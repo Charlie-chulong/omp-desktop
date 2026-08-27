@@ -100,7 +100,7 @@ export async function encodeAttachmentsForSend(
   }
 
   const store = await getAttachmentStore();
-  const encoded = await Promise.all(
+  return await Promise.all(
     attachments.map(async (attachment) => {
       try {
         const data = await store.encodeBase64({ attachment });
@@ -109,19 +109,15 @@ export async function encodeAttachmentsForSend(
           mimeType: attachment.mimeType,
         };
       } catch (error) {
-        console.error("[attachments] Failed to encode attachment for send", {
-          id: attachment.id,
-          error,
-        });
-        return null;
+        console.error("[attachments] Failed to encode attachment for send", attachment.id, error);
+        const label = attachment.fileName ?? attachment.id;
+        throw new Error(
+          `Unable to read image attachment '${label}'. Remove and reattach it, then try again.`,
+          { cause: error },
+        );
       }
     }),
   );
-
-  const valid = encoded.filter(
-    (entry): entry is { data: string; mimeType: string } => entry !== null,
-  );
-  return valid.length > 0 ? valid : undefined;
 }
 
 export async function resolveAttachmentPreviewUrl(attachment: AttachmentMetadata): Promise<string> {

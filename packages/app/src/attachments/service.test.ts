@@ -99,6 +99,19 @@ describe("attachment service", () => {
     ]);
   });
 
+  it("rejects the send when an attachment can no longer be read", async () => {
+    const store = createRecordingStore();
+    store.encodeBase64 = async () => {
+      throw new Error("ENOENT");
+    };
+    __setAttachmentStoreForTests(store);
+    const attachment = createAttachment({ id: "att_missing", fileName: "missing.png" });
+
+    await expect(encodeAttachmentsForSend([attachment])).rejects.toThrow(
+      "Unable to read image attachment 'missing.png'. Remove and reattach it, then try again.",
+    );
+  });
+
   it("does not collect an attachment persisted while garbage collection is starting", async () => {
     let releaseSave: () => void = () => undefined;
     let reportSaveStarted: () => void = () => undefined;
