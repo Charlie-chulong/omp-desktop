@@ -1,0 +1,120 @@
+import { i18n } from "@/i18n/i18next";
+
+interface ControlLabelInput {
+  id: string;
+  label?: string | null;
+}
+
+function sentenceCase(value: string): string {
+  if (!value) {
+    return value;
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function splitCompactLabel(value: string, splitHyphen: boolean): string {
+  const separatorPattern = splitHyphen ? /[_-]+/g : /_+/g;
+
+  return value
+    .replace(separatorPattern, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatControlLabel(option: ControlLabelInput, splitHyphen: boolean): string {
+  const rawLabel = (option.label ?? option.id).trim();
+  return sentenceCase(splitCompactLabel(rawLabel, splitHyphen));
+}
+
+function translateKnownMode(compactValue: string): string | null {
+  switch (compactValue) {
+    case "ask":
+    case "alwaysask":
+      return i18n.t("agentControls.mode.options.alwaysAsk");
+    case "write":
+    case "writeapproval":
+      return i18n.t("agentControls.mode.options.writeApproval");
+    case "full":
+    case "fullaccess":
+      return i18n.t("agentControls.mode.options.fullAccess");
+    case "auto":
+      return i18n.t("agentControls.mode.options.auto");
+    case "plan":
+    case "planmode":
+      return i18n.t("agentControls.mode.options.plan");
+    case "default":
+      return i18n.t("agentControls.mode.options.default");
+    case "acceptedits":
+      return i18n.t("agentControls.mode.options.acceptEdits");
+    case "bypasspermissions":
+      return i18n.t("agentControls.mode.options.bypassPermissions");
+    case "build":
+      return i18n.t("agentControls.mode.options.build");
+    default:
+      return null;
+  }
+}
+
+export function formatAgentModeLabel(mode: ControlLabelInput): string {
+  const rawLabel = (mode.label ?? mode.id).trim();
+  const compactId = mode.id.replace(/[\s_-]+/g, "").toLowerCase();
+  const compactLabel = rawLabel.replace(/[\s_-]+/g, "").toLowerCase();
+  return (
+    translateKnownMode(compactId) ??
+    translateKnownMode(compactLabel) ??
+    formatControlLabel(mode, mode.label == null)
+  );
+}
+
+export function formatThinkingOptionLabel(option: ControlLabelInput): string {
+  const rawLabel = (option.label ?? option.id).trim();
+  const compactId = option.id.replace(/[\s_-]+/g, "").toLowerCase();
+  const compactLabel = rawLabel.replace(/[\s_-]+/g, "").toLowerCase();
+
+  switch (compactId) {
+    case "off":
+      return i18n.t("agentControls.thinking.options.off");
+    case "minimal":
+      return i18n.t("agentControls.thinking.options.minimal");
+    case "low":
+      return i18n.t("agentControls.thinking.options.low");
+    case "medium":
+      return i18n.t("agentControls.thinking.options.medium");
+    case "high":
+      return i18n.t("agentControls.thinking.options.high");
+    case "xhigh":
+      return i18n.t("agentControls.thinking.extraHigh");
+    case "max":
+      return i18n.t("agentControls.thinking.options.max");
+  }
+  if (compactLabel === "xhigh") {
+    return i18n.t("agentControls.thinking.extraHigh");
+  }
+
+  return formatControlLabel(option, true);
+}
+
+export function formatAgentFeatureLabel(feature: ControlLabelInput): string {
+  return feature.id === "workflow_mode"
+    ? i18n.t("agentControls.features.workflow.title")
+    : (feature.label ?? feature.id);
+}
+
+export function formatAgentFeatureOptionLabel(
+  featureId: string,
+  option: ControlLabelInput,
+): string {
+  if (featureId !== "workflow_mode") return option.label ?? option.id;
+  switch (option.id) {
+    case "standard":
+      return i18n.t("agentControls.features.workflow.standard");
+    case "plan":
+      return i18n.t("agentControls.features.workflow.plan");
+    case "goal":
+      return i18n.t("agentControls.features.workflow.goal");
+    default:
+      return option.label ?? option.id;
+  }
+}

@@ -1,0 +1,71 @@
+import type { ModelBrowserView } from "@/components/model-browser-view";
+import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
+import {
+  formatOmpModelProviderNamespace,
+  resolveOmpModelProviderNamespace,
+} from "@/provider-selection/omp-model-provider";
+
+export function resolveModelBrowserScrolling(usesBottomSheet: boolean): "sheet" | "independent" {
+  return usesBottomSheet ? "sheet" : "independent";
+}
+
+export function groupOmpModelsByProviderNamespace(
+  providers: ProviderSelectorProvider[],
+): ProviderSelectorProvider[] {
+  return providers.flatMap((provider) => {
+    if (provider.id !== "omp" || provider.modelSelection.kind !== "models") return [provider];
+    const grouped = new Map<string, typeof provider.modelSelection.rows>();
+    for (const row of provider.modelSelection.rows) {
+      const namespace = resolveOmpModelProviderNamespace(row.modelId);
+      const rows = grouped.get(namespace) ?? [];
+      rows.push({
+        ...row,
+        providerLabel: formatOmpModelProviderNamespace(namespace),
+      });
+      grouped.set(namespace, rows);
+    }
+    if (grouped.size <= 1) return [provider];
+    return [...grouped]
+      .map(([namespace, rows]) => ({
+        id: `omp:${namespace}`,
+        label: formatOmpModelProviderNamespace(namespace),
+        modelSelection: { kind: "models" as const, rows },
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+  });
+}
+
+export function resolveModelBrowserProviderId(
+  provider: string,
+  modelId: string,
+  providers: ProviderSelectorProvider[],
+): string {
+  if (provider !== "omp") return provider;
+  const groupedId = `omp:${resolveOmpModelProviderNamespace(modelId)}`;
+  if (providers.some((entry) => entry.id === groupedId)) return groupedId;
+  for (const entry of providers) {
+    if (entry.modelSelection.kind !== "models") continue;
+    const matches = entry.modelSelection.rows.some(
+      (row) => row.modelId === modelId || row.modelId.endsWith(`/${modelId}`),
+    );
+    if (matches) return entry.id;
+  }
+  return provider;
+}
+
+export function resolveModelSheetOpening({
+  canSwitchProvider,
+  providers,
+  selectedProvider,
+}: {
+  canSwitchProvider: boolean;
+  providers: ProviderSelectorProvider[];
+  selectedProvider: string;
+}): ModelBrowserView {
+  if (canSwitchProvider && providers.length > 1) return { kind: "all" };
+
+  const provider = providers.find((entry) => entry.id === selectedProvider) ?? providers[0] ?? null;
+  return provider
+    ? { kind: "provider", providerId: provider.id, providerLabel: provider.label }
+    : { kind: "all" };
+}
