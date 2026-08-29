@@ -1,6 +1,6 @@
 {
   "name": "@omp-desktop/cli",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "OMP Desktop command-line client",
   "bin": {
     "omp-desktop": "bin/omp-desktop"
