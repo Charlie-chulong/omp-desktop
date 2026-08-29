@@ -238,6 +238,13 @@ export const ru: TranslationResources = {
         goalPlaceholder: "Введите цель",
       },
     },
+    quota: {
+      loading: "Загрузка квоты…",
+      account: "Аккаунт {{number}}",
+      total: "Общая квота",
+      fiveHour: "Квота на 5 часов",
+      resetAt: "Сброс в {{time}}",
+    },
     mode: {
       title: "Режим",
       searchPlaceholder: "Поиск режимов...",

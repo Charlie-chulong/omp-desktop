@@ -236,6 +236,13 @@ export const en = {
         goalPlaceholder: "Enter a goal",
       },
     },
+    quota: {
+      loading: "Loading quota…",
+      account: "Account {{number}}",
+      total: "Total quota",
+      fiveHour: "5-hour quota",
+      resetAt: "Resets at {{time}}",
+    },
     mode: {
       title: "Mode",
       searchPlaceholder: "Search modes...",

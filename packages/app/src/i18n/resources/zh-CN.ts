@@ -238,6 +238,13 @@ export const zhCN: TranslationResources = {
         goalPlaceholder: "请输入目标",
       },
     },
+    quota: {
+      loading: "正在加载额度…",
+      account: "账户 {{number}}",
+      total: "总额度",
+      fiveHour: "5 小时额度",
+      resetAt: "{{time}} 重置",
+    },
     mode: {
       title: "模式",
       searchPlaceholder: "搜索模式...",

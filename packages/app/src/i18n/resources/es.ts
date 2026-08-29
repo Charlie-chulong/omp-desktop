@@ -238,6 +238,7 @@ export const es: TranslationResources = {
         goalPlaceholder: "Introduce un objetivo",
       },
     },
+    quota: en.agentControls.quota,
     mode: {
       title: "Modo",
       searchPlaceholder: "Modos de búsqueda...",

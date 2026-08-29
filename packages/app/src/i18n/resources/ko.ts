@@ -238,6 +238,7 @@ export const ko: TranslationResources = {
         goalPlaceholder: "목표를 입력하세요",
       },
     },
+    quota: en.agentControls.quota,
     mode: {
       title: "모드",
       searchPlaceholder: "모드 검색...",

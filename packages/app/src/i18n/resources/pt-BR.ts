@@ -238,6 +238,7 @@ export const ptBR: TranslationResources = {
         goalPlaceholder: "Digite um objetivo",
       },
     },
+    quota: en.agentControls.quota,
     mode: {
       title: "Modo",
       searchPlaceholder: "Buscar modos...",

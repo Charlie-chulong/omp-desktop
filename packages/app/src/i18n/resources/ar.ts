@@ -238,6 +238,7 @@ export const ar: TranslationResources = {
         goalPlaceholder: "أدخل هدفًا",
       },
     },
+    quota: en.agentControls.quota,
     mode: {
       title: "وضع",
       searchPlaceholder: "أوضاع البحث...",

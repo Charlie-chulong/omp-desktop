@@ -238,6 +238,7 @@ export const ja: TranslationResources = {
         goalPlaceholder: "目標を入力",
       },
     },
+    quota: en.agentControls.quota,
     mode: {
       title: "モード",
       searchPlaceholder: "モードを検索...",
