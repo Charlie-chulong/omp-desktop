@@ -237,6 +237,9 @@ export const ptBR: TranslationResources = {
         goal: "Objetivo",
         goalPlaceholder: "Digite um objetivo",
       },
+      oauthAccount: {
+        title: "Conta OAuth",
+      },
     },
     quota: en.agentControls.quota,
     mode: {

@@ -237,6 +237,9 @@ export const es: TranslationResources = {
         goal: "Objetivo",
         goalPlaceholder: "Introduce un objetivo",
       },
+      oauthAccount: {
+        title: "Cuenta OAuth",
+      },
     },
     quota: en.agentControls.quota,
     mode: {

@@ -237,6 +237,9 @@ export const ar: TranslationResources = {
         goal: "هدف",
         goalPlaceholder: "أدخل هدفًا",
       },
+      oauthAccount: {
+        title: "حساب OAuth",
+      },
     },
     quota: en.agentControls.quota,
     mode: {

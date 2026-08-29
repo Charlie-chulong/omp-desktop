@@ -237,10 +237,14 @@ export const zhCN: TranslationResources = {
         goal: "目标",
         goalPlaceholder: "请输入目标",
       },
+      oauthAccount: {
+        title: "OAuth 账号",
+      },
     },
     quota: {
       loading: "正在加载额度…",
       account: "账户 {{number}}",
+      noNote: "未备注",
       total: "总额度",
       fiveHour: "5 小时额度",
       resetAt: "{{time}} 重置",

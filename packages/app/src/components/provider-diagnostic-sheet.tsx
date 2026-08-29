@@ -70,6 +70,7 @@ import {
   updateOmpProviderAccountNote,
 } from "./omp-provider-account-notes";
 import { formatOmpAccountIdentity, resolveOmpLoginAction } from "./omp-provider-accounts";
+import { resolveOmpRemainingQuotaPct } from "./omp-provider-quota";
 import {
   groupOmpDiscoveredModels,
   resolveProviderDiscoveredModels,
@@ -222,60 +223,64 @@ function formatQuotaResetTime(iso: string | null | undefined): string | null {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function OmpAccountQuotaSummary({
-  credentialId,
-  quota,
+function OmpAccountQuotaWindow({
+  label,
+  usedPct,
+  resetsAt,
+  status,
+  unknownLabel,
+  limitReached = false,
 }: {
-  credentialId: number;
-  quota?: OmpProviderAccount["quota"];
+  label: string;
+  usedPct: number | null | undefined;
+  resetsAt: string | null | undefined;
+  status: OmpProviderAccount["quota"] extends infer Quota
+    ? Quota extends { status: infer Status }
+      ? Status
+      : undefined
+    : undefined;
+  unknownLabel?: string;
+  limitReached?: boolean;
 }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const usedPct = quota?.fiveHourUsedPct ?? null;
-  const limitReached = quota?.fiveHourLimitReached === true || (usedPct ?? 0) >= 100;
-  const toneColor = limitReached
+  const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
+  const reached = limitReached || remainingPct === 0;
+  const toneColor = reached
     ? theme.colors.destructive
-    : usedPct !== null
-      ? usedPct >= 70
+    : remainingPct !== null
+      ? remainingPct <= 30
         ? theme.colors.palette.amber[500]
         : theme.colors.palette.green[500]
       : theme.colors.foregroundMuted;
-  const usedText =
-    usedPct !== null
-      ? t("settings.providers.omp.multiAccount.quotaUsed", {
-          used: Math.round(usedPct),
-          remaining: Math.max(0, Math.round(100 - usedPct)),
+  const remainingText =
+    remainingPct !== null
+      ? t("settings.providers.omp.multiAccount.quotaRemaining", {
+          remaining: Math.round(remainingPct),
         })
       : null;
-  const statusText = !quota
-    ? t("settings.providers.omp.multiAccount.quotaUnknown")
-    : quota.status !== "available"
+  const statusText =
+    status !== "available"
       ? t("settings.providers.omp.multiAccount.quotaUnavailable")
-      : usedText
-        ? limitReached
-          ? `${usedText} · ${t("settings.providers.omp.multiAccount.quotaReached")}`
-          : usedText
-        : t("settings.providers.omp.multiAccount.quotaUnknown");
-  const resetTime = formatQuotaResetTime(quota?.fiveHourResetsAt);
+      : (remainingText ?? unknownLabel ?? t("settings.providers.omp.multiAccount.quotaUnknown"));
+  const resetTime = formatQuotaResetTime(resetsAt);
   return (
-    <View style={sheetStyles.accountQuota} testID={`omp-provider-account-quota-${credentialId}`}>
+    <View style={sheetStyles.accountQuotaWindow}>
       <View style={sheetStyles.accountQuotaHeader}>
-        <Text style={sheetStyles.accountQuotaLabel}>
-          {t("settings.providers.omp.multiAccount.quotaFiveHour")}
-        </Text>
+        <Text style={sheetStyles.accountQuotaLabel}>{label}</Text>
         <Text style={[sheetStyles.accountQuotaStatus, { color: toneColor }]}>{statusText}</Text>
       </View>
-      {usedPct !== null ? (
+      {remainingPct !== null ? (
         <View
           accessibilityRole="progressbar"
-          accessibilityLabel={t("settings.providers.omp.multiAccount.quotaFiveHour")}
-          accessibilityValue={{ min: 0, max: 100, now: Math.round(usedPct) }}
+          accessibilityLabel={label}
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(remainingPct) }}
           style={sheetStyles.accountQuotaTrack}
         >
           <View
             style={[
               sheetStyles.accountQuotaFill,
-              { width: `${Math.min(100, usedPct)}%`, backgroundColor: toneColor },
+              { width: `${remainingPct}%`, backgroundColor: toneColor },
             ]}
           />
         </View>
@@ -285,6 +290,34 @@ function OmpAccountQuotaSummary({
           {t("settings.providers.omp.multiAccount.quotaResetsAt", { time: resetTime })}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function OmpAccountQuotaSummary({
+  credentialId,
+  quota,
+}: {
+  credentialId: number;
+  quota?: OmpProviderAccount["quota"];
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={sheetStyles.accountQuota} testID={`omp-provider-account-quota-${credentialId}`}>
+      <OmpAccountQuotaWindow
+        label={t("settings.providers.omp.multiAccount.quotaTotal")}
+        usedPct={quota?.weeklyUsedPct}
+        resetsAt={quota?.weeklyResetsAt}
+        status={quota?.status}
+        unknownLabel={t("settings.providers.omp.multiAccount.quotaTotalUnknown")}
+      />
+      <OmpAccountQuotaWindow
+        label={t("settings.providers.omp.multiAccount.quotaFiveHour")}
+        usedPct={quota?.fiveHourUsedPct}
+        resetsAt={quota?.fiveHourResetsAt}
+        status={quota?.status}
+        limitReached={quota?.fiveHourLimitReached === true}
+      />
     </View>
   );
 }
@@ -2264,6 +2297,9 @@ const sheetStyles = StyleSheet.create((theme) => ({
   accountNote: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  accountQuotaWindow: {
+    gap: theme.spacing[1],
   },
   accountQuota: {
     gap: theme.spacing[1],

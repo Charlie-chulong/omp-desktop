@@ -237,6 +237,9 @@ export const ja: TranslationResources = {
         goal: "目標",
         goalPlaceholder: "目標を入力",
       },
+      oauthAccount: {
+        title: "OAuth アカウント",
+      },
     },
     quota: en.agentControls.quota,
     mode: {

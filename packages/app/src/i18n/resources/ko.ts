@@ -237,6 +237,9 @@ export const ko: TranslationResources = {
         goal: "목표",
         goalPlaceholder: "목표를 입력하세요",
       },
+      oauthAccount: {
+        title: "OAuth 계정",
+      },
     },
     quota: en.agentControls.quota,
     mode: {

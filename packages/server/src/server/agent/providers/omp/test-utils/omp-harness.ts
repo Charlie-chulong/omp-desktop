@@ -19,6 +19,7 @@ import {
   OmpAgentSession,
   type OmpNoTurnScheduler,
   type OmpProviderIdleScheduler,
+  type StoredOmpOAuthAccount,
 } from "../agent.js";
 import type { OmpUsagePollScheduler } from "../usage-poller.js";
 import type { OmpAgentMessage, OmpRpcSlashCommand } from "../rpc-types.js";
@@ -70,6 +71,7 @@ export class OmpHarness {
 
   constructor(
     options: {
+      oauthAccounts?: readonly StoredOmpOAuthAccount[];
       providerIdleScheduler?: OmpProviderIdleScheduler;
       noTurnScheduler?: OmpNoTurnScheduler;
       usagePollScheduler?: OmpUsagePollScheduler;
@@ -78,6 +80,7 @@ export class OmpHarness {
     this.client = new OmpAgentClient({
       logger: pino({ level: "silent" }),
       runtime: this.omp,
+      oauthAccounts: options.oauthAccounts,
       providerIdleScheduler: options.providerIdleScheduler,
       noTurnScheduler: options.noTurnScheduler,
       usagePollScheduler: options.usagePollScheduler,

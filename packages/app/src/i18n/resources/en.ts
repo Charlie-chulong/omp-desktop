@@ -235,10 +235,14 @@ export const en = {
         goal: "Goal",
         goalPlaceholder: "Enter a goal",
       },
+      oauthAccount: {
+        title: "OAuth account",
+      },
     },
     quota: {
       loading: "Loading quota…",
       account: "Account {{number}}",
+      noNote: "No note",
       total: "Total quota",
       fiveHour: "5-hour quota",
       resetAt: "Resets at {{time}}",

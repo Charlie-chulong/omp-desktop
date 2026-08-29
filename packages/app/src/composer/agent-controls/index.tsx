@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   memo,
   useCallback,
@@ -52,7 +53,8 @@ import {
 } from "@/composer/agent-controls/mode-control";
 import { groupOmpModelsByProviderNamespace } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
-import { formatOmpAccountIdentity } from "@/components/omp-provider-accounts";
+import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
+import { resolveOmpRemainingQuotaPct } from "@/components/omp-provider-quota";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -109,6 +111,7 @@ interface AgentControlOption {
 type OmpWorkflowQuotaAccount = NonNullable<
   OmpProviderManagement["loginProviders"][number]["accounts"]
 >[number];
+type OmpWorkflowQuotaDisplayAccount = OmpWorkflowQuotaAccount & { note?: string };
 function isCodexWorkflowProvider(provider: string | undefined, modelId: string | null): boolean {
   if (provider === "openai-codex") return true;
   return provider === "omp" && resolveOmpModelProviderNamespace(modelId ?? "") === "openai-codex";
@@ -117,7 +120,7 @@ function useWorkflowQuota(
   serverId: string | null | undefined,
   provider: string | null | undefined,
   modelId: string | null | undefined,
-): { accounts: OmpWorkflowQuotaAccount[]; loading: boolean } {
+): { accounts: OmpWorkflowQuotaDisplayAccount[]; loading: boolean } {
   const client = useSessionStore((state) => state.sessions[serverId ?? ""]?.client ?? null);
   const supportsOmpProviderManagement = useSessionStore(
     (state) => state.sessions[serverId ?? ""]?.serverInfo?.features?.ompProviderManagement === true,
@@ -130,15 +133,30 @@ function useWorkflowQuota(
       return client.getOmpProviderManagement();
     },
     enabled: Boolean(client && supportsOmpProviderManagement && shouldFetch),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchInterval: 30_000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: true,
+  });
+  const notesQuery = useQuery({
+    queryKey: ["ompProviderAccountNotes", serverId ?? ""],
+    queryFn: () => loadOmpProviderAccountNotes(AsyncStorage, serverId ?? undefined),
+    enabled: Boolean(serverId && shouldFetch),
+    staleTime: 0,
     refetchOnMount: true,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   });
   const accounts = shouldFetch
-    ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex")?.accounts ?? [])
+    ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex")?.accounts ?? []).map(
+        (account) => ({
+          ...account,
+          note: notesQuery.data?.[String(account.credentialId)],
+        }),
+      )
     : [];
-  return { accounts, loading: query.isFetching };
+  return { accounts, loading: query.isFetching || notesQuery.isFetching };
 }
 
 type AgentControlSelector = "provider" | "mode" | "model" | "thinking" | `feature-${string}`;
@@ -170,7 +188,7 @@ interface ControlledAgentControlsProps {
   onDropdownClose?: () => void;
   onModelSelectorOpen?: () => void;
   onRetryModelProvider?: (provider: AgentProvider) => void;
-  workflowQuotaAccounts?: OmpWorkflowQuotaAccount[];
+  workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
   workflowQuotaLoading?: boolean;
   isRetryingModelProvider?: boolean;
   modeControl?: AgentModeControlValue | null;
@@ -942,71 +960,52 @@ interface DesktopAgentControlsContentProps {
   handleOpenSheet: (sheet: Exclude<ActiveSheet, null>) => void;
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
-  workflowQuotaAccounts?: OmpWorkflowQuotaAccount[];
+  workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
   workflowQuotaLoading?: boolean;
-}
-
-function formatWorkflowQuotaResetTime(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const timestamp = Date.parse(iso);
-  if (!Number.isFinite(timestamp)) return null;
-  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function WorkflowQuotaBar({
   label,
   usedPct,
-  resetsAt,
   limitReached,
 }: {
   label: string;
   usedPct: number | null | undefined;
-  resetsAt: string | null | undefined;
   limitReached?: boolean | null;
 }) {
-  const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const normalizedPct =
-    typeof usedPct === "number" && Number.isFinite(usedPct)
-      ? Math.max(0, Math.min(100, usedPct))
-      : null;
-  const reached = limitReached === true || normalizedPct === 100;
+  const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
+  const reached = limitReached === true || remainingPct === 0;
   const color = reached
     ? theme.colors.destructive
-    : normalizedPct !== null && normalizedPct >= 70
+    : remainingPct !== null && remainingPct <= 30
       ? theme.colors.palette.amber[500]
-      : normalizedPct !== null
+      : remainingPct !== null
         ? theme.colors.palette.green[500]
         : theme.colors.foregroundMuted;
-  const resetTime = formatWorkflowQuotaResetTime(resetsAt);
   return (
     <View style={styles.workflowQuotaBar}>
-      <View style={styles.workflowQuotaBarHeader}>
-        <Text style={styles.workflowQuotaBarLabel}>{label}</Text>
-        <Text style={[styles.workflowQuotaBarValue, { color }]}>
-          {normalizedPct === null ? "—" : `${Math.round(normalizedPct)}%`}
-        </Text>
-      </View>
+      <Text style={styles.workflowQuotaBarLabel} numberOfLines={1}>
+        {label}
+      </Text>
       <View
         accessibilityRole="progressbar"
         accessibilityLabel={label}
         accessibilityValue={
-          normalizedPct === null ? undefined : { min: 0, max: 100, now: Math.round(normalizedPct) }
+          remainingPct === null ? undefined : { min: 0, max: 100, now: Math.round(remainingPct) }
         }
         style={styles.workflowQuotaTrack}
       >
         <View
           style={[
             styles.workflowQuotaFill,
-            { width: `${normalizedPct ?? 0}%`, backgroundColor: color },
+            { width: `${remainingPct ?? 0}%`, backgroundColor: color },
           ]}
         />
       </View>
-      {resetTime ? (
-        <Text style={styles.workflowQuotaReset}>
-          {t("agentControls.quota.resetAt", { time: resetTime })}
-        </Text>
-      ) : null}
+      <Text style={[styles.workflowQuotaBarValue, { color }]}>
+        {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
+      </Text>
     </View>
   );
 }
@@ -1015,7 +1014,7 @@ function WorkflowQuotaSummary({
   accounts,
   loading,
 }: {
-  accounts: OmpWorkflowQuotaAccount[];
+  accounts: OmpWorkflowQuotaDisplayAccount[];
   loading: boolean;
 }) {
   const { t } = useTranslation();
@@ -1029,27 +1028,28 @@ function WorkflowQuotaSummary({
   if (accounts.length === 0) return null;
   return (
     <View style={styles.workflowQuota} testID="agent-workflow-quota">
-      {accounts.map((account, index) => {
-        const identity = formatOmpAccountIdentity(account.identityKey);
-        return (
-          <View key={account.credentialId} style={styles.workflowQuotaAccount}>
-            <Text style={styles.workflowQuotaTitle} numberOfLines={1}>
-              {identity.primary ?? t("agentControls.quota.account", { number: index + 1 })}
-            </Text>
-            <WorkflowQuotaBar
-              label={t("agentControls.quota.total")}
-              usedPct={account.quota?.weeklyUsedPct}
-              resetsAt={account.quota?.weeklyResetsAt}
-            />
-            <WorkflowQuotaBar
-              label={t("agentControls.quota.fiveHour")}
-              usedPct={account.quota?.fiveHourUsedPct}
-              limitReached={account.quota?.fiveHourLimitReached}
-              resetsAt={account.quota?.fiveHourResetsAt}
-            />
-          </View>
-        );
-      })}
+      {accounts.map((account, index) => (
+        <View
+          key={account.credentialId}
+          style={[
+            styles.workflowQuotaAccount,
+            index > 0 ? styles.workflowQuotaAccountSeparated : null,
+          ]}
+        >
+          <Text style={styles.workflowQuotaTitle} numberOfLines={1}>
+            {account.note?.trim() || t("agentControls.quota.noNote")}
+          </Text>
+          <WorkflowQuotaBar
+            label={t("agentControls.quota.total")}
+            usedPct={account.quota?.weeklyUsedPct}
+          />
+          <WorkflowQuotaBar
+            label={t("agentControls.quota.fiveHour")}
+            usedPct={account.quota?.fiveHourUsedPct}
+            limitReached={account.quota?.fiveHourLimitReached}
+          />
+        </View>
+      ))}
     </View>
   );
 }
@@ -2272,38 +2272,58 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: theme.fontSize.base * 1.4,
   },
   workflowQuota: {
-    minWidth: 150,
-    width: 220,
+    height: 28,
+    minWidth: 220,
+    maxWidth: 520,
     flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+    borderRadius: theme.borderRadius["2xl"],
+  },
+  workflowQuotaAccount: {
+    height: 28,
+    minWidth: 0,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[1],
   },
-  workflowQuotaAccount: {
-    gap: theme.spacing[1],
+  workflowQuotaAccountSeparated: {
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border,
   },
   workflowQuotaTitle: {
+    maxWidth: 96,
+    minWidth: 0,
+    flexShrink: 1,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
   workflowQuotaBar: {
-    gap: 2,
-  },
-  workflowQuotaBarHeader: {
+    minWidth: 78,
+    maxWidth: 112,
+    flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing[1],
+    gap: 3,
   },
   workflowQuotaBarLabel: {
+    flexShrink: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
   workflowQuotaBarValue: {
+    width: 30,
+    flexShrink: 0,
+    textAlign: "right",
     fontSize: theme.fontSize.sm,
   },
   workflowQuotaTrack: {
     height: 4,
-    width: "100%",
+    minWidth: 18,
+    flexGrow: 1,
     overflow: "hidden",
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.surface2,
@@ -2311,10 +2331,6 @@ const styles = StyleSheet.create((theme) => ({
   workflowQuotaFill: {
     height: "100%",
     borderRadius: theme.borderRadius.full,
-  },
-  workflowQuotaReset: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
   },
   combinedSheetControls: {
     gap: theme.spacing[1],
