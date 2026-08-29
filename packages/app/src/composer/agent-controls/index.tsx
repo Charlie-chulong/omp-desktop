@@ -964,7 +964,7 @@ interface DesktopAgentControlsContentProps {
   workflowQuotaLoading?: boolean;
 }
 
-function WorkflowQuotaBar({
+function WorkflowQuotaValue({
   label,
   usedPct,
   limitReached,
@@ -984,26 +984,11 @@ function WorkflowQuotaBar({
         ? theme.colors.palette.green[500]
         : theme.colors.foregroundMuted;
   return (
-    <View style={styles.workflowQuotaBar}>
-      <Text style={styles.workflowQuotaBarLabel} numberOfLines={1}>
+    <View style={styles.workflowQuotaValue}>
+      <Text style={styles.workflowQuotaValueLabel} numberOfLines={1}>
         {label}
       </Text>
-      <View
-        accessibilityRole="progressbar"
-        accessibilityLabel={label}
-        accessibilityValue={
-          remainingPct === null ? undefined : { min: 0, max: 100, now: Math.round(remainingPct) }
-        }
-        style={styles.workflowQuotaTrack}
-      >
-        <View
-          style={[
-            styles.workflowQuotaFill,
-            { width: `${remainingPct ?? 0}%`, backgroundColor: color },
-          ]}
-        />
-      </View>
-      <Text style={[styles.workflowQuotaBarValue, { color }]}>
+      <Text style={[styles.workflowQuotaValueText, { color }]}>
         {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
       </Text>
     </View>
@@ -1039,11 +1024,11 @@ function WorkflowQuotaSummary({
           <Text style={styles.workflowQuotaTitle} numberOfLines={1}>
             {account.note?.trim() || t("agentControls.quota.noNote")}
           </Text>
-          <WorkflowQuotaBar
+          <WorkflowQuotaValue
             label={t("agentControls.quota.total")}
             usedPct={account.quota?.weeklyUsedPct}
           />
-          <WorkflowQuotaBar
+          <WorkflowQuotaValue
             label={t("agentControls.quota.fiveHour")}
             usedPct={account.quota?.fiveHourUsedPct}
             limitReached={account.quota?.fiveHourLimitReached}
@@ -2301,36 +2286,24 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
-  workflowQuotaBar: {
-    minWidth: 78,
+  workflowQuotaValue: {
+    minWidth: 54,
     maxWidth: 112,
     flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
   },
-  workflowQuotaBarLabel: {
+  workflowQuotaValueLabel: {
     flexShrink: 0,
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
-  workflowQuotaBarValue: {
+  workflowQuotaValueText: {
     width: 30,
     flexShrink: 0,
     textAlign: "right",
     fontSize: theme.fontSize.sm,
-  },
-  workflowQuotaTrack: {
-    height: 4,
-    minWidth: 18,
-    flexGrow: 1,
-    overflow: "hidden",
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surface2,
-  },
-  workflowQuotaFill: {
-    height: "100%",
-    borderRadius: theme.borderRadius.full,
   },
   combinedSheetControls: {
     gap: theme.spacing[1],
