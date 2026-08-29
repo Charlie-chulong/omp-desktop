@@ -731,6 +731,10 @@ export interface OmpProviderManagement {
     name: string;
     available: boolean;
     authenticated: boolean;
+    accounts?: Array<{
+      credentialId: number;
+      identityKey?: string;
+    }>;
   }>;
 }
 export interface OmpProviderLoginStart {

@@ -123,12 +123,79 @@ const QUESTION_RESPONSE_HEADER = "Response";
 const QUESTION_COMMENT_HEADER = "Comment";
 const OMP_ASK_USER_FREEFORM_SENTINEL = "✏️ Type custom response...";
 const COMBINED_ASK_USER_METADATA = "ask_user_select_optional_comment";
+interface NodeSqliteStatement {
+  all(...params: unknown[]): Array<Record<string, unknown>>;
+  run(...params: unknown[]): { changes: number | bigint };
+}
 interface NodeSqliteDatabase {
   close(): void;
   exec(sql: string): void;
-  prepare(sql: string): {
-    run(...params: unknown[]): { changes: number | bigint };
+  prepare(sql: string): NodeSqliteStatement;
+}
+export interface StoredOmpOAuthAccount {
+  credentialId: number;
+  provider: string;
+  identityKey?: string;
+}
+
+function openOmpCredentialDatabase(agentDbPath: string): NodeSqliteDatabase {
+  const require = createRequire(import.meta.url);
+  const { DatabaseSync } = require("node:sqlite") as {
+    DatabaseSync: new (path: string) => NodeSqliteDatabase;
   };
+  const database = new DatabaseSync(agentDbPath);
+  database.exec("PRAGMA busy_timeout = 5000");
+  return database;
+}
+
+export function readStoredOmpOAuthAccounts(agentDbPath: string): StoredOmpOAuthAccount[] {
+  if (!existsSync(agentDbPath)) return [];
+
+  const database = openOmpCredentialDatabase(agentDbPath);
+  try {
+    const columns = new Set(
+      database
+        .prepare("PRAGMA table_info(auth_credentials)")
+        .all()
+        .map((row) => row.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+    const requiredColumns = ["id", "provider", "credential_type", "disabled_cause", "identity_key"];
+    if (requiredColumns.some((column) => !columns.has(column))) return [];
+
+    return database
+      .prepare(
+        `SELECT id, provider, identity_key
+         FROM auth_credentials
+         WHERE credential_type = 'oauth' AND disabled_cause IS NULL
+         ORDER BY provider, id`,
+      )
+      .all()
+      .flatMap((row): StoredOmpOAuthAccount[] => {
+        const credentialId = Number(row.id);
+        if (
+          !Number.isSafeInteger(credentialId) ||
+          credentialId <= 0 ||
+          typeof row.provider !== "string" ||
+          row.provider.length === 0
+        ) {
+          return [];
+        }
+        const identityKey =
+          typeof row.identity_key === "string" && row.identity_key.trim().length > 0
+            ? row.identity_key.trim()
+            : undefined;
+        return [
+          {
+            credentialId,
+            provider: row.provider,
+            ...(identityKey ? { identityKey } : {}),
+          },
+        ];
+      });
+  } finally {
+    database.close();
+  }
 }
 
 export function disableStoredOmpProviderCredentials(
@@ -138,13 +205,8 @@ export function disableStoredOmpProviderCredentials(
   if (!existsSync(agentDbPath)) {
     throw new Error(`OMP credential database does not exist at ${agentDbPath}`);
   }
-  const require = createRequire(import.meta.url);
-  const { DatabaseSync } = require("node:sqlite") as {
-    DatabaseSync: new (path: string) => NodeSqliteDatabase;
-  };
-  const database = new DatabaseSync(agentDbPath);
+  const database = openOmpCredentialDatabase(agentDbPath);
   try {
-    database.exec("PRAGMA busy_timeout = 5000");
     const result = database
       .prepare(
         `UPDATE auth_credentials
@@ -2786,6 +2848,18 @@ export class OmpAgentClient implements AgentClient {
     } catch {
       // OMP reports the invalid config through runtimeError below.
     }
+    const storedAccountsByProvider = new Map<string, StoredOmpOAuthAccount[]>();
+    try {
+      const env = { ...process.env, ...this.runtimeSettings?.env };
+      const { agentDb } = resolveOmpDiagnosticPaths(env);
+      for (const account of readStoredOmpOAuthAccounts(agentDb)) {
+        const accounts = storedAccountsByProvider.get(account.provider) ?? [];
+        accounts.push(account);
+        storedAccountsByProvider.set(account.provider, accounts);
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
+    }
     let loginProviders: OmpProviderManagement["loginProviders"] = [];
     let runtimeError: string | undefined;
     let runtimeSession: OmpRuntimeSession | undefined;
@@ -2804,7 +2878,17 @@ export class OmpAgentClient implements AgentClient {
       for (const model of models) {
         providerModels.set(model.provider, (providerModels.get(model.provider) ?? 0) + 1);
       }
-      loginProviders = providers;
+      loginProviders = providers.map((provider) => {
+        const accounts = storedAccountsByProvider.get(provider.id);
+        if (!accounts || accounts.length === 0) return provider;
+        return {
+          ...provider,
+          accounts: accounts.map(({ credentialId, identityKey }) => ({
+            credentialId,
+            ...(identityKey ? { identityKey } : {}),
+          })),
+        };
+      });
     } catch (error) {
       runtimeError = toDiagnosticErrorMessage(error);
       this.logger.debug({ err: error }, "OMP provider management lookup failed");

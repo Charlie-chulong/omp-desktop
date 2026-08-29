@@ -5913,6 +5913,14 @@ export const OmpProviderManagementSchema = z.object({
       name: z.string(),
       available: z.boolean(),
       authenticated: z.boolean(),
+      accounts: z
+        .array(
+          z.object({
+            credentialId: z.number().int().positive(),
+            identityKey: z.string().optional(),
+          }),
+        )
+        .optional(),
     }),
   ),
 });

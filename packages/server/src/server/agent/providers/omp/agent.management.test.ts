@@ -10,6 +10,7 @@ import { createTestLogger } from "../../../../test-utils/test-logger.js";
 import {
   disableStoredOmpProviderCredentials,
   formatOmpModelsYaml,
+  readStoredOmpOAuthAccounts,
   OmpAgentClient,
 } from "./agent.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
@@ -69,6 +70,74 @@ describe("OMP provider management", () => {
       ],
     });
   });
+  test("reports every active OAuth account without exposing credential data", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    const databasePath = path.join(agentDir, "agent.db");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        credential_type TEXT NOT NULL,
+        data TEXT NOT NULL,
+        disabled_cause TEXT,
+        identity_key TEXT
+      );
+      INSERT INTO auth_credentials
+        (id, provider, credential_type, data, identity_key, disabled_cause)
+      VALUES
+        (1, 'openai-codex', 'oauth', '{"access":"secret-a"}', 'email:alice@example.com|org:personal', NULL),
+        (2, 'openai-codex', 'oauth', '{"access":"secret-b"}', 'email:bob@example.com|org:team', NULL),
+        (3, 'openai-codex', 'oauth', '{"access":"secret-c"}', 'email:old@example.com', 'expired'),
+        (4, 'openai-codex', 'api_key', '{"key":"secret-d"}', NULL, NULL),
+        (5, 'anthropic', 'oauth', '{"access":"secret-e"}', NULL, NULL);
+    `);
+    database.close();
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([
+      { id: "openai-codex", name: "OpenAI Codex", available: true, authenticated: true },
+      { id: "anthropic", name: "Anthropic", available: true, authenticated: true },
+    ]);
+
+    expect(readStoredOmpOAuthAccounts(databasePath)).toEqual([
+      {
+        credentialId: 5,
+        provider: "anthropic",
+      },
+      {
+        credentialId: 1,
+        provider: "openai-codex",
+        identityKey: "email:alice@example.com|org:personal",
+      },
+      {
+        credentialId: 2,
+        provider: "openai-codex",
+        identityKey: "email:bob@example.com|org:team",
+      },
+    ]);
+    await expect(client.getOmpProviderManagement()).resolves.toMatchObject({
+      loginProviders: [
+        {
+          id: "openai-codex",
+          accounts: [
+            {
+              credentialId: 1,
+              identityKey: "email:alice@example.com|org:personal",
+            },
+            {
+              credentialId: 2,
+              identityKey: "email:bob@example.com|org:team",
+            },
+          ],
+        },
+        {
+          id: "anthropic",
+          accounts: [{ credentialId: 5 }],
+        },
+      ],
+    });
+  });
+
   test("logs out only active credentials for the requested provider", async () => {
     const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-auth-"));
     tempDirs.push(agentDir);
