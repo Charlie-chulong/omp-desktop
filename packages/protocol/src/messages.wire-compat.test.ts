@@ -287,4 +287,37 @@ describe("wire schema compatibility", () => {
       { credentialId: 9, identityKey: "email:bob@example.com|org:team" },
     ]);
   });
+  test("OMP provider management accepts optional per-account quota", () => {
+    const parsed = OmpProviderManagementSchema.parse({
+      configPath: "/tmp/models.yml",
+      configYaml: "providers: {}\n",
+      providerModels: [],
+      loginProviders: [
+        {
+          id: "openai-codex",
+          name: "OpenAI Codex",
+          available: true,
+          authenticated: true,
+          accounts: [
+            {
+              credentialId: 4,
+              quota: {
+                status: "available",
+                planLabel: "plus",
+                fiveHourUsedPct: 100,
+                fiveHourLimitReached: true,
+                fiveHourResetsAt: "2026-08-29T05:00:00.000Z",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(parsed.loginProviders[0]?.accounts?.[0]?.quota).toMatchObject({
+      status: "available",
+      fiveHourUsedPct: 100,
+      fiveHourLimitReached: true,
+    });
+  });
 });

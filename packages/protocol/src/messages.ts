@@ -5896,6 +5896,17 @@ export const ProviderDiagnosticResponseMessageSchema = z.object({
     requestId: z.string(),
   }),
 });
+export const OmpProviderAccountQuotaSchema = z.object({
+  status: z.enum(["available", "unavailable", "error"]),
+  planLabel: z.string().nullable().optional(),
+  fiveHourUsedPct: z.number().min(0).max(100).nullable().optional(),
+  fiveHourLimitReached: z.boolean().nullable().optional(),
+  fiveHourResetsAt: z.string().nullable().optional(),
+  weeklyUsedPct: z.number().min(0).max(100).nullable().optional(),
+  weeklyResetsAt: z.string().nullable().optional(),
+  fetchedAt: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
 export const OmpProviderManagementSchema = z.object({
   configPath: z.string(),
   configYaml: z.string(),
@@ -5918,6 +5929,7 @@ export const OmpProviderManagementSchema = z.object({
           z.object({
             credentialId: z.number().int().positive(),
             identityKey: z.string().optional(),
+            quota: OmpProviderAccountQuotaSchema.optional(),
           }),
         )
         .optional(),
@@ -6812,6 +6824,7 @@ export type ProviderDiagnosticResponseMessage = z.infer<
   typeof ProviderDiagnosticResponseMessageSchema
 >;
 export type OmpProviderManagement = z.infer<typeof OmpProviderManagementSchema>;
+export type OmpProviderAccountQuota = z.infer<typeof OmpProviderAccountQuotaSchema>;
 export type OmpProviderManagementGetResponseMessage = z.infer<
   typeof OmpProviderManagementGetResponseMessageSchema
 >;

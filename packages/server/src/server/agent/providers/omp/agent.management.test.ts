@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { parse } from "yaml";
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
@@ -32,7 +32,7 @@ const { DatabaseSync } = testRequire("node:sqlite") as {
   DatabaseSync: new (path: string) => TestSqliteDatabase;
 };
 
-async function createClient() {
+async function createClient(options: { quotaFetch?: typeof fetch } = {}) {
   const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-management-"));
   tempDirs.push(agentDir);
   const runtime = new FakeOmp();
@@ -40,6 +40,7 @@ async function createClient() {
     logger: createTestLogger(),
     runtime,
     runtimeSettings: { env: { PI_CODING_AGENT_DIR: agentDir } },
+    quotaFetch: options.quotaFetch ?? (async () => new Response(null, { status: 401 })),
   });
   return { agentDir, client, runtime };
 }
@@ -71,7 +72,23 @@ describe("OMP provider management", () => {
     });
   });
   test("reports every active OAuth account without exposing credential data", async () => {
-    const { agentDir, client, runtime } = await createClient();
+    const quotaFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      if (headers.get("Authorization") === "Bearer secret-a") {
+        return new Response(
+          JSON.stringify({
+            plan_type: "plus",
+            rate_limit: {
+              primary_window: { used_percent: 42, reset_at: 1_798_122_000 },
+              secondary_window: { used_percent: 8, reset_at: 1_798_640_000 },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(null, { status: 401 });
+    });
+    const { agentDir, client, runtime } = await createClient({ quotaFetch });
     const databasePath = path.join(agentDir, "agent.db");
     const database = new DatabaseSync(databasePath);
     database.exec(`
@@ -86,8 +103,8 @@ describe("OMP provider management", () => {
       INSERT INTO auth_credentials
         (id, provider, credential_type, data, identity_key, disabled_cause)
       VALUES
-        (1, 'openai-codex', 'oauth', '{"access":"secret-a"}', 'email:alice@example.com|org:personal', NULL),
-        (2, 'openai-codex', 'oauth', '{"access":"secret-b"}', 'email:bob@example.com|org:team', NULL),
+        (1, 'openai-codex', 'oauth', '{"access":"secret-a","accountId":"acct-a"}', 'email:alice@example.com|org:personal', NULL),
+        (2, 'openai-codex', 'oauth', '{"access":"secret-b","accountId":"acct-b"}', 'email:bob@example.com|org:team', NULL),
         (3, 'openai-codex', 'oauth', '{"access":"secret-c"}', 'email:old@example.com', 'expired'),
         (4, 'openai-codex', 'api_key', '{"key":"secret-d"}', NULL, NULL),
         (5, 'anthropic', 'oauth', '{"access":"secret-e"}', NULL, NULL);
@@ -115,7 +132,8 @@ describe("OMP provider management", () => {
         identityKey: "email:bob@example.com|org:team",
       },
     ]);
-    await expect(client.getOmpProviderManagement()).resolves.toMatchObject({
+    const management = await client.getOmpProviderManagement();
+    expect(management).toMatchObject({
       loginProviders: [
         {
           id: "openai-codex",
@@ -123,10 +141,22 @@ describe("OMP provider management", () => {
             {
               credentialId: 1,
               identityKey: "email:alice@example.com|org:personal",
+              quota: {
+                status: "available",
+                planLabel: "plus",
+                fiveHourUsedPct: 42,
+                fiveHourLimitReached: false,
+                weeklyUsedPct: 8,
+              },
             },
             {
               credentialId: 2,
               identityKey: "email:bob@example.com|org:team",
+              quota: {
+                status: "unavailable",
+                fiveHourUsedPct: null,
+                fiveHourLimitReached: null,
+              },
             },
           ],
         },
@@ -136,6 +166,14 @@ describe("OMP provider management", () => {
         },
       ],
     });
+    expect(JSON.stringify(management)).not.toContain("secret-a");
+    expect(JSON.stringify(management)).not.toContain("secret-b");
+    expect(quotaFetch).toHaveBeenCalledTimes(2);
+    expect(
+      quotaFetch.mock.calls
+        .map(([, init]) => new Headers(init?.headers).get("ChatGPT-Account-Id"))
+        .sort(),
+    ).toEqual(["acct-a", "acct-b"]);
   });
 
   test("logs out only active credentials for the requested provider", async () => {

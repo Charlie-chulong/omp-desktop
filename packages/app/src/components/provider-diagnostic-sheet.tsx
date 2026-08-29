@@ -215,8 +215,83 @@ type OmpProviderAccount = NonNullable<
   OmpProviderManagement["loginProviders"][number]["accounts"]
 >[number];
 
+function formatQuotaResetTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function OmpAccountQuotaSummary({
+  credentialId,
+  quota,
+}: {
+  credentialId: number;
+  quota?: OmpProviderAccount["quota"];
+}) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const usedPct = quota?.fiveHourUsedPct ?? null;
+  const limitReached = quota?.fiveHourLimitReached === true || (usedPct ?? 0) >= 100;
+  const toneColor = limitReached
+    ? theme.colors.destructive
+    : usedPct !== null
+      ? usedPct >= 70
+        ? theme.colors.palette.amber[500]
+        : theme.colors.palette.green[500]
+      : theme.colors.foregroundMuted;
+  const usedText =
+    usedPct !== null
+      ? t("settings.providers.omp.multiAccount.quotaUsed", {
+          used: Math.round(usedPct),
+          remaining: Math.max(0, Math.round(100 - usedPct)),
+        })
+      : null;
+  const statusText = !quota
+    ? t("settings.providers.omp.multiAccount.quotaUnknown")
+    : quota.status !== "available"
+      ? t("settings.providers.omp.multiAccount.quotaUnavailable")
+      : usedText
+        ? limitReached
+          ? `${usedText} · ${t("settings.providers.omp.multiAccount.quotaReached")}`
+          : usedText
+        : t("settings.providers.omp.multiAccount.quotaUnknown");
+  const resetTime = formatQuotaResetTime(quota?.fiveHourResetsAt);
+  return (
+    <View style={sheetStyles.accountQuota} testID={`omp-provider-account-quota-${credentialId}`}>
+      <View style={sheetStyles.accountQuotaHeader}>
+        <Text style={sheetStyles.accountQuotaLabel}>
+          {t("settings.providers.omp.multiAccount.quotaFiveHour")}
+        </Text>
+        <Text style={[sheetStyles.accountQuotaStatus, { color: toneColor }]}>{statusText}</Text>
+      </View>
+      {usedPct !== null ? (
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel={t("settings.providers.omp.multiAccount.quotaFiveHour")}
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(usedPct) }}
+          style={sheetStyles.accountQuotaTrack}
+        >
+          <View
+            style={[
+              sheetStyles.accountQuotaFill,
+              { width: `${Math.min(100, usedPct)}%`, backgroundColor: toneColor },
+            ]}
+          />
+        </View>
+      ) : null}
+      {resetTime ? (
+        <Text style={sheetStyles.accountQuotaReset}>
+          {t("settings.providers.omp.multiAccount.quotaResetsAt", { time: resetTime })}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function OmpProviderAccountRow({
   account,
+  showQuota,
   index,
   note,
   editing,
@@ -228,6 +303,7 @@ function OmpProviderAccountRow({
   onCancel,
 }: {
   account: OmpProviderAccount;
+  showQuota: boolean;
   index: number;
   note?: string;
   editing: boolean;
@@ -295,6 +371,9 @@ function OmpProviderAccountRow({
               <Text style={sheetStyles.accountNote} numberOfLines={2}>
                 {note}
               </Text>
+            ) : null}
+            {showQuota ? (
+              <OmpAccountQuotaSummary credentialId={account.credentialId} quota={account.quota} />
             ) : null}
           </View>
           <Button
@@ -466,6 +545,7 @@ function OmpProviderSummaryRow({
             <OmpProviderAccountRow
               key={account.credentialId}
               account={account}
+              showQuota={summary.id === "openai-codex"}
               index={index}
               note={accountNotes[String(account.credentialId)]}
               editing={editingAccountId === account.credentialId}
@@ -2182,6 +2262,39 @@ const sheetStyles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.mono,
   },
   accountNote: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  accountQuota: {
+    gap: theme.spacing[1],
+    marginTop: theme.spacing[1],
+  },
+  accountQuotaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[2],
+  },
+  accountQuotaLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  accountQuotaStatus: {
+    flexShrink: 1,
+    fontSize: theme.fontSize.sm,
+  },
+  accountQuotaTrack: {
+    height: 5,
+    width: "100%",
+    overflow: "hidden",
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface2,
+  },
+  accountQuotaFill: {
+    height: "100%",
+    borderRadius: theme.borderRadius.full,
+  },
+  accountQuotaReset: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },

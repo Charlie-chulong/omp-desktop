@@ -8,6 +8,7 @@ import type {
   AgentAttachment,
   OmpCustomProviderInput,
   OmpInstallationStatus,
+  OmpProviderAccountQuota,
 } from "@omp-desktop/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
@@ -734,6 +735,7 @@ export interface OmpProviderManagement {
     accounts?: Array<{
       credentialId: number;
       identityKey?: string;
+      quota?: OmpProviderAccountQuota;
     }>;
   }>;
 }

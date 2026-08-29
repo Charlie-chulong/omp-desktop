@@ -6,7 +6,11 @@ import { join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
-import type { OmpCustomProviderInput, OmpInstallationStatus } from "@omp-desktop/protocol/messages";
+import type {
+  OmpCustomProviderInput,
+  OmpInstallationStatus,
+  OmpProviderAccountQuota,
+} from "@omp-desktop/protocol/messages";
 import { parseDocument } from "yaml";
 
 import {
@@ -117,6 +121,7 @@ import {
   mapOmpRpcUiPermissionRequest,
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
+import { fetchCodexAccountQuota, type CodexAccountQuotaCredential } from "./codex-account-quota.js";
 
 const OMP_PROVIDER = "omp";
 const QUESTION_RESPONSE_HEADER = "Response";
@@ -136,6 +141,88 @@ export interface StoredOmpOAuthAccount {
   credentialId: number;
   provider: string;
   identityKey?: string;
+}
+interface StoredOmpOAuthAccountCredential
+  extends StoredOmpOAuthAccount, CodexAccountQuotaCredential {}
+
+function parseStoredOmpOAuthAccountCredential(
+  row: Record<string, unknown>,
+): StoredOmpOAuthAccountCredential | null {
+  const credentialId = Number(row.id);
+  if (
+    !Number.isSafeInteger(credentialId) ||
+    credentialId <= 0 ||
+    typeof row.provider !== "string" ||
+    row.provider.length === 0 ||
+    typeof row.data !== "string"
+  ) {
+    return null;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(row.data);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const credential = data as Record<string, unknown>;
+  const accessToken = typeof credential.access === "string" ? credential.access.trim() : "";
+  if (!accessToken) return null;
+  const identityKey =
+    typeof row.identity_key === "string" && row.identity_key.trim().length > 0
+      ? row.identity_key.trim()
+      : undefined;
+  const accountId =
+    typeof credential.accountId === "string" && credential.accountId.trim().length > 0
+      ? credential.accountId.trim()
+      : undefined;
+  return {
+    credentialId,
+    provider: row.provider,
+    ...(identityKey ? { identityKey } : {}),
+    accessToken,
+    ...(accountId ? { accountId } : {}),
+  };
+}
+
+export function readStoredOmpOAuthAccountCredentials(
+  agentDbPath: string,
+  providerId = "openai-codex",
+): StoredOmpOAuthAccountCredential[] {
+  if (!existsSync(agentDbPath)) return [];
+  const database = openOmpCredentialDatabase(agentDbPath);
+  try {
+    const columns = new Set(
+      database
+        .prepare("PRAGMA table_info(auth_credentials)")
+        .all()
+        .map((row) => row.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+    const requiredColumns = [
+      "id",
+      "provider",
+      "credential_type",
+      "data",
+      "disabled_cause",
+      "identity_key",
+    ];
+    if (requiredColumns.some((column) => !columns.has(column))) return [];
+    return database
+      .prepare(
+        `SELECT id, provider, data, identity_key
+         FROM auth_credentials
+         WHERE provider = ? AND credential_type = 'oauth' AND disabled_cause IS NULL
+         ORDER BY id`,
+      )
+      .all(providerId)
+      .flatMap((row) => {
+        const parsed = parseStoredOmpOAuthAccountCredential(row);
+        return parsed ? [parsed] : [];
+      });
+  } finally {
+    database.close();
+  }
 }
 
 function openOmpCredentialDatabase(agentDbPath: string): NodeSqliteDatabase {
@@ -242,6 +329,8 @@ export interface OmpAgentClientOptions {
   providerIdleScheduler?: OmpProviderIdleScheduler;
   noTurnScheduler?: OmpNoTurnScheduler;
   usagePollScheduler?: OmpUsagePollScheduler;
+  quotaFetch?: typeof fetch;
+  quotaNow?: () => number;
 }
 
 export interface OmpProviderIdleScheduler {
@@ -2638,6 +2727,8 @@ export class OmpAgentClient implements AgentClient {
   private readonly providerIdleScheduler?: OmpProviderIdleScheduler;
   private readonly noTurnScheduler?: OmpNoTurnScheduler;
   private readonly usagePollScheduler?: OmpUsagePollScheduler;
+  private readonly quotaFetch: typeof fetch;
+  private readonly quotaNow: () => number;
   private readonly runtime: OmpRuntime;
   private readonly loginFlows = new Map<string, OmpProviderLoginFlow>();
 
@@ -2663,6 +2754,8 @@ export class OmpAgentClient implements AgentClient {
     this.providerIdleScheduler = options.providerIdleScheduler;
     this.noTurnScheduler = options.noTurnScheduler;
     this.usagePollScheduler = options.usagePollScheduler;
+    this.quotaFetch = options.quotaFetch ?? fetch;
+    this.quotaNow = options.quotaNow ?? Date.now;
     this.runtime = options.runtime ?? createRuntime(options.logger, runtimeSettings);
   }
 
@@ -2849,6 +2942,7 @@ export class OmpAgentClient implements AgentClient {
       // OMP reports the invalid config through runtimeError below.
     }
     const storedAccountsByProvider = new Map<string, StoredOmpOAuthAccount[]>();
+    const storedAccountCredentialsById = new Map<number, StoredOmpOAuthAccountCredential>();
     try {
       const env = { ...process.env, ...this.runtimeSettings?.env };
       const { agentDb } = resolveOmpDiagnosticPaths(env);
@@ -2856,6 +2950,9 @@ export class OmpAgentClient implements AgentClient {
         const accounts = storedAccountsByProvider.get(account.provider) ?? [];
         accounts.push(account);
         storedAccountsByProvider.set(account.provider, accounts);
+      }
+      for (const account of readStoredOmpOAuthAccountCredentials(agentDb)) {
+        storedAccountCredentialsById.set(account.credentialId, account);
       }
     } catch (error) {
       this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
@@ -2878,15 +2975,33 @@ export class OmpAgentClient implements AgentClient {
       for (const model of models) {
         providerModels.set(model.provider, (providerModels.get(model.provider) ?? 0) + 1);
       }
+      const quotaByCredentialId = new Map<number, OmpProviderAccountQuota>();
+      await Promise.all(
+        [...storedAccountCredentialsById.values()]
+          .filter((account) => account.provider === "openai-codex")
+          .map(async (account) => {
+            const quota = await fetchCodexAccountQuota({
+              credential: account,
+              fetch: this.quotaFetch,
+              now: this.quotaNow,
+            });
+            quotaByCredentialId.set(account.credentialId, quota);
+          }),
+      );
       loginProviders = providers.map((provider) => {
         const accounts = storedAccountsByProvider.get(provider.id);
         if (!accounts || accounts.length === 0) return provider;
         return {
           ...provider,
-          accounts: accounts.map(({ credentialId, identityKey }) => ({
-            credentialId,
-            ...(identityKey ? { identityKey } : {}),
-          })),
+          accounts: accounts.map(({ credentialId, identityKey }) => {
+            const quota =
+              provider.id === "openai-codex" ? quotaByCredentialId.get(credentialId) : undefined;
+            return {
+              credentialId,
+              ...(identityKey ? { identityKey } : {}),
+              ...(quota ? { quota } : {}),
+            };
+          }),
         };
       });
     } catch (error) {
