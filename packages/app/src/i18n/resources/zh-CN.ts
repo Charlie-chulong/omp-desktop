@@ -238,7 +238,7 @@ export const zhCN: TranslationResources = {
         goalPlaceholder: "请输入目标",
       },
       oauthAccount: {
-        title: "OAuth 账号",
+        title: "账号",
       },
     },
     quota: {

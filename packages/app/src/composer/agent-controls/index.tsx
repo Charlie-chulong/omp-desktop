@@ -54,6 +54,7 @@ import {
 import { groupOmpModelsByProviderNamespace } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
 import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
+import { formatOmpAccountSelectionLabel } from "@/components/omp-provider-accounts";
 import { resolveOmpRemainingQuotaPct } from "@/components/omp-provider-quota";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -112,6 +113,23 @@ type OmpWorkflowQuotaAccount = NonNullable<
   OmpProviderManagement["loginProviders"][number]["accounts"]
 >[number];
 type OmpWorkflowQuotaDisplayAccount = OmpWorkflowQuotaAccount & { note?: string };
+function formatFeatureOptionLabel(
+  featureId: string,
+  option: AgentControlOption,
+  oauthAccounts: readonly OmpWorkflowQuotaDisplayAccount[] = [],
+): string {
+  if (featureId === "oauth_account_credential") {
+    const account = oauthAccounts.find((candidate) => String(candidate.credentialId) === option.id);
+    if (account) {
+      return formatOmpAccountSelectionLabel({
+        note: account.note,
+        identityKey: account.identityKey,
+        fallback: option.label,
+      });
+    }
+  }
+  return formatAgentFeatureOptionLabel(featureId, option);
+}
 function isCodexWorkflowProvider(provider: string | undefined, modelId: string | null): boolean {
   if (provider === "openai-codex") return true;
   return provider === "omp" && resolveOmpModelProviderNamespace(modelId ?? "") === "openai-codex";
@@ -623,11 +641,11 @@ function ControlledAgentControls({
         return {
           type: "select" as const,
           label: selectedOption
-            ? formatAgentFeatureOptionLabel(feature.id, selectedOption)
+            ? formatFeatureOptionLabel(feature.id, selectedOption, workflowQuotaAccounts)
             : formatAgentFeatureLabel(feature),
         };
       }),
-    [features, t],
+    [features, t, workflowQuotaAccounts],
   );
   const controlPresence = useMemo(
     () => ({
@@ -865,6 +883,7 @@ function ControlledAgentControls({
             selectedModelId={selectedModelId}
             selectedThinkingOptionId={selectedThinkingOptionId}
             features={features}
+            oauthAccounts={workflowQuotaAccounts}
             onSetFeature={onSetFeature}
             onApplyAgentProfile={onApplyAgentProfile}
             onEditAgentProfiles={onEditAgentProfiles}
@@ -1234,6 +1253,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
               <SheetFeatureItem
                 key={`feature-${feature.id}`}
                 feature={feature}
+                oauthAccounts={workflowQuotaAccounts}
                 disabled={disabled}
                 openSelector={openSelector}
                 handleOpenChange={handleNestedOpenChange}
@@ -1247,6 +1267,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           <DesktopFeatureItem
             key={`feature-${feature.id}`}
             feature={feature}
+            oauthAccounts={workflowQuotaAccounts}
             disabled={disabled}
             openSelector={openSelector}
             handleOpenChange={handleOpenChange}
@@ -1268,6 +1289,7 @@ interface SheetAgentControlsContentProps {
   selectedModelId?: string;
   selectedThinkingOptionId?: string;
   features?: AgentFeature[];
+  oauthAccounts?: OmpWorkflowQuotaDisplayAccount[];
   onSetFeature?: (featureId: string, value: unknown) => void;
   onApplyAgentProfile?: (profileId: string) => void;
   onEditAgentProfiles?: () => void;
@@ -1312,6 +1334,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     selectedModelId,
     selectedThinkingOptionId,
     features,
+    oauthAccounts,
     onSetFeature,
     onApplyAgentProfile,
     onEditAgentProfiles,
@@ -1399,6 +1422,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
         <SheetFeatureItem
           key={`feature-${feature.id}`}
           feature={feature}
+          oauthAccounts={oauthAccounts}
           disabled={disabled}
           openSelector={openSelector}
           handleOpenChange={handleOpenChange}
@@ -1475,6 +1499,7 @@ function FeatureSelectComboboxOption({
 
 function DesktopFeatureItem({
   feature,
+  oauthAccounts,
   disabled,
   openSelector,
   handleOpenChange,
@@ -1483,6 +1508,7 @@ function DesktopFeatureItem({
 }: {
   feature: AgentFeature;
   disabled: boolean;
+  oauthAccounts?: readonly OmpWorkflowQuotaDisplayAccount[];
   openSelector: AgentControlSelector | null;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
@@ -1521,10 +1547,10 @@ function DesktopFeatureItem({
       feature.type === "select"
         ? feature.options.map((option) => ({
             id: option.id,
-            label: formatAgentFeatureOptionLabel(feature.id, option),
+            label: formatFeatureOptionLabel(feature.id, option, oauthAccounts),
           }))
         : [],
-    [feature, t],
+    [feature, oauthAccounts, t],
   );
   const renderSelectOption = useCallback(
     (args: {
@@ -1579,7 +1605,7 @@ function DesktopFeatureItem({
     const FeatureIcon = getAgentFeatureIcon(feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const selectedOptionLabel = selectedOption
-      ? formatAgentFeatureOptionLabel(feature.id, selectedOption)
+      ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
       : featureLabel;
     return (
       <>
@@ -1622,6 +1648,7 @@ function DesktopFeatureItem({
 
 function SheetFeatureItem({
   feature,
+  oauthAccounts,
   disabled,
   openSelector,
   handleOpenChange,
@@ -1629,6 +1656,7 @@ function SheetFeatureItem({
 }: {
   feature: AgentFeature;
   disabled: boolean;
+  oauthAccounts?: readonly OmpWorkflowQuotaDisplayAccount[];
   openSelector: AgentControlSelector | null;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
@@ -1659,14 +1687,14 @@ function SheetFeatureItem({
     if (feature.type === "select") {
       return feature.options.map((option) => ({
         id: option.id,
-        label: formatAgentFeatureOptionLabel(feature.id, option),
+        label: formatFeatureOptionLabel(feature.id, option, oauthAccounts),
       }));
     }
     return [
       { id: "true", label: t("agentControls.features.on") },
       { id: "false", label: t("agentControls.features.off") },
     ];
-  }, [feature, t]);
+  }, [feature, oauthAccounts, t]);
   const renderSelectOption = useCallback(
     (args: {
       option: ComboboxOption;
@@ -1728,7 +1756,7 @@ function SheetFeatureItem({
     const FeatureIcon = getAgentFeatureIcon(feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const selectedOptionLabel = selectedOption
-      ? formatAgentFeatureOptionLabel(feature.id, selectedOption)
+      ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
       : featureLabel;
     return (
       <>

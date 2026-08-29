@@ -106,15 +106,19 @@ function createToolCatalog(): PaseoToolCatalog {
   };
 }
 
-
 describe("OMP agent client and session", () => {
-  test("exposes and pins a selected stored OAuth account", async () => {
+  test("exposes and pins a selected stored OAuth account when multiple accounts exist", async () => {
     const omp = new OmpHarness({
       oauthAccounts: [
         {
           credentialId: 41,
           provider: "openai-codex",
           identityKey: "email:alice@example.com|org:personal",
+        },
+        {
+          credentialId: 42,
+          provider: "openai-codex",
+          identityKey: "email:bob@example.com|org:team",
         },
       ],
     });
@@ -127,10 +131,8 @@ describe("OMP agent client and session", () => {
         type: "select",
         value: null,
         options: [
-          {
-            id: "41",
-            label: "alice@example.com · org:personal",
-          },
+          { id: "41", label: "alice@example.com · org:personal" },
+          { id: "42", label: "bob@example.com · org:team" },
         ],
       }),
     ]);
@@ -145,7 +147,7 @@ describe("OMP agent client and session", () => {
     );
   });
 
-  test("restores a configured OAuth account pin before the first turn", async () => {
+  test("hides OAuth account selection for a single account", async () => {
     const omp = new OmpHarness({
       oauthAccounts: [{ credentialId: 7, provider: "openai-codex" }],
     });
@@ -154,13 +156,26 @@ describe("OMP agent client and session", () => {
       featureValues: { oauth_account_credential: "7" },
     });
 
-    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
-    expect(omp.features()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "oauth_account_credential", value: "7" }),
-      ]),
-    );
+    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.recordedPrompts()).toEqual([]);
   });
+
+  test("hides OAuth account selection for custom providers", async () => {
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 7, provider: "custom-openai" },
+        { credentialId: 8, provider: "custom-openai" },
+      ],
+    });
+    await omp.start({
+      model: "custom-openai/model",
+      featureValues: { oauth_account_credential: "7" },
+    });
+
+    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.recordedPrompts()).toEqual([]);
+  });
+
   test("owns launch configuration and registers native host tools", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask" }, createToolCatalog());

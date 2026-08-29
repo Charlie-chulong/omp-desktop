@@ -45,6 +45,12 @@ describe("localized agent control labels", () => {
       expect(formatAgentModeLabel({ id: "full", label: "Full access" })).toBe("完全访问");
       expect(formatAgentFeatureLabel({ id: "workflow_mode", label: "Workflow" })).toBe("工作流");
       expect(
+        formatAgentFeatureLabel({
+          id: "oauth_account_credential",
+          label: "OAuth account",
+        }),
+      ).toBe("账号");
+      expect(
         formatAgentFeatureOptionLabel("workflow_mode", {
           id: "standard",
           label: "Standard",

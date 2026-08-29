@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { formatOmpAccountIdentity, resolveOmpLoginAction } from "./omp-provider-accounts";
+import {
+  formatOmpAccountIdentity,
+  formatOmpAccountSelectionLabel,
+  resolveOmpLoginAction,
+} from "./omp-provider-accounts";
 
 describe("OMP provider accounts", () => {
   test("keeps login available after the first account authenticates", () => {
@@ -19,5 +23,32 @@ describe("OMP provider accounts", () => {
       secondary: null,
     });
     expect(formatOmpAccountIdentity()).toEqual({ primary: null, secondary: null });
+  });
+
+  test("shows account notes before email addresses in selectors", () => {
+    expect(
+      formatOmpAccountSelectionLabel({
+        note: "  个人订阅  ",
+        identityKey: "email:alice@example.com|org:org-team",
+        fallback: "OAuth credential #4",
+      }),
+    ).toBe("个人订阅 · alice@example.com");
+    expect(
+      formatOmpAccountSelectionLabel({
+        identityKey: "email:alice@example.com|org:org-team",
+        fallback: "OAuth credential #4",
+      }),
+    ).toBe("alice@example.com");
+    expect(
+      formatOmpAccountSelectionLabel({
+        note: "个人订阅",
+        fallback: "OAuth credential #4",
+      }),
+    ).toBe("个人订阅");
+    expect(
+      formatOmpAccountSelectionLabel({
+        fallback: "OAuth credential #4",
+      }),
+    ).toBe("OAuth credential #4");
   });
 });

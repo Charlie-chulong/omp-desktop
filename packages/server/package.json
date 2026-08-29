@@ -1,6 +1,6 @@
 {
   "name": "@omp-desktop/server",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "OMP Desktop local daemon",
   "files": [
     "dist/server",
@@ -53,9 +53,9 @@
     "@babel/parser": "^7.29.8",
     "@isaacs/ttlcache": "^2.1.4",
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@omp-desktop/client": "0.1.11",
-    "@omp-desktop/highlight": "0.1.11",
-    "@omp-desktop/protocol": "0.1.11",
+    "@omp-desktop/client": "0.1.12",
+    "@omp-desktop/highlight": "0.1.12",
+    "@omp-desktop/protocol": "0.1.12",
     "@xterm/headless": "^6.0.0",
     "ai": "5.0.78",
     "ajv": "^8.20.0",

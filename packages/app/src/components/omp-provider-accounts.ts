@@ -29,3 +29,14 @@ export function formatOmpAccountIdentity(identityKey?: string): OmpAccountIdenti
     secondary: qualifiers.length > 0 ? qualifiers.join(" · ") : null,
   };
 }
+
+export function formatOmpAccountSelectionLabel(input: {
+  note?: string;
+  identityKey?: string;
+  fallback: string;
+}): string {
+  const note = input.note?.trim();
+  const identity = formatOmpAccountIdentity(input.identityKey).primary?.trim();
+  if (note && identity) return `${note} · ${identity}`;
+  return note || identity || input.fallback;
+}

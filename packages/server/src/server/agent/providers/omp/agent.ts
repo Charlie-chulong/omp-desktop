@@ -481,7 +481,10 @@ function createOmpFeatures(
       ],
     },
   ];
-  if (oauthAccounts.length > 0) {
+  if (
+    parseModelReference(config.model ?? null)?.provider === "openai-codex" &&
+    oauthAccounts.length > 1
+  ) {
     const configuredCredentialId = optionalString(
       config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
     );
@@ -504,6 +507,7 @@ function createOmpFeatures(
   }
   return features;
 }
+
 interface OmpProviderLoginFlow {
   providerId: string;
   runtimeSession: OmpRuntimeSession;
@@ -1453,6 +1457,10 @@ export class OmpAgentSession implements AgentSession {
       if (!Number.isSafeInteger(credentialId) || credentialId <= 0) {
         throw new Error(`Invalid OMP OAuth account '${value}'`);
       }
+      const feature = this.features.find((candidate) => candidate.id === featureId);
+      if (feature?.type !== "select") {
+        throw new Error("OMP OAuth account feature is unavailable");
+      }
       const modelProvider =
         this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
       const account = this.oauthAccounts.find(
@@ -1463,10 +1471,6 @@ export class OmpAgentSession implements AgentSession {
         throw new Error(`OMP OAuth account '${value}' is unavailable for the current model`);
       }
       await this.pinOAuthAccount(account);
-      const feature = this.features.find((candidate) => candidate.id === featureId);
-      if (feature?.type !== "select") {
-        throw new Error("OMP OAuth account feature is unavailable");
-      }
       feature.value = value;
       this.config.featureValues = {
         ...this.config.featureValues,
@@ -1514,6 +1518,7 @@ export class OmpAgentSession implements AgentSession {
       this.config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
     );
     if (!configuredCredentialId) return;
+    if (!this.features.some((feature) => feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)) return;
     const modelProvider =
       this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
     const account = this.oauthAccounts.find(
