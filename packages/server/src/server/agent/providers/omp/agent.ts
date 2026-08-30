@@ -3388,6 +3388,17 @@ export class OmpAgentClient implements AgentClient {
     this.deleteLoginFlow(flowId);
     return await this.getOmpProviderManagement();
   }
+  async cancelOmpProviderLogin(flowId: string): Promise<boolean> {
+    const flow = this.loginFlows.get(flowId);
+    if (!flow) return false;
+    this.loginFlows.delete(flowId);
+    clearTimeout(flow.timeout);
+    flow.unsubscribe();
+    flow.error = new Error("OMP login cancelled");
+    flow.resolveActivity();
+    await flow.runtimeSession.close();
+    return true;
+  }
   async logoutOmpProvider(providerId: string): Promise<OmpProviderManagement> {
     const env = { ...process.env, ...this.runtimeSettings?.env };
     const { agentDb } = resolveOmpDiagnosticPaths(env);

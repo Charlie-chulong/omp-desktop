@@ -1350,6 +1350,32 @@ test("OMP provider actions use the native management RPCs", async () => {
     }),
   );
   await expect(finishPromise).resolves.toMatchObject({ requestId: "omp-login-finish" });
+  const cancelPromise = client.omp.cancelProviderLogin("flow-openai", {
+    requestId: "omp-login-cancel",
+  });
+  expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
+    type: "session",
+    message: {
+      type: "omp.provider.login.cancel.request",
+      flowId: "flow-openai",
+      requestId: "omp-login-cancel",
+    },
+  });
+  ws.message(
+    sessionMessage({
+      type: "omp.provider.login.cancel.response",
+      payload: {
+        requestId: "omp-login-cancel",
+        flowId: "flow-openai",
+        cancelled: true,
+      },
+    }),
+  );
+  await expect(cancelPromise).resolves.toEqual({
+    requestId: "omp-login-cancel",
+    flowId: "flow-openai",
+    cancelled: true,
+  });
 
   await client.close();
 });

@@ -441,6 +441,7 @@ function OmpProviderSummaryRow({
   summary,
   loggingInProviderId,
   loggingOutProviderId,
+  loginFlowActive,
   removingProviderId,
   accountNotes = {},
   editingAccountId = null,
@@ -459,6 +460,7 @@ function OmpProviderSummaryRow({
   summary: OmpProviderSummary;
   loggingInProviderId: string | null;
   loggingOutProviderId: string | null;
+  loginFlowActive: boolean;
   removingProviderId?: string | null;
   accountNotes?: Record<string, string>;
   editingAccountId?: number | null;
@@ -539,7 +541,7 @@ function OmpProviderSummaryRow({
               size="sm"
               leftIcon={loggingInProviderId === login.id ? undefined : LogIn}
               onPress={handleLogin}
-              disabled={Boolean(loggingInProviderId || loggingOutProviderId)}
+              disabled={Boolean(loggingInProviderId || loggingOutProviderId || loginFlowActive)}
               testID={`omp-login-provider-${login.id}`}
             >
               {loggingInProviderId === login.id
@@ -1184,6 +1186,13 @@ function OmpProviderForm({
   );
 }
 type OmpManagementTab = "sign-in" | "custom";
+interface OmpProviderLoginFlowState {
+  flowId: string;
+  providerId: string;
+  url: string;
+  launchUrl?: string;
+  instructions?: string;
+}
 
 function isCustomOmpProvider(
   provider: OmpProviderManagement["providerModels"][number],
@@ -1243,6 +1252,7 @@ function OmpCustomProvidersTab({
               summary={summary}
               loggingInProviderId={null}
               loggingOutProviderId={null}
+              loginFlowActive={false}
               removingProviderId={removingProviderId}
               onLogin={NOOP}
               onEdit={onEditProvider}
@@ -1316,19 +1326,22 @@ function OmpManagementPanel({
   const [loginProviderId, setLoginProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
   const [logoutProviderId, setLogoutProviderId] = useState<string | null>(null);
-  const [loginFlow, setLoginFlow] = useState<{
-    flowId: string;
-    providerId: string;
-    url: string;
-    launchUrl?: string;
-    instructions?: string;
-  } | null>(null);
+  const [loginFlow, setLoginFlow] = useState<OmpProviderLoginFlowState | null>(null);
   const [loginInput, setLoginInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [accountNotes, setAccountNotes] = useState<Record<string, string>>({});
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [accountNoteDraft, setAccountNoteDraft] = useState("");
   const [savingAccountNoteId, setSavingAccountNoteId] = useState<number | null>(null);
+  const visibleRef = useRef(visible);
+  const loginStartPendingRef = useRef(false);
+  const cancellingLoginFlowIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const clientRef = useRef(client);
+  const loginFlowRef = useRef(loginFlow);
+  clientRef.current = client;
+  loginFlowRef.current = loginFlow;
+  visibleRef.current = visible;
 
   const applyManagement = useCallback(
     (result: OmpProviderManagement) => {
@@ -1350,20 +1363,58 @@ function OmpManagementPanel({
       setLoading(false);
     }
   }, [applyManagement, client, supported]);
+  const cancelLoginFlow = useCallback(
+    async (flow: OmpProviderLoginFlowState) => {
+      if (!client || cancellingLoginFlowIdRef.current === flow.flowId) return;
+      cancellingLoginFlowIdRef.current = flow.flowId;
+      if (mountedRef.current) setLoginProviderId(flow.providerId);
+      try {
+        await client.cancelOmpProviderLogin(flow.flowId);
+        if (loginFlowRef.current?.flowId === flow.flowId) loginFlowRef.current = null;
+        if (mountedRef.current) {
+          setLoginFlow((current) => (current?.flowId === flow.flowId ? null : current));
+          setLoginInput("");
+        }
+      } catch (cancelError) {
+        if (mountedRef.current) {
+          setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
+        }
+      } finally {
+        if (cancellingLoginFlowIdRef.current === flow.flowId) {
+          cancellingLoginFlowIdRef.current = null;
+          if (mountedRef.current) {
+            setLoginProviderId((current) => (current === flow.providerId ? null : current));
+          }
+        }
+      }
+    },
+    [client],
+  );
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+      visibleRef.current = false;
+      const flow = loginFlowRef.current;
+      const runtimeClient = clientRef.current;
+      if (!flow || !runtimeClient || cancellingLoginFlowIdRef.current === flow.flowId) return;
+      cancellingLoginFlowIdRef.current = flow.flowId;
+      void runtimeClient.cancelOmpProviderLogin(flow.flowId).catch(() => undefined);
+    },
+    [],
+  );
   useEffect(() => {
-    if (visible) {
-      void load();
-    } else {
-      setManagement(null);
-      setActiveTab("sign-in");
-      setAddProviderOpen(false);
-      setContextProviderId(null);
-      setLoginFlow(null);
-      setEditingProvider(null);
-      setLoginInput("");
-      setError(null);
-    }
+    if (visible) void load();
   }, [load, visible]);
+  useEffect(() => {
+    if (visible) return;
+    if (loginFlow) void cancelLoginFlow(loginFlow);
+    setManagement(null);
+    setActiveTab("sign-in");
+    setAddProviderOpen(false);
+    setContextProviderId(null);
+    setEditingProvider(null);
+    setError(null);
+  }, [cancelLoginFlow, loginFlow, visible]);
   useEffect(() => {
     if (!visible) {
       setAccountNotes({});
@@ -1418,18 +1469,26 @@ function OmpManagementPanel({
   );
   const startLogin = useCallback(
     async (providerId: string) => {
-      if (!client) return;
+      if (!client || loginFlow || loginStartPendingRef.current) return;
+      loginStartPendingRef.current = true;
       setLoginProviderId(providerId);
       setError(null);
       try {
         const flow = await client.startOmpProviderLogin(providerId);
-        setLoginFlow({
+        const nextFlow: OmpProviderLoginFlowState = {
           flowId: flow.flowId,
           providerId: flow.providerId,
           url: flow.url,
           ...(flow.launchUrl ? { launchUrl: flow.launchUrl } : {}),
           ...(flow.instructions ? { instructions: flow.instructions } : {}),
-        });
+        };
+        loginFlowRef.current = nextFlow;
+        if (!visibleRef.current) {
+          if (mountedRef.current) setLoginFlow(nextFlow);
+          await cancelLoginFlow(nextFlow);
+          return;
+        }
+        setLoginFlow(nextFlow);
         await Linking.openURL(flow.launchUrl ?? flow.url).catch((openError) => {
           setError(
             t("settings.providers.omp.login.openFailed", {
@@ -1440,10 +1499,11 @@ function OmpManagementPanel({
       } catch (loginError) {
         setError(loginError instanceof Error ? loginError.message : String(loginError));
       } finally {
+        loginStartPendingRef.current = false;
         setLoginProviderId(null);
       }
     },
-    [client, t],
+    [cancelLoginFlow, client, loginFlow, t],
   );
   const finishLogin = useCallback(async () => {
     if (!client || !loginFlow) return;
@@ -1451,6 +1511,7 @@ function OmpManagementPanel({
     setError(null);
     try {
       applyManagement(await client.finishOmpProviderLogin(loginFlow.flowId, loginInput));
+      loginFlowRef.current = null;
       setLoginFlow(null);
       setLoginInput("");
     } catch (loginError) {
@@ -1694,6 +1755,7 @@ function OmpManagementPanel({
                       key={summary.id}
                       summary={summary}
                       loggingInProviderId={loginProviderId}
+                      loginFlowActive={loginFlow !== null}
                       loggingOutProviderId={logoutProviderId}
                       accountNotes={accountNotes}
                       editingAccountId={editingAccountId}

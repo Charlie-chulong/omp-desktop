@@ -53,6 +53,43 @@ describe("project icon message security", () => {
     expect(parsed.success).toBe(false);
   });
 });
+describe("OMP provider login cancellation protocol", () => {
+  test("accepts a flow-scoped cancellation request and response", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "omp.provider.login.cancel.request",
+        flowId: "flow-openai-codex",
+        requestId: "cancel-login",
+      }),
+    ).toMatchObject({
+      type: "omp.provider.login.cancel.request",
+      flowId: "flow-openai-codex",
+    });
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "omp.provider.login.cancel.response",
+        payload: {
+          requestId: "cancel-login",
+          flowId: "flow-openai-codex",
+          cancelled: true,
+        },
+      }),
+    ).toMatchObject({
+      type: "omp.provider.login.cancel.response",
+      payload: { flowId: "flow-openai-codex", cancelled: true },
+    });
+  });
+
+  test("rejects cancellation without a flow id", () => {
+    expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "omp.provider.login.cancel.request",
+        flowId: "",
+        requestId: "cancel-login",
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe("project icon revision compatibility", () => {
   const project = {

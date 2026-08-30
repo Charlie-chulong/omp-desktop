@@ -188,6 +188,26 @@ describe("OMP provider management", () => {
         .sort(),
     ).toEqual(["acct-a", "acct-b"]);
   });
+  test("cancels an active provider login and closes its runtime session", async () => {
+    const { client, runtime } = await createClient();
+    runtime.queueLoginFlow({
+      url: "https://example.test/oauth",
+      launchUrl: "https://example.test/oauth?launch=1",
+    });
+
+    const flow = await client.startOmpProviderLogin("openai-codex");
+    const session = runtime.latestSession();
+    expect(flow).toMatchObject({
+      providerId: "openai-codex",
+      url: "https://example.test/oauth",
+    });
+    expect(session.loginRequests).toEqual(["openai-codex"]);
+    expect(session.closed).toBe(false);
+
+    await expect(client.cancelOmpProviderLogin(flow.flowId)).resolves.toBe(true);
+    expect(session.closed).toBe(true);
+    await expect(client.cancelOmpProviderLogin(flow.flowId)).resolves.toBe(false);
+  });
 
   test("logs out only active credentials for the requested provider", async () => {
     const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-auth-"));

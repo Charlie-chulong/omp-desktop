@@ -813,6 +813,7 @@ export interface AgentClient {
   installOmp?(): Promise<OmpInstallationStatus>;
   startOmpProviderLogin?(providerId: string): Promise<OmpProviderLoginStart>;
   finishOmpProviderLogin?(flowId: string, input?: string): Promise<OmpProviderManagement>;
+  cancelOmpProviderLogin?(flowId: string): Promise<boolean>;
   logoutOmpProvider?(providerId: string): Promise<OmpProviderManagement>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().

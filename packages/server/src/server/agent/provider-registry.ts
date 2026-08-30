@@ -459,6 +459,7 @@ function wrapClientProvider(
     installOmp: inner.installOmp?.bind(inner),
     startOmpProviderLogin: inner.startOmpProviderLogin?.bind(inner),
     finishOmpProviderLogin: inner.finishOmpProviderLogin?.bind(inner),
+    cancelOmpProviderLogin: inner.cancelOmpProviderLogin?.bind(inner),
     logoutOmpProvider: inner.logoutOmpProvider?.bind(inner),
   };
 }

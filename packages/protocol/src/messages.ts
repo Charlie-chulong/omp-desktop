@@ -1764,6 +1764,11 @@ export const OmpProviderLoginFinishRequestMessageSchema = z.object({
   input: z.string().optional(),
   requestId: z.string(),
 });
+export const OmpProviderLoginCancelRequestMessageSchema = z.object({
+  type: z.literal("omp.provider.login.cancel.request"),
+  flowId: z.string().min(1),
+  requestId: z.string(),
+});
 export const OmpProviderLogoutRequestMessageSchema = z.object({
   type: z.literal("omp.provider.logout.request"),
   providerId: z.string().min(1),
@@ -3173,6 +3178,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OmpInstallRequestMessageSchema,
   OmpProviderLoginStartRequestMessageSchema,
   OmpProviderLoginFinishRequestMessageSchema,
+  OmpProviderLoginCancelRequestMessageSchema,
   OmpProviderLogoutRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
   ResumeAgentRequestMessageSchema,
@@ -6014,6 +6020,14 @@ export const OmpProviderLoginFinishResponseMessageSchema = z.object({
   type: z.literal("omp.provider.login.finish.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
 });
+export const OmpProviderLoginCancelResponseMessageSchema = z.object({
+  type: z.literal("omp.provider.login.cancel.response"),
+  payload: z.object({
+    requestId: z.string(),
+    flowId: z.string(),
+    cancelled: z.boolean(),
+  }),
+});
 export const OmpProviderLogoutResponseMessageSchema = z.object({
   type: z.literal("omp.provider.logout.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
@@ -6652,6 +6666,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   OmpInstallResponseMessageSchema,
   OmpProviderLoginStartResponseMessageSchema,
   OmpProviderLoginFinishResponseMessageSchema,
+  OmpProviderLoginCancelResponseMessageSchema,
   OmpProviderLogoutResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
   ListCommandsResponseSchema,
@@ -6857,6 +6872,9 @@ export type OmpInstallStatusResponseMessage = z.infer<typeof OmpInstallStatusRes
 export type OmpInstallResponseMessage = z.infer<typeof OmpInstallResponseMessageSchema>;
 export type OmpProviderLoginStartResponseMessage = z.infer<
   typeof OmpProviderLoginStartResponseMessageSchema
+>;
+export type OmpProviderLoginCancelResponseMessage = z.infer<
+  typeof OmpProviderLoginCancelResponseMessageSchema
 >;
 export type OmpProviderLoginFinishResponseMessage = z.infer<
   typeof OmpProviderLoginFinishResponseMessageSchema

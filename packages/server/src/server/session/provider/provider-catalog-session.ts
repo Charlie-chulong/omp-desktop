@@ -701,6 +701,29 @@ export class ProviderCatalogSession {
       });
     }
   }
+  async handleOmpProviderLoginCancelRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.provider.login.cancel.request" }>,
+  ): Promise<void> {
+    try {
+      const cancelled = await this.providerSnapshotManager.cancelOmpProviderLogin(msg.flowId);
+      this.host.emit({
+        type: "omp.provider.login.cancel.response",
+        payload: { requestId: msg.requestId, flowId: msg.flowId, cancelled },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err, flowId: msg.flowId }, "Failed to cancel OMP login");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to cancel OMP login: ${err.message}`,
+          code: "omp_provider_login_cancel_failed",
+        },
+      });
+    }
+  }
   async handleOmpProviderLogoutRequest(
     msg: Extract<SessionInboundMessage, { type: "omp.provider.logout.request" }>,
   ): Promise<void> {

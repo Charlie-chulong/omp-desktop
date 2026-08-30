@@ -92,6 +92,7 @@ import type {
   OmpProviderModelDiscoveryResponseMessage,
   OmpProviderLoginStartResponseMessage,
   OmpProviderLoginFinishResponseMessage,
+  OmpProviderLoginCancelResponseMessage,
   OmpProviderLogoutResponseMessage,
   OmpInstallStatusResponseMessage,
   OmpInstallResponseMessage,
@@ -477,6 +478,7 @@ type OmpProviderManagementRemovePayload = OmpProviderManagementRemoveResponseMes
 type OmpProviderModelDiscoveryPayload = OmpProviderModelDiscoveryResponseMessage["payload"];
 type OmpProviderLoginStartPayload = OmpProviderLoginStartResponseMessage["payload"];
 type OmpProviderLoginFinishPayload = OmpProviderLoginFinishResponseMessage["payload"];
+type OmpProviderLoginCancelPayload = OmpProviderLoginCancelResponseMessage["payload"];
 type OmpProviderLogoutPayload = OmpProviderLogoutResponseMessage["payload"];
 type OmpInstallStatusPayload = OmpInstallStatusResponseMessage["payload"];
 type OmpInstallPayload = OmpInstallResponseMessage["payload"];
@@ -4990,6 +4992,19 @@ export class DaemonClient {
       },
       responseType: "omp.provider.login.finish.response",
       timeout: 660000,
+    });
+  }
+  async cancelOmpProviderLogin(
+    flowId: string,
+    options?: { requestId?: string },
+  ): Promise<OmpProviderLoginCancelPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "omp.provider.login.cancel.request",
+        flowId,
+      },
+      responseType: "omp.provider.login.cancel.response",
     });
   }
   async logoutOmpProvider(
