@@ -54,8 +54,14 @@ import {
 import { groupOmpModelsByProviderNamespace } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
 import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
-import { formatOmpAccountSelectionLabel } from "@/components/omp-provider-accounts";
-import { resolveOmpRemainingQuotaPct } from "@/components/omp-provider-quota";
+import {
+  formatOmpAccountSelectionLabel,
+  selectOmpQuotaAccounts,
+} from "@/components/omp-provider-accounts";
+import {
+  resolveOmpRemainingQuotaPct,
+  shouldShowOmpFiveHourQuota,
+} from "@/components/omp-provider-quota";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -1040,18 +1046,17 @@ function WorkflowQuotaSummary({
             index > 0 ? styles.workflowQuotaAccountSeparated : null,
           ]}
         >
-          <Text style={styles.workflowQuotaTitle} numberOfLines={1}>
-            {account.note?.trim() || t("agentControls.quota.noNote")}
-          </Text>
           <WorkflowQuotaValue
             label={t("agentControls.quota.total")}
             usedPct={account.quota?.weeklyUsedPct}
           />
-          <WorkflowQuotaValue
-            label={t("agentControls.quota.fiveHour")}
-            usedPct={account.quota?.fiveHourUsedPct}
-            limitReached={account.quota?.fiveHourLimitReached}
-          />
+          {shouldShowOmpFiveHourQuota(account.quota?.planLabel) ? (
+            <WorkflowQuotaValue
+              label={t("agentControls.quota.fiveHour")}
+              usedPct={account.quota?.fiveHourUsedPct}
+              limitReached={account.quota?.fiveHourLimitReached}
+            />
+          ) : null}
         </View>
       ))}
     </View>
@@ -1116,6 +1121,18 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     workflowQuotaAccounts,
     workflowQuotaLoading,
   } = props;
+  const selectedOAuthCredentialId = useMemo(() => {
+    const accountFeature = features?.find(
+      (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
+    );
+    if (!accountFeature || typeof accountFeature.value !== "string") return null;
+    const credentialId = Number(accountFeature.value);
+    return Number.isSafeInteger(credentialId) && credentialId > 0 ? credentialId : null;
+  }, [features]);
+  const displayedWorkflowQuotaAccounts = useMemo(
+    () => selectOmpQuotaAccounts(workflowQuotaAccounts ?? [], selectedOAuthCredentialId),
+    [selectedOAuthCredentialId, workflowQuotaAccounts],
+  );
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
     [glyphSize, presentation.showCarets],
@@ -1277,7 +1294,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
         ))
       )}
       <WorkflowQuotaSummary
-        accounts={workflowQuotaAccounts ?? []}
+        accounts={displayedWorkflowQuotaAccounts}
         loading={Boolean(workflowQuotaLoading)}
       />
     </>
@@ -1604,9 +1621,13 @@ function DesktopFeatureItem({
   if (feature.type === "select") {
     const FeatureIcon = getAgentFeatureIcon(feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
-    const selectedOptionLabel = selectedOption
+    const selectedOptionValueLabel = selectedOption
       ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
       : featureLabel;
+    const selectedOptionLabel =
+      feature.id === "oauth_account_credential" && selectedOption
+        ? `${featureLabel} · ${selectedOptionValueLabel}`
+        : selectedOptionValueLabel;
     return (
       <>
         <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
@@ -2300,7 +2321,7 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
+    gap: theme.spacing[3],
     paddingHorizontal: theme.spacing[1],
   },
   workflowQuotaAccountSeparated: {

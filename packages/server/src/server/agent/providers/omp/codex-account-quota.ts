@@ -38,6 +38,10 @@ function parseResetAt(value: unknown): string | null {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
+function isProPlan(planLabel: string | null): boolean {
+  return planLabel?.trim().toLowerCase() === "pro";
+}
+
 function parseWindow(value: unknown): { usedPct: number | null; resetsAt: string | null } | null {
   if (!isRecord(value)) return null;
   const usedPct = parseUsedPct(value.used_percent);
@@ -106,18 +110,22 @@ export async function fetchCodexAccountQuota(
 
     const primary = parseWindow(payload.rate_limit.primary_window);
     const secondary = parseWindow(payload.rate_limit.secondary_window);
-    if (!primary) {
+    const planLabel = typeof payload.plan_type === "string" ? payload.plan_type : null;
+    const hasFiveHourLimit = !isProPlan(planLabel);
+    if (!primary && hasFiveHourLimit) {
       return failure("error", "Codex usage response did not include the five-hour limit", now);
     }
 
     const fetchedAt = new Date(now()).toISOString();
-    const planLabel = typeof payload.plan_type === "string" ? payload.plan_type : null;
     return {
       status: "available",
       planLabel,
-      fiveHourUsedPct: primary.usedPct,
-      fiveHourLimitReached: primary.usedPct === null ? null : primary.usedPct >= 100,
-      fiveHourResetsAt: primary.resetsAt,
+      fiveHourUsedPct: hasFiveHourLimit ? (primary?.usedPct ?? null) : null,
+      fiveHourLimitReached:
+        hasFiveHourLimit && primary?.usedPct !== null && primary?.usedPct !== undefined
+          ? primary.usedPct >= 100
+          : null,
+      fiveHourResetsAt: hasFiveHourLimit ? (primary?.resetsAt ?? null) : null,
       weeklyUsedPct: secondary?.usedPct ?? null,
       weeklyResetsAt: secondary?.resetsAt ?? null,
       fetchedAt,

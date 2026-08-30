@@ -70,7 +70,7 @@ import {
   updateOmpProviderAccountNote,
 } from "./omp-provider-account-notes";
 import { formatOmpAccountIdentity, resolveOmpLoginAction } from "./omp-provider-accounts";
-import { resolveOmpRemainingQuotaPct } from "./omp-provider-quota";
+import { resolveOmpRemainingQuotaPct, shouldShowOmpFiveHourQuota } from "./omp-provider-quota";
 import {
   groupOmpDiscoveredModels,
   resolveProviderDiscoveredModels,
@@ -311,13 +311,15 @@ function OmpAccountQuotaSummary({
         status={quota?.status}
         unknownLabel={t("settings.providers.omp.multiAccount.quotaTotalUnknown")}
       />
-      <OmpAccountQuotaWindow
-        label={t("settings.providers.omp.multiAccount.quotaFiveHour")}
-        usedPct={quota?.fiveHourUsedPct}
-        resetsAt={quota?.fiveHourResetsAt}
-        status={quota?.status}
-        limitReached={quota?.fiveHourLimitReached === true}
-      />
+      {shouldShowOmpFiveHourQuota(quota?.planLabel) ? (
+        <OmpAccountQuotaWindow
+          label={t("settings.providers.omp.multiAccount.quotaFiveHour")}
+          usedPct={quota?.fiveHourUsedPct}
+          resetsAt={quota?.fiveHourResetsAt}
+          status={quota?.status}
+          limitReached={quota?.fiveHourLimitReached === true}
+        />
+      ) : null}
     </View>
   );
 }

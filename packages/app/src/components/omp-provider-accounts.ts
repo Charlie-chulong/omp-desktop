@@ -40,3 +40,13 @@ export function formatOmpAccountSelectionLabel(input: {
   if (note && identity) return `${note} · ${identity}`;
   return note || identity || input.fallback;
 }
+
+export function selectOmpQuotaAccounts<T extends { credentialId: number }>(
+  accounts: readonly T[],
+  selectedCredentialId: number | null | undefined,
+): T[] {
+  if (accounts.length <= 1) return [...accounts];
+  if (selectedCredentialId === null || selectedCredentialId === undefined) return [];
+  const selected = accounts.find((account) => account.credentialId === selectedCredentialId);
+  return selected ? [selected] : [];
+}

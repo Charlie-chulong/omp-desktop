@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { resolveOmpRemainingQuotaPct } from "./omp-provider-quota";
+import { resolveOmpRemainingQuotaPct, shouldShowOmpFiveHourQuota } from "./omp-provider-quota";
 
 describe("OMP provider quota percentage", () => {
   test.each([
@@ -18,4 +18,17 @@ describe("OMP provider quota percentage", () => {
     expect(resolveOmpRemainingQuotaPct(undefined)).toBeNull();
     expect(resolveOmpRemainingQuotaPct(Number.NaN)).toBeNull();
   });
+});
+
+describe("OMP provider quota windows", () => {
+  test.each(["pro", " PRO ", "Pro"])("hides the five-hour window for %s plans", (planLabel) => {
+    expect(shouldShowOmpFiveHourQuota(planLabel)).toBe(false);
+  });
+
+  test.each(["plus", "team", null, undefined])(
+    "keeps the five-hour window for %s plans",
+    (planLabel) => {
+      expect(shouldShowOmpFiveHourQuota(planLabel)).toBe(true);
+    },
+  );
 });

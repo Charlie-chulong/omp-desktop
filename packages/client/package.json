@@ -1,6 +1,6 @@
 {
   "name": "@omp-desktop/client",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "OMP Desktop client SDK",
   "files": [
     "dist",
@@ -39,7 +39,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@omp-desktop/protocol": "0.1.13",
+    "@omp-desktop/protocol": "0.1.14",
     "zod": "^4.4.3"
   },
   "devDependencies": {

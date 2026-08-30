@@ -49,6 +49,34 @@ describe("fetchCodexAccountQuota", () => {
     );
   });
 
+  it("accepts Pro usage without a five-hour window", async () => {
+    const fetchApi = vi.fn(async () =>
+      jsonResponse({
+        plan_type: "pro",
+        rate_limit: {
+          secondary_window: { used_percent: 16, reset_at: 1_798_640_000 },
+        },
+      }),
+    );
+
+    await expect(
+      fetchCodexAccountQuota({
+        credential: { accessToken: "access-token" },
+        fetch: fetchApi,
+        now: () => NOW,
+      }),
+    ).resolves.toEqual({
+      status: "available",
+      planLabel: "pro",
+      fiveHourUsedPct: null,
+      fiveHourLimitReached: null,
+      fiveHourResetsAt: null,
+      weeklyUsedPct: 16,
+      weeklyResetsAt: "2026-12-30T14:13:20.000Z",
+      fetchedAt: "2026-08-29T00:00:00.000Z",
+    });
+  });
+
   it("marks expired credentials unavailable without attempting refresh", async () => {
     const fetchApi = vi.fn(async () => new Response(null, { status: 401 }));
 

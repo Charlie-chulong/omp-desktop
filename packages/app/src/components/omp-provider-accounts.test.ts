@@ -4,6 +4,7 @@ import {
   formatOmpAccountIdentity,
   formatOmpAccountSelectionLabel,
   resolveOmpLoginAction,
+  selectOmpQuotaAccounts,
 } from "./omp-provider-accounts";
 
 describe("OMP provider accounts", () => {
@@ -50,5 +51,13 @@ describe("OMP provider accounts", () => {
         fallback: "OAuth credential #4",
       }),
     ).toBe("OAuth credential #4");
+  });
+
+  test("shows only the selected account quota when multiple accounts exist", () => {
+    const accounts = [{ credentialId: 1 }, { credentialId: 2 }];
+
+    expect(selectOmpQuotaAccounts(accounts, 2)).toEqual([{ credentialId: 2 }]);
+    expect(selectOmpQuotaAccounts(accounts, null)).toEqual([]);
+    expect(selectOmpQuotaAccounts([accounts[0]], null)).toEqual([{ credentialId: 1 }]);
   });
 });
