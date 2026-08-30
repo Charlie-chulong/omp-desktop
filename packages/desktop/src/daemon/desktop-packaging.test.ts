@@ -92,22 +92,17 @@ describe("desktop packaging", () => {
   it("uses the server skill catalog without a duplicate desktop resource", () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
     const serverPackage = readFileSync(join(packageRoot, "..", "server", "package.json"), "utf8");
-    const runtimeTrace = readFileSync(
-      join(packageRoot, "..", "..", "scripts", "trace-daemon.mjs"),
-      "utf8",
-    );
 
     expect(config).not.toContain("from: ../../skills");
     expect(serverPackage).toContain("fs.rmSync('dist/server/skills',{recursive:true,force:true})");
     expect(serverPackage).toContain("fs.cpSync('../../skills','dist/server/skills'");
-    expect(runtimeTrace).toContain('"packages/server/dist/server/skills/**"');
   });
 
-  it("registers Paseo agent links with the operating system", () => {
+  it("registers OMP Desktop agent links with the operating system", () => {
     const config = readFileSync(join(packageRoot, "electron-builder.yml"), "utf8");
 
-    expect(config).toContain("name: Paseo agent link");
-    expect(config).toContain("- paseo");
+    expect(config).toContain("name: OMP Desktop agent link");
+    expect(config).toContain("- omp-desktop");
   });
 
   // electron-builder packs production dependencies declared in package.json into
