@@ -1007,7 +1007,7 @@ function WorkflowQuotaValue({
       <Text style={styles.workflowQuotaValueLabel} numberOfLines={1}>
         {label}
       </Text>
-      <Text style={[styles.workflowQuotaValueText, { color }]}>
+      <Text style={[styles.workflowQuotaValueText, { color }]} numberOfLines={1}>
         {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
       </Text>
     </View>
@@ -2328,7 +2328,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
   },
   workflowQuotaValueText: {
-    width: 30,
+    width: 36,
     flexShrink: 0,
     textAlign: "right",
     fontSize: theme.fontSize.sm,
