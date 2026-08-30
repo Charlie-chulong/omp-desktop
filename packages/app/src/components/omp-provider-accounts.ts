@@ -37,8 +37,18 @@ export function formatOmpAccountSelectionLabel(input: {
 }): string {
   const note = input.note?.trim();
   const identity = formatOmpAccountIdentity(input.identityKey).primary?.trim();
-  if (note && identity) return `${note} · ${identity}`;
   return note || identity || input.fallback;
+}
+
+export function resolveOmpAccountControlLabels(input: {
+  featureLabel: string;
+  accountLabel?: string | null;
+}): { buttonLabel: string; tooltipLabel: string } {
+  const accountLabel = input.accountLabel?.trim();
+  return {
+    buttonLabel: input.featureLabel,
+    tooltipLabel: accountLabel ? `${input.featureLabel}: ${accountLabel}` : input.featureLabel,
+  };
 }
 
 export function selectOmpQuotaAccounts<T extends { credentialId: number }>(

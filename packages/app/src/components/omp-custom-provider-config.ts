@@ -1,5 +1,5 @@
 import type { OmpCustomProviderInput, OmpProviderApi } from "@omp-desktop/protocol/messages";
-import { parse, parseDocument } from "yaml";
+import { isMap, parse, parseDocument } from "yaml";
 
 export const OMP_PROVIDER_APIS = [
   "openai-responses",
@@ -149,5 +149,42 @@ export function updateCustomProviderConfigYaml(
 ): string {
   const document = parseDocument(configYaml);
   document.setIn(["providers", providerId], providerInputToYamlValue(provider));
+  return document.toString();
+}
+
+export function updateOmpModelContextWindowOverrides(
+  configYaml: string,
+  providerId: string,
+  overrides: Readonly<Record<string, number | undefined>>,
+): string {
+  const document = parseDocument(configYaml);
+  for (const [modelId, contextWindow] of Object.entries(overrides)) {
+    const modelPath = ["providers", providerId, "modelOverrides", modelId];
+    const contextPath = [...modelPath, "contextWindow"];
+    if (contextWindow !== undefined) {
+      document.setIn(contextPath, contextWindow);
+      continue;
+    }
+    if (document.getIn(contextPath) === undefined) {
+      continue;
+    }
+
+    document.deleteIn(contextPath);
+    const modelNode = document.getIn(modelPath, true);
+    if (isMap(modelNode) && modelNode.items.length === 0) {
+      document.deleteIn(modelPath);
+    }
+  }
+
+  const overridesPath = ["providers", providerId, "modelOverrides"];
+  const overridesNode = document.getIn(overridesPath, true);
+  if (isMap(overridesNode) && overridesNode.items.length === 0) {
+    document.deleteIn(overridesPath);
+  }
+  const providerPath = ["providers", providerId];
+  const providerNode = document.getIn(providerPath, true);
+  if (isMap(providerNode) && providerNode.items.length === 0) {
+    document.deleteIn(providerPath);
+  }
   return document.toString();
 }

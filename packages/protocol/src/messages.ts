@@ -5916,6 +5916,16 @@ export const OmpProviderManagementSchema = z.object({
       id: z.string(),
       modelCount: z.number().int().nonnegative(),
       source: z.enum(["built-in", "custom"]).optional(),
+      models: z
+        .array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            contextWindow: z.number().int().positive().optional(),
+            contextWindowOverride: z.number().int().positive().optional(),
+          }),
+        )
+        .optional(),
     }),
   ),
   loginProviders: z.array(

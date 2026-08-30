@@ -49,12 +49,12 @@ describe("fetchCodexAccountQuota", () => {
     );
   });
 
-  it("accepts Pro usage without a five-hour window", async () => {
+  it("maps the Pro primary window as total quota without a five-hour quota", async () => {
     const fetchApi = vi.fn(async () =>
       jsonResponse({
         plan_type: "pro",
         rate_limit: {
-          secondary_window: { used_percent: 16, reset_at: 1_798_640_000 },
+          primary_window: { used_percent: 16, reset_at: 1_798_640_000 },
         },
       }),
     );

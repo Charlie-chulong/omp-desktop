@@ -41,6 +41,19 @@ const en = {
     providerGroupOne: "{{provider}}, 1 model",
     providerGroupMany: "{{provider}}, {{count}} models",
   },
+  contextWindow: {
+    configure: "Model context",
+    title: "{{provider}} context windows",
+    description:
+      "Override the OMP model catalog value in tokens. Leave a field empty to use the catalog default. The change applies after creating or reloading an agent.",
+    inputAccessibility: "{{model}} context-window tokens",
+    currentDefault: "OMP catalog default: {{count}} tokens",
+    currentOverride: "Current override: {{count}} tokens. Clear the field to restore the default.",
+    unknown: "Unknown",
+    positiveInteger: "Context window must be a positive whole number.",
+    save: "Save context windows",
+    saving: "Saving…",
+  },
   login: {
     completeTitle: "Complete {{provider}} sign-in",
     openAuthorization: "Open authorization page",
@@ -747,6 +760,19 @@ export const ompProviderSettings = {
     models: {
       providerGroupOne: "{{provider}}，1 个模型",
       providerGroupMany: "{{provider}}，{{count}} 个模型",
+    },
+    contextWindow: {
+      configure: "模型上下文",
+      title: "{{provider}} 上下文长度",
+      description:
+        "按 Token 数覆盖 OMP 模型目录中的上下文长度。留空将使用目录默认值；新建或重新加载 Agent 后生效。",
+      inputAccessibility: "{{model}} 上下文 Token 数",
+      currentDefault: "OMP 目录默认值：{{count}} Token",
+      currentOverride: "当前覆盖值：{{count}} Token；清空输入框可恢复默认值。",
+      unknown: "未知",
+      positiveInteger: "上下文长度必须是正整数。",
+      save: "保存上下文长度",
+      saving: "正在保存…",
     },
     login: {
       completeTitle: "完成 {{provider}} 登录",

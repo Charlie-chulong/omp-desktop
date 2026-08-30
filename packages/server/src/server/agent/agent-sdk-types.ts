@@ -725,7 +725,17 @@ export interface ResolveAgentDefaultModeInput {
 export interface OmpProviderManagement {
   configPath: string;
   configYaml: string;
-  providerModels: Array<{ id: string; modelCount: number }>;
+  providerModels: Array<{
+    id: string;
+    modelCount: number;
+    source?: "built-in" | "custom";
+    models?: Array<{
+      id: string;
+      name: string;
+      contextWindow?: number;
+      contextWindowOverride?: number;
+    }>;
+  }>;
   runtimeError?: string;
   loginProviders: Array<{
     id: string;

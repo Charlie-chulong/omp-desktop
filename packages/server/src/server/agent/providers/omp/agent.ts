@@ -3083,13 +3083,39 @@ export class OmpAgentClient implements AgentClient {
       .catch((error: NodeJS.ErrnoException) =>
         error.code === "ENOENT" ? "providers: {}\n" : Promise.reject(error),
       );
-    const providerModels = new Map<string, number>();
+    const providerModels = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        contextWindow?: number;
+        contextWindowOverride?: number;
+      }>
+    >();
     const customProviderIds = new Set<string>();
+    const contextWindowOverrides = new Map<string, Map<string, number>>();
     try {
       const configuredProviders = parseOmpModelsDocument(configYaml).providers;
-      for (const providerId of Object.keys(configuredProviders ?? {})) {
-        customProviderIds.add(providerId);
-        providerModels.set(providerId, 0);
+      for (const [providerId, configuredProvider] of Object.entries(configuredProviders ?? {})) {
+        providerModels.set(providerId, []);
+        if (!isRecord(configuredProvider)) continue;
+        if (Array.isArray(configuredProvider.models) && configuredProvider.models.length > 0) {
+          customProviderIds.add(providerId);
+        }
+        if (!isRecord(configuredProvider.modelOverrides)) continue;
+        const providerOverrides = new Map<string, number>();
+        for (const [modelId, override] of Object.entries(configuredProvider.modelOverrides)) {
+          if (
+            isRecord(override) &&
+            Number.isSafeInteger(override.contextWindow) &&
+            Number(override.contextWindow) > 0
+          ) {
+            providerOverrides.set(modelId, Number(override.contextWindow));
+          }
+        }
+        if (providerOverrides.size > 0) {
+          contextWindowOverrides.set(providerId, providerOverrides);
+        }
       }
     } catch {
       // OMP reports the invalid config through runtimeError below.
@@ -3126,7 +3152,17 @@ export class OmpAgentClient implements AgentClient {
         runtimeSession.getLoginProviders(),
       ]);
       for (const model of models) {
-        providerModels.set(model.provider, (providerModels.get(model.provider) ?? 0) + 1);
+        const providerModelList = providerModels.get(model.provider) ?? [];
+        const contextWindowOverride = contextWindowOverrides.get(model.provider)?.get(model.id);
+        providerModelList.push({
+          id: model.id,
+          name: model.name ?? model.id,
+          ...(typeof model.contextWindow === "number" && model.contextWindow > 0
+            ? { contextWindow: model.contextWindow }
+            : {}),
+          ...(contextWindowOverride !== undefined ? { contextWindowOverride } : {}),
+        });
+        providerModels.set(model.provider, providerModelList);
       }
       const quotaByCredentialId = new Map<number, OmpProviderAccountQuota>();
       await Promise.all(
@@ -3167,10 +3203,11 @@ export class OmpAgentClient implements AgentClient {
       configPath,
       configYaml,
       providerModels: [...providerModels]
-        .map(([id, modelCount]) => ({
+        .map(([id, models]) => ({
           id,
-          modelCount,
+          modelCount: models.length,
           source: customProviderIds.has(id) ? ("custom" as const) : ("built-in" as const),
+          models: models.sort((left, right) => left.name.localeCompare(right.name)),
         }))
         .sort((left, right) => left.id.localeCompare(right.id)),
       loginProviders,

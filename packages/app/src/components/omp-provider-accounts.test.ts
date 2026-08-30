@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   formatOmpAccountIdentity,
   formatOmpAccountSelectionLabel,
+  resolveOmpAccountControlLabels,
   resolveOmpLoginAction,
   selectOmpQuotaAccounts,
 } from "./omp-provider-accounts";
@@ -26,14 +27,14 @@ describe("OMP provider accounts", () => {
     expect(formatOmpAccountIdentity()).toEqual({ primary: null, secondary: null });
   });
 
-  test("shows account notes before email addresses in selectors", () => {
+  test("shows account notes instead of email addresses in selectors", () => {
     expect(
       formatOmpAccountSelectionLabel({
         note: "  个人订阅  ",
         identityKey: "email:alice@example.com|org:org-team",
         fallback: "OAuth credential #4",
       }),
-    ).toBe("个人订阅 · alice@example.com");
+    ).toBe("个人订阅");
     expect(
       formatOmpAccountSelectionLabel({
         identityKey: "email:alice@example.com|org:org-team",
@@ -51,6 +52,22 @@ describe("OMP provider accounts", () => {
         fallback: "OAuth credential #4",
       }),
     ).toBe("OAuth credential #4");
+  });
+
+  test("keeps the account button compact while showing the selected account on hover", () => {
+    expect(
+      resolveOmpAccountControlLabels({
+        featureLabel: "账号",
+        accountLabel: "个人订阅",
+      }),
+    ).toEqual({
+      buttonLabel: "账号",
+      tooltipLabel: "账号: 个人订阅",
+    });
+    expect(resolveOmpAccountControlLabels({ featureLabel: "账号" })).toEqual({
+      buttonLabel: "账号",
+      tooltipLabel: "账号",
+    });
   });
 
   test("shows only the selected account quota when multiple accounts exist", () => {

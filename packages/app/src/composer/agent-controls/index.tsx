@@ -56,6 +56,7 @@ import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model
 import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
 import {
   formatOmpAccountSelectionLabel,
+  resolveOmpAccountControlLabels,
   selectOmpQuotaAccounts,
 } from "@/components/omp-provider-accounts";
 import {
@@ -1623,11 +1624,18 @@ function DesktopFeatureItem({
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const selectedOptionValueLabel = selectedOption
       ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
-      : featureLabel;
-    const selectedOptionLabel =
-      feature.id === "oauth_account_credential" && selectedOption
-        ? `${featureLabel} · ${selectedOptionValueLabel}`
-        : selectedOptionValueLabel;
+      : null;
+    const selectedOptionLabel = selectedOptionValueLabel ?? featureLabel;
+    const accountControlLabels =
+      feature.id === "oauth_account_credential"
+        ? resolveOmpAccountControlLabels({
+            featureLabel,
+            accountLabel: selectedOptionValueLabel,
+          })
+        : null;
+    const toolbarValueLabel = accountControlLabels?.buttonLabel ?? selectedOptionLabel;
+    const tooltipLabel =
+      accountControlLabels?.tooltipLabel ?? `${featureLabel}: ${selectedOptionLabel}`;
     return (
       <>
         <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
@@ -1637,16 +1645,16 @@ function DesktopFeatureItem({
               icon={FeatureIcon}
               surface="toolbar"
               label={featureLabel}
-              value={selectedOptionLabel}
+              value={toolbarValueLabel}
               open={openSelector === featureSelector}
               disabled={disabled}
               onPress={handleSelectPress}
-              accessibilityLabel={`${featureLabel}: ${selectedOptionLabel}`}
+              accessibilityLabel={tooltipLabel}
               testID={`agent-feature-${feature.id}`}
             />
           </TooltipTrigger>
           <TooltipContent side="top" align="center" offset={8}>
-            <Text style={styles.tooltipText}>{`${featureLabel}: ${selectedOptionLabel}`}</Text>
+            <Text style={styles.tooltipText}>{tooltipLabel}</Text>
           </TooltipContent>
         </Tooltip>
         <Combobox

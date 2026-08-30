@@ -112,6 +112,7 @@ export async function fetchCodexAccountQuota(
     const secondary = parseWindow(payload.rate_limit.secondary_window);
     const planLabel = typeof payload.plan_type === "string" ? payload.plan_type : null;
     const hasFiveHourLimit = !isProPlan(planLabel);
+    const total = hasFiveHourLimit ? secondary : primary;
     if (!primary && hasFiveHourLimit) {
       return failure("error", "Codex usage response did not include the five-hour limit", now);
     }
@@ -126,8 +127,8 @@ export async function fetchCodexAccountQuota(
           ? primary.usedPct >= 100
           : null,
       fiveHourResetsAt: hasFiveHourLimit ? (primary?.resetsAt ?? null) : null,
-      weeklyUsedPct: secondary?.usedPct ?? null,
-      weeklyResetsAt: secondary?.resetsAt ?? null,
+      weeklyUsedPct: total?.usedPct ?? null,
+      weeklyResetsAt: total?.resetsAt ?? null,
       fetchedAt,
     };
   } catch (error) {

@@ -62,8 +62,21 @@ describe("OMP provider management", () => {
       configPath: path.join(agentDir, "models.yml"),
       configYaml: "providers: {}\n",
       providerModels: [
-        { id: "anthropic", modelCount: 2, source: "built-in" },
-        { id: "openai", modelCount: 1, source: "built-in" },
+        {
+          id: "anthropic",
+          modelCount: 2,
+          source: "built-in",
+          models: [
+            { id: "claude-opus-4", name: "Claude Opus 4" },
+            { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
+          ],
+        },
+        {
+          id: "openai",
+          modelCount: 1,
+          source: "built-in",
+          models: [{ id: "gpt-5", name: "GPT-5" }],
+        },
       ],
       loginProviders: [
         { id: "anthropic", name: "Anthropic", available: true, authenticated: true },
@@ -210,6 +223,53 @@ describe("OMP provider management", () => {
     ]);
   });
 
+  test("reports built-in model context-window overrides without treating them as custom", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    await writeFile(
+      path.join(agentDir, "models.yml"),
+      `providers:
+  openai-codex:
+    modelOverrides:
+      gpt-5.6-sol:
+        contextWindow: 1000000
+`,
+      "utf8",
+    );
+    runtime.queueModels([
+      {
+        provider: "openai-codex",
+        id: "gpt-5.6-sol",
+        name: "GPT-5.6-Sol",
+        contextWindow: 1_000_000,
+      },
+    ]);
+    runtime.queueLoginProviders([
+      {
+        id: "openai-codex",
+        name: "OpenAI Codex",
+        available: true,
+        authenticated: true,
+      },
+    ]);
+
+    await expect(client.getOmpProviderManagement()).resolves.toMatchObject({
+      providerModels: [
+        {
+          id: "openai-codex",
+          modelCount: 1,
+          source: "built-in",
+          models: [
+            {
+              id: "gpt-5.6-sol",
+              name: "GPT-5.6-Sol",
+              contextWindow: 1_000_000,
+              contextWindowOverride: 1_000_000,
+            },
+          ],
+        },
+      ],
+    });
+  });
   test("formats models.yml as readable block YAML and preserves comments", () => {
     expect(
       formatOmpModelsYaml(

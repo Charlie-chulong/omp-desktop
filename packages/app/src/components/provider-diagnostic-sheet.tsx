@@ -13,6 +13,7 @@ import {
   Plus,
   RotateCw,
   Save,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react-native";
@@ -61,6 +62,7 @@ import {
   OMP_PROVIDER_APIS,
   parseCustomProviderDraft,
   updateCustomProviderConfigYaml,
+  updateOmpModelContextWindowOverrides,
   type OmpProviderDraft,
   type OmpProviderModelDraft,
 } from "./omp-custom-provider-config";
@@ -209,8 +211,13 @@ function SectionHeader({ title, count, hint }: { title: string; count?: number; 
 interface OmpProviderSummary {
   id: string;
   modelCount: number;
+  models?: OmpManagedProviderModel[];
   login?: OmpProviderManagement["loginProviders"][number];
 }
+
+type OmpManagedProviderModel = NonNullable<
+  OmpProviderManagement["providerModels"][number]["models"]
+>[number];
 
 type OmpProviderAccount = NonNullable<
   OmpProviderManagement["loginProviders"][number]["accounts"]
@@ -439,6 +446,7 @@ function OmpProviderSummaryRow({
   editingAccountId = null,
   accountNoteDraft = "",
   savingAccountNoteId = null,
+  onConfigureModels,
   onEdit,
   onLogin,
   onRemove,
@@ -456,6 +464,7 @@ function OmpProviderSummaryRow({
   editingAccountId?: number | null;
   accountNoteDraft?: string;
   savingAccountNoteId?: number | null;
+  onConfigureModels?: (providerId: string) => void;
   onEdit?: (providerId: string) => void;
   onLogin: (providerId: string) => void;
   onLogout?: (providerId: string) => void;
@@ -481,6 +490,9 @@ function OmpProviderSummaryRow({
   const handleRemove = useCallback(() => {
     onRemove?.(summary.id);
   }, [onRemove, summary.id]);
+  const handleConfigureModels = useCallback(() => {
+    onConfigureModels?.(summary.id);
+  }, [onConfigureModels, summary.id]);
   const modelCount = t(
     summary.modelCount === 1 ? "settings.providers.models.one" : "settings.providers.models.many",
     { count: summary.modelCount },
@@ -510,6 +522,17 @@ function OmpProviderSummaryRow({
           </Text>
         </View>
         <View style={sheetStyles.providerSummaryActions}>
+          {login && summary.models && summary.models.length > 0 && onConfigureModels ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={Settings2}
+              onPress={handleConfigureModels}
+              testID={`omp-configure-models-${summary.id}`}
+            >
+              {t("settings.providers.omp.contextWindow.configure")}
+            </Button>
+          ) : null}
           {login && loginAction ? (
             <Button
               variant="secondary"
@@ -605,6 +628,114 @@ function parseOptionalPositiveInteger(value: string, errorMessage: string): numb
     throw new Error(errorMessage);
   }
   return parsed;
+}
+
+function OmpModelContextWindowForm({
+  configYaml,
+  providerId,
+  models,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  configYaml: string;
+  providerId: string;
+  models: OmpManagedProviderModel[];
+  saving: boolean;
+  onSave: (configYaml: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [drafts, setDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      models.map((model) => [
+        model.id,
+        model.contextWindowOverride !== undefined ? String(model.contextWindowOverride) : "",
+      ]),
+    ),
+  );
+  const [error, setError] = useState<string | null>(null);
+  const updateDraft = useCallback((modelId: string, value: string) => {
+    setDrafts((current) => ({ ...current, [modelId]: value }));
+  }, []);
+  const handleSave = useCallback(async () => {
+    try {
+      const overrides = Object.fromEntries(
+        models.map((model) => [
+          model.id,
+          parseOptionalPositiveInteger(
+            drafts[model.id] ?? "",
+            t("settings.providers.omp.contextWindow.positiveInteger"),
+          ),
+        ]),
+      );
+      setError(null);
+      await onSave(updateOmpModelContextWindowOverrides(configYaml, providerId, overrides));
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    }
+  }, [configYaml, drafts, models, onSave, providerId, t]);
+  return (
+    <View style={sheetStyles.formGroup}>
+      <Text style={sheetStyles.mutedText}>
+        {t("settings.providers.omp.contextWindow.description")}
+      </Text>
+      <View style={sheetStyles.modelList}>
+        {models.map((model) => {
+          const currentContext =
+            model.contextWindow !== undefined
+              ? new Intl.NumberFormat().format(model.contextWindow)
+              : t("settings.providers.omp.contextWindow.unknown");
+          return (
+            <View key={model.id} style={sheetStyles.modelEditor}>
+              <View style={sheetStyles.modelInputRow}>
+                <View style={sheetStyles.modelInputMeta}>
+                  <Text style={sheetStyles.modelEditorTitle}>{model.name}</Text>
+                  <Text style={sheetStyles.modelInputHint}>{model.id}</Text>
+                  <Text style={sheetStyles.modelInputHint}>
+                    {t(
+                      model.contextWindowOverride !== undefined
+                        ? "settings.providers.omp.contextWindow.currentOverride"
+                        : "settings.providers.omp.contextWindow.currentDefault",
+                      { count: currentContext },
+                    )}
+                  </Text>
+                </View>
+                <AdaptiveTextInput
+                  initialValue={drafts[model.id] ?? ""}
+                  resetKey={`${providerId}:${model.id}:${model.contextWindowOverride ?? "default"}`}
+                  onChangeText={(value) => updateDraft(model.id, value)}
+                  placeholder={model.contextWindow !== undefined ? String(model.contextWindow) : ""}
+                  inputMode="numeric"
+                  accessibilityLabel={t("settings.providers.omp.contextWindow.inputAccessibility", {
+                    model: model.name,
+                  })}
+                  style={[sheetStyles.formInput, sheetStyles.contextWindowInput]}
+                />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      {error ? <Text style={sheetStyles.errorText}>{error}</Text> : null}
+      <View style={sheetStyles.formActions}>
+        <Button variant="secondary" size="sm" onPress={onCancel} disabled={saving}>
+          {t("common.actions.cancel")}
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          leftIcon={saving ? undefined : Save}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving
+            ? t("settings.providers.omp.contextWindow.saving")
+            : t("settings.providers.omp.contextWindow.save")}
+        </Button>
+      </View>
+    </View>
+  );
 }
 
 function OmpApiMenuItem({
@@ -1179,6 +1310,7 @@ function OmpManagementPanel({
     draft: OmpProviderDraft;
   } | null>(null);
   const [addProviderOpen, setAddProviderOpen] = useState(false);
+  const [contextProviderId, setContextProviderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loginProviderId, setLoginProviderId] = useState<string | null>(null);
@@ -1225,6 +1357,7 @@ function OmpManagementPanel({
       setManagement(null);
       setActiveTab("sign-in");
       setAddProviderOpen(false);
+      setContextProviderId(null);
       setLoginFlow(null);
       setEditingProvider(null);
       setLoginInput("");
@@ -1265,6 +1398,24 @@ function OmpManagementPanel({
       setSaving(false);
     }
   }, [applyManagement, client, configYaml]);
+  const saveContextWindowConfig = useCallback(
+    async (nextConfigYaml: string) => {
+      if (!client) return;
+      setSaving(true);
+      setError(null);
+      try {
+        applyManagement(await client.saveOmpProviderConfig(nextConfigYaml));
+        setContextProviderId(null);
+      } catch (saveError) {
+        const message = saveError instanceof Error ? saveError.message : String(saveError);
+        setError(message);
+        throw saveError;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [applyManagement, client],
+  );
   const startLogin = useCallback(
     async (providerId: string) => {
       if (!client) return;
@@ -1360,16 +1511,23 @@ function OmpManagementPanel({
   const signInProviders = useMemo<OmpProviderSummary[]>(() => {
     if (!management) return [];
     return management.loginProviders
-      .map((login) => ({
-        id: login.id,
-        modelCount:
-          management.providerModels.find((provider) => provider.id === login.id)?.modelCount ?? 0,
-        login,
-      }))
+      .map((login) => {
+        const provider = management.providerModels.find((candidate) => candidate.id === login.id);
+        return {
+          id: login.id,
+          modelCount: provider?.modelCount ?? 0,
+          models: provider?.models,
+          login,
+        };
+      })
       .sort((left, right) =>
         (left.login?.name ?? left.id).localeCompare(right.login?.name ?? right.id),
       );
   }, [management]);
+  const contextProvider = useMemo(
+    () => signInProviders.find((provider) => provider.id === contextProviderId) ?? null,
+    [contextProviderId, signInProviders],
+  );
   const customProviders = useMemo<OmpProviderSummary[]>(() => {
     if (!management) return [];
     const loginProviderIds = new Set(management.loginProviders.map((provider) => provider.id));
@@ -1410,6 +1568,21 @@ function OmpManagementPanel({
     }),
     [editingProvider, t],
   );
+  const contextWindowFormHeader = useMemo<SheetHeader>(
+    () => ({
+      title: t("settings.providers.omp.contextWindow.title", {
+        provider: contextProvider?.login?.name ?? contextProvider?.id ?? "",
+      }),
+    }),
+    [contextProvider, t],
+  );
+  const handleOpenContextWindow = useCallback((providerId: string) => {
+    setContextProviderId(providerId);
+    setError(null);
+  }, []);
+  const handleCloseContextWindow = useCallback(() => {
+    if (!saving) setContextProviderId(null);
+  }, [saving]);
   const handleOpenAddProvider = useCallback(() => {
     setEditingProvider(null);
     setAddProviderOpen(true);
@@ -1526,6 +1699,7 @@ function OmpManagementPanel({
                       editingAccountId={editingAccountId}
                       accountNoteDraft={accountNoteDraft}
                       savingAccountNoteId={savingAccountNoteId}
+                      onConfigureModels={handleOpenContextWindow}
                       onEditAccountNote={editAccountNote}
                       onChangeAccountNote={setAccountNoteDraft}
                       onSaveAccountNote={saveAccountNote}
@@ -1623,6 +1797,26 @@ function OmpManagementPanel({
             configYaml={editingProvider ? configYaml : undefined}
             onSaved={handleProviderSaved}
             onCancel={handleCloseProviderForm}
+          />
+        ) : null}
+      </AdaptiveModalSheet>
+      <AdaptiveModalSheet
+        header={contextWindowFormHeader}
+        visible={contextProvider !== null}
+        onClose={handleCloseContextWindow}
+        testID="omp-model-context-window-sheet"
+        snapPoints={ADD_PROVIDER_SNAP_POINTS}
+        contentStyle={sheetStyles.addProviderModalContent}
+      >
+        {contextProvider?.models ? (
+          <OmpModelContextWindowForm
+            key={`${contextProvider.id}:${management?.configYaml ?? ""}`}
+            configYaml={configYaml}
+            providerId={contextProvider.id}
+            models={contextProvider.models}
+            saving={saving}
+            onSave={saveContextWindowConfig}
+            onCancel={handleCloseContextWindow}
           />
         ) : null}
       </AdaptiveModalSheet>
@@ -2108,6 +2302,10 @@ const sheetStyles = StyleSheet.create((theme) => ({
     borderWidth: 1,
     borderColor: theme.colors.border,
     fontSize: theme.fontSize.base,
+  },
+  contextWindowInput: {
+    width: 180,
+    minHeight: 44,
   },
   apiSelectTrigger: {
     minHeight: 44,
