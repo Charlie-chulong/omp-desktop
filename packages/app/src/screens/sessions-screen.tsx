@@ -212,6 +212,7 @@ function SessionsScreenContent() {
           listFooterComponent={listFooterComponent}
           showAttentionIndicator={false}
           showHostColumn
+          showDeleteButton
           searchMatchesByAgentKey={isSearching ? searchMatchesByAgentKey : undefined}
           flat={isSearching}
         />

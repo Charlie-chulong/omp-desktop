@@ -5,6 +5,7 @@ import {
   Modal,
   RefreshControl,
   FlatList,
+  type GestureResponderEvent,
   type ListRenderItem,
   type PressableStateCallbackType,
 } from "react-native";
@@ -17,7 +18,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { formatTimeAgo } from "@/utils/time";
 import { type AggregatedAgent } from "@/hooks/use-aggregated-agents";
 import { useSessionStore } from "@/stores/session-store";
-import { Archive, ChevronRight } from "lucide-react-native";
+import { Archive, ChevronRight, Trash2 } from "lucide-react-native";
 import { getProviderIcon } from "@/components/provider-icons";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
@@ -36,6 +37,8 @@ interface AgentListProps {
   listFooterComponent?: ReactElement | null;
   showAttentionIndicator?: boolean;
   showHostColumn?: boolean;
+  /** Shows a destructive archive action on every row. */
+  showDeleteButton?: boolean;
   /**
    * Where a search matched each row, keyed by `serverId:agentId`. Rows mark the
    * spans so the list can explain why a result is in it — the subsequence and
@@ -212,7 +215,9 @@ function SessionRow({
   selectedAgentId,
   showAttentionIndicator,
   showHostColumn,
+  showDeleteButton,
   onPress,
+  onDelete,
   onLongPress,
 }: {
   agent: AggregatedAgent;
@@ -221,8 +226,10 @@ function SessionRow({
   selectedAgentId?: string;
   showAttentionIndicator: boolean;
   showHostColumn: boolean;
+  showDeleteButton: boolean;
   onPress: (agent: AggregatedAgent) => void;
   onLongPress: (agent: AggregatedAgent) => void;
+  onDelete: (agent: AggregatedAgent) => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -252,7 +259,23 @@ function SessionRow({
 
   const handlePress = useCallback(() => onPress(agent), [onPress, agent]);
   const handleLongPress = useCallback(() => onLongPress(agent), [onLongPress, agent]);
+  const handleDelete = useCallback(() => onDelete(agent), [onDelete, agent]);
+  const deleteButtonStyle = useCallback(
+    ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.deleteButton,
+      Boolean(hovered) && styles.deleteButtonHovered,
+      pressed && styles.deleteButtonPressed,
+    ],
+    [],
+  );
 
+  const handleDeletePress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      handleDelete();
+    },
+    [handleDelete],
+  );
   const sessionTitleStyle = useMemo(
     () => [styles.sessionTitle, isSelected && styles.sessionTitleHighlighted],
     [isSelected],
@@ -362,6 +385,18 @@ function SessionRow({
           </Text>
         </View>
       ) : null}
+      {showDeleteButton ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("workspace.actions.delete")}
+          hitSlop={8}
+          onPress={handleDeletePress}
+          style={deleteButtonStyle}
+          testID={`agent-delete-${agent.serverId}-${agent.id}`}
+        >
+          <Trash2 size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+        </Pressable>
+      ) : null}
       <SessionRowTrailingAttention
         isMobile={isMobile}
         showAttentionIndicator={showAttentionIndicator}
@@ -380,6 +415,7 @@ export function AgentList({
   listFooterComponent,
   showAttentionIndicator = true,
   showHostColumn = false,
+  showDeleteButton = false,
   searchMatchesByAgentKey,
   flat = false,
 }: AgentListProps) {
@@ -433,6 +469,10 @@ export function AgentList({
       void archiveAgent({ serverId: agent.serverId, agentId: agent.id }).catch(() => {});
     },
     [archiveAgent],
+  );
+  const handleAgentDelete = useCallback(
+    (agent: AggregatedAgent) => handleAgentLongPress(agent),
+    [handleAgentLongPress],
   );
 
   const handleCloseActionSheet = useCallback(() => {
@@ -496,18 +536,22 @@ export function AgentList({
           selectedAgentId={selectedAgentId}
           showAttentionIndicator={showAttentionIndicator}
           showHostColumn={showHostColumn}
+          showDeleteButton={showDeleteButton}
           onPress={handleAgentPress}
           onLongPress={handleAgentLongPress}
+          onDelete={handleAgentDelete}
         />
       );
     },
     [
+      handleAgentDelete,
       handleAgentLongPress,
       handleAgentPress,
       isMobile,
       searchMatchesByAgentKey,
       selectedAgentId,
       showAttentionIndicator,
+      showDeleteButton,
       showHostColumn,
       t,
     ],
@@ -639,6 +683,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
     overflow: "hidden",
+    paddingRight: 40,
   },
   rowTitleRow: {
     flexDirection: "row",
@@ -676,6 +721,20 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPressed: {
     backgroundColor: theme.colors.surface2,
+  },
+  deleteButton: {
+    position: "absolute",
+    right: theme.spacing[3],
+    top: theme.spacing[1],
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+  },
+  deleteButtonHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  deleteButtonPressed: {
+    backgroundColor: theme.colors.surface3,
   },
   sessionTitle: {
     flexShrink: 1,
