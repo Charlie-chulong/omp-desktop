@@ -237,6 +237,17 @@ export const ru: TranslationResources = {
         goal: "Цель",
         goalPlaceholder: "Введите цель",
       },
+      oauthAccount: {
+        title: "OAuth-аккаунт",
+      },
+    },
+    quota: {
+      loading: "Загрузка квоты…",
+      account: "Аккаунт {{number}}",
+      noNote: "Без заметки",
+      total: "Общая квота",
+      fiveHour: "Квота на 5 часов",
+      resetAt: "Сброс в {{time}}",
     },
     mode: {
       title: "Режим",

@@ -178,7 +178,7 @@ describe("create agent preferences", () => {
     });
   });
 
-  it("never restores or persists the transient workflow selection", () => {
+  it("never restores or persists transient workflow and OAuth account selections", () => {
     expect(
       parseFormPreferences({
         provider: "omp",
@@ -186,6 +186,7 @@ describe("create agent preferences", () => {
           omp: {
             featureValues: {
               workflow_mode: "plan",
+              oauth_account_credential: "41",
               durable_feature: true,
             },
           },
@@ -210,6 +211,7 @@ describe("create agent preferences", () => {
             omp: {
               featureValues: {
                 workflow_mode: "goal",
+                oauth_account_credential: "41",
                 durable_feature: true,
               },
             },

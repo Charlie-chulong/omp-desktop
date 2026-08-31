@@ -537,6 +537,13 @@ export class ProviderSnapshotManager {
     if (!client.finishOmpProviderLogin) throw new Error("OMP login is unavailable");
     return await client.finishOmpProviderLogin(flowId, input);
   }
+  async cancelOmpProviderLogin(flowId: string): Promise<boolean> {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.cancelOmpProviderLogin) throw new Error("Cancelling OMP login is unavailable");
+    return await client.cancelOmpProviderLogin(flowId);
+  }
   async logoutOmpProvider(providerId: string): Promise<OmpProviderManagement> {
     const definition = this.providerRegistry.omp;
     if (!definition) throw new Error("OMP provider is not configured");

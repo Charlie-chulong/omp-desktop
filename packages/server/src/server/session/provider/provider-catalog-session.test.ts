@@ -285,6 +285,25 @@ describe("ProviderCatalogSession", () => {
       providers: ["codex"],
     });
   });
+  it("acknowledges provider login cancellation after the runtime flow closes", async () => {
+    const cancelOmpProviderLogin = vi.fn(async () => true);
+    const { subsystem, emitted } = makeSubsystem({
+      snapshot: { cancelOmpProviderLogin },
+    });
+
+    await subsystem.handleOmpProviderLoginCancelRequest({
+      type: "omp.provider.login.cancel.request",
+      flowId: "flow-openai-codex",
+      requestId: "cancel-login",
+    });
+
+    expect(cancelOmpProviderLogin).toHaveBeenCalledWith("flow-openai-codex");
+    expect(findByType(emitted, "omp.provider.login.cancel.response")?.payload).toEqual({
+      requestId: "cancel-login",
+      flowId: "flow-openai-codex",
+      cancelled: true,
+    });
+  });
 
   it("surfaces a usage-list failure as an rpc_error envelope", async () => {
     const { subsystem, emitted } = makeSubsystem({

@@ -8,6 +8,7 @@ import type {
   AgentAttachment,
   OmpCustomProviderInput,
   OmpInstallationStatus,
+  OmpProviderAccountQuota,
 } from "@omp-desktop/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
@@ -724,13 +725,28 @@ export interface ResolveAgentDefaultModeInput {
 export interface OmpProviderManagement {
   configPath: string;
   configYaml: string;
-  providerModels: Array<{ id: string; modelCount: number }>;
+  providerModels: Array<{
+    id: string;
+    modelCount: number;
+    source?: "built-in" | "custom";
+    models?: Array<{
+      id: string;
+      name: string;
+      contextWindow?: number;
+      contextWindowOverride?: number;
+    }>;
+  }>;
   runtimeError?: string;
   loginProviders: Array<{
     id: string;
     name: string;
     available: boolean;
     authenticated: boolean;
+    accounts?: Array<{
+      credentialId: number;
+      identityKey?: string;
+      quota?: OmpProviderAccountQuota;
+    }>;
   }>;
 }
 export interface OmpProviderLoginStart {
@@ -797,6 +813,7 @@ export interface AgentClient {
   installOmp?(): Promise<OmpInstallationStatus>;
   startOmpProviderLogin?(providerId: string): Promise<OmpProviderLoginStart>;
   finishOmpProviderLogin?(flowId: string, input?: string): Promise<OmpProviderManagement>;
+  cancelOmpProviderLogin?(flowId: string): Promise<boolean>;
   logoutOmpProvider?(providerId: string): Promise<OmpProviderManagement>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().

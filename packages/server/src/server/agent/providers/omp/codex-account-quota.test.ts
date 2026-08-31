@@ -1,0 +1,115 @@
+import { describe, expect, it, vi } from "vitest";
+import { CODEX_USAGE_ENDPOINT, fetchCodexAccountQuota } from "./codex-account-quota.js";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+const NOW = Date.parse("2026-08-29T00:00:00.000Z");
+
+describe("fetchCodexAccountQuota", () => {
+  it("maps the five-hour window and sends the account id without exposing credentials", async () => {
+    const fetchApi = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.headers).toEqual({
+        Accept: "application/json",
+        Authorization: "Bearer access-token",
+        "ChatGPT-Account-Id": "account-1",
+      });
+      return jsonResponse({
+        plan_type: "plus",
+        rate_limit: {
+          primary_window: { used_percent: "100", reset_at: 1_798_122_000 },
+          secondary_window: { used_percent: 12, reset_at: 1_798_640_000 },
+        },
+      });
+    });
+
+    await expect(
+      fetchCodexAccountQuota({
+        credential: { accessToken: " access-token ", accountId: "account-1" },
+        fetch: fetchApi,
+        now: () => NOW,
+      }),
+    ).resolves.toEqual({
+      status: "available",
+      planLabel: "plus",
+      fiveHourUsedPct: 100,
+      fiveHourLimitReached: true,
+      fiveHourResetsAt: "2026-12-24T14:20:00.000Z",
+      weeklyUsedPct: 12,
+      weeklyResetsAt: "2026-12-30T14:13:20.000Z",
+      fetchedAt: "2026-08-29T00:00:00.000Z",
+    });
+    expect(fetchApi).toHaveBeenCalledWith(
+      CODEX_USAGE_ENDPOINT,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("maps the Pro primary window as total quota without a five-hour quota", async () => {
+    const fetchApi = vi.fn(async () =>
+      jsonResponse({
+        plan_type: "pro",
+        rate_limit: {
+          primary_window: { used_percent: 16, reset_at: 1_798_640_000 },
+        },
+      }),
+    );
+
+    await expect(
+      fetchCodexAccountQuota({
+        credential: { accessToken: "access-token" },
+        fetch: fetchApi,
+        now: () => NOW,
+      }),
+    ).resolves.toEqual({
+      status: "available",
+      planLabel: "pro",
+      fiveHourUsedPct: null,
+      fiveHourLimitReached: null,
+      fiveHourResetsAt: null,
+      weeklyUsedPct: 16,
+      weeklyResetsAt: "2026-12-30T14:13:20.000Z",
+      fetchedAt: "2026-08-29T00:00:00.000Z",
+    });
+  });
+
+  it("marks expired credentials unavailable without attempting refresh", async () => {
+    const fetchApi = vi.fn(async () => new Response(null, { status: 401 }));
+
+    await expect(
+      fetchCodexAccountQuota({
+        credential: { accessToken: "expired-token" },
+        fetch: fetchApi,
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      status: "unavailable",
+      fiveHourLimitReached: null,
+      error: "Codex account authentication expired",
+    });
+    expect(fetchApi).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a successful response that has no five-hour window", async () => {
+    const fetchApi = vi.fn(async () =>
+      jsonResponse({ rate_limit: { secondary_window: { used_percent: 20 } } }),
+    );
+
+    await expect(
+      fetchCodexAccountQuota({
+        credential: { accessToken: "access-token" },
+        fetch: fetchApi,
+        now: () => NOW,
+      }),
+    ).resolves.toMatchObject({
+      status: "error",
+      fiveHourUsedPct: null,
+      fiveHourLimitReached: null,
+      error: "Codex usage response did not include the five-hour limit",
+    });
+  });
+});

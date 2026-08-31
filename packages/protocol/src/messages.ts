@@ -1764,6 +1764,11 @@ export const OmpProviderLoginFinishRequestMessageSchema = z.object({
   input: z.string().optional(),
   requestId: z.string(),
 });
+export const OmpProviderLoginCancelRequestMessageSchema = z.object({
+  type: z.literal("omp.provider.login.cancel.request"),
+  flowId: z.string().min(1),
+  requestId: z.string(),
+});
 export const OmpProviderLogoutRequestMessageSchema = z.object({
   type: z.literal("omp.provider.logout.request"),
   providerId: z.string().min(1),
@@ -3201,6 +3206,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OmpInstallRequestMessageSchema,
   OmpProviderLoginStartRequestMessageSchema,
   OmpProviderLoginFinishRequestMessageSchema,
+  OmpProviderLoginCancelRequestMessageSchema,
   OmpProviderLogoutRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
   ResumeAgentRequestMessageSchema,
@@ -5972,6 +5978,17 @@ export const ProviderDiagnosticResponseMessageSchema = z.object({
     requestId: z.string(),
   }),
 });
+export const OmpProviderAccountQuotaSchema = z.object({
+  status: z.enum(["available", "unavailable", "error"]),
+  planLabel: z.string().nullable().optional(),
+  fiveHourUsedPct: z.number().min(0).max(100).nullable().optional(),
+  fiveHourLimitReached: z.boolean().nullable().optional(),
+  fiveHourResetsAt: z.string().nullable().optional(),
+  weeklyUsedPct: z.number().min(0).max(100).nullable().optional(),
+  weeklyResetsAt: z.string().nullable().optional(),
+  fetchedAt: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+});
 export const OmpProviderManagementSchema = z.object({
   configPath: z.string(),
   configYaml: z.string(),
@@ -5981,6 +5998,16 @@ export const OmpProviderManagementSchema = z.object({
       id: z.string(),
       modelCount: z.number().int().nonnegative(),
       source: z.enum(["built-in", "custom"]).optional(),
+      models: z
+        .array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            contextWindow: z.number().int().positive().optional(),
+            contextWindowOverride: z.number().int().positive().optional(),
+          }),
+        )
+        .optional(),
     }),
   ),
   loginProviders: z.array(
@@ -5989,6 +6016,15 @@ export const OmpProviderManagementSchema = z.object({
       name: z.string(),
       available: z.boolean(),
       authenticated: z.boolean(),
+      accounts: z
+        .array(
+          z.object({
+            credentialId: z.number().int().positive(),
+            identityKey: z.string().optional(),
+            quota: OmpProviderAccountQuotaSchema.optional(),
+          }),
+        )
+        .optional(),
     }),
   ),
 });
@@ -6059,6 +6095,14 @@ export const OmpProviderLoginStartResponseMessageSchema = z.object({
 export const OmpProviderLoginFinishResponseMessageSchema = z.object({
   type: z.literal("omp.provider.login.finish.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
+});
+export const OmpProviderLoginCancelResponseMessageSchema = z.object({
+  type: z.literal("omp.provider.login.cancel.response"),
+  payload: z.object({
+    requestId: z.string(),
+    flowId: z.string(),
+    cancelled: z.boolean(),
+  }),
 });
 export const OmpProviderLogoutResponseMessageSchema = z.object({
   type: z.literal("omp.provider.logout.response"),
@@ -6702,6 +6746,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   OmpInstallResponseMessageSchema,
   OmpProviderLoginStartResponseMessageSchema,
   OmpProviderLoginFinishResponseMessageSchema,
+  OmpProviderLoginCancelResponseMessageSchema,
   OmpProviderLogoutResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
   ListCommandsResponseSchema,
@@ -6884,6 +6929,7 @@ export type ProviderDiagnosticResponseMessage = z.infer<
   typeof ProviderDiagnosticResponseMessageSchema
 >;
 export type OmpProviderManagement = z.infer<typeof OmpProviderManagementSchema>;
+export type OmpProviderAccountQuota = z.infer<typeof OmpProviderAccountQuotaSchema>;
 export type OmpProviderManagementGetResponseMessage = z.infer<
   typeof OmpProviderManagementGetResponseMessageSchema
 >;
@@ -6906,6 +6952,9 @@ export type OmpInstallStatusResponseMessage = z.infer<typeof OmpInstallStatusRes
 export type OmpInstallResponseMessage = z.infer<typeof OmpInstallResponseMessageSchema>;
 export type OmpProviderLoginStartResponseMessage = z.infer<
   typeof OmpProviderLoginStartResponseMessageSchema
+>;
+export type OmpProviderLoginCancelResponseMessage = z.infer<
+  typeof OmpProviderLoginCancelResponseMessageSchema
 >;
 export type OmpProviderLoginFinishResponseMessage = z.infer<
   typeof OmpProviderLoginFinishResponseMessageSchema

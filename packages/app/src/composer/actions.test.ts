@@ -17,6 +17,7 @@ import {
   rejectMessageSubmission,
   type MessageSubmissionRecord,
 } from "@/composer/submission/model";
+import { collectRetainedAttachmentIds } from "@/attachments/gc-retention";
 import {
   cancelComposerAgent,
   dispatchComposerAgentMessage,
@@ -30,6 +31,7 @@ import {
   sendQueuedComposerMessageNow,
   toggleGithubAttachment,
   toggleGithubAttachmentFromPicker,
+  withRetainedComposerImages,
   type MessageSubmissionWriter,
   type AttachmentPersister,
   type ComposerCancelClient,
@@ -414,6 +416,38 @@ describe("pickAndPersistImages", () => {
       { dataUrl, mimeType: "image/png", fileName: "clipboard.png" },
     ]);
     expect(result).toHaveLength(1);
+  });
+});
+
+describe("withRetainedComposerImages", () => {
+  it("retains image files while the cleared draft waits for asynchronous encoding", async () => {
+    const image = imageWithId("img-in-flight");
+
+    const result = await withRetainedComposerImages(
+      [{ kind: "image", metadata: image }],
+      async () => {
+        expect(collectRetainedAttachmentIds()).toContain(image.id);
+        await Promise.resolve();
+        expect(collectRetainedAttachmentIds()).toContain(image.id);
+        return "sent";
+      },
+    );
+
+    expect(result).toBe("sent");
+    expect(collectRetainedAttachmentIds()).not.toContain(image.id);
+  });
+
+  it("releases image files after a failed send", async () => {
+    const image = imageWithId("img-failed");
+    const failure = new Error("encoding failed");
+
+    await expect(
+      withRetainedComposerImages([{ kind: "image", metadata: image }], async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+
+    expect(collectRetainedAttachmentIds()).not.toContain(image.id);
   });
 });
 

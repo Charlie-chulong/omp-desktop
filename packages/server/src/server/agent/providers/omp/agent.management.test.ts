@@ -3,13 +3,14 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { parse } from "yaml";
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
 import {
   disableStoredOmpProviderCredentials,
   formatOmpModelsYaml,
+  readStoredOmpOAuthAccounts,
   OmpAgentClient,
 } from "./agent.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
@@ -31,7 +32,7 @@ const { DatabaseSync } = testRequire("node:sqlite") as {
   DatabaseSync: new (path: string) => TestSqliteDatabase;
 };
 
-async function createClient() {
+async function createClient(options: { quotaFetch?: typeof fetch } = {}) {
   const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-management-"));
   tempDirs.push(agentDir);
   const runtime = new FakeOmp();
@@ -39,6 +40,7 @@ async function createClient() {
     logger: createTestLogger(),
     runtime,
     runtimeSettings: { env: { PI_CODING_AGENT_DIR: agentDir } },
+    quotaFetch: options.quotaFetch ?? (async () => new Response(null, { status: 401 })),
   });
   return { agentDir, client, runtime };
 }
@@ -60,8 +62,21 @@ describe("OMP provider management", () => {
       configPath: path.join(agentDir, "models.yml"),
       configYaml: "providers: {}\n",
       providerModels: [
-        { id: "anthropic", modelCount: 2, source: "built-in" },
-        { id: "openai", modelCount: 1, source: "built-in" },
+        {
+          id: "anthropic",
+          modelCount: 2,
+          source: "built-in",
+          models: [
+            { id: "claude-opus-4", name: "Claude Opus 4" },
+            { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
+          ],
+        },
+        {
+          id: "openai",
+          modelCount: 1,
+          source: "built-in",
+          models: [{ id: "gpt-5", name: "GPT-5" }],
+        },
       ],
       loginProviders: [
         { id: "anthropic", name: "Anthropic", available: true, authenticated: true },
@@ -69,6 +84,131 @@ describe("OMP provider management", () => {
       ],
     });
   });
+  test("reports every active OAuth account without exposing credential data", async () => {
+    const quotaFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      if (headers.get("Authorization") === "Bearer secret-a") {
+        return new Response(
+          JSON.stringify({
+            plan_type: "plus",
+            rate_limit: {
+              primary_window: { used_percent: 42, reset_at: 1_798_122_000 },
+              secondary_window: { used_percent: 8, reset_at: 1_798_640_000 },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(null, { status: 401 });
+    });
+    const { agentDir, client, runtime } = await createClient({ quotaFetch });
+    const databasePath = path.join(agentDir, "agent.db");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        credential_type TEXT NOT NULL,
+        data TEXT NOT NULL,
+        disabled_cause TEXT,
+        identity_key TEXT
+      );
+      INSERT INTO auth_credentials
+        (id, provider, credential_type, data, identity_key, disabled_cause)
+      VALUES
+        (1, 'openai-codex', 'oauth', '{"access":"secret-a","accountId":"acct-a"}', 'email:alice@example.com|org:personal', NULL),
+        (2, 'openai-codex', 'oauth', '{"access":"secret-b","accountId":"acct-b"}', 'email:bob@example.com|org:team', NULL),
+        (3, 'openai-codex', 'oauth', '{"access":"secret-c"}', 'email:old@example.com', 'expired'),
+        (4, 'openai-codex', 'api_key', '{"key":"secret-d"}', NULL, NULL),
+        (5, 'anthropic', 'oauth', '{"access":"secret-e"}', NULL, NULL);
+    `);
+    database.close();
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([
+      { id: "openai-codex", name: "OpenAI Codex", available: true, authenticated: true },
+      { id: "anthropic", name: "Anthropic", available: true, authenticated: true },
+    ]);
+
+    expect(readStoredOmpOAuthAccounts(databasePath)).toEqual([
+      {
+        credentialId: 5,
+        provider: "anthropic",
+      },
+      {
+        credentialId: 1,
+        provider: "openai-codex",
+        identityKey: "email:alice@example.com|org:personal",
+      },
+      {
+        credentialId: 2,
+        provider: "openai-codex",
+        identityKey: "email:bob@example.com|org:team",
+      },
+    ]);
+    const management = await client.getOmpProviderManagement();
+    expect(management).toMatchObject({
+      loginProviders: [
+        {
+          id: "openai-codex",
+          accounts: [
+            {
+              credentialId: 1,
+              identityKey: "email:alice@example.com|org:personal",
+              quota: {
+                status: "available",
+                planLabel: "plus",
+                fiveHourUsedPct: 42,
+                fiveHourLimitReached: false,
+                weeklyUsedPct: 8,
+              },
+            },
+            {
+              credentialId: 2,
+              identityKey: "email:bob@example.com|org:team",
+              quota: {
+                status: "unavailable",
+                fiveHourUsedPct: null,
+                fiveHourLimitReached: null,
+              },
+            },
+          ],
+        },
+        {
+          id: "anthropic",
+          accounts: [{ credentialId: 5 }],
+        },
+      ],
+    });
+    expect(JSON.stringify(management)).not.toContain("secret-a");
+    expect(JSON.stringify(management)).not.toContain("secret-b");
+    expect(quotaFetch).toHaveBeenCalledTimes(2);
+    expect(
+      quotaFetch.mock.calls
+        .map(([, init]) => new Headers(init?.headers).get("ChatGPT-Account-Id"))
+        .sort(),
+    ).toEqual(["acct-a", "acct-b"]);
+  });
+  test("cancels an active provider login and closes its runtime session", async () => {
+    const { client, runtime } = await createClient();
+    runtime.queueLoginFlow({
+      url: "https://example.test/oauth",
+      launchUrl: "https://example.test/oauth?launch=1",
+    });
+
+    const flow = await client.startOmpProviderLogin("openai-codex");
+    const session = runtime.latestSession();
+    expect(flow).toMatchObject({
+      providerId: "openai-codex",
+      url: "https://example.test/oauth",
+    });
+    expect(session.loginRequests).toEqual(["openai-codex"]);
+    expect(session.closed).toBe(false);
+
+    await expect(client.cancelOmpProviderLogin(flow.flowId)).resolves.toBe(true);
+    expect(session.closed).toBe(true);
+    await expect(client.cancelOmpProviderLogin(flow.flowId)).resolves.toBe(false);
+  });
+
   test("logs out only active credentials for the requested provider", async () => {
     const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-auth-"));
     tempDirs.push(agentDir);
@@ -103,6 +243,53 @@ describe("OMP provider management", () => {
     ]);
   });
 
+  test("reports built-in model context-window overrides without treating them as custom", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    await writeFile(
+      path.join(agentDir, "models.yml"),
+      `providers:
+  openai-codex:
+    modelOverrides:
+      gpt-5.6-sol:
+        contextWindow: 1000000
+`,
+      "utf8",
+    );
+    runtime.queueModels([
+      {
+        provider: "openai-codex",
+        id: "gpt-5.6-sol",
+        name: "GPT-5.6-Sol",
+        contextWindow: 1_000_000,
+      },
+    ]);
+    runtime.queueLoginProviders([
+      {
+        id: "openai-codex",
+        name: "OpenAI Codex",
+        available: true,
+        authenticated: true,
+      },
+    ]);
+
+    await expect(client.getOmpProviderManagement()).resolves.toMatchObject({
+      providerModels: [
+        {
+          id: "openai-codex",
+          modelCount: 1,
+          source: "built-in",
+          models: [
+            {
+              id: "gpt-5.6-sol",
+              name: "GPT-5.6-Sol",
+              contextWindow: 1_000_000,
+              contextWindowOverride: 1_000_000,
+            },
+          ],
+        },
+      ],
+    });
+  });
   test("formats models.yml as readable block YAML and preserves comments", () => {
     expect(
       formatOmpModelsYaml(

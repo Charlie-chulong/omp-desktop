@@ -17,6 +17,7 @@ import type {
   MutableDaemonConfigPatch,
   OmpCustomProviderInput,
   OmpProviderLoginFinishResponseMessage,
+  OmpProviderLoginCancelResponseMessage,
   OmpProviderLoginStartResponseMessage,
   OmpInstallationStatus,
   OmpProviderManagementGetResponseMessage,
@@ -395,6 +396,10 @@ export interface OmpProviderActions {
     input?: string,
     options?: { requestId?: string },
   ): Promise<OmpProviderLoginFinishResponseMessage["payload"]>;
+  cancelProviderLogin(
+    flowId: string,
+    options?: { requestId?: string },
+  ): Promise<OmpProviderLoginCancelResponseMessage["payload"]>;
 }
 
 export interface PaseoForgeAuthActions {
@@ -531,6 +536,8 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
         daemonClient.startOmpProviderLogin(providerId, options),
       finishProviderLogin: (flowId, input, options) =>
         daemonClient.finishOmpProviderLogin(flowId, input, options),
+      cancelProviderLogin: (flowId, options) =>
+        daemonClient.cancelOmpProviderLogin(flowId, options),
     },
     forgeAuth: {
       start: (input, requestId) => daemonClient.startForgeLogin(input, requestId),

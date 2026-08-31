@@ -50,6 +50,11 @@ export interface FakeOmpSubagentMessagesResult {
   messages: OmpAgentMessage[];
 }
 
+export interface FakeOmpLoginFlow {
+  url: string;
+  launchUrl?: string;
+  instructions?: string;
+}
 export class FakeOmp implements OmpRuntime {
   readonly recordedLaunches: OmpRuntimeLaunch[] = [];
   private readonly sessions: FakeOmpSession[] = [];
@@ -57,6 +62,7 @@ export class FakeOmp implements OmpRuntime {
   private readonly queuedCommands: OmpRpcSlashCommand[][] = [];
   private readonly queuedModels: OmpModel[][] = [];
   private readonly queuedLoginProviders: OmpLoginProvider[][] = [];
+  private readonly queuedLoginFlows: FakeOmpLoginFlow[] = [];
   private nextStartError: Error | undefined;
   private readonly queuedSubagentSubscriptionErrors = new Map<
     FakeOmpSubagentSubscriptionLevel,
@@ -82,6 +88,7 @@ export class FakeOmp implements OmpRuntime {
     session.commands = this.queuedCommands.shift() ?? [];
     session.models = this.queuedModels.shift() ?? [];
     session.loginProviders = this.queuedLoginProviders.shift() ?? [];
+    session.loginFlow = this.queuedLoginFlows.shift();
     for (const [level, error] of this.queuedSubagentSubscriptionErrors) {
       session.subagentSubscriptionErrors.set(level, error);
     }
@@ -99,6 +106,9 @@ export class FakeOmp implements OmpRuntime {
 
   queueLoginProviders(providers: OmpLoginProvider[]): void {
     this.queuedLoginProviders.push(providers);
+  }
+  queueLoginFlow(flow: FakeOmpLoginFlow): void {
+    this.queuedLoginFlows.push(flow);
   }
 
   failNextStart(error: Error): void {
@@ -143,6 +153,8 @@ export class FakeOmpSession implements OmpRuntimeSession {
   setModelResult: OmpModel | null = null;
   models: OmpModel[] = [];
   loginProviders: OmpLoginProvider[] = [];
+  loginFlow: FakeOmpLoginFlow | undefined;
+  readonly loginRequests: string[] = [];
   messages: OmpAgentMessage[] = [];
   stats: OmpSessionStats = {
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
@@ -172,6 +184,7 @@ export class FakeOmpSession implements OmpRuntimeSession {
   private nextHeldPrompt: { promise: Promise<void>; reject: (error: Error) => void } | null = null;
   private activeHeldPrompt: { promise: Promise<void>; reject: (error: Error) => void } | null =
     null;
+  private releaseLogin: (() => void) | null = null;
 
   constructor(launch: OmpRuntimeLaunch) {
     this.state = {
@@ -304,7 +317,19 @@ export class FakeOmpSession implements OmpRuntimeSession {
     return this.loginProviders;
   }
 
-  async login(_providerId: string): Promise<void> {}
+  async login(providerId: string): Promise<void> {
+    this.loginRequests.push(providerId);
+    if (!this.loginFlow) return;
+    this.emit({
+      type: "extension_ui_request",
+      id: `login-${providerId}`,
+      method: "open_url",
+      ...this.loginFlow,
+    });
+    await new Promise<void>((resolve) => {
+      this.releaseLogin = resolve;
+    });
+  }
 
   async setModel(provider: string, modelId: string): Promise<OmpModel> {
     this.setModelRequests.push({ provider, modelId });
@@ -432,6 +457,8 @@ export class FakeOmpSession implements OmpRuntimeSession {
 
   async close(): Promise<void> {
     this.closed = true;
+    this.releaseLogin?.();
+    this.releaseLogin = null;
   }
 
   emit(event: OmpRuntimeEvent): void {

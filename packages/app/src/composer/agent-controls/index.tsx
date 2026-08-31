@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   memo,
   useCallback,
@@ -8,6 +9,7 @@ import {
   type ReactElement,
   type RefObject,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import {
@@ -50,6 +52,17 @@ import {
   type AgentModeControlValue,
 } from "@/composer/agent-controls/mode-control";
 import { groupOmpModelsByProviderNamespace } from "@/composer/agent-controls/model-sheet-flow";
+import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
+import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
+import {
+  formatOmpAccountSelectionLabel,
+  resolveOmpAccountControlLabels,
+  selectOmpQuotaAccounts,
+} from "@/components/omp-provider-accounts";
+import {
+  resolveOmpRemainingQuotaPct,
+  shouldShowOmpFiveHourQuota,
+} from "@/components/omp-provider-quota";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -59,6 +72,7 @@ import type {
   AgentProvider,
 } from "@omp-desktop/protocol/agent-types";
 import type { AgentProviderDefinition } from "@omp-desktop/protocol/provider-manifest";
+import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
@@ -102,6 +116,73 @@ interface AgentControlOption {
   id: string;
   label: string;
 }
+type OmpWorkflowQuotaAccount = NonNullable<
+  OmpProviderManagement["loginProviders"][number]["accounts"]
+>[number];
+type OmpWorkflowQuotaDisplayAccount = OmpWorkflowQuotaAccount & { note?: string };
+function formatFeatureOptionLabel(
+  featureId: string,
+  option: AgentControlOption,
+  oauthAccounts: readonly OmpWorkflowQuotaDisplayAccount[] = [],
+): string {
+  if (featureId === "oauth_account_credential") {
+    const account = oauthAccounts.find((candidate) => String(candidate.credentialId) === option.id);
+    if (account) {
+      return formatOmpAccountSelectionLabel({
+        note: account.note,
+        identityKey: account.identityKey,
+        fallback: option.label,
+      });
+    }
+  }
+  return formatAgentFeatureOptionLabel(featureId, option);
+}
+function isCodexWorkflowProvider(provider: string | undefined, modelId: string | null): boolean {
+  if (provider === "openai-codex") return true;
+  return provider === "omp" && resolveOmpModelProviderNamespace(modelId ?? "") === "openai-codex";
+}
+function useWorkflowQuota(
+  serverId: string | null | undefined,
+  provider: string | null | undefined,
+  modelId: string | null | undefined,
+): { accounts: OmpWorkflowQuotaDisplayAccount[]; loading: boolean } {
+  const client = useSessionStore((state) => state.sessions[serverId ?? ""]?.client ?? null);
+  const supportsOmpProviderManagement = useSessionStore(
+    (state) => state.sessions[serverId ?? ""]?.serverInfo?.features?.ompProviderManagement === true,
+  );
+  const shouldFetch = isCodexWorkflowProvider(provider ?? undefined, modelId ?? null);
+  const query = useQuery({
+    queryKey: ["ompWorkflowQuota", serverId ?? ""],
+    queryFn: async () => {
+      if (!client) throw new Error("OMP provider management is unavailable");
+      return client.getOmpProviderManagement();
+    },
+    enabled: Boolean(client && supportsOmpProviderManagement && shouldFetch),
+    staleTime: 0,
+    refetchInterval: 30_000,
+    refetchOnMount: true,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: true,
+  });
+  const notesQuery = useQuery({
+    queryKey: ["ompProviderAccountNotes", serverId ?? ""],
+    queryFn: () => loadOmpProviderAccountNotes(AsyncStorage, serverId ?? undefined),
+    enabled: Boolean(serverId && shouldFetch),
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  });
+  const accounts = shouldFetch
+    ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex")?.accounts ?? []).map(
+        (account) => ({
+          ...account,
+          note: notesQuery.data?.[String(account.credentialId)],
+        }),
+      )
+    : [];
+  return { accounts, loading: query.isFetching || notesQuery.isFetching };
+}
 
 type AgentControlSelector = "provider" | "mode" | "model" | "thinking" | `feature-${string}`;
 
@@ -132,6 +213,8 @@ interface ControlledAgentControlsProps {
   onDropdownClose?: () => void;
   onModelSelectorOpen?: () => void;
   onRetryModelProvider?: (provider: AgentProvider) => void;
+  workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
+  workflowQuotaLoading?: boolean;
   isRetryingModelProvider?: boolean;
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
@@ -508,6 +591,8 @@ function ControlledAgentControls({
   modeControl,
   modelSelectorServerId = null,
   isCompactLayout,
+  workflowQuotaAccounts,
+  workflowQuotaLoading,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -563,11 +648,11 @@ function ControlledAgentControls({
         return {
           type: "select" as const,
           label: selectedOption
-            ? formatAgentFeatureOptionLabel(feature.id, selectedOption)
+            ? formatFeatureOptionLabel(feature.id, selectedOption, workflowQuotaAccounts)
             : formatAgentFeatureLabel(feature),
         };
       }),
-    [features, t],
+    [features, t, workflowQuotaAccounts],
   );
   const controlPresence = useMemo(
     () => ({
@@ -796,6 +881,8 @@ function ControlledAgentControls({
             handleOpenSheet={handleOpenSheet}
             handleCloseSheet={handleCloseSheet}
             modelSelectorServerId={modelSelectorServerId}
+            workflowQuotaAccounts={workflowQuotaAccounts}
+            workflowQuotaLoading={workflowQuotaLoading}
           />
         ) : (
           <SheetAgentControlsContent
@@ -803,6 +890,7 @@ function ControlledAgentControls({
             selectedModelId={selectedModelId}
             selectedThinkingOptionId={selectedThinkingOptionId}
             features={features}
+            oauthAccounts={workflowQuotaAccounts}
             onSetFeature={onSetFeature}
             onApplyAgentProfile={onApplyAgentProfile}
             onEditAgentProfiles={onEditAgentProfiles}
@@ -898,6 +986,82 @@ interface DesktopAgentControlsContentProps {
   handleOpenSheet: (sheet: Exclude<ActiveSheet, null>) => void;
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
+  workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
+  workflowQuotaLoading?: boolean;
+}
+
+function WorkflowQuotaValue({
+  label,
+  usedPct,
+  limitReached,
+}: {
+  label: string;
+  usedPct: number | null | undefined;
+  limitReached?: boolean | null;
+}) {
+  const { theme } = useUnistyles();
+  const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
+  const reached = limitReached === true || remainingPct === 0;
+  const color = reached
+    ? theme.colors.destructive
+    : remainingPct !== null && remainingPct <= 30
+      ? theme.colors.palette.amber[500]
+      : remainingPct !== null
+        ? theme.colors.palette.green[500]
+        : theme.colors.foregroundMuted;
+  return (
+    <View style={styles.workflowQuotaValue}>
+      <Text style={styles.workflowQuotaValueLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[styles.workflowQuotaValueText, { color }]} numberOfLines={1}>
+        {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
+      </Text>
+    </View>
+  );
+}
+
+function WorkflowQuotaSummary({
+  accounts,
+  loading,
+}: {
+  accounts: OmpWorkflowQuotaDisplayAccount[];
+  loading: boolean;
+}) {
+  const { t } = useTranslation();
+  if (loading && accounts.length === 0) {
+    return (
+      <View style={styles.workflowQuota} testID="agent-workflow-quota">
+        <Text style={styles.workflowQuotaTitle}>{t("agentControls.quota.loading")}</Text>
+      </View>
+    );
+  }
+  if (accounts.length === 0) return null;
+  return (
+    <View style={styles.workflowQuota} testID="agent-workflow-quota">
+      {accounts.map((account, index) => (
+        <View
+          key={account.credentialId}
+          style={[
+            styles.workflowQuotaAccount,
+            index > 0 ? styles.workflowQuotaAccountSeparated : null,
+          ]}
+        >
+          <WorkflowQuotaValue
+            label={t("agentControls.quota.total")}
+            usedPct={account.quota?.weeklyUsedPct}
+          />
+          {shouldShowOmpFiveHourQuota(account.quota?.planLabel) ? (
+            <WorkflowQuotaValue
+              label={t("agentControls.quota.fiveHour")}
+              usedPct={account.quota?.fiveHourUsedPct}
+              limitReached={account.quota?.fiveHourLimitReached}
+            />
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
 }
 
 const DESKTOP_SEARCH_THRESHOLD = 6;
@@ -955,7 +1119,21 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleOpenSheet,
     handleCloseSheet,
     modelSelectorServerId,
+    workflowQuotaAccounts,
+    workflowQuotaLoading,
   } = props;
+  const selectedOAuthCredentialId = useMemo(() => {
+    const accountFeature = features?.find(
+      (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
+    );
+    if (!accountFeature || typeof accountFeature.value !== "string") return null;
+    const credentialId = Number(accountFeature.value);
+    return Number.isSafeInteger(credentialId) && credentialId > 0 ? credentialId : null;
+  }, [features]);
+  const displayedWorkflowQuotaAccounts = useMemo(
+    () => selectOmpQuotaAccounts(workflowQuotaAccounts ?? [], selectedOAuthCredentialId),
+    [selectedOAuthCredentialId, workflowQuotaAccounts],
+  );
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
     [glyphSize, presentation.showCarets],
@@ -1093,6 +1271,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
               <SheetFeatureItem
                 key={`feature-${feature.id}`}
                 feature={feature}
+                oauthAccounts={workflowQuotaAccounts}
                 disabled={disabled}
                 openSelector={openSelector}
                 handleOpenChange={handleNestedOpenChange}
@@ -1106,6 +1285,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           <DesktopFeatureItem
             key={`feature-${feature.id}`}
             feature={feature}
+            oauthAccounts={workflowQuotaAccounts}
             disabled={disabled}
             openSelector={openSelector}
             handleOpenChange={handleOpenChange}
@@ -1114,6 +1294,10 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           />
         ))
       )}
+      <WorkflowQuotaSummary
+        accounts={displayedWorkflowQuotaAccounts}
+        loading={Boolean(workflowQuotaLoading)}
+      />
     </>
   );
 }
@@ -1123,6 +1307,7 @@ interface SheetAgentControlsContentProps {
   selectedModelId?: string;
   selectedThinkingOptionId?: string;
   features?: AgentFeature[];
+  oauthAccounts?: OmpWorkflowQuotaDisplayAccount[];
   onSetFeature?: (featureId: string, value: unknown) => void;
   onApplyAgentProfile?: (profileId: string) => void;
   onEditAgentProfiles?: () => void;
@@ -1167,6 +1352,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     selectedModelId,
     selectedThinkingOptionId,
     features,
+    oauthAccounts,
     onSetFeature,
     onApplyAgentProfile,
     onEditAgentProfiles,
@@ -1254,6 +1440,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
         <SheetFeatureItem
           key={`feature-${feature.id}`}
           feature={feature}
+          oauthAccounts={oauthAccounts}
           disabled={disabled}
           openSelector={openSelector}
           handleOpenChange={handleOpenChange}
@@ -1330,6 +1517,7 @@ function FeatureSelectComboboxOption({
 
 function DesktopFeatureItem({
   feature,
+  oauthAccounts,
   disabled,
   openSelector,
   handleOpenChange,
@@ -1338,6 +1526,7 @@ function DesktopFeatureItem({
 }: {
   feature: AgentFeature;
   disabled: boolean;
+  oauthAccounts?: readonly OmpWorkflowQuotaDisplayAccount[];
   openSelector: AgentControlSelector | null;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
@@ -1376,10 +1565,10 @@ function DesktopFeatureItem({
       feature.type === "select"
         ? feature.options.map((option) => ({
             id: option.id,
-            label: formatAgentFeatureOptionLabel(feature.id, option),
+            label: formatFeatureOptionLabel(feature.id, option, oauthAccounts),
           }))
         : [],
-    [feature, t],
+    [feature, oauthAccounts, t],
   );
   const renderSelectOption = useCallback(
     (args: {
@@ -1433,9 +1622,20 @@ function DesktopFeatureItem({
   if (feature.type === "select") {
     const FeatureIcon = getAgentFeatureIcon(feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
-    const selectedOptionLabel = selectedOption
-      ? formatAgentFeatureOptionLabel(feature.id, selectedOption)
-      : featureLabel;
+    const selectedOptionValueLabel = selectedOption
+      ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
+      : null;
+    const selectedOptionLabel = selectedOptionValueLabel ?? featureLabel;
+    const accountControlLabels =
+      feature.id === "oauth_account_credential"
+        ? resolveOmpAccountControlLabels({
+            featureLabel,
+            accountLabel: selectedOptionValueLabel,
+          })
+        : null;
+    const toolbarValueLabel = accountControlLabels?.buttonLabel ?? selectedOptionLabel;
+    const tooltipLabel =
+      accountControlLabels?.tooltipLabel ?? `${featureLabel}: ${selectedOptionLabel}`;
     return (
       <>
         <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
@@ -1445,16 +1645,16 @@ function DesktopFeatureItem({
               icon={FeatureIcon}
               surface="toolbar"
               label={featureLabel}
-              value={selectedOptionLabel}
+              value={toolbarValueLabel}
               open={openSelector === featureSelector}
               disabled={disabled}
               onPress={handleSelectPress}
-              accessibilityLabel={`${featureLabel}: ${selectedOptionLabel}`}
+              accessibilityLabel={tooltipLabel}
               testID={`agent-feature-${feature.id}`}
             />
           </TooltipTrigger>
           <TooltipContent side="top" align="center" offset={8}>
-            <Text style={styles.tooltipText}>{`${featureLabel}: ${selectedOptionLabel}`}</Text>
+            <Text style={styles.tooltipText}>{tooltipLabel}</Text>
           </TooltipContent>
         </Tooltip>
         <Combobox
@@ -1477,6 +1677,7 @@ function DesktopFeatureItem({
 
 function SheetFeatureItem({
   feature,
+  oauthAccounts,
   disabled,
   openSelector,
   handleOpenChange,
@@ -1484,6 +1685,7 @@ function SheetFeatureItem({
 }: {
   feature: AgentFeature;
   disabled: boolean;
+  oauthAccounts?: readonly OmpWorkflowQuotaDisplayAccount[];
   openSelector: AgentControlSelector | null;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   onSetFeature?: (featureId: string, value: unknown) => void;
@@ -1514,14 +1716,14 @@ function SheetFeatureItem({
     if (feature.type === "select") {
       return feature.options.map((option) => ({
         id: option.id,
-        label: formatAgentFeatureOptionLabel(feature.id, option),
+        label: formatFeatureOptionLabel(feature.id, option, oauthAccounts),
       }));
     }
     return [
       { id: "true", label: t("agentControls.features.on") },
       { id: "false", label: t("agentControls.features.off") },
     ];
-  }, [feature, t]);
+  }, [feature, oauthAccounts, t]);
   const renderSelectOption = useCallback(
     (args: {
       option: ComboboxOption;
@@ -1583,7 +1785,7 @@ function SheetFeatureItem({
     const FeatureIcon = getAgentFeatureIcon(feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const selectedOptionLabel = selectedOption
-      ? formatAgentFeatureOptionLabel(feature.id, selectedOption)
+      ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
       : featureLabel;
     return (
       <>
@@ -1714,6 +1916,11 @@ export const AgentControls = memo(function AgentControls({
 
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
+  const { accounts: workflowQuotaAccounts, loading: workflowQuotaLoading } = useWorkflowQuota(
+    serverId,
+    agentProvider,
+    activeModelId,
+  );
 
   const handleSelectModel = useCallback(
     async (modelId: string) => {
@@ -1912,6 +2119,8 @@ export const AgentControls = memo(function AgentControls({
         disabled={!client}
         modeControl={modeControl}
         modelSelectorServerId={serverId}
+        workflowQuotaAccounts={workflowQuotaAccounts}
+        workflowQuotaLoading={workflowQuotaLoading}
         isCompactLayout={isCompactLayout}
       />
     </>
@@ -1960,6 +2169,11 @@ export function DraftAgentControls({
         label: model.label,
       })),
     [models],
+  );
+  const { accounts: workflowQuotaAccounts, loading: workflowQuotaLoading } = useWorkflowQuota(
+    modelSelectorServerId,
+    selectedProvider,
+    selectedModel,
   );
 
   // The draft form is the one surface that can switch provider, so every profile
@@ -2032,6 +2246,8 @@ export function DraftAgentControls({
         disabled={disabled}
         modeControl={modeControl}
         modelSelectorServerId={modelSelectorServerId}
+        workflowQuotaAccounts={workflowQuotaAccounts}
+        workflowQuotaLoading={workflowQuotaLoading}
         isCompactLayout={isCompactLayout}
       />
     </>
@@ -2096,6 +2312,55 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     lineHeight: theme.fontSize.base * 1.4,
+  },
+  workflowQuota: {
+    height: 28,
+    minWidth: 220,
+    maxWidth: 520,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+    borderRadius: theme.borderRadius["2xl"],
+  },
+  workflowQuotaAccount: {
+    height: 28,
+    minWidth: 0,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    paddingHorizontal: theme.spacing[1],
+  },
+  workflowQuotaAccountSeparated: {
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border,
+  },
+  workflowQuotaTitle: {
+    maxWidth: 96,
+    minWidth: 0,
+    flexShrink: 1,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  workflowQuotaValue: {
+    minWidth: 54,
+    maxWidth: 112,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  workflowQuotaValueLabel: {
+    flexShrink: 0,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  workflowQuotaValueText: {
+    width: 36,
+    flexShrink: 0,
+    textAlign: "right",
+    fontSize: theme.fontSize.sm,
   },
   combinedSheetControls: {
     gap: theme.spacing[1],

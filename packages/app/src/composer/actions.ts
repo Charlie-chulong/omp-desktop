@@ -17,6 +17,7 @@ import { createUserMessage, generateMessageId, type UserMessageItem } from "@/ty
 import type { MessageSubmissionRejectionOutcome } from "@/composer/submission/model";
 import type { PickedImageAttachmentInput } from "@/hooks/image-attachment-picker";
 import { i18n } from "@/i18n/i18next";
+import { retainAttachmentForGarbageCollection } from "@/attachments/gc-retention";
 
 export interface QueuedComposerMessage {
   id: string;
@@ -165,6 +166,26 @@ export function cancelComposerAgent(input: CancelComposerAgentInput): Promise<vo
     return Promise.resolve(input.client.cancelAgent(input.agentId));
   } catch (error) {
     return Promise.reject(error);
+  }
+}
+
+export async function withRetainedComposerImages<T>(
+  attachments: readonly ComposerAttachment[],
+  submit: () => Promise<T>,
+): Promise<T> {
+  const releases: Array<() => void> = [];
+  for (const attachment of attachments) {
+    if (attachment.kind === "image") {
+      releases.push(retainAttachmentForGarbageCollection(attachment.metadata.id));
+    }
+  }
+
+  try {
+    return await submit();
+  } finally {
+    for (const release of releases) {
+      release();
+    }
   }
 }
 

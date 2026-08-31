@@ -4,6 +4,7 @@ import type { AgentProvider } from "@omp-desktop/protocol/agent-types";
 const featureValuesSchema = z.record(z.string(), z.union([z.boolean(), z.string(), z.null()]));
 const TRANSIENT_FEATURE_IDS: Record<string, true> = {
   workflow_mode: true,
+  oauth_account_credential: true,
   goal_objective: true,
   goal_status: true,
 };

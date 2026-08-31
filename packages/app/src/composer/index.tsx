@@ -73,6 +73,7 @@ import {
   sendQueuedComposerMessageNow,
   toggleGithubAttachmentFromPicker,
   uploadFileAttachments,
+  withRetainedComposerImages,
   type AttachmentPersister,
   type QueueWriter,
   type QueuedComposerMessage,
@@ -1636,38 +1637,42 @@ function ComposerContentImpl({
       outgoingAttachments: ComposerAttachment[],
       forceSend?: boolean,
     ) => {
-      const result = await submitAgentInput({
-        message: outgoingMessage,
-        attachments: outgoingAttachments,
-        hasExternalContent,
-        allowEmptySubmit,
-        forceSend,
-        submitBehavior,
-        isAgentRunning,
-        // Parent-managed submits are still valid submit paths even when the
-        // transport is disconnected, because the parent decides the failure mode.
-        canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
-        queueMessage: ({ message: queuedText, attachments: queuedAttachments }) => {
-          queueMessage(queuedText, queuedAttachments);
-        },
-        submitMessage: async ({ message: submitText, attachments: submitAttachments }) => {
-          if (submitBehavior !== "preserve-and-lock") {
-            beginSubmit(submitAttachments);
-          }
-          await submitMessage(submitText, submitAttachments);
-        },
-        clearDraft,
-        setUserInput: replaceUserInput,
-        setAttachments: (nextAttachments) => {
-          setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
-        },
-        setSendError,
-        setIsProcessing,
-        onSubmitError: (error) => {
-          console.error("[AgentInput] Failed to send message:", error);
-        },
-        failedToSendMessage: t("composer.errors.failedToSend"),
-      });
+      const result = await withRetainedComposerImages(outgoingAttachments, () =>
+        submitAgentInput({
+          message: outgoingMessage,
+          attachments: outgoingAttachments,
+          hasExternalContent,
+          allowEmptySubmit,
+          forceSend,
+          submitBehavior,
+          isAgentRunning,
+          // Parent-managed submits are still valid submit paths even when the
+          // transport is disconnected, because the parent decides the failure mode.
+          canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
+          queueMessage: ({ message: queuedText, attachments: queuedAttachments }) => {
+            queueMessage(queuedText, queuedAttachments);
+          },
+          submitMessage: async ({ message: submitText, attachments: submitAttachments }) => {
+            if (submitBehavior !== "preserve-and-lock") {
+              beginSubmit(submitAttachments);
+            }
+            await submitMessage(submitText, submitAttachments);
+          },
+          clearDraft,
+          setUserInput: replaceUserInput,
+          setAttachments: (nextAttachments) => {
+            setSelectedAttachments(
+              composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments),
+            );
+          },
+          setSendError,
+          setIsProcessing,
+          onSubmitError: (error) => {
+            console.error("[AgentInput] Failed to send message:", error);
+          },
+          failedToSendMessage: t("composer.errors.failedToSend"),
+        }),
+      );
       completeSubmit({
         result,
         outgoingAttachments,

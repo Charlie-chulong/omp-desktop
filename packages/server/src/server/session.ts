@@ -2541,6 +2541,8 @@ export class Session {
         return this.providerCatalogSession.handleOmpProviderLoginStartRequest(msg);
       case "omp.provider.login.finish.request":
         return this.providerCatalogSession.handleOmpProviderLoginFinishRequest(msg);
+      case "omp.provider.login.cancel.request":
+        return this.providerCatalogSession.handleOmpProviderLoginCancelRequest(msg);
       case "omp.provider.logout.request":
         return this.providerCatalogSession.handleOmpProviderLogoutRequest(msg);
       case "provider.usage.list.request":

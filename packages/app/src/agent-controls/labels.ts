@@ -97,9 +97,11 @@ export function formatThinkingOptionLabel(option: ControlLabelInput): string {
 }
 
 export function formatAgentFeatureLabel(feature: ControlLabelInput): string {
-  return feature.id === "workflow_mode"
-    ? i18n.t("agentControls.features.workflow.title")
-    : (feature.label ?? feature.id);
+  if (feature.id === "workflow_mode") return i18n.t("agentControls.features.workflow.title");
+  if (feature.id === "oauth_account_credential") {
+    return i18n.t("agentControls.features.oauthAccount.title");
+  }
+  return feature.label ?? feature.id;
 }
 
 export function formatAgentFeatureOptionLabel(

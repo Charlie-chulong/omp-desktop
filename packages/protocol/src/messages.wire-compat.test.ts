@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   AgentSnapshotPayloadSchema,
   AgentTimelineItemPayloadSchema,
+  OmpProviderManagementSchema,
   ServerInfoStatusPayloadSchema,
   WSHelloMessageSchema,
 } from "./messages.js";
@@ -243,5 +244,80 @@ describe("wire schema compatibility", () => {
     expect(parsed.capabilities.supportsRewindConversation).toBe(false);
     expect(parsed.capabilities.supportsRewindFiles).toBe(false);
     expect(parsed.capabilities.supportsRewindBoth).toBe(false);
+  });
+  test("OMP provider management accepts legacy and multi-account login providers", () => {
+    const base = {
+      configPath: "/tmp/models.yml",
+      configYaml: "providers: {}\n",
+      providerModels: [],
+    };
+
+    expect(
+      OmpProviderManagementSchema.parse({
+        ...base,
+        loginProviders: [
+          {
+            id: "openai-codex",
+            name: "OpenAI Codex",
+            available: true,
+            authenticated: true,
+          },
+        ],
+      }).loginProviders[0]?.accounts,
+    ).toBeUndefined();
+
+    expect(
+      OmpProviderManagementSchema.parse({
+        ...base,
+        loginProviders: [
+          {
+            id: "openai-codex",
+            name: "OpenAI Codex",
+            available: true,
+            authenticated: true,
+            accounts: [
+              { credentialId: 4, identityKey: "email:alice@example.com|org:personal" },
+              { credentialId: 9, identityKey: "email:bob@example.com|org:team" },
+            ],
+          },
+        ],
+      }).loginProviders[0]?.accounts,
+    ).toEqual([
+      { credentialId: 4, identityKey: "email:alice@example.com|org:personal" },
+      { credentialId: 9, identityKey: "email:bob@example.com|org:team" },
+    ]);
+  });
+  test("OMP provider management accepts optional per-account quota", () => {
+    const parsed = OmpProviderManagementSchema.parse({
+      configPath: "/tmp/models.yml",
+      configYaml: "providers: {}\n",
+      providerModels: [],
+      loginProviders: [
+        {
+          id: "openai-codex",
+          name: "OpenAI Codex",
+          available: true,
+          authenticated: true,
+          accounts: [
+            {
+              credentialId: 4,
+              quota: {
+                status: "available",
+                planLabel: "plus",
+                fiveHourUsedPct: 100,
+                fiveHourLimitReached: true,
+                fiveHourResetsAt: "2026-08-29T05:00:00.000Z",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(parsed.loginProviders[0]?.accounts?.[0]?.quota).toMatchObject({
+      status: "available",
+      fiveHourUsedPct: 100,
+      fiveHourLimitReached: true,
+    });
   });
 });

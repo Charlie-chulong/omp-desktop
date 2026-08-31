@@ -6,7 +6,11 @@ import { join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
-import type { OmpCustomProviderInput, OmpInstallationStatus } from "@omp-desktop/protocol/messages";
+import type {
+  OmpCustomProviderInput,
+  OmpInstallationStatus,
+  OmpProviderAccountQuota,
+} from "@omp-desktop/protocol/messages";
 import { parseDocument } from "yaml";
 
 import {
@@ -117,18 +121,168 @@ import {
   mapOmpRpcUiPermissionRequest,
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
+import { fetchCodexAccountQuota, type CodexAccountQuotaCredential } from "./codex-account-quota.js";
 
 const OMP_PROVIDER = "omp";
 const QUESTION_RESPONSE_HEADER = "Response";
 const QUESTION_COMMENT_HEADER = "Comment";
 const OMP_ASK_USER_FREEFORM_SENTINEL = "✏️ Type custom response...";
 const COMBINED_ASK_USER_METADATA = "ask_user_select_optional_comment";
+interface NodeSqliteStatement {
+  all(...params: unknown[]): Array<Record<string, unknown>>;
+  run(...params: unknown[]): { changes: number | bigint };
+}
 interface NodeSqliteDatabase {
   close(): void;
   exec(sql: string): void;
-  prepare(sql: string): {
-    run(...params: unknown[]): { changes: number | bigint };
+  prepare(sql: string): NodeSqliteStatement;
+}
+export interface StoredOmpOAuthAccount {
+  credentialId: number;
+  provider: string;
+  identityKey?: string;
+}
+interface StoredOmpOAuthAccountCredential
+  extends StoredOmpOAuthAccount, CodexAccountQuotaCredential {}
+
+function parseStoredOmpOAuthAccountCredential(
+  row: Record<string, unknown>,
+): StoredOmpOAuthAccountCredential | null {
+  const credentialId = Number(row.id);
+  if (
+    !Number.isSafeInteger(credentialId) ||
+    credentialId <= 0 ||
+    typeof row.provider !== "string" ||
+    row.provider.length === 0 ||
+    typeof row.data !== "string"
+  ) {
+    return null;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(row.data);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const credential = data as Record<string, unknown>;
+  const accessToken = typeof credential.access === "string" ? credential.access.trim() : "";
+  if (!accessToken) return null;
+  const identityKey =
+    typeof row.identity_key === "string" && row.identity_key.trim().length > 0
+      ? row.identity_key.trim()
+      : undefined;
+  const accountId =
+    typeof credential.accountId === "string" && credential.accountId.trim().length > 0
+      ? credential.accountId.trim()
+      : undefined;
+  return {
+    credentialId,
+    provider: row.provider,
+    ...(identityKey ? { identityKey } : {}),
+    accessToken,
+    ...(accountId ? { accountId } : {}),
   };
+}
+
+export function readStoredOmpOAuthAccountCredentials(
+  agentDbPath: string,
+  providerId = "openai-codex",
+): StoredOmpOAuthAccountCredential[] {
+  if (!existsSync(agentDbPath)) return [];
+  const database = openOmpCredentialDatabase(agentDbPath);
+  try {
+    const columns = new Set(
+      database
+        .prepare("PRAGMA table_info(auth_credentials)")
+        .all()
+        .map((row) => row.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+    const requiredColumns = [
+      "id",
+      "provider",
+      "credential_type",
+      "data",
+      "disabled_cause",
+      "identity_key",
+    ];
+    if (requiredColumns.some((column) => !columns.has(column))) return [];
+    return database
+      .prepare(
+        `SELECT id, provider, data, identity_key
+         FROM auth_credentials
+         WHERE provider = ? AND credential_type = 'oauth' AND disabled_cause IS NULL
+         ORDER BY id`,
+      )
+      .all(providerId)
+      .flatMap((row) => {
+        const parsed = parseStoredOmpOAuthAccountCredential(row);
+        return parsed ? [parsed] : [];
+      });
+  } finally {
+    database.close();
+  }
+}
+
+function openOmpCredentialDatabase(agentDbPath: string): NodeSqliteDatabase {
+  const require = createRequire(import.meta.url);
+  const { DatabaseSync } = require("node:sqlite") as {
+    DatabaseSync: new (path: string) => NodeSqliteDatabase;
+  };
+  const database = new DatabaseSync(agentDbPath);
+  database.exec("PRAGMA busy_timeout = 5000");
+  return database;
+}
+
+export function readStoredOmpOAuthAccounts(agentDbPath: string): StoredOmpOAuthAccount[] {
+  if (!existsSync(agentDbPath)) return [];
+
+  const database = openOmpCredentialDatabase(agentDbPath);
+  try {
+    const columns = new Set(
+      database
+        .prepare("PRAGMA table_info(auth_credentials)")
+        .all()
+        .map((row) => row.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+    const requiredColumns = ["id", "provider", "credential_type", "disabled_cause", "identity_key"];
+    if (requiredColumns.some((column) => !columns.has(column))) return [];
+
+    return database
+      .prepare(
+        `SELECT id, provider, identity_key
+         FROM auth_credentials
+         WHERE credential_type = 'oauth' AND disabled_cause IS NULL
+         ORDER BY provider, id`,
+      )
+      .all()
+      .flatMap((row): StoredOmpOAuthAccount[] => {
+        const credentialId = Number(row.id);
+        if (
+          !Number.isSafeInteger(credentialId) ||
+          credentialId <= 0 ||
+          typeof row.provider !== "string" ||
+          row.provider.length === 0
+        ) {
+          return [];
+        }
+        const identityKey =
+          typeof row.identity_key === "string" && row.identity_key.trim().length > 0
+            ? row.identity_key.trim()
+            : undefined;
+        return [
+          {
+            credentialId,
+            provider: row.provider,
+            ...(identityKey ? { identityKey } : {}),
+          },
+        ];
+      });
+  } finally {
+    database.close();
+  }
 }
 
 export function disableStoredOmpProviderCredentials(
@@ -138,13 +292,8 @@ export function disableStoredOmpProviderCredentials(
   if (!existsSync(agentDbPath)) {
     throw new Error(`OMP credential database does not exist at ${agentDbPath}`);
   }
-  const require = createRequire(import.meta.url);
-  const { DatabaseSync } = require("node:sqlite") as {
-    DatabaseSync: new (path: string) => NodeSqliteDatabase;
-  };
-  const database = new DatabaseSync(agentDbPath);
+  const database = openOmpCredentialDatabase(agentDbPath);
   try {
-    database.exec("PRAGMA busy_timeout = 5000");
     const result = database
       .prepare(
         `UPDATE auth_credentials
@@ -172,6 +321,7 @@ const OMP_CORE_CAPABILITIES: AgentCapabilityFlags = {
 };
 
 export interface OmpAgentClientOptions {
+  oauthAccounts?: readonly StoredOmpOAuthAccount[];
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
   providerParams?: unknown;
@@ -180,6 +330,8 @@ export interface OmpAgentClientOptions {
   providerIdleScheduler?: OmpProviderIdleScheduler;
   noTurnScheduler?: OmpNoTurnScheduler;
   usagePollScheduler?: OmpUsagePollScheduler;
+  quotaFetch?: typeof fetch;
+  quotaNow?: () => number;
 }
 
 export interface OmpProviderIdleScheduler {
@@ -219,6 +371,7 @@ interface StartTurnResult {
 }
 
 interface OmpAgentSessionOptions {
+  oauthAccounts?: readonly StoredOmpOAuthAccount[];
   runtimeSession: OmpRuntimeSession;
   config: AgentSessionConfig;
   initialState: OmpSessionState;
@@ -284,6 +437,7 @@ interface OmpSlashCommandInvocation {
   args?: string;
 }
 const OMP_WORKFLOW_FEATURE_ID = "workflow_mode";
+const OMP_OAUTH_ACCOUNT_FEATURE_ID = "oauth_account_credential";
 const OMP_PLAN_APPROVAL_REQUEST_ID = "omp-plan-approval";
 const OMP_PLAN_APPROVAL_REQUEST_NAME = "OmpPlanApproval";
 type OmpWorkflowMode = "plan" | "goal";
@@ -293,8 +447,26 @@ function normalizeOmpWorkflowSelection(value: unknown): OmpWorkflowSelection {
   return value === "plan" || value === "goal" ? value : "standard";
 }
 
-function createOmpWorkflowFeatures(config: AgentSessionConfig): AgentFeature[] {
-  return [
+function formatStoredOmpOAuthAccountLabel(account: StoredOmpOAuthAccount): string {
+  const identityKey = account.identityKey?.trim();
+  if (!identityKey) return `OAuth credential #${account.credentialId}`;
+  const parts = identityKey
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const emailPart = parts.find((part) => part.toLowerCase().startsWith("email:"));
+  if (!emailPart) return identityKey;
+  const email = emailPart.slice(emailPart.indexOf(":") + 1).trim();
+  if (!email) return identityKey;
+  const qualifiers = parts.filter((part) => part !== emailPart);
+  return qualifiers.length > 0 ? `${email} · ${qualifiers.join(" · ")}` : email;
+}
+
+function createOmpFeatures(
+  config: AgentSessionConfig,
+  oauthAccounts: readonly StoredOmpOAuthAccount[] = [],
+): AgentFeature[] {
+  const features: AgentFeature[] = [
     {
       type: "select",
       id: OMP_WORKFLOW_FEATURE_ID,
@@ -309,7 +481,33 @@ function createOmpWorkflowFeatures(config: AgentSessionConfig): AgentFeature[] {
       ],
     },
   ];
+  if (
+    parseModelReference(config.model ?? null)?.provider === "openai-codex" &&
+    oauthAccounts.length > 1
+  ) {
+    const configuredCredentialId = optionalString(
+      config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
+    );
+    features.push({
+      type: "select",
+      id: OMP_OAUTH_ACCOUNT_FEATURE_ID,
+      label: "OAuth account",
+      description: "Pin one stored OAuth account to this OMP session.",
+      icon: "User",
+      value:
+        configuredCredentialId &&
+        oauthAccounts.some((account) => String(account.credentialId) === configuredCredentialId)
+          ? configuredCredentialId
+          : null,
+      options: oauthAccounts.map((account) => ({
+        id: String(account.credentialId),
+        label: formatStoredOmpOAuthAccountLabel(account),
+      })),
+    });
+  }
+  return features;
 }
+
 interface OmpProviderLoginFlow {
   providerId: string;
   runtimeSession: OmpRuntimeSession;
@@ -1021,13 +1219,14 @@ export class OmpAgentSession implements AgentSession {
   constructor(options: OmpAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
     this.config = options.config;
+    this.oauthAccounts = [...(options.oauthAccounts ?? [])];
     this.state = options.initialState;
     const configuredModeId = options.currentModeId ?? null;
     const configuredWorkflowMode = normalizeOmpWorkflowSelection(
       options.config.featureValues?.[OMP_WORKFLOW_FEATURE_ID],
     );
     this.currentModeId = configuredModeId;
-    this.features = createOmpWorkflowFeatures(options.config);
+    this.features = createOmpFeatures(options.config, this.oauthAccounts);
     this.activeWorkflowMode =
       options.live === false && configuredWorkflowMode !== "standard"
         ? configuredWorkflowMode
@@ -1086,6 +1285,7 @@ export class OmpAgentSession implements AgentSession {
   private readonly config: AgentSessionConfig;
   private readonly logger: Logger;
   private readonly paseoTools?: PaseoToolCatalog;
+  private readonly oauthAccounts: readonly StoredOmpOAuthAccount[];
 
   get id(): string | null {
     return this.state.sessionId;
@@ -1249,6 +1449,35 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
+    if (featureId === OMP_OAUTH_ACCOUNT_FEATURE_ID) {
+      if (typeof value !== "string" || !/^\d+$/.test(value)) {
+        throw new Error(`Invalid OMP OAuth account '${String(value)}'`);
+      }
+      const credentialId = Number(value);
+      if (!Number.isSafeInteger(credentialId) || credentialId <= 0) {
+        throw new Error(`Invalid OMP OAuth account '${value}'`);
+      }
+      const feature = this.features.find((candidate) => candidate.id === featureId);
+      if (feature?.type !== "select") {
+        throw new Error("OMP OAuth account feature is unavailable");
+      }
+      const modelProvider =
+        this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
+      const account = this.oauthAccounts.find(
+        (candidate) =>
+          candidate.credentialId === credentialId && candidate.provider === modelProvider,
+      );
+      if (!account) {
+        throw new Error(`OMP OAuth account '${value}' is unavailable for the current model`);
+      }
+      await this.pinOAuthAccount(account);
+      feature.value = value;
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        [OMP_OAUTH_ACCOUNT_FEATURE_ID]: value,
+      };
+      return;
+    }
     if (featureId !== OMP_WORKFLOW_FEATURE_ID) {
       throw new Error(`Unsupported OMP feature '${featureId}'`);
     }
@@ -1268,6 +1497,37 @@ export class OmpAgentSession implements AgentSession {
     if (value !== "plan") {
       this.dismissPendingPlanApproval();
     }
+  }
+
+  private async pinOAuthAccount(account: StoredOmpOAuthAccount): Promise<void> {
+    const position = this.oauthAccounts.indexOf(account);
+    if (position < 0) {
+      throw new Error(`OMP OAuth account '${account.credentialId}' is unavailable`);
+    }
+    if (this.activeTurnId) {
+      throw new Error("Cannot pin an OMP OAuth account while a turn is active");
+    }
+    const ack = await this.runtimeSession.prompt(`/session pin ${position + 1}`);
+    if (ack.requestId) {
+      this.pendingPromptResults.delete(ack.requestId);
+    }
+  }
+
+  async initialize(): Promise<void> {
+    const configuredCredentialId = optionalString(
+      this.config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
+    );
+    if (!configuredCredentialId) return;
+    if (!this.features.some((feature) => feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)) return;
+    const modelProvider =
+      this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
+    const account = this.oauthAccounts.find(
+      (candidate) =>
+        String(candidate.credentialId) === configuredCredentialId &&
+        candidate.provider === modelProvider,
+    );
+    if (!account) return;
+    await this.pinOAuthAccount(account);
   }
 
   async setGoalObjective(objective: string): Promise<void> {
@@ -2576,7 +2836,10 @@ export class OmpAgentClient implements AgentClient {
   private readonly providerIdleScheduler?: OmpProviderIdleScheduler;
   private readonly noTurnScheduler?: OmpNoTurnScheduler;
   private readonly usagePollScheduler?: OmpUsagePollScheduler;
+  private readonly quotaFetch: typeof fetch;
+  private readonly quotaNow: () => number;
   private readonly runtime: OmpRuntime;
+  private readonly oauthAccountsOverride?: readonly StoredOmpOAuthAccount[];
   private readonly loginFlows = new Map<string, OmpProviderLoginFlow>();
 
   constructor(options: OmpAgentClientOptions) {
@@ -2601,7 +2864,10 @@ export class OmpAgentClient implements AgentClient {
     this.providerIdleScheduler = options.providerIdleScheduler;
     this.noTurnScheduler = options.noTurnScheduler;
     this.usagePollScheduler = options.usagePollScheduler;
+    this.quotaFetch = options.quotaFetch ?? fetch;
+    this.quotaNow = options.quotaNow ?? Date.now;
     this.runtime = options.runtime ?? createRuntime(options.logger, runtimeSettings);
+    this.oauthAccountsOverride = options.oauthAccounts;
   }
 
   private async configureNativePaseoTools(
@@ -2612,6 +2878,42 @@ export class OmpAgentClient implements AgentClient {
       return;
     }
     await setOmpHostTools(runtimeSession, catalog);
+  }
+  private readOAuthAccounts(
+    config: AgentSessionConfig,
+    launchEnv?: Record<string, string>,
+  ): StoredOmpOAuthAccount[] {
+    const modelProvider = parseModelReference(config.model ?? null)?.provider;
+    if (!modelProvider) return [];
+    if (this.oauthAccountsOverride !== undefined) {
+      return this.oauthAccountsOverride.filter((account) => account.provider === modelProvider);
+    }
+    try {
+      const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
+      const { agentDb } = resolveOmpDiagnosticPaths(env);
+      return readStoredOmpOAuthAccounts(agentDb).filter(
+        (account) => account.provider === modelProvider,
+      );
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
+      return [];
+    }
+  }
+
+  private async createInitializedSession(
+    runtimeSession: OmpRuntimeSession,
+    config: AgentSessionConfig,
+    options: Omit<OmpAgentSessionOptions, "runtimeSession" | "config" | "oauthAccounts">,
+    oauthAccounts: readonly StoredOmpOAuthAccount[],
+  ): Promise<OmpAgentSession> {
+    const session = new OmpAgentSession({
+      runtimeSession,
+      config,
+      oauthAccounts,
+      ...options,
+    });
+    await session.initialize();
+    return session;
   }
 
   async createSession(
@@ -2632,18 +2934,21 @@ export class OmpAgentClient implements AgentClient {
     });
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
-      return new OmpAgentSession({
+      return await this.createInitializedSession(
         runtimeSession,
         config,
-        initialState: await runtimeSession.getState(),
-        currentModeId: launchMode.modeId,
-        logger: this.logger,
-        subagentCardScheduler: this.subagentCardScheduler,
-        providerIdleScheduler: this.providerIdleScheduler,
-        noTurnScheduler: this.noTurnScheduler,
-        usagePollScheduler: this.usagePollScheduler,
-        paseoTools: launchContext?.paseoTools,
-      });
+        {
+          initialState: await runtimeSession.getState(),
+          currentModeId: launchMode.modeId,
+          logger: this.logger,
+          subagentCardScheduler: this.subagentCardScheduler,
+          providerIdleScheduler: this.providerIdleScheduler,
+          noTurnScheduler: this.noTurnScheduler,
+          usagePollScheduler: this.usagePollScheduler,
+          paseoTools: launchContext?.paseoTools,
+        },
+        this.readOAuthAccounts(config, launchContext?.env),
+      );
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       throw error;
@@ -2674,19 +2979,22 @@ export class OmpAgentClient implements AgentClient {
     );
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
-      return new OmpAgentSession({
+      return await this.createInitializedSession(
         runtimeSession,
-        config: resumeConfig.config,
-        initialState: await runtimeSession.getState(),
-        currentModeId: launchMode.modeId,
-        logger: this.logger,
-        subagentCardScheduler: this.subagentCardScheduler,
-        providerIdleScheduler: this.providerIdleScheduler,
-        noTurnScheduler: this.noTurnScheduler,
-        usagePollScheduler: this.usagePollScheduler,
-        paseoTools: launchContext?.paseoTools,
-        live: false,
-      });
+        resumeConfig.config,
+        {
+          initialState: await runtimeSession.getState(),
+          currentModeId: launchMode.modeId,
+          logger: this.logger,
+          subagentCardScheduler: this.subagentCardScheduler,
+          providerIdleScheduler: this.providerIdleScheduler,
+          noTurnScheduler: this.noTurnScheduler,
+          usagePollScheduler: this.usagePollScheduler,
+          paseoTools: launchContext?.paseoTools,
+          live: false,
+        },
+        this.readOAuthAccounts(resumeConfig.config, launchContext?.env),
+      );
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       throw error;
@@ -2735,7 +3043,7 @@ export class OmpAgentClient implements AgentClient {
   }
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return createOmpWorkflowFeatures(config);
+    return createOmpFeatures(config, this.readOAuthAccounts(config));
   }
 
   async listImportableSessions(
@@ -2775,16 +3083,58 @@ export class OmpAgentClient implements AgentClient {
       .catch((error: NodeJS.ErrnoException) =>
         error.code === "ENOENT" ? "providers: {}\n" : Promise.reject(error),
       );
-    const providerModels = new Map<string, number>();
+    const providerModels = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        contextWindow?: number;
+        contextWindowOverride?: number;
+      }>
+    >();
     const customProviderIds = new Set<string>();
+    const contextWindowOverrides = new Map<string, Map<string, number>>();
     try {
       const configuredProviders = parseOmpModelsDocument(configYaml).providers;
-      for (const providerId of Object.keys(configuredProviders ?? {})) {
-        customProviderIds.add(providerId);
-        providerModels.set(providerId, 0);
+      for (const [providerId, configuredProvider] of Object.entries(configuredProviders ?? {})) {
+        providerModels.set(providerId, []);
+        if (!isRecord(configuredProvider)) continue;
+        if (Array.isArray(configuredProvider.models) && configuredProvider.models.length > 0) {
+          customProviderIds.add(providerId);
+        }
+        if (!isRecord(configuredProvider.modelOverrides)) continue;
+        const providerOverrides = new Map<string, number>();
+        for (const [modelId, override] of Object.entries(configuredProvider.modelOverrides)) {
+          if (
+            isRecord(override) &&
+            Number.isSafeInteger(override.contextWindow) &&
+            Number(override.contextWindow) > 0
+          ) {
+            providerOverrides.set(modelId, Number(override.contextWindow));
+          }
+        }
+        if (providerOverrides.size > 0) {
+          contextWindowOverrides.set(providerId, providerOverrides);
+        }
       }
     } catch {
       // OMP reports the invalid config through runtimeError below.
+    }
+    const storedAccountsByProvider = new Map<string, StoredOmpOAuthAccount[]>();
+    const storedAccountCredentialsById = new Map<number, StoredOmpOAuthAccountCredential>();
+    try {
+      const env = { ...process.env, ...this.runtimeSettings?.env };
+      const { agentDb } = resolveOmpDiagnosticPaths(env);
+      for (const account of readStoredOmpOAuthAccounts(agentDb)) {
+        const accounts = storedAccountsByProvider.get(account.provider) ?? [];
+        accounts.push(account);
+        storedAccountsByProvider.set(account.provider, accounts);
+      }
+      for (const account of readStoredOmpOAuthAccountCredentials(agentDb)) {
+        storedAccountCredentialsById.set(account.credentialId, account);
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
     }
     let loginProviders: OmpProviderManagement["loginProviders"] = [];
     let runtimeError: string | undefined;
@@ -2802,9 +3152,47 @@ export class OmpAgentClient implements AgentClient {
         runtimeSession.getLoginProviders(),
       ]);
       for (const model of models) {
-        providerModels.set(model.provider, (providerModels.get(model.provider) ?? 0) + 1);
+        const providerModelList = providerModels.get(model.provider) ?? [];
+        const contextWindowOverride = contextWindowOverrides.get(model.provider)?.get(model.id);
+        providerModelList.push({
+          id: model.id,
+          name: model.name ?? model.id,
+          ...(typeof model.contextWindow === "number" && model.contextWindow > 0
+            ? { contextWindow: model.contextWindow }
+            : {}),
+          ...(contextWindowOverride !== undefined ? { contextWindowOverride } : {}),
+        });
+        providerModels.set(model.provider, providerModelList);
       }
-      loginProviders = providers;
+      const quotaByCredentialId = new Map<number, OmpProviderAccountQuota>();
+      await Promise.all(
+        [...storedAccountCredentialsById.values()]
+          .filter((account) => account.provider === "openai-codex")
+          .map(async (account) => {
+            const quota = await fetchCodexAccountQuota({
+              credential: account,
+              fetch: this.quotaFetch,
+              now: this.quotaNow,
+            });
+            quotaByCredentialId.set(account.credentialId, quota);
+          }),
+      );
+      loginProviders = providers.map((provider) => {
+        const accounts = storedAccountsByProvider.get(provider.id);
+        if (!accounts || accounts.length === 0) return provider;
+        return {
+          ...provider,
+          accounts: accounts.map(({ credentialId, identityKey }) => {
+            const quota =
+              provider.id === "openai-codex" ? quotaByCredentialId.get(credentialId) : undefined;
+            return {
+              credentialId,
+              ...(identityKey ? { identityKey } : {}),
+              ...(quota ? { quota } : {}),
+            };
+          }),
+        };
+      });
     } catch (error) {
       runtimeError = toDiagnosticErrorMessage(error);
       this.logger.debug({ err: error }, "OMP provider management lookup failed");
@@ -2815,10 +3203,11 @@ export class OmpAgentClient implements AgentClient {
       configPath,
       configYaml,
       providerModels: [...providerModels]
-        .map(([id, modelCount]) => ({
+        .map(([id, models]) => ({
           id,
-          modelCount,
+          modelCount: models.length,
           source: customProviderIds.has(id) ? ("custom" as const) : ("built-in" as const),
+          models: models.sort((left, right) => left.name.localeCompare(right.name)),
         }))
         .sort((left, right) => left.id.localeCompare(right.id)),
       loginProviders,
@@ -2998,6 +3387,17 @@ export class OmpAgentClient implements AgentClient {
     }
     this.deleteLoginFlow(flowId);
     return await this.getOmpProviderManagement();
+  }
+  async cancelOmpProviderLogin(flowId: string): Promise<boolean> {
+    const flow = this.loginFlows.get(flowId);
+    if (!flow) return false;
+    this.loginFlows.delete(flowId);
+    clearTimeout(flow.timeout);
+    flow.unsubscribe();
+    flow.error = new Error("OMP login cancelled");
+    flow.resolveActivity();
+    await flow.runtimeSession.close();
+    return true;
   }
   async logoutOmpProvider(providerId: string): Promise<OmpProviderManagement> {
     const env = { ...process.env, ...this.runtimeSettings?.env };
