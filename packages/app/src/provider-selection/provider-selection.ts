@@ -30,7 +30,7 @@ function buildModelRowKey(provider: string, modelId: string): string {
 }
 
 export type ProviderModelSelection =
-  | { kind: "models"; rows: ProviderSelectionModelRow[] }
+  | { kind: "models"; rows: ProviderSelectionModelRow[]; error?: string }
   | { kind: "loading" }
   | { kind: "error"; message: string };
 
@@ -105,7 +105,10 @@ function buildEntryModelSelection(
   label: string,
 ): ProviderModelSelection {
   if ((entry.models?.length ?? 0) > 0) {
-    return buildModelSelection(entry.provider, label, entry.models ?? null);
+    const selection = buildModelSelection(entry.provider, label, entry.models ?? null);
+    return entry.status === "error" && selection.kind === "models"
+      ? { ...selection, error: entry.error ?? i18n.t("providerSelection.unknownError") }
+      : selection;
   }
   if (entry.status === "ready") {
     return buildModelSelection(entry.provider, label, entry.models ?? null);

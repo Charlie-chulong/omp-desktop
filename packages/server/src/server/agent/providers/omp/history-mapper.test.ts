@@ -257,7 +257,7 @@ describe("OMP history mapper", () => {
     ]);
   });
 
-  test("suppresses replayed raw todo tool calls through the OMP detail hook", async () => {
+  test("replays todo snapshots while suppressing raw todo tool calls", async () => {
     await expect(
       collectHistory([
         {
@@ -269,9 +269,32 @@ describe("OMP history mapper", () => {
           toolCallId: "todo-1",
           toolName: "todo",
           content: [{ type: "text", text: "todos" }],
+          details: {
+            phases: [
+              {
+                name: "Implementation",
+                tasks: [
+                  { content: "Locate submit path", status: "completed" },
+                  { content: "Add directory check", status: "in_progress" },
+                ],
+              },
+            ],
+          },
         },
       ]),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([
+      {
+        type: "timeline",
+        provider: "omp",
+        item: {
+          type: "todo",
+          items: [
+            { text: "Locate submit path", status: "completed", completed: true },
+            { text: "Add directory check", status: "in_progress", completed: false },
+          ],
+        },
+      },
+    ]);
   });
 
   test("replays task tool results as static sub-agent details", async () => {

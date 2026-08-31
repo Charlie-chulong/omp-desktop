@@ -11,6 +11,42 @@ interface AttachmentFileResult {
   byteSize: number;
 }
 
+export class ManagedAttachmentReferenceRegistry {
+  private readonly referencedIdsByOwner = new Map<number, Set<string>>();
+
+  public update(input: {
+    ownerId: number;
+    activeOwnerIds: readonly number[];
+    referencedIds: readonly string[];
+  }): Set<string> | null {
+    const activeOwnerIds = new Set(input.activeOwnerIds);
+    for (const ownerId of this.referencedIdsByOwner.keys()) {
+      if (!activeOwnerIds.has(ownerId)) {
+        this.referencedIdsByOwner.delete(ownerId);
+      }
+    }
+
+    if (!activeOwnerIds.has(input.ownerId)) {
+      return null;
+    }
+    this.referencedIdsByOwner.set(input.ownerId, new Set(input.referencedIds));
+
+    for (const ownerId of activeOwnerIds) {
+      if (!this.referencedIdsByOwner.has(ownerId)) {
+        return null;
+      }
+    }
+
+    const referencedIds = new Set<string>();
+    for (const ownerIds of this.referencedIdsByOwner.values()) {
+      for (const id of ownerIds) {
+        referencedIds.add(id);
+      }
+    }
+    return referencedIds;
+  }
+}
+
 function attachmentsDirPath(): string {
   return path.join(resolvePaseoHome(process.env), ATTACHMENTS_DIRNAME);
 }
@@ -160,9 +196,15 @@ export async function deleteManagedAttachmentFile(input: { path?: unknown }): Pr
   return true;
 }
 
-export async function garbageCollectManagedAttachmentFiles(input: {
-  referencedIds?: unknown;
-}): Promise<number> {
+export async function garbageCollectManagedAttachmentFiles(
+  input: {
+    referencedIds?: unknown;
+  },
+  options: {
+    minimumAgeMs?: number;
+    nowMs?: number;
+  } = {},
+): Promise<number> {
   const dirPath = await ensureAttachmentsDir();
   const referencedIds = Array.isArray(input.referencedIds)
     ? new Set(
@@ -173,10 +215,27 @@ export async function garbageCollectManagedAttachmentFiles(input: {
       )
     : new Set<string>();
 
+  const minimumAgeMs = Math.max(0, options.minimumAgeMs ?? 0);
+  const nowMs = options.nowMs ?? Date.now();
   const entries = await readdir(dirPath, { withFileTypes: true });
-  const toDelete = entries.filter(
+  const candidates = entries.filter(
     (entry) => entry.isFile() && !referencedIds.has(path.parse(entry.name).name),
   );
+  const deleteDecisions = await Promise.all(
+    candidates.map(async (entry) => {
+      if (minimumAgeMs === 0) {
+        return true;
+      }
+      try {
+        const fileInfo = await stat(path.join(dirPath, entry.name));
+        const managedAtMs = Math.max(fileInfo.birthtimeMs, fileInfo.ctimeMs, fileInfo.mtimeMs);
+        return nowMs - managedAtMs >= minimumAgeMs;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  const toDelete = candidates.filter((_, index) => deleteDecisions[index]);
 
   await Promise.all(toDelete.map((entry) => rm(path.join(dirPath, entry.name), { force: true })));
 

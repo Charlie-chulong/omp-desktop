@@ -1041,6 +1041,13 @@ export const ko: TranslationResources = {
         installCli: "{{brand}} 기능을 사용하려면 {{cli}} CLI를 설치하세요.",
         signIn: "{{brand}} 기능을 사용하려면 {{command}}를 실행하세요.",
         generic: "해당 기능을 사용하려면 이 호스트에 {{brand}}를 설정하세요.",
+        nativeSignIn: "{{brand}}에 로그인하여 저장소 및 Pull Request 기능을 사용하세요.",
+        signInButton: "GitHub에 로그인",
+        deviceInstructions: "GitHub 인증 페이지에 이 일회용 코드를 입력하세요.",
+        copyCode: "코드 복사",
+        openAuthorization: "인증 페이지 열기",
+        codeCopied: "인증 코드를 복사했습니다",
+        signedIn: "{{login}} 계정으로 로그인했습니다",
       },
     },
   },
@@ -1163,12 +1170,6 @@ export const ko: TranslationResources = {
       workspaces: "워크스페이스",
       sessions: "기록",
       schedules: "일정",
-    },
-    worktreeSetup: {
-      title: "워크트리 스크립트 설정",
-      description:
-        "새 워크트리가 의존성을 설치하고 자동으로 준비될 수 있도록 설정 명령을 추가하세요.",
-      openProjectSettings: "프로젝트 설정 열기",
     },
     project: {
       actions: {

@@ -82,6 +82,7 @@ export interface ForgePresentation {
   issueNumberPrefix: string;
   /** Auth CLI binary for the install hint, or null for a forge with no Paseo-driven sign-in. */
   signInCli: string | null;
+  signInKind: "cli" | "native" | null;
   /**
    * i18next context selecting the change-request vocabulary family for any key
    * that carries an `_mr` variant: `t(key, { context: changeRequestContext })`
@@ -105,7 +106,8 @@ export function getForgePresentation(forge: string): ForgePresentation {
     changeRequestNoun: definition.changeRequestNoun,
     numberPrefix: definition.changeRequestNumberPrefix,
     issueNumberPrefix: definition.issueNumberPrefix,
-    signInCli: definition.signIn?.cli ?? null,
+    signInCli: definition.signIn?.kind === "cli" ? definition.signIn.cli : null,
+    signInKind: definition.signIn?.kind ?? null,
     changeRequestContext: isMergeRequest ? "mr" : undefined,
     buildBlobUrl: hasWebUrls ? (input) => buildForgeBlobUrl(definition.id, input) : null,
     buildBranchTreeUrl: hasWebUrls
@@ -116,12 +118,10 @@ export function getForgePresentation(forge: string): ForgePresentation {
 
 export function buildForgeSignInCommand(forge: string, host: string | null): string | null {
   const signIn = getForgeDefinitionOrNeutral(forge).signIn;
-  if (!signIn) {
+  if (!signIn || signIn.kind !== "cli") {
     return null;
   }
-  // A forge that needs a --hostname only gets it when a host is known; forges
-  // whose command already targets the right API host (e.g. github's plain
-  // `gh auth login`, which must NOT receive ssh.github.com) omit hostnameFlag.
+  // CLI-backed forges may target a self-hosted instance with a hostname flag.
   if (signIn.hostnameFlag && host) {
     return `${signIn.command} ${signIn.hostnameFlag} ${host}`;
   }

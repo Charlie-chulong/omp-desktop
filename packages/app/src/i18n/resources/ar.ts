@@ -1034,6 +1034,13 @@ export const ar: TranslationResources = {
         installCli: "ثبّت واجهة سطر الأوامر {{cli}} لاستخدام ميزات {{brand}}.",
         signIn: "نفّذ {{command}} لاستخدام ميزات {{brand}}.",
         generic: "قم بإعداد {{brand}} على هذا المضيف لاستخدام ميزاته.",
+        nativeSignIn: "سجّل الدخول إلى {{brand}} لاستخدام المستودعات وطلبات السحب.",
+        signInButton: "تسجيل الدخول إلى GitHub",
+        deviceInstructions: "أدخل هذا الرمز لمرة واحدة في صفحة تفويض GitHub.",
+        copyCode: "نسخ الرمز",
+        openAuthorization: "فتح صفحة التفويض",
+        codeCopied: "تم نسخ رمز التفويض",
+        signedIn: "تم تسجيل الدخول باسم {{login}}",
       },
     },
   },
@@ -1156,12 +1163,6 @@ export const ar: TranslationResources = {
       workspaces: "مساحات العمل",
       sessions: "السجل",
       schedules: "الجداول",
-    },
-    worktreeSetup: {
-      title: "إعداد البرامج النصية لشجرة العمل",
-      description:
-        "أضف أوامر الإعداد حتى تتمكن أشجار العمل الجديدة من تثبيت التبعيات وإعداد نفسها تلقائيًا.",
-      openProjectSettings: "افتح إعدادات المشروع",
     },
     project: {
       actions: {

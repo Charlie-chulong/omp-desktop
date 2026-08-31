@@ -1,7 +1,7 @@
 import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
 import { Text, View, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
+import { CircleAlert, Folder, FolderGit2, Monitor, Pin } from "lucide-react-native";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
@@ -40,6 +40,7 @@ const ThemedCircleAlert = withUnistyles(CircleAlert);
 const ThemedMonitor = withUnistyles(Monitor);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedFolderGit2 = withUnistyles(FolderGit2);
+const ThemedPin = withUnistyles(Pin);
 
 export function SidebarWorkspaceRowFrame({
   workspace,
@@ -126,11 +127,11 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
-  const workspaceBranchTextStyle = useMemo(
+  const workspaceTitleTextStyle = useMemo(
     () => [
-      styles.workspaceBranchText,
-      isHovered && styles.workspaceBranchTextHovered,
-      isCreating && styles.workspaceBranchTextCreating,
+      styles.workspaceTitleText,
+      isHovered && styles.workspaceTitleTextHovered,
+      isCreating && styles.workspaceTitleTextCreating,
     ],
     [isHovered, isCreating],
   );
@@ -158,13 +159,20 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
         )}
         <View style={styles.workspaceContentColumn}>
           <View style={styles.workspaceTitleRow}>
-            <Text style={workspaceBranchTextStyle} numberOfLines={1}>
+            {workspace.pinnedAt != null ? (
+              <ThemedPin
+                size={12}
+                uniProps={foregroundMutedColorMapping}
+                accessibilityLabel="Pinned"
+              />
+            ) : null}
+            <Text style={workspaceTitleTextStyle} numberOfLines={1}>
               {workspaceLabel}
             </Text>
             <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View>
           </View>
           <WorkspaceMetaRow
-            currentBranch={workspace.currentBranch}
+            currentBranch={null}
             projectName={leadingProjectName}
             hostBadge={hostBadge ?? null}
             prHint={workspace.prHint}
@@ -461,7 +469,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspaceTitleRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing[2],
   },
@@ -503,7 +511,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   // The title owns the first line outright now that the host, change request and CI moved
   // to the meta row, so it takes the full width the trailing slot leaves behind.
-  workspaceBranchText: {
+  workspaceTitleText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: "400",
@@ -512,10 +520,10 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minWidth: 0,
   },
-  workspaceBranchTextCreating: {
+  workspaceTitleTextCreating: {
     opacity: 0.92,
   },
-  workspaceBranchTextHovered: {
+  workspaceTitleTextHovered: {
     opacity: 1,
   },
   statusDotNeedsInput: {

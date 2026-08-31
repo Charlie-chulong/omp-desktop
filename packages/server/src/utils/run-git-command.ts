@@ -28,6 +28,23 @@ let gitProcessScheduler = new GitProcessScheduler(resolveGitProcessPolicy({ env:
 let gitRuntimeMetrics = createGitCommandRuntimeMetricsWindow(gitProcessScheduler.policy);
 const gitCommandPriority = new AsyncLocalStorage<GitProcessPriority>();
 
+export interface GitCredentialEnvironmentInput {
+  args: readonly string[];
+  cwd: string;
+}
+
+export type GitCredentialEnvironmentProvider = (
+  input: GitCredentialEnvironmentInput,
+) => Promise<ProcessEnvRecord | undefined>;
+
+let gitCredentialEnvironmentProvider: GitCredentialEnvironmentProvider | null = null;
+
+export function configureGitCredentialEnvironmentProvider(
+  provider: GitCredentialEnvironmentProvider | null,
+): void {
+  gitCredentialEnvironmentProvider = provider;
+}
+
 export function runWithGitCommandPriority<T>(priority: GitProcessPriority, operation: () => T): T {
   return gitCommandPriority.run(priority, operation);
 }
@@ -249,7 +266,24 @@ function getEnvOverlayKeys(envOverlay: ProcessEnvRecord | undefined): string[] {
   return Object.keys(envOverlay ?? {}).sort();
 }
 
-export function runGitCommand(
+export async function runGitCommand(
+  args: string[],
+  options: GitCommandOptions,
+): Promise<GitCommandResult> {
+  const credentialEnvironment = await gitCredentialEnvironmentProvider?.({
+    args,
+    cwd: options.cwd,
+  });
+  return runScheduledGitCommand(args, {
+    ...options,
+    envOverlay: {
+      ...credentialEnvironment,
+      ...options.envOverlay,
+    },
+  });
+}
+
+function runScheduledGitCommand(
   args: string[],
   options: GitCommandOptions,
 ): Promise<GitCommandResult> {

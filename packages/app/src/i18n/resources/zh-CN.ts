@@ -1033,6 +1033,13 @@ export const zhCN: TranslationResources = {
         installCli: "安装 {{cli}} CLI 以使用 {{brand}} 功能。",
         signIn: "运行 {{command}} 以使用 {{brand}} 功能。",
         generic: "在此主机上设置 {{brand}} 以使用其功能。",
+        nativeSignIn: "登录 {{brand}} 以使用仓库和 Pull Request 功能。",
+        signInButton: "登录 GitHub",
+        deviceInstructions: "在 GitHub 授权页面输入此一次性代码。",
+        copyCode: "复制代码",
+        openAuthorization: "打开授权页面",
+        codeCopied: "授权代码已复制",
+        signedIn: "已登录为 {{login}}",
       },
     },
   },
@@ -1155,11 +1162,6 @@ export const zhCN: TranslationResources = {
       workspaces: "工作区",
       sessions: "历史记录",
       schedules: "计划任务",
-    },
-    worktreeSetup: {
-      title: "设置工作树脚本",
-      description: "添加设置命令，让新的工作树自动安装依赖并完成准备。",
-      openProjectSettings: "打开项目设置",
     },
     project: {
       actions: {

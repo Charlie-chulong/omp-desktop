@@ -1188,7 +1188,7 @@ export class CheckoutSession {
           truncated: false,
           error: {
             kind: "unknown",
-            message: `${getForgeDefinitionOrNeutral(forge).displayName} CLI is unavailable or not authenticated`,
+            message: `${getForgeDefinitionOrNeutral(forge).displayName} is unavailable or not authenticated`,
           },
           requestId,
           githubFeaturesEnabled: false,

@@ -91,6 +91,21 @@ const ProvidersSchema = z
   })
   .strict();
 
+const GitHubHostSchema = z
+  .object({
+    clientId: z.string().trim().min(1),
+    apiBaseUrl: z.url().optional(),
+    webBaseUrl: z.url().optional(),
+  })
+  .strict();
+
+const GitHubConfigSchema = z
+  .object({
+    clientId: z.string().trim().min(1).optional(),
+    hosts: z.record(z.string().trim().min(1), GitHubHostSchema).optional(),
+  })
+  .strict();
+
 const WorktreesConfigSchema = z
   .object({
     root: z.string().min(1).optional(),
@@ -318,6 +333,8 @@ export const PersistedConfigSchema = z
       })
       .strict()
       .optional(),
+
+    github: GitHubConfigSchema.optional(),
 
     providers: ProvidersSchema.optional(),
     pluginsEnabled: z.boolean().optional(),

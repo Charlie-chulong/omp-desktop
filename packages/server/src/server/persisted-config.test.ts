@@ -137,6 +137,34 @@ describe("PersistedConfigSchema worktrees config", () => {
   });
 });
 
+describe("PersistedConfigSchema GitHub OAuth config", () => {
+  test("accepts GitHub.com and host-specific Enterprise OAuth clients", () => {
+    const parsed = PersistedConfigSchema.parse({
+      github: {
+        clientId: "cloud-client",
+        hosts: {
+          "github.acme.test": {
+            clientId: "enterprise-client",
+            apiBaseUrl: "https://github.acme.test/api/v3",
+            webBaseUrl: "https://github.acme.test",
+          },
+        },
+      },
+    });
+
+    expect(parsed.github).toEqual({
+      clientId: "cloud-client",
+      hosts: {
+        "github.acme.test": {
+          clientId: "enterprise-client",
+          apiBaseUrl: "https://github.acme.test/api/v3",
+          webBaseUrl: "https://github.acme.test",
+        },
+      },
+    });
+  });
+});
+
 describe("PersistedConfigSchema provider credentials", () => {
   test("accepts separate OpenAI STT and TTS credentials", () => {
     const parsed = PersistedConfigSchema.parse({

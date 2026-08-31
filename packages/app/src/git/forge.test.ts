@@ -31,6 +31,8 @@ describe("getForgePresentation", () => {
     expect(github.numberPrefix).toBe("#");
     expect(github.issueNumberPrefix).toBe("#");
     expect(github.changeRequestContext).toBeUndefined();
+    expect(github.signInKind).toBe("native");
+    expect(github.signInCli).toBeNull();
   });
 
   it("relabels GitLab to the merge-request noun and the ! prefix", () => {
@@ -90,9 +92,9 @@ describe("buildForgeSignInCommand", () => {
     expect(buildForgeSignInCommand("codeberg", "codeberg.org")).toBe("tea login add");
   });
 
-  it("uses plain gh auth login for GitHub (incl. the ssh.github.com endpoint)", () => {
-    expect(buildForgeSignInCommand("github", "github.com")).toBe("gh auth login");
-    expect(buildForgeSignInCommand("github", "ssh.github.com")).toBe("gh auth login");
+  it("does not synthesize a CLI command for native GitHub authentication", () => {
+    expect(buildForgeSignInCommand("github", "github.com")).toBeNull();
+    expect(buildForgeSignInCommand("github", "ssh.github.com")).toBeNull();
   });
 
   it("targets the workspace host for self-hosted GitLab", () => {

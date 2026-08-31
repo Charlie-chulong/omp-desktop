@@ -63,10 +63,7 @@ function makeProject(
   };
 }
 
-function projectionInput(options?: {
-  groupMode?: "project" | "status";
-  pinnedCollapsed?: boolean;
-}) {
+function projectionInput(options?: { groupMode?: "project" | "status" }) {
   const pinned = makeWorkspace("pinned", "running");
   const unpinned = makeWorkspace("unpinned", "needs_input");
   return {
@@ -82,7 +79,6 @@ function projectionInput(options?: {
     ]),
     projectNamesByViewKey: new Map([["project", "Project"]]),
     groupMode: options?.groupMode ?? ("project" as const),
-    pinnedCollapsed: options?.pinnedCollapsed ?? false,
     collapsedProjectKeys: new Set<string>(),
     collapsedWorkspaceGroupKeys: new Set<string>(),
   };
@@ -118,16 +114,13 @@ describe("buildSidebarProjection", () => {
       const projection = buildSidebarProjection(twoProjectInput(groupMode));
       const covered = new Set(projection.projectIconTargets.map((target) => target.projectViewKey));
 
-      // Every leading visual the sidebar can paint from this projection: pinned rows, grouped
-      // rows, project headers and the rows under them.
+      // Every leading visual the sidebar can paint from this projection: grouped rows, project
+      // headers and the rows under them.
       const renderedProjectViewKeys = new Set<string>();
-      for (const entry of projection.pinnedGroups.pinnedChats) {
-        renderedProjectViewKeys.add(entry.projectViewKey);
-      }
       for (const group of projection.workspaceGroups) {
         for (const entry of group.rows) renderedProjectViewKeys.add(entry.projectViewKey);
       }
-      for (const project of projection.pinnedGroups.unpinnedProjects) {
+      for (const project of projection.projects) {
         renderedProjectViewKeys.add(project.viewKey);
         for (const entry of project.workspaces) renderedProjectViewKeys.add(entry.projectViewKey);
       }
@@ -137,25 +130,11 @@ describe("buildSidebarProjection", () => {
     });
   }
 
-  it("uses one pin-aware projection for project rows and shortcut order", () => {
+  it("keeps pinned chats at the top of their project and shortcut order", () => {
     const projection = buildSidebarProjection(projectionInput());
 
-    expect(projection.pinnedGroups.pinnedChats.map((entry) => entry.workspaceId)).toEqual([
+    expect(projection.projects[0]?.workspaces.map((entry) => entry.workspaceId)).toEqual([
       "pinned",
-    ]);
-    const remainingProject = projection.pinnedGroups.unpinnedProjects[0];
-    expect(remainingProject?.workspaces.map((entry) => entry.workspaceId)).toEqual(["unpinned"]);
-    expect(projection.shortcutModel.shortcutTargets).toEqual([
-      { serverId: "srv", workspaceId: "pinned" },
-      { serverId: "srv", workspaceId: "unpinned" },
-    ]);
-  });
-
-  it("keeps pinned chats above status groups and removes them from those groups", () => {
-    const projection = buildSidebarProjection(projectionInput({ groupMode: "status" }));
-
-    expect(projection.workspaceGroups.map((group) => group.key)).toEqual(["needs_input"]);
-    expect(projection.workspaceGroups[0]?.rows.map((entry) => entry.workspaceId)).toEqual([
       "unpinned",
     ]);
     expect(projection.shortcutModel.shortcutTargets).toEqual([
@@ -164,13 +143,21 @@ describe("buildSidebarProjection", () => {
     ]);
   });
 
-  it("does not number pinned chats while the pinned section is collapsed", () => {
-    const projection = buildSidebarProjection(
-      projectionInput({ groupMode: "status", pinnedCollapsed: true }),
-    );
+  it("keeps pinned chats in the normal status groups", () => {
+    const projection = buildSidebarProjection(projectionInput({ groupMode: "status" }));
 
+    expect(projection.workspaceGroups.map((group) => group.key)).toEqual([
+      "needs_input",
+      "running",
+    ]);
+    const workspaceIds: string[] = [];
+    for (const group of projection.workspaceGroups) {
+      for (const entry of group.rows) workspaceIds.push(entry.workspaceId);
+    }
+    expect(workspaceIds).toEqual(["unpinned", "pinned"]);
     expect(projection.shortcutModel.shortcutTargets).toEqual([
       { serverId: "srv", workspaceId: "unpinned" },
+      { serverId: "srv", workspaceId: "pinned" },
     ]);
   });
 });

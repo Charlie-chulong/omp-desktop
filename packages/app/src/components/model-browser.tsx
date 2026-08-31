@@ -961,12 +961,20 @@ function GroupProviderButton({
   const stateNode = useMemo(() => {
     if (selection.kind === "models") {
       const count = selection.rows.length;
-      return (
+      const countNode = (
         <Text style={styles.drillDownCount}>
           {t(count === 1 ? "modelSelector.modelCount" : "modelSelector.modelCountPlural", {
             count,
           })}
         </Text>
+      );
+      return selection.error ? (
+        <View style={styles.rowStateInline}>
+          <ThemedAlertTriangle size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
+          {countNode}
+        </View>
+      ) : (
+        countNode
       );
     }
     if (selection.kind === "loading") {
@@ -1217,6 +1225,36 @@ function ProviderErrorEmptyState({
   );
 }
 
+function ProviderErrorNotice({
+  providerId,
+  message,
+  onRetryProvider,
+  isRetryingProvider,
+}: {
+  providerId: string;
+  message: string;
+  onRetryProvider?: (provider: AgentProvider) => void;
+  isRetryingProvider: boolean;
+}) {
+  const { t } = useTranslation();
+  const handleRetry = useCallback(() => {
+    onRetryProvider?.(providerId);
+  }, [onRetryProvider, providerId]);
+  return (
+    <View style={styles.providerErrorNotice} testID={`model-provider-error-${providerId}`}>
+      <ThemedAlertTriangle size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
+      <Text style={styles.providerErrorNoticeText} numberOfLines={2}>
+        {message}
+      </Text>
+      {onRetryProvider ? (
+        <Button variant="ghost" size="sm" onPress={handleRetry} disabled={isRetryingProvider}>
+          {isRetryingProvider ? t("modelSelector.retrying") : t("modelSelector.retry")}
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
 function ModelSearchEmptyState() {
   const { t } = useTranslation();
   return (
@@ -1315,13 +1353,27 @@ function ProviderModelBrowserContent({
   if (visibleRows.length === 0) {
     return profileHeader ?? <ModelSearchEmptyState />;
   }
+  const listHeader =
+    selection.error || profileHeader ? (
+      <>
+        {selection.error ? (
+          <ProviderErrorNotice
+            providerId={view.providerId}
+            message={selection.error}
+            onRetryProvider={onRetryProvider}
+            isRetryingProvider={isRetryingProvider}
+          />
+        ) : null}
+        {profileHeader}
+      </>
+    ) : undefined;
   return (
     <ModelRowList
       rows={visibleRows}
       selectedProvider={selectedProvider}
       selectedModel={selectedModel}
       onSelect={onSelect}
-      header={profileHeader}
+      header={listHeader}
       scrolling={scrolling}
       profiledLookup={profiledLookup}
       onCreateProfile={onCreateProfile}
@@ -1654,6 +1706,22 @@ const styles = StyleSheet.create((theme) => ({
   },
   emptyStateText: {
     fontSize: theme.fontSize.base,
+    color: theme.colors.foregroundMuted,
+  },
+  providerErrorNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    marginHorizontal: isWeb ? theme.spacing[3] : theme.spacing[6],
+    marginVertical: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surface1,
+  },
+  providerErrorNoticeText: {
+    flex: 1,
+    fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
   tooltipText: {

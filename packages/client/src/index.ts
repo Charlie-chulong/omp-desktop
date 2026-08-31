@@ -10,6 +10,10 @@ import type {
   ListProviderModelsResponseMessage,
   ListProviderModesResponseMessage,
   MutableDaemonConfig,
+  ForgeAuthLoginStartResponse,
+  ForgeAuthLoginFinishResponse,
+  ForgeAuthLoginCancelResponse,
+  ForgeAuthLogoutResponse,
   MutableDaemonConfigPatch,
   OmpCustomProviderInput,
   OmpProviderLoginFinishResponseMessage,
@@ -398,12 +402,26 @@ export interface OmpProviderActions {
   ): Promise<OmpProviderLoginCancelResponseMessage["payload"]>;
 }
 
+export interface PaseoForgeAuthActions {
+  start(
+    input: { forge: string; cwd?: string; host?: string },
+    requestId?: string,
+  ): Promise<ForgeAuthLoginStartResponse["payload"]>;
+  finish(flowId: string, requestId?: string): Promise<ForgeAuthLoginFinishResponse["payload"]>;
+  cancel(flowId: string, requestId?: string): Promise<ForgeAuthLoginCancelResponse["payload"]>;
+  logout(
+    input: { forge: string; cwd?: string; host?: string },
+    requestId?: string,
+  ): Promise<ForgeAuthLogoutResponse["payload"]>;
+}
+
 export interface PaseoApi {
   readonly workspaces: PaseoWorkspaceActions;
   readonly agents: PaseoAgentActions;
   readonly providers: PaseoProviderActions;
   readonly config: PaseoConfigActions;
   readonly omp: OmpProviderActions;
+  readonly forgeAuth: PaseoForgeAuthActions;
 }
 
 export interface PaseoClient extends PaseoApi {
@@ -520,6 +538,12 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
         daemonClient.finishOmpProviderLogin(flowId, input, options),
       cancelProviderLogin: (flowId, options) =>
         daemonClient.cancelOmpProviderLogin(flowId, options),
+    },
+    forgeAuth: {
+      start: (input, requestId) => daemonClient.startForgeLogin(input, requestId),
+      finish: (flowId, requestId) => daemonClient.finishForgeLogin(flowId, requestId),
+      cancel: (flowId, requestId) => daemonClient.cancelForgeLogin(flowId, requestId),
+      logout: (input, requestId) => daemonClient.logoutForge(input, requestId),
     },
   };
 }

@@ -1,9 +1,5 @@
 import { buildStatusGroups } from "@/hooks/sidebar-status-view-model";
-import {
-  splitPinnedSidebarGroups,
-  type PinnedSidebarGroups,
-  type PinnedSidebarKeys,
-} from "@/hooks/use-sidebar-pins";
+import { orderPinnedSidebarProjects, type PinnedSidebarKeys } from "@/hooks/use-sidebar-pins";
 import type {
   SidebarProjectEntry,
   SidebarWorkspaceEntry,
@@ -21,7 +17,7 @@ import {
 import { statusWorkspaceGroups, type SidebarWorkspaceGroup } from "./sidebar-labels";
 
 export interface SidebarProjection {
-  pinnedGroups: PinnedSidebarGroups;
+  projects: SidebarProjectEntry[];
   workspaceGroups: SidebarWorkspaceGroup[];
   /**
    * The project icons this projection needs fetched, keyed by `projectViewKey` — one per project,
@@ -42,33 +38,31 @@ export interface SidebarProjectionInput {
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   projectNamesByViewKey: Map<string, string>;
   groupMode: SidebarGroupMode;
-  pinnedCollapsed: boolean;
   collapsedProjectKeys: ReadonlySet<string>;
   collapsedWorkspaceGroupKeys: ReadonlySet<string>;
 }
 
 export function buildSidebarProjection(input: SidebarProjectionInput): SidebarProjection {
-  const pinnedGroups = splitPinnedSidebarGroups({
+  const projects = orderPinnedSidebarProjects({
     projects: input.projects,
     keys: input.pinnedKeys,
     pinnedWorkspaceOrder: input.pinnedWorkspaceOrder,
   });
-  const pinnedWorkspaceKeys = new Set(input.pinnedKeys.pinnedWorkspaceKeys);
-  const unpinnedWorkspaces = Array.from(input.workspaceEntriesByKey.values()).filter(
-    (workspace) => !pinnedWorkspaceKeys.has(workspace.workspaceKey),
+  const orderedWorkspaces = projects.flatMap((project) =>
+    project.workspaces.flatMap((workspace) => {
+      const entry = input.workspaceEntriesByKey.get(workspace.workspaceKey);
+      return entry ? [entry] : [];
+    }),
   );
   // One switch decides both what the list groups by and what the keyboard shortcuts walk, so the
   // two cannot disagree and a new grouping mode is a compile error here rather than a silent
   // fall-through to the project rows.
-  const workspaceGroups = buildWorkspaceGroups(input, unpinnedWorkspaces);
+  const workspaceGroups = buildWorkspaceGroups(input, orderedWorkspaces);
 
   const sections: SidebarShortcutSection[] = [];
-  if (!input.pinnedCollapsed) {
-    sections.push({ workspaces: pinnedGroups.pinnedChats });
-  }
   if (input.groupMode === "project") {
     sections.push(
-      ...pinnedGroups.unpinnedProjects.map((project) => ({
+      ...projects.map((project) => ({
         workspaces: project.workspaces,
         collapsed: input.collapsedProjectKeys.has(project.viewKey),
       })),
@@ -83,7 +77,7 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
   }
 
   return {
-    pinnedGroups,
+    projects,
     workspaceGroups,
     projectIconTargets: resolveSidebarProjectIconTargets(input.projects),
     shortcutModel: buildSidebarShortcutSections({ sections }),
@@ -93,14 +87,12 @@ export function buildSidebarProjection(input: SidebarProjectionInput): SidebarPr
 /** Project mode keeps its project headers and groups nothing; status mode groups the rows. */
 function buildWorkspaceGroups(
   input: SidebarProjectionInput,
-  unpinnedWorkspaces: SidebarWorkspaceEntry[],
+  workspaces: SidebarWorkspaceEntry[],
 ): SidebarWorkspaceGroup[] {
   switch (input.groupMode) {
     case "project":
       return [];
     case "status":
-      return statusWorkspaceGroups(
-        buildStatusGroups(unpinnedWorkspaces, input.projectNamesByViewKey),
-      );
+      return statusWorkspaceGroups(buildStatusGroups(workspaces, input.projectNamesByViewKey));
   }
 }

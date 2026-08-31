@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  baseColors,
   darkPureBlackTheme,
   darkTheme,
   FONT_SIZE,
   getNextThemePreference,
   lightTheme,
+  ompBrandColors,
   THEME_OPTIONS,
 } from "./theme";
 
@@ -39,6 +41,20 @@ describe("Theme catalog", () => {
     expect(getNextThemePreference("dark")).toBe("auto");
     expect(getNextThemePreference("pureBlack")).toBe("light");
   });
+
+  it("uses the OMP cyan accent across every concrete theme", () => {
+    for (const option of THEME_OPTIONS) {
+      if (!("theme" in option)) continue;
+      const isDark = option.theme.colorScheme === "dark";
+      const expectedAccent = isDark ? ompBrandColors.cyan : ompBrandColors.cyanOnLight;
+      const expectedForeground = isDark ? baseColors.black : baseColors.white;
+
+      expect(option.theme.colors.accent).toBe(expectedAccent);
+      expect(option.theme.colors.accentBright).toBe(expectedAccent);
+      expect(option.theme.colors.accentForeground).toBe(expectedForeground);
+      expect(option.theme.colors.success).toBe(option.theme.colors.statusSuccess);
+    }
+  });
 });
 
 describe("Pure black theme", () => {
@@ -48,9 +64,10 @@ describe("Pure black theme", () => {
     expect(darkPureBlackTheme.colors.terminal.background).toBe("#000000");
   });
 
-  it("uses Paseo's muted green accent", () => {
-    expect(darkPureBlackTheme.colors.accent).toBe("#20744A");
-    expect(darkPureBlackTheme.colors.accentBright).toBe("#7ccba0");
+  it("uses the global OMP cyan accent", () => {
+    expect(darkPureBlackTheme.colors.accent).toBe(ompBrandColors.cyan);
+    expect(darkPureBlackTheme.colors.accentBright).toBe(ompBrandColors.cyan);
+    expect(darkPureBlackTheme.colors.accentForeground).toBe(baseColors.black);
   });
 
   it("derives sidebar interaction surfaces from the surface scale", () => {

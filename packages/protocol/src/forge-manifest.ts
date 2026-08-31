@@ -11,24 +11,22 @@
  * declarative half.
  */
 
-/**
- * Declarative sign-in recipe for a forge. The client renders install/sign-in
- * hints from this data alone — no per-CLI switch — so a new forge wires its auth
- * UX entirely from the manifest. Behavioural auth (the actual host probe) stays
- * in the server adapter; this is only what the user is told to run.
- */
-export interface ForgeSignInCommand {
-  /** Binary the user installs, e.g. "gh" — shown in the install-CLI hint. */
+/** Declarative sign-in recipe rendered by the client. */
+export interface ForgeCliSignIn {
+  kind: "cli";
+  /** Binary the user installs — shown in the install-CLI hint. */
   cli: string;
-  /** Full sign-in command, e.g. "gh auth login". */
+  /** Full CLI sign-in command. */
   command: string;
-  /**
-   * Flag that targets a self-hosted host, e.g. "--hostname". When present and a
-   * host is known, the client appends `${command} ${hostnameFlag} ${host}`.
-   * Omit when the command already targets the right host on its own.
-   */
+  /** Optional flag used to target a self-hosted forge. */
   hostnameFlag?: string;
 }
+
+export interface ForgeNativeSignIn {
+  kind: "native";
+}
+
+export type ForgeSignIn = ForgeCliSignIn | ForgeNativeSignIn;
 
 export interface ForgeDefinition {
   /** Registry id, matches the server adapter and the wire `forge` value. */
@@ -46,7 +44,7 @@ export interface ForgeDefinition {
   /** Icon key; the client falls back to a generic git icon for unknown values. */
   iconKind: string;
   /** Sign-in recipe, or null when the forge has no Paseo-driven sign-in. */
-  signIn: ForgeSignInCommand | null;
+  signIn: ForgeSignIn | null;
   /**
    * Public cloud hosts this forge owns exactly. A BOUNDED list, never an
    * allowlist for self-hosted detection — self-hosted/Enterprise instances are
@@ -64,7 +62,7 @@ export const FORGE_DEFINITIONS: ForgeDefinition[] = [
     changeRequestNumberPrefix: "#",
     issueNumberPrefix: "#",
     iconKind: "github",
-    signIn: { cli: "gh", command: "gh auth login" },
+    signIn: { kind: "native" },
     cloudHosts: ["github.com", "ssh.github.com"],
   },
   {
@@ -75,7 +73,7 @@ export const FORGE_DEFINITIONS: ForgeDefinition[] = [
     changeRequestNumberPrefix: "!",
     issueNumberPrefix: "#",
     iconKind: "gitlab",
-    signIn: { cli: "glab", command: "glab auth login", hostnameFlag: "--hostname" },
+    signIn: { kind: "cli", cli: "glab", command: "glab auth login", hostnameFlag: "--hostname" },
     cloudHosts: ["gitlab.com"],
   },
   {
@@ -86,7 +84,7 @@ export const FORGE_DEFINITIONS: ForgeDefinition[] = [
     changeRequestNumberPrefix: "#",
     issueNumberPrefix: "#",
     iconKind: "gitea",
-    signIn: { cli: "tea", command: "tea login add" },
+    signIn: { kind: "cli", cli: "tea", command: "tea login add" },
     cloudHosts: ["gitea.com"],
   },
   {
@@ -97,7 +95,7 @@ export const FORGE_DEFINITIONS: ForgeDefinition[] = [
     changeRequestNumberPrefix: "#",
     issueNumberPrefix: "#",
     iconKind: "forgejo",
-    signIn: { cli: "tea", command: "tea login add" },
+    signIn: { kind: "cli", cli: "tea", command: "tea login add" },
   },
   {
     id: "codeberg",
@@ -107,7 +105,7 @@ export const FORGE_DEFINITIONS: ForgeDefinition[] = [
     changeRequestNumberPrefix: "#",
     issueNumberPrefix: "#",
     iconKind: "codeberg",
-    signIn: { cli: "tea", command: "tea login add" },
+    signIn: { kind: "cli", cli: "tea", command: "tea login add" },
     cloudHosts: ["codeberg.org"],
   },
 ];

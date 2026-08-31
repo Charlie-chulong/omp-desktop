@@ -1051,6 +1051,13 @@ export const en = {
         installCli: "Install the {{cli}} CLI to use {{brand}} features.",
         signIn: "Run {{command}} to use {{brand}} features.",
         generic: "Set up {{brand}} on this host to use its features.",
+        nativeSignIn: "Sign in to {{brand}} to use repository and pull request features.",
+        signInButton: "Sign in to GitHub",
+        deviceInstructions: "Enter this one-time code on the GitHub authorization page.",
+        copyCode: "Copy code",
+        openAuthorization: "Open authorization page",
+        codeCopied: "Authorization code copied",
+        signedIn: "Signed in as {{login}}",
       },
     },
   },
@@ -1173,12 +1180,6 @@ export const en = {
       workspaces: "Workspaces",
       sessions: "History",
       schedules: "Schedules",
-    },
-    worktreeSetup: {
-      title: "Set up worktree scripts",
-      description:
-        "Add setup commands so new worktrees can install dependencies and prepare themselves automatically.",
-      openProjectSettings: "Open project settings",
     },
     project: {
       actions: {

@@ -120,6 +120,10 @@ import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
 import { createWorkspaceLabelService } from "./workspace-labels/index.js";
 import { createGitHubService } from "../services/github-service.js";
+import { GitHubAuthManager } from "../services/github-auth.js";
+import type { GitHubAuthConfig } from "../services/github-auth.js";
+import { GitHubGitCredentialEnvironmentProvider } from "../services/github-git-credentials.js";
+import { probeRegisteredForgeHost } from "../services/forge-registry.js";
 import { createPaseoWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
 import { createPaseoWorktreeWorkflow } from "./worktree-session.js";
@@ -204,7 +208,10 @@ import { createWebUiMiddleware } from "./web-ui.js";
 import { WorkspaceAutoName } from "./workspace-auto-name.js";
 import { createGitMutationService } from "./session/git-mutation/git-mutation-service.js";
 import { workspaceIdsOnCheckout } from "./workspace-directory.js";
-import { configureGitProcessPolicy } from "../utils/run-git-command.js";
+import {
+  configureGitCredentialEnvironmentProvider,
+  configureGitProcessPolicy,
+} from "../utils/run-git-command.js";
 import { resolveGitProcessPolicy } from "../utils/git-process-scheduler.js";
 import { resolveFirstAgentPromptTitle } from "./agent/create-agent-title.js";
 import {
@@ -422,6 +429,7 @@ export interface PaseoDaemonConfig {
   };
   appBaseUrl?: string;
   auth?: DaemonAuthConfig;
+  github?: GitHubAuthConfig;
   openai?: PaseoOpenAIConfig;
   imageGeneration?: {
     enabled: boolean;
@@ -882,13 +890,21 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     workspaceRegistry,
   });
-  const github = createGitHubService();
+  const githubAuth = new GitHubAuthManager({
+    config: config.github,
+    env: config.configReload?.env ?? process.env,
+  });
+  const githubGitCredentials = new GitHubGitCredentialEnvironmentProvider(githubAuth);
+  configureGitCredentialEnvironmentProvider((input) => githubGitCredentials.resolve(input));
+  const github = createGitHubService({ authManager: githubAuth });
   const workspaceGitService = new WorkspaceGitServiceImpl({
     logger,
     paseoHome: config.paseoHome,
     worktreesRoot: config.worktreesRoot,
     deps: {
       forgeOverrides: { github },
+      probeForge: async (host) =>
+        github.isConfiguredHost(host) ? "github" : probeRegisteredForgeHost(host),
     },
   });
   const workspaceProvisioning = createWorkspaceProvisioningService({
@@ -1629,6 +1645,7 @@ export async function createPaseoDaemon(
   const stop = async () => {
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();
+    configureGitCredentialEnvironmentProvider(null);
     // Freeze both ingress and registration before taking the agent closure snapshot.
     wsServer?.prepareForShutdown();
     agentManager.prepareForShutdown();

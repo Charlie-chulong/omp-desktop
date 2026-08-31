@@ -226,14 +226,7 @@ async function collectProviderEntries(
 }
 
 async function collectToolEntries(): Promise<DiagnosticEntry[]> {
-  const [git, gh] = await Promise.all([
-    checkTool("git", ["--version"]),
-    checkTool("gh", ["--version"]),
-  ]);
-  return [
-    { label: "git", value: git },
-    { label: "gh", value: gh },
-  ];
+  return [{ label: "git", value: await checkTool("git", ["--version"]) }];
 }
 
 function collectWebSocketRuntimeEntries(options: DaemonDiagnosticsOptions): DiagnosticEntry[] {

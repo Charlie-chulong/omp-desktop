@@ -280,7 +280,8 @@ function WorkspaceRowBody({
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
   const [isPressed, setIsPressed] = useState(false);
-  const trailing = useSidebarWorkspaceTrailing();
+  const trailingPreference = useSidebarWorkspaceTrailing();
+  const trailing = trailingPreference === "diff" ? "none" : trailingPreference;
   const draggable = Boolean(drag);
   const interaction = useLongPressDragInteraction({
     drag: drag ?? noop,

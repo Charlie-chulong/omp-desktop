@@ -192,6 +192,77 @@ describe("fetchProvidersSnapshot", () => {
       },
     ]);
   });
+
+  it("shows cached models while a cold daemon snapshot is still loading", async () => {
+    const entries = [codexEntry("ready", [readyCodexModel])];
+    const cache = createCache({
+      version: 1,
+      hash: "ready-hash",
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      compactSnapshot: compactProviderSnapshot(entries),
+      entries,
+    });
+    const client = createClient({
+      snapshots: [providersSnapshot([codexEntry("loading")])],
+    });
+
+    const snapshot = await fetchProvidersSnapshot({
+      client,
+      serverId,
+      cwd: "/repo-a",
+      cache,
+    });
+
+    expect(snapshot.entries).toEqual([
+      expect.objectContaining({
+        provider: "codex",
+        status: "loading",
+        models: [readyCodexModel],
+      }),
+    ]);
+    expect(cache.writes).toEqual([]);
+  });
+
+  it("keeps the successful disk cache when refresh fails", async () => {
+    const entries = [codexEntry("ready", [readyCodexModel])];
+    const cache = createCache({
+      version: 1,
+      hash: "ready-hash",
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      compactSnapshot: compactProviderSnapshot(entries),
+      entries,
+    });
+    const failed = {
+      ...codexEntry("error"),
+      error: "network timeout",
+    };
+    const compactSnapshot = compactProviderSnapshot([failed]);
+    const client = createClient({
+      snapshots: [
+        {
+          ...providersSnapshot([failed]),
+          compactSnapshot,
+          snapshotHash: "failed-hash",
+        },
+      ],
+    });
+
+    const snapshot = await fetchProvidersSnapshot({
+      client,
+      serverId,
+      cwd: "/repo-a",
+      cache,
+    });
+
+    expect(snapshot.entries).toEqual([
+      expect.objectContaining({
+        status: "error",
+        error: "network timeout",
+        models: [readyCodexModel],
+      }),
+    ]);
+    expect(cache.writes).toEqual([]);
+  });
 });
 
 describe("refreshAndApplyProvidersSnapshot", () => {
@@ -375,6 +446,34 @@ describe("applyProvidersSnapshotUpdate", () => {
         compactSnapshot,
       },
     ]);
+  });
+
+  it("keeps visible models across loading and failed push updates", () => {
+    const queryKey = providersSnapshotQueryKey(serverId, "/repo-a");
+    queryClient.setQueryData(queryKey, providersSnapshot([codexEntry("ready", [readyCodexModel])]));
+
+    applyProvidersSnapshotUpdate({
+      serverId,
+      queryClient,
+      message: updateMessage([codexEntry("loading")], "/repo-a"),
+    });
+    applyProvidersSnapshotUpdate({
+      serverId,
+      queryClient,
+      message: updateMessage([{ ...codexEntry("error"), error: "network timeout" }], "/repo-a"),
+    });
+
+    expect(queryClient.getQueryData(queryKey)).toEqual({
+      entries: [
+        expect.objectContaining({
+          status: "error",
+          error: "network timeout",
+          models: [readyCodexModel],
+        }),
+      ],
+      generatedAt: "2026-01-01T00:00:01.000Z",
+      requestId: "providers_snapshot_update",
+    });
   });
 
   it("applies Windows daemon updates to app-normalized workspace paths", () => {

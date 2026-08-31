@@ -3,7 +3,7 @@ import type {
   SidebarProjectEntry,
   SidebarWorkspacePlacement,
 } from "@/hooks/sidebar-workspaces-view-model";
-import { splitPinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
+import { orderPinnedSidebarProjects } from "@/hooks/use-sidebar-pins";
 
 function placement(workspaceKey: string): SidebarWorkspacePlacement {
   return {
@@ -29,11 +29,11 @@ function project(projectKey: string, workspaces: SidebarWorkspacePlacement[]): S
   };
 }
 
-describe("splitPinnedSidebarGroups", () => {
-  it("keeps the project shell reachable when every chat is pinned", () => {
+describe("orderPinnedSidebarProjects", () => {
+  it("keeps every pinned chat inside its project", () => {
     const only = placement("w1");
     const projects = [project("p1", [only])];
-    const result = splitPinnedSidebarGroups({
+    const result = orderPinnedSidebarProjects({
       projects,
       keys: {
         pinnedWorkspaceKeys: ["w1"],
@@ -41,23 +41,24 @@ describe("splitPinnedSidebarGroups", () => {
       },
       pinnedWorkspaceOrder: [],
     });
-    expect(result.pinnedChats).toHaveLength(1);
-    expect(result.unpinnedProjects).toEqual([{ ...projects[0], workspaces: [] }]);
+
+    expect(result).toEqual(projects);
   });
 
   it("keeps a genuinely empty project so its new-workspace row stays reachable", () => {
     const projects = [project("p1", [])];
-    const result = splitPinnedSidebarGroups({
+    const result = orderPinnedSidebarProjects({
       projects,
       keys: { pinnedWorkspaceKeys: [], pinnedAtByKey: {} },
       pinnedWorkspaceOrder: [],
     });
-    expect(result.unpinnedProjects).toHaveLength(1);
+
+    expect(result).toHaveLength(1);
   });
 
-  it("keeps remaining chats when only some are pinned", () => {
-    const projects = [project("p1", [placement("w1"), placement("w2")])];
-    const result = splitPinnedSidebarGroups({
+  it("moves a pinned chat above the other chats in its project", () => {
+    const projects = [project("p1", [placement("w2"), placement("w1")])];
+    const result = orderPinnedSidebarProjects({
       projects,
       keys: {
         pinnedWorkspaceKeys: ["w1"],
@@ -65,13 +66,13 @@ describe("splitPinnedSidebarGroups", () => {
       },
       pinnedWorkspaceOrder: [],
     });
-    expect(result.pinnedChats.map((w) => w.workspaceKey)).toEqual(["w1"]);
-    expect(result.unpinnedProjects[0]?.workspaces.map((w) => w.workspaceKey)).toEqual(["w2"]);
+
+    expect(result[0]?.workspaces.map((workspace) => workspace.workspaceKey)).toEqual(["w1", "w2"]);
   });
 
   it("orders pinned chats by most-recently-pinned first", () => {
     const projects = [project("p1", [placement("older"), placement("newer")])];
-    const result = splitPinnedSidebarGroups({
+    const result = orderPinnedSidebarProjects({
       projects,
       keys: {
         pinnedWorkspaceKeys: ["older", "newer"],
@@ -83,7 +84,7 @@ describe("splitPinnedSidebarGroups", () => {
       pinnedWorkspaceOrder: [],
     });
 
-    expect(result.pinnedChats.map((workspace) => workspace.workspaceKey)).toEqual([
+    expect(result[0]?.workspaces.map((workspace) => workspace.workspaceKey)).toEqual([
       "newer",
       "older",
     ]);
@@ -91,7 +92,7 @@ describe("splitPinnedSidebarGroups", () => {
 
   it("applies the saved order while keeping a newly pinned chat first", () => {
     const projects = [project("p1", [placement("older"), placement("newer"), placement("new")])];
-    const result = splitPinnedSidebarGroups({
+    const result = orderPinnedSidebarProjects({
       projects,
       keys: {
         pinnedWorkspaceKeys: ["older", "newer", "new"],
@@ -104,7 +105,7 @@ describe("splitPinnedSidebarGroups", () => {
       pinnedWorkspaceOrder: ["older", "newer"],
     });
 
-    expect(result.pinnedChats.map((workspace) => workspace.workspaceKey)).toEqual([
+    expect(result[0]?.workspaces.map((workspace) => workspace.workspaceKey)).toEqual([
       "new",
       "older",
       "newer",

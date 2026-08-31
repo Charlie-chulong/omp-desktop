@@ -49,7 +49,7 @@ import {
 } from "./checkout-git.js";
 import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
 import { createForgeResolver } from "../services/forge-resolver.js";
-import { GitHubCommandError, GitHubCliMissingError } from "../services/github-service.js";
+import { GitHubApiError, GitHubAuthenticationError } from "../services/github-service.js";
 import type { CurrentPullRequestStatus, ForgeService } from "../services/forge-service.js";
 import {
   TeaAuthenticationError,
@@ -2495,14 +2495,14 @@ const x = 1;
     expect(branches[0]?.committerDate).toEqual(expect.any(Number));
   });
 
-  it("disables GitHub features when gh is unavailable", async () => {
+  it("disables GitHub features when native authentication is unavailable", async () => {
     execFileSync("git", ["remote", "add", "origin", "https://github.com/getpaseo/paseo.git"], {
       cwd: repoDir,
     });
 
     const github = createGitHubServiceForStatus(null);
     github.getCurrentPullRequestStatus = async () => {
-      throw new GitHubCliMissingError();
+      throw new GitHubAuthenticationError("github.com", "Sign in to GitHub");
     };
     const status = await getPullRequestStatus(repoDir, github);
     expect(status.githubFeaturesEnabled).toBe(false);
@@ -3303,11 +3303,9 @@ const x = 1;
             url: "https://github.com/getpaseo/paseo/pull/123",
           });
         }
-        throw new GitHubCommandError({
-          args: ["pr", "view"],
-          cwd: repoDir,
-          exitCode: 1,
-          stderr: "could not resolve host: github.com",
+        throw new GitHubApiError({
+          message: "could not resolve host: github.com",
+          cause: new Error("network unavailable"),
         });
       };
 
@@ -3374,11 +3372,9 @@ const x = 1;
     const fresh = await getPullRequestStatus(repoDir, github);
     expect(fresh.status?.url).toContain("/pull/123");
 
-    const error = new GitHubCommandError({
-      args: ["pr", "view"],
-      cwd: repoDir,
-      exitCode: 1,
-      stderr: "could not resolve host: github.com",
+    const error = new GitHubApiError({
+      message: "could not resolve host: github.com",
+      cause: new Error("network unavailable"),
     });
     github.getCurrentPullRequestStatus = async () => {
       throw error;

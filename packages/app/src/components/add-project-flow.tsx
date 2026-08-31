@@ -91,6 +91,7 @@ import {
   useHostRuntimeConnectionStatuses,
 } from "@/runtime/host-runtime";
 import { useHostFeatureMap } from "@/runtime/host-features";
+import { GitHubAuthCallout } from "@/git/github-auth-callout";
 import { useSessionStore } from "@/stores/session-store";
 import { useRecommendedProjectPaths } from "@/stores/session-store-hooks";
 import type { AddProjectFlowRequest } from "@/stores/add-project-flow-store";
@@ -328,6 +329,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const githubCloneByHost = useHostFeatureMap(hostIds, "projectGithubClone");
   // COMPAT(workspaceGithubRepositorySearch): added in v0.1.108, remove gate after 2027-01-15.
   const githubSearchByHost = useHostFeatureMap(hostIds, "workspaceGithubRepositorySearch");
+  const githubNativeAuthByHost = useHostFeatureMap(hostIds, "githubNativeAuth");
   // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
   const createDirectoryByHost = useHostFeatureMap(hostIds, "projectCreateDirectory");
   const localServerId = useLocalDaemonServerId();
@@ -836,6 +838,13 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     githubAvailable: currentGithubSearch?.available ?? null,
     githubError: currentGithubSearch?.error ?? null,
   });
+  const githubNeedsAuth =
+    page.kind === "github-search" &&
+    currentGithubSearch?.status === "unauthenticated" &&
+    Boolean(hostId && githubNativeAuthByHost.get(hostId) === true);
+  const handleGithubAuthenticated = useCallback(async () => {
+    await githubQuery.refetch();
+  }, [githubQuery]);
   const preview =
     page.kind === "new-directory-name" && page.name.trim()
       ? joinDirectoryPath(page.parentPath, page.name.trim())
@@ -921,7 +930,14 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
                 {page.error}
               </Text>
             ) : null}
-            {!isSubmitting && queryError ? (
+            {!isSubmitting && githubNeedsAuth && hostId ? (
+              <GitHubAuthCallout
+                serverId={hostId}
+                message={t("workspace.git.forgeSetup.nativeSignIn", { brand: "GitHub" })}
+                onAuthenticated={handleGithubAuthenticated}
+              />
+            ) : null}
+            {!isSubmitting && queryError && !githubNeedsAuth ? (
               <Text style={styles.errorText} testID="add-project-flow-query-error">
                 {queryError}
               </Text>
@@ -953,9 +969,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
             <FlowHint keys={SELECT_HINT_KEYS} action={t("common.actions.select")} />
             <FlowHint
               keys={ESCAPE_HINT_KEYS}
-              action={
-                state.pages.length > 1 ? t("common.actions.back") : t("common.actions.close")
-              }
+              action={state.pages.length > 1 ? t("common.actions.back") : t("common.actions.close")}
             />
           </View>
         </View>

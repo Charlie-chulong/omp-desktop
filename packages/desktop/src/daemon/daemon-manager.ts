@@ -1,13 +1,14 @@
 import { type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { app, ipcMain, powerMonitor } from "electron";
+import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
 import { resolvePaseoHome, spawnProcess } from "@omp-desktop/server";
 import {
   copyAttachmentFileToManagedStorage,
   deleteManagedAttachmentFile,
   garbageCollectManagedAttachmentFiles,
+  ManagedAttachmentReferenceRegistry,
   readManagedFileBase64,
   writeAttachmentBase64,
   writeAttachmentBytes,
@@ -47,6 +48,7 @@ import { tailFile } from "../diagnostics/tail-file.js";
 const DAEMON_LOG_FILENAME = "daemon.log";
 const STARTUP_POLL_INTERVAL_MS = 200;
 const STARTUP_POLL_MAX_ATTEMPTS = 150;
+const ATTACHMENT_GC_MINIMUM_AGE_MS = 60 * 60 * 1000;
 const DETACHED_STARTUP_GRACE_MS = 1200;
 
 type DesktopDaemonState = "starting" | "running" | "stopped" | "errored";
@@ -535,7 +537,6 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     copy_attachment_file: (args) => copyAttachmentFileToManagedStorage(args ?? {}),
     read_file_base64: (args) => readManagedFileBase64(args ?? {}),
     delete_attachment_file: (args) => deleteManagedAttachmentFile(args ?? {}),
-    garbage_collect_attachment_files: (args) => garbageCollectManagedAttachmentFiles(args ?? {}),
     open_local_daemon_transport: async (args) => {
       const target = args as { transportType: "socket" | "pipe"; transportPath: string };
       return await openLocalTransportSession(target);
@@ -579,15 +580,45 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
 
 export function registerDaemonManager(): void {
   const handlers = createDaemonCommandHandlers();
+  const attachmentReferences = new ManagedAttachmentReferenceRegistry();
+  let attachmentGarbageCollectionTail: Promise<void> = Promise.resolve();
 
-  ipcMain.handle(
-    "paseo:invoke",
-    async (_event, command: string, args?: Record<string, unknown>) => {
-      const handler = handlers[command];
-      if (!handler) {
-        throw new Error(`Unknown desktop command: ${command}`);
-      }
-      return await handler(args);
-    },
-  );
+  ipcMain.handle("paseo:invoke", async (event, command: string, args?: Record<string, unknown>) => {
+    if (command === "garbage_collect_attachment_files") {
+      const ownerId = event.sender.id;
+      const ownerSession = event.sender.session;
+      const referencedIds = Array.isArray(args?.referencedIds)
+        ? args.referencedIds.filter((value): value is string => typeof value === "string")
+        : [];
+      const collect = attachmentGarbageCollectionTail.then(async () => {
+        const activeOwnerIds = BrowserWindow.getAllWindows()
+          .map((window) => window.webContents)
+          .filter((contents) => !contents.isDestroyed() && contents.session === ownerSession)
+          .map((contents) => contents.id);
+        const allReferencedIds = attachmentReferences.update({
+          ownerId,
+          activeOwnerIds,
+          referencedIds,
+        });
+        if (!allReferencedIds) {
+          return 0;
+        }
+        return await garbageCollectManagedAttachmentFiles(
+          { referencedIds: [...allReferencedIds] },
+          { minimumAgeMs: ATTACHMENT_GC_MINIMUM_AGE_MS },
+        );
+      });
+      attachmentGarbageCollectionTail = collect.then(
+        () => undefined,
+        () => undefined,
+      );
+      return await collect;
+    }
+
+    const handler = handlers[command];
+    if (!handler) {
+      throw new Error(`Unknown desktop command: ${command}`);
+    }
+    return await handler(args);
+  });
 }

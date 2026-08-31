@@ -6,7 +6,7 @@ import {
   type SidebarWorkspacesListResult,
 } from "@/hooks/use-sidebar-workspaces-list";
 import { useSidebarWorkspaceEntries } from "@/hooks/use-sidebar-workspace-entries";
-import { usePinnedSidebarKeys, type PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
+import { usePinnedSidebarKeys } from "@/hooks/use-sidebar-pins";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import {
   hasActiveSidebarLabelFilter,
@@ -39,7 +39,6 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   groupMode: SidebarGroupMode;
   workspaceGroups: SidebarWorkspaceGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
-  pinnedGroups: PinnedSidebarGroups;
   collapsedProjectKeys: ReadonlySet<string>;
   toggleProjectCollapsed: (projectViewKey: string) => void;
   shortcutModel: SidebarShortcutModel;
@@ -66,7 +65,6 @@ export function SidebarModelProvider({
   const collapsedWorkspaceGroupKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedWorkspaceGroupKeys,
   );
-  const pinnedCollapsed = useSidebarCollapsedSectionsStore((state) => state.collapsedPinned);
   const pinnedWorkspaceOrder = useSidebarOrderStore((state) => state.pinnedWorkspaceOrder);
   const toggleProjectCollapsed = useSidebarCollapsedSectionsStore(
     (state) => state.toggleProjectCollapsed,
@@ -147,7 +145,6 @@ export function SidebarModelProvider({
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       projectNamesByViewKey: list.projectNamesByViewKey,
       groupMode,
-      pinnedCollapsed,
       collapsedProjectKeys,
       collapsedWorkspaceGroupKeys,
     }),
@@ -157,7 +154,6 @@ export function SidebarModelProvider({
       groupMode,
       list.projectNamesByViewKey,
       filteredProjects,
-      pinnedCollapsed,
       pinnedKeys,
       pinnedWorkspaceOrder,
       filteredWorkspaceEntriesByKey,
@@ -167,7 +163,7 @@ export function SidebarModelProvider({
   const value = useMemo(
     () => ({
       ...list,
-      projects: filteredProjects,
+      projects: projection.projects,
       allProjects: list.projects,
       resolvedProjectFilters,
       hasProjectsBeforeFilter: list.projects.length > 0,
@@ -175,7 +171,6 @@ export function SidebarModelProvider({
       groupMode,
       workspaceGroups: projection.workspaceGroups,
       projectIconTargets: projection.projectIconTargets,
-      pinnedGroups: projection.pinnedGroups,
       collapsedProjectKeys,
       toggleProjectCollapsed,
       shortcutModel: projection.shortcutModel,
@@ -185,7 +180,6 @@ export function SidebarModelProvider({
       collapsedProjectKeys,
       groupMode,
       list,
-      filteredProjects,
       projection,
       toggleProjectCollapsed,
       filteredWorkspaceEntriesByKey,

@@ -62,6 +62,7 @@ import { BranchSwitcher } from "@/components/branch-switcher";
 import { useGitActions } from "@/git/use-actions";
 import { GIT_ACTION_ICONS } from "@/git/action-icons";
 import { buildForgeSignInCommand, getForgePresentation, type Forge } from "@/git/forge";
+import { GitHubAuthCallout } from "@/git/github-auth-callout";
 import { parseGitRemoteLocation } from "@omp-desktop/protocol/git-remote";
 import type { ForgeAuthState } from "@omp-desktop/protocol/messages";
 import { useCheckoutGitActionsStore } from "@/git/actions-store";
@@ -750,6 +751,7 @@ type ForgeSetupAction = "install_cli" | "sign_in" | null;
 function computeForgeSetupAction(input: {
   forge: Forge;
   forgeProvidersSupported: boolean;
+  nativeAuthSupported: boolean;
   authState: ForgeAuthState | undefined;
 }): ForgeSetupAction {
   // A daemon without pluggable forge support can't operate any non-GitHub forge,
@@ -759,7 +761,7 @@ function computeForgeSetupAction(input: {
   }
   switch (input.authState) {
     case "cli_missing":
-      return "install_cli";
+      return input.forge === "github" && input.nativeAuthSupported ? "sign_in" : "install_cli";
     case "unauthenticated":
       return "sign_in";
     case "authenticated":
@@ -784,10 +786,10 @@ function buildForgeSetupMessage(input: {
   if (!input.action) {
     return null;
   }
-  const { brandLabel, signInCli } = getForgePresentation(input.forge);
-  // A forge with no known CLI (an unknown/third-party forge rendered neutrally)
-  // has no install/sign-in command to interpolate — show neutral guidance
-  // rather than the GitLab-specific callout or a null command.
+  const { brandLabel, signInCli, signInKind } = getForgePresentation(input.forge);
+  if (input.action === "sign_in" && signInKind === "native") {
+    return input.t("workspace.git.forgeSetup.nativeSignIn", { brand: brandLabel });
+  }
   if (signInCli === null) {
     return input.t("workspace.git.forgeSetup.generic", { brand: brandLabel });
   }
@@ -1186,9 +1188,13 @@ export function ChangesSurface({
   const forgeProvidersSupported = useSessionStore(
     (s) => s.sessions[serverId]?.serverInfo?.features?.forgeProviders === true,
   );
+  const githubNativeAuthSupported = useSessionStore(
+    (s) => s.sessions[serverId]?.serverInfo?.features?.githubNativeAuth === true,
+  );
   const forgeSetupAction = computeForgeSetupAction({
     forge,
     forgeProvidersSupported,
+    nativeAuthSupported: githubNativeAuthSupported,
     authState,
   });
   const forgeSetupMessage = useMemo(
@@ -1201,6 +1207,12 @@ export function ChangesSurface({
       }),
     [forgeSetupAction, forge, status?.remoteUrl, t],
   );
+  const forgeHost = parseForgeHost(status?.remoteUrl);
+  const nativeGitHubSignIn =
+    forge === "github" &&
+    forgeSetupAction === "sign_in" &&
+    githubNativeAuthSupported &&
+    getForgePresentation(forge).signInKind === "native";
   const handleToggleDesktopTree = useCallback(() => {
     updateState({ ...instanceState, treeVisible: !desktopTreeVisible });
   }, [desktopTreeVisible, instanceState, updateState]);
@@ -1458,9 +1470,19 @@ export function ChangesSurface({
       ) : null}
 
       {forgeSetupMessage ? (
-        <View style={styles.forgeSetupCallout} testID="forge-setup-callout">
-          <Text style={styles.forgeSetupCalloutText}>{forgeSetupMessage}</Text>
-        </View>
+        nativeGitHubSignIn ? (
+          <GitHubAuthCallout
+            serverId={serverId}
+            cwd={cwd}
+            host={forgeHost}
+            message={forgeSetupMessage}
+            onAuthenticated={handleRefresh}
+          />
+        ) : (
+          <View style={styles.forgeSetupCallout} testID="forge-setup-callout">
+            <Text style={styles.forgeSetupCalloutText}>{forgeSetupMessage}</Text>
+          </View>
+        )
       ) : null}
 
       {prErrorMessage ? <Text style={styles.actionErrorText}>{prErrorMessage}</Text> : null}
