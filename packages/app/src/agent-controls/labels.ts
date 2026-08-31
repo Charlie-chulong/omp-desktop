@@ -1,4 +1,5 @@
 import { i18n } from "@/i18n/i18next";
+import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 
 interface ControlLabelInput {
   id: string;
@@ -97,6 +98,9 @@ export function formatThinkingOptionLabel(option: ControlLabelInput): string {
 }
 
 export function formatAgentFeatureLabel(feature: ControlLabelInput): string {
+  if (feature.id === FAST_MODE_FEATURE_ID) {
+    return i18n.t("shell.commandCenter.fastModeGroupLabel");
+  }
   if (feature.id === "workflow_mode") return i18n.t("agentControls.features.workflow.title");
   if (feature.id === "oauth_account_credential") {
     return i18n.t("agentControls.features.oauthAccount.title");

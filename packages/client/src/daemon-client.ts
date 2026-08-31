@@ -5060,11 +5060,15 @@ export class DaemonClient {
   }
   async logoutOmpProvider(
     providerId: string,
-    options?: { requestId?: string },
+    options?: { requestId?: string; credentialId?: number },
   ): Promise<OmpProviderLogoutPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId: options?.requestId,
-      message: { type: "omp.provider.logout.request", providerId },
+      message: {
+        type: "omp.provider.logout.request",
+        providerId,
+        ...(options?.credentialId === undefined ? {} : { credentialId: options.credentialId }),
+      },
       responseType: "omp.provider.logout.response",
     });
   }

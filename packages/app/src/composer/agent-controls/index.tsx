@@ -1610,7 +1610,7 @@ function SheetFeatureItem({
             theme.colors.foregroundMuted,
           )}
           surface="sheet"
-          label={feature.label}
+          label={featureLabel}
           value={feature.value ? t("agentControls.features.on") : t("agentControls.features.off")}
           open={openSelector === featureSelector}
           disabled={disabled}

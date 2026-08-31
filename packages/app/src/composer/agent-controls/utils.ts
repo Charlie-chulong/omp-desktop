@@ -31,7 +31,21 @@ export function normalizeModelId(modelId: string | null | undefined): string | n
   return normalized;
 }
 
-export function getFeatureTooltip(feature: Pick<AgentFeature, "label" | "tooltip">): string {
+export function getFeatureTooltip(
+  feature: Pick<AgentFeature, "id" | "label" | "tooltip"> & {
+    type?: string;
+    value?: unknown;
+  },
+): string {
+  if (
+    feature.id === FAST_MODE_FEATURE_ID &&
+    feature.type === "toggle" &&
+    typeof feature.value === "boolean"
+  ) {
+    return `${i18n.t("shell.commandCenter.fastModeGroupLabel")}: ${i18n.t(
+      feature.value ? "shell.commandCenter.settingOn" : "shell.commandCenter.settingOff",
+    )}`;
+  }
   return feature.tooltip ?? feature.label;
 }
 

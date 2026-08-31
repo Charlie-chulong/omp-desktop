@@ -19,6 +19,7 @@ import {
   OmpBranchMessagesResultSchema,
   OmpBranchResultSchema,
   OmpCommandsResultSchema,
+  OmpFastModeResultSchema,
   OmpHostToolsResultSchema,
   OmpLoginProvidersResultSchema,
   OmpMessagesResultSchema,
@@ -30,6 +31,7 @@ import {
   OmpSessionStateSchema,
   OmpSessionStatsSchema,
   type OmpThinkingLevel,
+  type OmpFastModeResult,
   type OmpAgentMessage,
   type OmpLoginProvider,
   type OmpModel,
@@ -216,6 +218,10 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
 
   async getState(): Promise<OmpSessionState> {
     return OmpSessionStateSchema.parse(await this.request({ type: "get_state" }));
+  }
+
+  async setFastMode(enabled: boolean): Promise<OmpFastModeResult> {
+    return OmpFastModeResultSchema.parse(await this.request({ type: "set_fast_mode", enabled }));
   }
 
   async getMessages(): Promise<OmpAgentMessage[]> {

@@ -19,6 +19,7 @@ describe("feature metadata helpers", () => {
   it("prefers explicit feature tooltip copy", () => {
     expect(
       getFeatureTooltip({
+        id: "custom",
         label: "Plan",
         tooltip: "Toggle plan mode",
       }),
@@ -28,9 +29,29 @@ describe("feature metadata helpers", () => {
   it("falls back to the feature label when no tooltip is provided", () => {
     expect(
       getFeatureTooltip({
+        id: "custom",
         label: "Custom",
       }),
     ).toBe("Custom");
+  });
+
+  it("shows the current fast-mode state in the tooltip", () => {
+    expect(
+      getFeatureTooltip({
+        id: "fast_mode",
+        type: "toggle",
+        label: "Fast mode",
+        value: true,
+      }),
+    ).toBe("Fast: On");
+    expect(
+      getFeatureTooltip({
+        id: "fast_mode",
+        type: "toggle",
+        label: "Fast mode",
+        value: false,
+      }),
+    ).toBe("Fast: Off");
   });
 
   it("maps feature highlight colors by feature id", () => {

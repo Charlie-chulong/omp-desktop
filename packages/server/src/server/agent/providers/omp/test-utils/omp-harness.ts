@@ -22,7 +22,7 @@ import {
   type StoredOmpOAuthAccount,
 } from "../agent.js";
 import type { OmpUsagePollScheduler } from "../usage-poller.js";
-import type { OmpAgentMessage, OmpRpcSlashCommand } from "../rpc-types.js";
+import type { OmpAgentMessage, OmpModel, OmpRpcSlashCommand } from "../rpc-types.js";
 import { FakeOmp } from "./fake-omp.js";
 
 const CWD = "/tmp/paseo-omp-agent-test";
@@ -72,15 +72,19 @@ export class OmpHarness {
   constructor(
     options: {
       oauthAccounts?: readonly StoredOmpOAuthAccount[];
+      fastModeSupported?: boolean;
+      initialModel?: OmpModel;
       providerIdleScheduler?: OmpProviderIdleScheduler;
       noTurnScheduler?: OmpNoTurnScheduler;
       usagePollScheduler?: OmpUsagePollScheduler;
     } = {},
   ) {
+    this.omp.setFastModeSupported(options.fastModeSupported ?? true);
+    this.omp.setInitialModel(options.initialModel ?? null);
     this.client = new OmpAgentClient({
       logger: pino({ level: "silent" }),
       runtime: this.omp,
-      oauthAccounts: options.oauthAccounts,
+      oauthAccounts: options.oauthAccounts ?? [],
       providerIdleScheduler: options.providerIdleScheduler,
       noTurnScheduler: options.noTurnScheduler,
       usagePollScheduler: options.usagePollScheduler,
@@ -467,8 +471,21 @@ export class OmpHarness {
   async setMode(modeId: string) {
     return await this.requireSession().setMode(modeId);
   }
+
+  async setModel(
+    provider: string,
+    modelId: string,
+    metadata: Partial<OmpModel> = {},
+  ): Promise<void> {
+    this.omp.latestSession().setModelResult = { ...metadata, provider, id: modelId };
+    await this.requireSession().setModel(`${provider}/${modelId}`);
+  }
+
   features() {
     return this.requireSession().features;
+  }
+  fastModeRequests(): boolean[] {
+    return [...this.omp.latestSession().setFastModeRequests];
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {

@@ -8,6 +8,7 @@ import { parse } from "yaml";
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
 import {
+  disableStoredOmpCredential,
   disableStoredOmpProviderCredentials,
   formatOmpModelsYaml,
   readStoredOmpOAuthAccounts,
@@ -240,6 +241,44 @@ describe("OMP provider management", () => {
       { id: 1, disabled_cause: "deleted by user" },
       { id: 2, disabled_cause: null },
       { id: 3, disabled_cause: "expired" },
+    ]);
+  });
+
+  test("logs out only the requested OAuth credential", async () => {
+    const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-auth-"));
+    tempDirs.push(agentDir);
+    const databasePath = path.join(agentDir, "agent.db");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        credential_type TEXT NOT NULL,
+        disabled_cause TEXT,
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO auth_credentials (id, provider, credential_type) VALUES
+        (1, 'openai-codex', 'oauth'),
+        (2, 'openai-codex', 'oauth'),
+        (3, 'openai-codex', 'apiKey'),
+        (4, 'anthropic', 'oauth');
+    `);
+    database.close();
+
+    expect(disableStoredOmpCredential(databasePath, "openai-codex", 2)).toBe(1);
+    expect(disableStoredOmpCredential(databasePath, "anthropic", 1)).toBe(0);
+    expect(disableStoredOmpCredential(databasePath, "openai-codex", 3)).toBe(0);
+
+    const verification = new DatabaseSync(databasePath);
+    const rows = verification
+      .prepare("SELECT id, disabled_cause FROM auth_credentials ORDER BY id")
+      .all();
+    verification.close();
+    expect(rows).toEqual([
+      { id: 1, disabled_cause: null },
+      { id: 2, disabled_cause: "deleted by user" },
+      { id: 3, disabled_cause: null },
+      { id: 4, disabled_cause: null },
     ]);
   });
 
