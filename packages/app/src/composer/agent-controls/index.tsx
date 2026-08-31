@@ -159,7 +159,7 @@ function useWorkflowQuota(
     },
     enabled: Boolean(client && supportsOmpProviderManagement && shouldFetch),
     staleTime: 0,
-    refetchInterval: 30_000,
+    refetchInterval: 300_000,
     refetchOnMount: true,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,

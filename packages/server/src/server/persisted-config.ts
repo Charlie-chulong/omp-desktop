@@ -94,6 +94,7 @@ const ProvidersSchema = z
 const GitHubHostSchema = z
   .object({
     clientId: z.string().trim().min(1),
+    clientType: z.enum(["oauth-app", "github-app"]).optional(),
     apiBaseUrl: z.url().optional(),
     webBaseUrl: z.url().optional(),
   })
@@ -102,6 +103,7 @@ const GitHubHostSchema = z
 const GitHubConfigSchema = z
   .object({
     clientId: z.string().trim().min(1).optional(),
+    clientType: z.enum(["oauth-app", "github-app"]).optional(),
     hosts: z.record(z.string().trim().min(1), GitHubHostSchema).optional(),
   })
   .strict();

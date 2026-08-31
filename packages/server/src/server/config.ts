@@ -543,8 +543,8 @@ function resolveGitHubConfig(
   persisted: PersistedConfig,
 ): NonNullable<PaseoDaemonConfig["github"]> {
   return {
-    githubComClientId:
-      nonEmptyEnv(env.PASEO_GITHUB_OAUTH_CLIENT_ID) ?? persisted.github?.clientId,
+    githubComClientId: nonEmptyEnv(env.PASEO_GITHUB_OAUTH_CLIENT_ID) ?? persisted.github?.clientId,
+    githubComClientType: persisted.github?.clientType,
     hosts: persisted.github?.hosts,
   };
 }

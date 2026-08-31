@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_GITHUB_OAUTH_CLIENT_ID,
   GitHubAuthConfigurationError,
   GitHubAuthManager,
   MemoryGitHubCredentialStore,
@@ -74,6 +75,26 @@ describe("GitHubAuthManager", () => {
     expect(requests.some((request) => request.url.endsWith("/user"))).toBe(true);
   });
 
+  it("reports when Device Flow is disabled for the configured GitHub App", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse(
+        {
+          error: "device_flow_disabled",
+          error_description: "Device Flow must be explicitly enabled for this App",
+        },
+        400,
+      ),
+    ) as typeof fetch;
+    const auth = new GitHubAuthManager({
+      credentialStore: new MemoryGitHubCredentialStore(),
+      env: {},
+    });
+
+    await expect(auth.beginLogin("github.com")).rejects.toThrow(
+      "enable Device Flow in the GitHub App settings",
+    );
+  });
+
   it("keeps GitHub.com and Enterprise credentials isolated", async () => {
     const store = new MemoryGitHubCredentialStore();
     await store.set({
@@ -113,12 +134,15 @@ describe("GitHubAuthManager", () => {
     });
     expect(auth.isLoginConfigured("github.com")).toBe(true);
     expect(auth.isLoginConfigured("github.acme.test")).toBe(true);
-    expect(
-      new GitHubAuthManager({
-        credentialStore: new MemoryGitHubCredentialStore(),
-        env: {},
-      }).isLoginConfigured("github.com"),
-    ).toBe(false);
+    const defaults = new GitHubAuthManager({
+      credentialStore: new MemoryGitHubCredentialStore(),
+      env: {},
+    });
+    expect(defaults.isLoginConfigured("github.com")).toBe(true);
+    expect(defaults.resolveHostConfig("github.com")).toMatchObject({
+      clientId: DEFAULT_GITHUB_OAUTH_CLIENT_ID,
+      clientType: "github-app",
+    });
   });
 
   it("refuses Enterprise API URLs that could receive a token for another host", () => {

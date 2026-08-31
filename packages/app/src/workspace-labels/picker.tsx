@@ -6,10 +6,15 @@ import {
   useSyncExternalStore,
   type ReactElement,
 } from "react";
-import { View } from "react-native";
+import {
+  Pressable,
+  View,
+  type GestureResponderEvent,
+  type PressableStateCallbackType,
+} from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react-native";
+import { Check, Plus, Trash2 } from "lucide-react-native";
 import {
   normalizeWorkspaceLabelName,
   WORKSPACE_LABEL_COLORS,
@@ -26,6 +31,7 @@ import {
   useMenuContext,
   type MenuPageDefinition,
 } from "@/components/ui/menu";
+import { confirmDialog } from "@/utils/confirm-dialog";
 import {
   createWorkspaceLabelPickerModel,
   useWorkspaceLabelProjection,
@@ -43,8 +49,11 @@ const WORKSPACE_LABEL_CREATE_PAGE_ID = "workspaceLabelsCreate";
 /** The menu's own icon size, matching the trailing check on every other row. */
 const MENU_ICON_SIZE = 14;
 
+const ThemedCheck = withUnistyles(Check);
 const ThemedPlus = withUnistyles(Plus);
+const ThemedTrash2 = withUnistyles(Trash2);
 const mutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const destructiveMapping = (theme: Theme) => ({ color: theme.colors.destructive });
 
 // The create row keeps the leading column the label rows above it sit in. Without a mark there
 // its label would start on the text rail while every label starts 24pt further in, and the last
@@ -132,24 +141,57 @@ function WorkspaceLabelPickerPage({
   const snapshot = useSyncExternalStore(model.subscribe, model.snapshot, model.snapshot);
   const offline = !snapshot.online;
   const pending = useMemo(() => new Set(snapshot.pendingNames), [snapshot.pendingNames]);
+  const [deletingName, setDeletingName] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const toggle = useCallback(
     (label: WorkspaceLabelDefinition, assigned: boolean) => {
       void model.toggle(label, assigned);
     },
     [model],
   );
+  const remove = useCallback(
+    async (label: WorkspaceLabelDefinition) => {
+      if (deletingName) return;
+      setDeleteError(null);
+      try {
+        const { affectedWorkspaceCount } = await workspaceLabels.inspectDelete({
+          serverId,
+          name: label.name,
+        });
+        const confirmed = await confirmDialog({
+          title: t("workspaceLabels.manage.deleteTitle", { name: label.name }),
+          message: t("workspaceLabels.manage.deleteMessage", { count: affectedWorkspaceCount }),
+          confirmLabel: t("workspaceLabels.manage.delete"),
+          destructive: true,
+        });
+        if (!confirmed) return;
+        setDeletingName(label.name.toLocaleLowerCase());
+        await workspaceLabels.delete({ serverId, name: label.name });
+      } catch (cause: unknown) {
+        setDeleteError(workspaceLabelErrorMessage(cause));
+      } finally {
+        setDeletingName(null);
+      }
+    },
+    [deletingName, serverId, t],
+  );
 
   return (
     <>
-      {snapshot.rows.map((row) => (
-        <WorkspaceLabelAssignRow
-          key={row.name.toLocaleLowerCase()}
-          row={row}
-          offline={offline}
-          pending={pending.has(row.name.toLocaleLowerCase())}
-          onToggle={toggle}
-        />
-      ))}
+      {snapshot.rows.map((row) => {
+        const key = row.name.toLocaleLowerCase();
+        return (
+          <WorkspaceLabelAssignRow
+            key={key}
+            row={row}
+            offline={offline}
+            pending={pending.has(key)}
+            deleting={deletingName === key}
+            onToggle={toggle}
+            onDelete={remove}
+          />
+        );
+      })}
       {snapshot.rows.length > 0 ? <MenuSeparator /> : null}
       <MenuSubTrigger
         id={WORKSPACE_LABEL_CREATE_PAGE_ID}
@@ -159,8 +201,8 @@ function WorkspaceLabelPickerPage({
       >
         {t("workspaceLabels.create")}
       </MenuSubTrigger>
-      {snapshot.error ? (
-        <MenuHint testID="workspace-label-picker-error">{snapshot.error}</MenuHint>
+      {snapshot.error || deleteError ? (
+        <MenuHint testID="workspace-label-picker-error">{snapshot.error ?? deleteError}</MenuHint>
       ) : null}
       {host?.status === "unsupported" ? (
         <MenuHint>{t("workspaceLabels.updateHostUse")}</MenuHint>
@@ -173,23 +215,40 @@ function WorkspaceLabelAssignRow({
   row,
   offline,
   pending,
+  deleting,
   onToggle,
+  onDelete,
 }: {
   row: WorkspaceLabelPickerRow;
   offline: boolean;
   pending: boolean;
+  deleting: boolean;
   onToggle: (label: WorkspaceLabelDefinition, assigned: boolean) => void;
+  onDelete: (label: WorkspaceLabelDefinition) => void;
 }): ReactElement {
+  const { t } = useTranslation();
+  const label = useMemo(() => ({ name: row.name, color: row.color }), [row.color, row.name]);
   const leading = useMemo(() => <WorkspaceLabelDot color={row.color} />, [row.color]);
-  const select = useCallback(
-    () => onToggle({ name: row.name, color: row.color }, !row.assigned),
-    [onToggle, row.assigned, row.color, row.name],
+  const select = useCallback(() => onToggle(label, !row.assigned), [label, onToggle, row.assigned]);
+  const remove = useCallback(() => onDelete(label), [label, onDelete]);
+  const trailing = useMemo(
+    () => (
+      <WorkspaceLabelRowActions
+        assigned={row.assigned}
+        disabled={offline || deleting}
+        deleteLabel={t("workspaceLabels.manage.delete")}
+        onDelete={remove}
+        testID={`workspace-label-picker-delete-${row.name}`}
+      />
+    ),
+    [deleting, offline, remove, row.assigned, row.name, t],
   );
   return (
     <MenuItem
       leading={leading}
+      trailing={trailing}
       selected={row.assigned}
-      disabled={offline}
+      disabled={offline || deleting}
       status={pending ? "pending" : "idle"}
       closeOnSelect={false}
       onSelect={select}
@@ -197,6 +256,53 @@ function WorkspaceLabelAssignRow({
     >
       {row.name}
     </MenuItem>
+  );
+}
+
+function WorkspaceLabelRowActions({
+  assigned,
+  disabled,
+  deleteLabel,
+  onDelete,
+  testID,
+}: {
+  assigned: boolean;
+  disabled: boolean;
+  deleteLabel: string;
+  onDelete: () => void;
+  testID: string;
+}): ReactElement {
+  const handleDelete = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      onDelete();
+    },
+    [onDelete],
+  );
+  const deleteStyle = useCallback(
+    ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.deleteButton,
+      hovered && !disabled ? styles.deleteButtonHovered : null,
+      pressed && !disabled ? styles.deleteButtonPressed : null,
+      disabled ? styles.deleteButtonDisabled : null,
+    ],
+    [disabled],
+  );
+  return (
+    <View style={styles.rowActions}>
+      {assigned ? <ThemedCheck size={16} uniProps={mutedMapping} /> : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={deleteLabel}
+        disabled={disabled}
+        hitSlop={4}
+        onPress={handleDelete}
+        style={deleteStyle}
+        testID={testID}
+      >
+        <ThemedTrash2 size={MENU_ICON_SIZE} uniProps={destructiveMapping} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -280,6 +386,27 @@ const styles = StyleSheet.create((theme) => ({
   // a hair left of the letters beside it — that overshoot is what makes a circle look aligned
   // with a flat stem, so it is the rail rather than a miss. Vertical room of its own because the
   // page's row gap is zero.
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  deleteButton: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.borderRadius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  deleteButtonPressed: {
+    opacity: 0.7,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.5,
+  },
   swatches: {
     paddingHorizontal: menuRowContentInset(theme),
     paddingVertical: theme.spacing[2],

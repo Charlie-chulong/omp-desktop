@@ -10,6 +10,9 @@ const GITHUB_CREDENTIAL_SERVICE = "omp-desktop.github";
 const GITHUB_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
 const GITHUB_REQUEST_TIMEOUT_MS = 30_000;
 const GITHUB_OAUTH_SCOPES = ["repo"] as const;
+export const DEFAULT_GITHUB_OAUTH_CLIENT_ID = "Iv23liUcLI6z5fu6BNnr";
+
+export type GitHubOAuthClientType = "oauth-app" | "github-app";
 
 interface GitHubDeviceVerification {
   device_code: string;
@@ -33,16 +36,19 @@ export type GitHubCredential = z.infer<typeof StoredCredentialSchema>;
 export interface GitHubHostAuthConfig {
   host: string;
   clientId?: string;
+  clientType: GitHubOAuthClientType;
   apiBaseUrl: string;
   webBaseUrl: string;
 }
 
 export interface GitHubAuthConfig {
   githubComClientId?: string;
+  githubComClientType?: GitHubOAuthClientType;
   hosts?: Record<
     string,
     {
       clientId: string;
+      clientType?: GitHubOAuthClientType;
       apiBaseUrl?: string;
       webBaseUrl?: string;
     }
@@ -192,10 +198,17 @@ export class GitHubAuthManager {
   resolveHostConfig(host: string): GitHubHostAuthConfig | null {
     const normalizedHost = normalizeGitHubHost(host);
     if (normalizedHost === "github.com" || normalizedHost === "ssh.github.com") {
+      const clientId =
+        nonEmpty(this.#env.PASEO_GITHUB_OAUTH_CLIENT_ID) ??
+        this.#config.githubComClientId ??
+        DEFAULT_GITHUB_OAUTH_CLIENT_ID;
       return {
         host: "github.com",
-        clientId:
-          nonEmpty(this.#env.PASEO_GITHUB_OAUTH_CLIENT_ID) ?? this.#config.githubComClientId,
+        clientId,
+        clientType:
+          parseClientType(this.#env.PASEO_GITHUB_OAUTH_CLIENT_TYPE) ??
+          this.#config.githubComClientType ??
+          inferClientType(clientId),
         apiBaseUrl: "https://api.github.com",
         webBaseUrl: "https://github.com",
       };
@@ -218,6 +231,7 @@ export class GitHubAuthManager {
     return {
       host: normalizedHost,
       clientId: configured.clientId,
+      clientType: configured.clientType ?? inferClientType(configured.clientId),
       apiBaseUrl,
       webBaseUrl,
     };
@@ -258,6 +272,7 @@ export class GitHubAuthManager {
 
     const flowId = randomUUID();
     const controller = new AbortController();
+    // Promise.withResolvers is unavailable on the daemon's supported ES2023 runtime.
     let resolveStart!: (start: GitHubLoginStart) => void;
     let rejectStart!: (error: unknown) => void;
     const started = new Promise<GitHubLoginStart>((resolve, reject) => {
@@ -269,39 +284,50 @@ export class GitHubAuthManager {
       baseUrl: hostConfig.apiBaseUrl,
       request: { fetch: createTimeoutFetch(controller.signal) },
     });
-    const auth = createOAuthDeviceAuth({
-      clientType: "oauth-app",
-      clientId: hostConfig.clientId,
-      scopes: [...GITHUB_OAUTH_SCOPES],
-      request: oauthRequest,
-      onVerification: (verification) => {
-        verificationReceived = true;
-        resolveStart(this.#toLoginStart(flowId, hostConfig, verification));
-      },
-    });
+    const onVerification = (verification: GitHubDeviceVerification) => {
+      verificationReceived = true;
+      resolveStart(this.#toLoginStart(flowId, hostConfig, verification));
+    };
+    const authentication =
+      hostConfig.clientType === "github-app"
+        ? createOAuthDeviceAuth({
+            clientType: "github-app",
+            clientId: hostConfig.clientId,
+            request: oauthRequest,
+            onVerification,
+          })({ type: "oauth" })
+        : createOAuthDeviceAuth({
+            clientType: "oauth-app",
+            clientId: hostConfig.clientId,
+            scopes: [...GITHUB_OAUTH_SCOPES],
+            request: oauthRequest,
+            onVerification,
+          })({ type: "oauth" });
 
-    const login = auth({ type: "oauth" })
+    const login = authentication
       .then(async (authentication) => {
         const user = await this.#validateToken(hostConfig, authentication.token, controller.signal);
+        const scopes = "scopes" in authentication ? [...authentication.scopes] : [];
         const credential: GitHubCredential = {
           version: 1,
           host: hostConfig.host,
           token: authentication.token,
           userId: user.id,
           login: user.login,
-          scopes: [...authentication.scopes],
+          scopes,
         };
         await this.#credentialStore.set(credential);
         return {
           host: hostConfig.host,
           userId: user.id,
           login: user.login,
-          scopes: [...authentication.scopes],
+          scopes,
         };
       })
       .catch((error: unknown) => {
-        if (!verificationReceived) rejectStart(error);
-        throw error;
+        const normalized = normalizeGitHubOAuthError(error, hostConfig.host);
+        if (!verificationReceived) rejectStart(normalized);
+        throw normalized;
       });
     void login.catch(() => undefined);
 
@@ -462,6 +488,41 @@ export function createTimeoutFetch(parentSignal?: AbortSignal): typeof fetch {
       signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
     });
   };
+}
+
+function parseClientType(value: string | undefined): GitHubOAuthClientType | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "github-app" || normalized === "oauth-app" ? normalized : undefined;
+}
+function normalizeGitHubOAuthError(error: unknown, host: string): Error {
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof error.response === "object" &&
+    error.response !== null &&
+    "data" in error.response &&
+    typeof error.response.data === "object" &&
+    error.response.data !== null &&
+    "error" in error.response.data &&
+    typeof error.response.data.error === "string"
+      ? error.response.data.error
+      : null;
+  if (code === "device_flow_disabled") {
+    return new GitHubAuthConfigurationError(
+      `GitHub Device Flow is disabled for the App configured on ${host}; enable Device Flow in the GitHub App settings`,
+    );
+  }
+  if (code === "incorrect_client_credentials") {
+    return new GitHubAuthConfigurationError(
+      `The GitHub Client ID configured for ${host} is invalid`,
+    );
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function inferClientType(clientId: string): GitHubOAuthClientType {
+  return clientId.startsWith("I") ? "github-app" : "oauth-app";
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

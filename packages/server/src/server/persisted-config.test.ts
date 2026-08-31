@@ -142,9 +142,11 @@ describe("PersistedConfigSchema GitHub OAuth config", () => {
     const parsed = PersistedConfigSchema.parse({
       github: {
         clientId: "cloud-client",
+        clientType: "github-app",
         hosts: {
           "github.acme.test": {
             clientId: "enterprise-client",
+            clientType: "oauth-app",
             apiBaseUrl: "https://github.acme.test/api/v3",
             webBaseUrl: "https://github.acme.test",
           },
@@ -154,9 +156,11 @@ describe("PersistedConfigSchema GitHub OAuth config", () => {
 
     expect(parsed.github).toEqual({
       clientId: "cloud-client",
+      clientType: "github-app",
       hosts: {
         "github.acme.test": {
           clientId: "enterprise-client",
+          clientType: "oauth-app",
           apiBaseUrl: "https://github.acme.test/api/v3",
           webBaseUrl: "https://github.acme.test",
         },
