@@ -517,7 +517,7 @@ function createOmpFeatures(
       label: "Fast mode",
       description: "Use the model's priority service tier for lower latency.",
       tooltip: "Toggle fast mode.",
-      icon: "Zap",
+      icon: "zap",
       value: fastMode.enabled,
     });
   }

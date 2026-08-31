@@ -207,7 +207,12 @@ describe("OMP agent client and session", () => {
 
     expect(omp.features()).toEqual([
       expect.objectContaining({ id: "workflow_mode" }),
-      expect.objectContaining({ id: "fast_mode", type: "toggle", value: false }),
+      expect.objectContaining({
+        id: "fast_mode",
+        type: "toggle",
+        icon: "zap",
+        value: false,
+      }),
     ]);
 
     await omp.setFeature("fast_mode", true);
