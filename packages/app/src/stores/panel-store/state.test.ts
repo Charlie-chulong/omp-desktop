@@ -7,6 +7,7 @@ import {
 import {
   buildOpenFileExplorerPatch,
   buildToggleFileExplorerPatch,
+  DEFAULT_SIDEBAR_WIDTH,
   DEFAULT_TREE_RAIL_WIDTH,
   migratePanelState,
   selectIsAgentListOpen,
@@ -141,6 +142,13 @@ describe("panel-store migration", () => {
     expect(DEFAULT_TREE_RAIL_WIDTH).toBeLessThan(320);
     expect(migratePanelState({ treeRailWidth: 320 }, 15).treeRailWidth).toBe(
       DEFAULT_TREE_RAIL_WIDTH,
+    );
+  });
+
+  it("narrows an existing install's sidebar to the new default width", () => {
+    expect(DEFAULT_SIDEBAR_WIDTH).toBeLessThan(320);
+    expect(migratePanelState({ sidebarWidth: 320 }, 16).sidebarWidth).toBe(
+      DEFAULT_SIDEBAR_WIDTH,
     );
   });
 

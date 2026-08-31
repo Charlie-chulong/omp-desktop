@@ -20,22 +20,11 @@ import { StatusRing } from "@/components/status-ring";
 import { getStatusRingOffset } from "@/components/status-ring/geometry";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 
-// Every surfaced status shares one badge shell, so the badge never changes size or position
-// between states. Only the thing inside it changes.
-const STATUS_BADGE_SIZE = 12;
-// How far the badge overhangs the icon's bottom-right corner. Well short of half the badge:
-// centered on the corner it reads as hanging off the icon rather than sitting on it, and the
-// sidebar row has no padding there to absorb the overhang.
-const STATUS_BADGE_OFFSET = -4;
-// Both glyphs must be EVEN. A centered glyph of size N sits at a (12 - N) / 2 offset — fractional
-// for odd N, which the browser snaps to a device-pixel boundary and renders visibly off-center (an
-// odd size measured 1.5 device px right and down at 3x, ~3px of asymmetry between opposite gaps).
-// Even sizes divide the shell into whole pixels and land dead center with no correction.
-//
-// The filled alert occupies the full badge shell so needs-input remains more prominent than
-// the passive status dots.
-// Matches a project title (18pt) plus the 1pt group gap and 16pt git metadata line.
-const PROJECT_ICON_SIZE = 35;
+// Keep the project marker on the same 16px rail as Cursor's repository icon. Status remains a
+// small corner signal instead of increasing the row height.
+const STATUS_BADGE_SIZE = 8;
+const STATUS_BADGE_OFFSET = -2;
+const PROJECT_ICON_SIZE = 16;
 const LEADING_SLOT_HEIGHT = PROJECT_ICON_SIZE;
 
 const ThemedActivityIndicator = withUnistyles(ActivityIndicator);
@@ -193,7 +182,7 @@ function ProjectStatusBadge({
       testID="project-status-badge"
     >
       {content.kind === "alert" ? (
-        <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
+        <ThemedCircleAlert size={STATUS_BADGE_SIZE} uniProps={needsInputColorMapping} />
       ) : (
         <ProjectStatusDot bucket={content.bucket} />
       )}
@@ -283,7 +272,7 @@ const styles = StyleSheet.create((theme) => {
       height: PROJECT_ICON_SIZE,
     },
     projectIconFallbackText: {
-      fontSize: 19,
+      fontSize: 10,
     },
     // The shell the alert and dot statuses share. It straddles the icon's bottom-right corner
     // (half in, half out) so the lettered project box stays readable. The shell is a knockout:

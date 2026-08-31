@@ -152,11 +152,10 @@ describe("translation resources", () => {
   it("labels every Chinese new-workspace entry as a new conversation", () => {
     expect(zhCN.sidebar.actions.newWorkspace).toBe("新建对话");
     expect(zhCN.sidebar.workspace.actions.newWorkspace).toBe("新建对话");
-    expect(zhCN.sidebar.workspace.actions.createWorkspaceFor).toBe(
-      "为 {{projectName}} 新建对话",
-    );
+    expect(zhCN.sidebar.workspace.actions.createWorkspaceFor).toBe("为 {{projectName}} 新建对话");
     expect(zhCN.newWorkspace.title).toBe("新建对话");
     expect(zhCN.settings.shortcuts.help.newWorkspace).toBe("新建对话");
+    expect(zhCN.sidebar.sections.workspaces).toBe("项目列表");
   });
 
   it("keeps reported Spanish settings and scripts labels clean", () => {

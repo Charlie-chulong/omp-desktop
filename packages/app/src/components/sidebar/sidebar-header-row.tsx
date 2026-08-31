@@ -64,7 +64,7 @@ export function SidebarHeaderRow({
       return (
         <>
           <ThemedIcon
-            size={ICON_SIZE.sm}
+            size={ICON_SIZE.md}
             uniProps={isHighlighted ? foregroundColorMapping : foregroundMutedColorMapping}
           />
           <SidebarHeaderRowLabel label={label} isHighlighted={isHighlighted} />

@@ -501,7 +501,6 @@ const SidebarNewWorkspaceHeaderRow = memo(function SidebarNewWorkspaceHeaderRow(
   );
 });
 
-
 function SidebarQuotaValue({
   label,
   usedPct,
@@ -551,8 +550,7 @@ function SidebarAccountQuota() {
         : null,
     [activeWorkspace, layout],
   );
-  const serverId =
-    activeWorkspace?.serverId ?? lastWorkspace?.serverId ?? localServerId;
+  const serverId = activeWorkspace?.serverId ?? lastWorkspace?.serverId ?? localServerId;
   const agentId = focusedChat?.kind === "agent" ? focusedChat.agentId : null;
   const agent = useSessionStore(
     useShallow((state) => {
@@ -1103,10 +1101,9 @@ const staticStyles = RNStyleSheet.create({
 const styles = StyleSheet.create((theme) => ({
   sidebarHeaderGroup: {
     paddingTop: theme.spacing[2],
-    gap: 2,
-    paddingBottom: theme.spacing[1.5],
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    gap: 0,
+    paddingBottom: theme.spacing[2],
+    userSelect: "none",
   },
   sidebarHeaderGroupBelowChrome: {
     paddingTop: 0,
@@ -1126,7 +1123,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspacesSectionTitle: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
   },
   workspacesSectionActions: {

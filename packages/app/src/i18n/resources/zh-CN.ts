@@ -1161,7 +1161,7 @@ export const zhCN: TranslationResources = {
       appName: "OMP Desktop",
     },
     sections: {
-      workspaces: "工作区",
+      workspaces: "项目列表",
       sessions: "历史记录",
       schedules: "计划任务",
     },

@@ -21,8 +21,8 @@ export interface DesktopSidebarState {
 
 export type SortOption = "name" | "modified" | "size";
 
-export const DEFAULT_SIDEBAR_WIDTH = 320;
-export const MIN_SIDEBAR_WIDTH = 200;
+export const DEFAULT_SIDEBAR_WIDTH = 260;
+export const MIN_SIDEBAR_WIDTH = 220;
 export const MAX_SIDEBAR_WIDTH = 600;
 
 export const DEFAULT_TREE_RAIL_WIDTH = 260;
@@ -194,6 +194,16 @@ function migratePanelDesktopFocusMode(state: MigratablePanelState): void {
   }
 }
 
+// v17 narrows the sidebar to match the compact repository navigation. Existing installs may still
+// carry the former 320px default, so reset once while preserving the new value thereafter.
+function migrateSidebarWidth(state: MigratablePanelState, version: number): void {
+  if (version < 17 || typeof state.sidebarWidth !== "number") {
+    state.sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+    return;
+  }
+  state.sidebarWidth = clampSidebarWidth(state.sidebarWidth);
+}
+
 // v16 narrowed the rail. Existing installs almost all carry the old 320 default,
 // so the reset is what makes the narrower rail visible to anyone but a new user.
 function migrateTreeRailWidth(state: MigratablePanelState, version: number): void {
@@ -223,9 +233,7 @@ export function migratePanelState(persistedState: unknown, version: number): Mig
   if (version < 8) {
     migratePanelDesktopFocusMode(state);
   }
-  if (version < 6 || typeof state.sidebarWidth !== "number") {
-    state.sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
-  }
+  migrateSidebarWidth(state, version);
   if (
     version < 9 ||
     typeof state.expandedPathsByWorkspace !== "object" ||

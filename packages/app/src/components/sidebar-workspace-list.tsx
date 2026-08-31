@@ -39,14 +39,12 @@ import { type GestureType } from "react-native-gesture-handler";
 import * as Clipboard from "expo-clipboard";
 import {
   ExternalLink,
-  GitBranch,
   GitPullRequest,
   Settings,
   MoreVertical,
   Plus,
   Trash2,
 } from "lucide-react-native";
-import { DiffStat } from "@/components/diff-stat";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
@@ -168,7 +166,6 @@ const ThemedPlus = withUnistyles(Plus);
 const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedSettings = withUnistyles(Settings);
-const ThemedGitBranch = withUnistyles(GitBranch);
 
 const foregroundColorMapping = (theme: Theme) => ({
   color: theme.colors.foreground,
@@ -259,17 +256,12 @@ interface SidebarWorkspaceListProps {
   parentGestureRef?: MutableRefObject<GestureType | undefined>;
   dragGestureHostPresented?: boolean;
 }
-interface ProjectGitSummary {
-  currentBranch: string | null;
-  diffStat: SidebarWorkspaceEntry["diffStat"];
-}
 
 interface ProjectHeaderRowProps {
   project: SidebarProjectEntry;
   displayName: string;
   iconDataUri: string | null;
   statusBucket: SidebarStateBucket | null;
-  gitSummary: ProjectGitSummary | null;
   selected?: boolean;
   chevron: "expand" | "collapse" | null;
   onPress: () => void;
@@ -884,39 +876,11 @@ function NewWorkspaceGhostRow({
   );
 }
 
-function ProjectGitMeta({ summary }: { summary: ProjectGitSummary | null }) {
-  const rowItems = useSidebarRowItems();
-  const trailing = useSidebarWorkspaceTrailing();
-  const currentBranch = rowItems.branch ? (summary?.currentBranch ?? null) : null;
-  const diffStat = trailing === "diff" ? (summary?.diffStat ?? null) : null;
-
-  if (!currentBranch && !diffStat) {
-    return null;
-  }
-
-  return (
-    <View style={styles.projectGitMetaRow}>
-      {currentBranch ? (
-        <View style={styles.projectBranch}>
-          <ThemedGitBranch size={12} uniProps={foregroundMutedColorMapping} />
-          <Text style={styles.projectBranchText} numberOfLines={1}>
-            {currentBranch}
-          </Text>
-        </View>
-      ) : (
-        <View />
-      )}
-      {diffStat ? <DiffStat additions={diffStat.additions} deletions={diffStat.deletions} /> : null}
-    </View>
-  );
-}
-
 function ProjectHeaderRow({
   project,
   displayName,
   iconDataUri,
   statusBucket,
-  gitSummary,
   selected = false,
   chevron,
   onPress,
@@ -1023,7 +987,6 @@ function ProjectHeaderRow({
           <Text style={styles.projectTitle} numberOfLines={1}>
             {displayName}
           </Text>
-          <ProjectGitMeta summary={gitSummary} />
         </View>
       </View>
       <ProjectRowTrailingActions
@@ -1757,15 +1720,6 @@ function ProjectBlock({
     workspaces: project.workspaces,
     enabled: collapsed,
   });
-  const gitSummary = useMemo<ProjectGitSummary | null>(() => {
-    const activePlacement = project.workspaces.find(
-      (workspace) =>
-        workspace.serverId === activeWorkspaceSelection?.serverId &&
-        workspace.workspaceId === activeWorkspaceSelection.workspaceId,
-    );
-    const placement = activePlacement ?? project.workspaces[0];
-    return placement ? (workspaceEntriesByKey.get(placement.workspaceKey) ?? null) : null;
-  }, [activeWorkspaceSelection, project.workspaces, workspaceEntriesByKey]);
 
   const active = isProjectSelectedByRoute({
     selection: activeWorkspaceSelection,
@@ -1951,7 +1905,6 @@ function ProjectBlock({
         displayName={displayName}
         iconDataUri={iconDataUri}
         statusBucket={aggregateStatusBucket}
-        gitSummary={gitSummary}
         selected={false}
         chevron={rowModel.chevron}
         onPress={handleToggleCollapsed}
@@ -2509,7 +2462,7 @@ const styles = StyleSheet.create((theme) => ({
   // the rows underneath the header, so a collapsed project gives it back and a column of collapsed
   // headers closes up to the pitch of a list instead of staying spaced for content that is gone.
   projectBlockExpanded: {
-    paddingBottom: theme.spacing[3],
+    paddingBottom: theme.spacing[2],
   },
   workspaceListContainer: {},
   // Kept in step with `workspaceRow` above. It stands in a project's list where a workspace row
@@ -2519,12 +2472,12 @@ const styles = StyleSheet.create((theme) => ({
   // the step in reads as belonging to that project. Padding rather than margin, so the hover and
   // pressed fills stay the same box as every other row in the sidebar.
   newWorkspaceGhostRow: {
-    minHeight: 36,
-    marginBottom: theme.spacing[0.5],
-    paddingVertical: theme.spacing[2],
+    minHeight: 32,
+    marginBottom: 0,
+    paddingVertical: theme.spacing[1.5],
     paddingLeft: theme.spacing[4],
-    paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
+    paddingRight: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
@@ -2559,11 +2512,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   projectRow: {
     position: "relative",
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
+    minHeight: 32,
+    paddingVertical: theme.spacing[1.5],
     paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.lg,
-    marginBottom: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+    marginBottom: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2594,35 +2547,15 @@ const styles = StyleSheet.create((theme) => ({
   projectTitleGroup: {
     flex: 1,
     minWidth: 0,
-    gap: 1,
+    gap: 0,
   },
   projectTitle: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.lg,
+    fontSize: theme.fontSize.base,
+    lineHeight: 20,
     fontWeight: "400",
     minWidth: 0,
     flexShrink: 1,
-  },
-  projectGitMetaRow: {
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing[2],
-  },
-  projectBranch: {
-    minWidth: 0,
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-  },
-  projectBranchText: {
-    minWidth: 0,
-    flexShrink: 1,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-    lineHeight: 16,
   },
   projectActionButton: {
     flexDirection: "row",
@@ -2641,8 +2574,8 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
   },
   projectIconActionButton: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     borderRadius: theme.borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
@@ -2664,8 +2597,8 @@ const styles = StyleSheet.create((theme) => ({
     marginRight: -6,
   },
   projectKebabButton: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     borderRadius: theme.borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
@@ -2678,8 +2611,8 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface2,
   },
   projectTrailingControlSlot: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -2700,16 +2633,16 @@ const styles = StyleSheet.create((theme) => ({
     right: theme.spacing[2],
   },
   workspaceRow: {
-    minHeight: 36,
-    marginBottom: theme.spacing[0.5],
-    paddingVertical: theme.spacing[2],
+    minHeight: 32,
+    marginBottom: 0,
+    paddingVertical: theme.spacing[1],
     paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
+    paddingRight: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "center",
-    gap: theme.spacing[1],
+    gap: theme.spacing[0.5],
     userSelect: "none",
   },
   workspaceRowMain: {
