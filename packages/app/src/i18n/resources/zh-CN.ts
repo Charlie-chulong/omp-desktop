@@ -1034,6 +1034,8 @@ export const zhCN: TranslationResources = {
         signIn: "运行 {{command}} 以使用 {{brand}} 功能。",
         generic: "在此主机上设置 {{brand}} 以使用其功能。",
         nativeSignIn: "登录 {{brand}} 以使用仓库和 Pull Request 功能。",
+        oauthNotConfigured:
+          "此构建未配置 {{brand}} OAuth。请在 daemon 环境设置 PASEO_GITHUB_OAUTH_CLIENT_ID，然后重启 daemon。",
         signInButton: "登录 GitHub",
         deviceInstructions: "在 GitHub 授权页面输入此一次性代码。",
         copyCode: "复制代码",

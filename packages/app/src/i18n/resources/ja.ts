@@ -1046,6 +1046,8 @@ export const ja: TranslationResources = {
         signIn: "{{brand}} の機能を使うには {{command}} を実行してください。",
         generic: "このホストで {{brand}} をセットアップすると、その機能を使えます。",
         nativeSignIn: "{{brand}} にサインインして、リポジトリと Pull Request の機能を使用します。",
+        oauthNotConfigured:
+          "このビルドでは {{brand}} OAuth が設定されていません。daemon に PASEO_GITHUB_OAUTH_CLIENT_ID を設定して再起動してください。",
         signInButton: "GitHub にサインイン",
         deviceInstructions: "GitHub の認証ページでこのワンタイムコードを入力してください。",
         copyCode: "コードをコピー",

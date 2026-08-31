@@ -3596,6 +3596,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceGithubRepositorySearch: z.boolean().optional(),
         // COMPAT(githubNativeAuth): added in v0.3.X, remove after supported daemon floor includes it.
         githubNativeAuth: z.boolean().optional(),
+        // COMPAT(githubOAuthConfigured): cloud Device Flow requires a registered OAuth client.
+        githubOAuthConfigured: z.boolean().optional(),
         // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
         projectCreateDirectory: z.boolean().optional(),
         // COMPAT(projectList): added in v0.2.4, drop the gate when floor >= v0.2.4.

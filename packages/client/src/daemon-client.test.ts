@@ -3042,6 +3042,24 @@ test("runs native forge authentication through correlated RPCs", async () => {
     }),
   );
   await expect(logout).resolves.toMatchObject({ host: "github.com" });
+
+  const failedStart = client.startForgeLogin({ forge: "github" }, "forge-auth-error");
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "rpc_error",
+      payload: {
+        requestId: "forge-auth-error",
+        requestType: "forge.auth.login.start.request",
+        code: "forge_auth_login_start_failed",
+        error: "GitHub OAuth is not configured",
+      },
+    }),
+  );
+  await expect(failedStart).rejects.toMatchObject({
+    message: "GitHub OAuth is not configured",
+    requestType: "forge.auth.login.start.request",
+    code: "forge_auth_login_start_failed",
+  });
 });
 
 test("creates and registers a project directory through the dotted RPC", async () => {

@@ -111,6 +111,14 @@ describe("GitHubAuthManager", () => {
       apiBaseUrl: "https://github.acme.test/api/v3",
       webBaseUrl: "https://github.acme.test",
     });
+    expect(auth.isLoginConfigured("github.com")).toBe(true);
+    expect(auth.isLoginConfigured("github.acme.test")).toBe(true);
+    expect(
+      new GitHubAuthManager({
+        credentialStore: new MemoryGitHubCredentialStore(),
+        env: {},
+      }).isLoginConfigured("github.com"),
+    ).toBe(false);
   });
 
   it("refuses Enterprise API URLs that could receive a token for another host", () => {

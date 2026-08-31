@@ -1035,6 +1035,8 @@ export const ar: TranslationResources = {
         signIn: "نفّذ {{command}} لاستخدام ميزات {{brand}}.",
         generic: "قم بإعداد {{brand}} على هذا المضيف لاستخدام ميزاته.",
         nativeSignIn: "سجّل الدخول إلى {{brand}} لاستخدام المستودعات وطلبات السحب.",
+        oauthNotConfigured:
+          "لم يتم إعداد OAuth لـ {{brand}} في هذا الإصدار. عيّن PASEO_GITHUB_OAUTH_CLIENT_ID في daemon ثم أعد تشغيله.",
         signInButton: "تسجيل الدخول إلى GitHub",
         deviceInstructions: "أدخل هذا الرمز لمرة واحدة في صفحة تفويض GitHub.",
         copyCode: "نسخ الرمز",

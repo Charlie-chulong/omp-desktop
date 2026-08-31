@@ -227,6 +227,10 @@ export class GitHubAuthManager {
     return this.resolveHostConfig(host) !== null;
   }
 
+  isLoginConfigured(host: string): boolean {
+    return nonEmpty(this.resolveHostConfig(host)?.clientId) !== undefined;
+  }
+
   async getCredential(host: string): Promise<GitHubCredential | null> {
     const config = this.resolveHostConfig(host);
     if (!config) return null;
@@ -357,7 +361,7 @@ export class GitHubAuthManager {
     const clientId = nonEmpty(config.clientId);
     if (!clientId) {
       throw new GitHubAuthConfigurationError(
-        `GitHub OAuth is not configured for ${config.host}; set PASEO_GITHUB_OAUTH_CLIENT_ID`,
+        `GitHub OAuth is not configured for ${config.host}; configure github.clientId or set PASEO_GITHUB_OAUTH_CLIENT_ID`,
       );
     }
     return { ...config, clientId };

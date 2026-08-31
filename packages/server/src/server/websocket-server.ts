@@ -71,6 +71,7 @@ import {
   findLatestPermissionRequest,
 } from "@omp-desktop/protocol/agent-attention-notification";
 import { createGitHubService } from "../services/github-service.js";
+import type { GitHubService } from "../services/github-service.js";
 import type { ForgeService } from "../services/forge-service.js";
 import {
   extractWsBearerProtocol,
@@ -1739,6 +1740,8 @@ export class VoiceAssistantWebSocketServer {
         workspaceGithubRepositorySearch: true,
         // COMPAT(githubNativeAuth): native OAuth replaces the optional gh CLI dependency.
         githubNativeAuth: true,
+        githubOAuthConfigured:
+          (this.github as Partial<GitHubService>).isLoginConfigured?.("github.com") === true,
         // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
         projectCreateDirectory: true,
         // COMPAT(commitsList): added in v0.1.110, remove gate after 2027-01-16.

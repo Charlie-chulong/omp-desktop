@@ -1052,6 +1052,8 @@ export const en = {
         signIn: "Run {{command}} to use {{brand}} features.",
         generic: "Set up {{brand}} on this host to use its features.",
         nativeSignIn: "Sign in to {{brand}} to use repository and pull request features.",
+        oauthNotConfigured:
+          "{{brand}} OAuth is not configured in this build. Set PASEO_GITHUB_OAUTH_CLIENT_ID on the daemon and restart it.",
         signInButton: "Sign in to GitHub",
         deviceInstructions: "Enter this one-time code on the GitHub authorization page.",
         copyCode: "Copy code",

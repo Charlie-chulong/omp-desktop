@@ -1057,6 +1057,8 @@ export const ptBR: TranslationResources = {
         signIn: "Execute {{command}} para usar os recursos do {{brand}}.",
         generic: "Configure o {{brand}} neste host para usar seus recursos.",
         nativeSignIn: "Entre no {{brand}} para usar repositórios e pull requests.",
+        oauthNotConfigured:
+          "O OAuth do {{brand}} não está configurado nesta compilação. Defina PASEO_GITHUB_OAUTH_CLIENT_ID no daemon e reinicie-o.",
         signInButton: "Entrar no GitHub",
         deviceInstructions: "Digite este código de uso único na página de autorização do GitHub.",
         copyCode: "Copiar código",

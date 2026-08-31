@@ -206,6 +206,7 @@ describe("project command-center protocol", () => {
     expect(parsed.features?.projectGithubClone).toBeUndefined();
     expect(parsed.features?.projectCreateDirectory).toBeUndefined();
     expect(parsed.features?.githubNativeAuth).toBeUndefined();
+    expect(parsed.features?.githubOAuthConfigured).toBeUndefined();
   });
 
   it("parses the agent thinking update capability", () => {

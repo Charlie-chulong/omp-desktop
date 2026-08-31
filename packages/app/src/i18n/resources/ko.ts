@@ -1042,6 +1042,8 @@ export const ko: TranslationResources = {
         signIn: "{{brand}} 기능을 사용하려면 {{command}}를 실행하세요.",
         generic: "해당 기능을 사용하려면 이 호스트에 {{brand}}를 설정하세요.",
         nativeSignIn: "{{brand}}에 로그인하여 저장소 및 Pull Request 기능을 사용하세요.",
+        oauthNotConfigured:
+          "이 빌드에는 {{brand}} OAuth가 구성되어 있지 않습니다. daemon에 PASEO_GITHUB_OAUTH_CLIENT_ID를 설정한 후 다시 시작하세요.",
         signInButton: "GitHub에 로그인",
         deviceInstructions: "GitHub 인증 페이지에 이 일회용 코드를 입력하세요.",
         copyCode: "코드 복사",

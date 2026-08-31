@@ -981,6 +981,8 @@ describe("relay external socket reconnect behavior", () => {
     expect(serverInfo.features?.pluginLogs).toBe(true);
     expect(serverInfo.features?.["terminal-input-mode-replay"]).toBe(true);
     expect(serverInfo.features?.["terminal-size-ownership"]).toBe(true);
+    expect(serverInfo.features?.githubNativeAuth).toBe(true);
+    expect(serverInfo.features?.githubOAuthConfigured).toBe(false);
     expect(serverInfo.features?.agentTurnIdentity).toBeUndefined();
     await server.close();
   });

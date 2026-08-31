@@ -1066,6 +1066,8 @@ export const es: TranslationResources = {
         signIn: "Ejecuta {{command}} para usar las funciones de {{brand}}.",
         generic: "Configura {{brand}} en este host para usar sus funciones.",
         nativeSignIn: "Inicia sesión en {{brand}} para usar repositorios y pull requests.",
+        oauthNotConfigured:
+          "{{brand}} OAuth no está configurado en esta compilación. Define PASEO_GITHUB_OAUTH_CLIENT_ID en el daemon y reinícialo.",
         signInButton: "Iniciar sesión en GitHub",
         deviceInstructions:
           "Introduce este código de un solo uso en la página de autorización de GitHub.",

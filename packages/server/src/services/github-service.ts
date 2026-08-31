@@ -852,6 +852,7 @@ export interface SearchGitHubRepositoriesOptions {
 export interface GitHubService extends ForgeService {
   searchRepositories(options: SearchGitHubRepositoriesOptions): Promise<GitHubRepositorySummary[]>;
   isConfiguredHost(host: string): boolean;
+  isLoginConfigured(host: string): boolean;
   beginLogin(input: { cwd?: string; host?: string }): Promise<GitHubLoginStart>;
   finishLogin(flowId: string): Promise<GitHubLoginResult>;
   cancelLogin(flowId: string): void;
@@ -1655,6 +1656,10 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
 
     isConfiguredHost(host) {
       return clients.isConfiguredHost(host);
+    },
+
+    isLoginConfigured(host) {
+      return clients.isLoginConfigured(host);
     },
     retainCurrentPullRequestStatusPoll(input) {
       const key = getPollTargetKey(input);

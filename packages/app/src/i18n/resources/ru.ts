@@ -1057,6 +1057,8 @@ export const ru: TranslationResources = {
         signIn: "Выполните {{command}}, чтобы использовать возможности {{brand}}.",
         generic: "Настройте {{brand}} на этом хосте, чтобы использовать его функции.",
         nativeSignIn: "Войдите в {{brand}}, чтобы использовать репозитории и pull request.",
+        oauthNotConfigured:
+          "В этой сборке не настроен OAuth {{brand}}. Задайте PASEO_GITHUB_OAUTH_CLIENT_ID для daemon и перезапустите его.",
         signInButton: "Войти в GitHub",
         deviceInstructions: "Введите этот одноразовый код на странице авторизации GitHub.",
         copyCode: "Копировать код",

@@ -153,6 +153,10 @@ export class GitHubClientFactory {
     return this.#auth.isConfiguredHost(host);
   }
 
+  isLoginConfigured(host: string): boolean {
+    return this.#auth.isLoginConfigured(host);
+  }
+
   invalidate(host?: string): void {
     if (host) {
       this.#clients.delete(normalizeGitHubHost(host));

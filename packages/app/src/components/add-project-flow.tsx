@@ -330,6 +330,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   // COMPAT(workspaceGithubRepositorySearch): added in v0.1.108, remove gate after 2027-01-15.
   const githubSearchByHost = useHostFeatureMap(hostIds, "workspaceGithubRepositorySearch");
   const githubNativeAuthByHost = useHostFeatureMap(hostIds, "githubNativeAuth");
+  const githubOAuthConfiguredByHost = useHostFeatureMap(hostIds, "githubOAuthConfigured");
   // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
   const createDirectoryByHost = useHostFeatureMap(hostIds, "projectCreateDirectory");
   const localServerId = useLocalDaemonServerId();
@@ -838,10 +839,22 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     githubAvailable: currentGithubSearch?.available ?? null,
     githubError: currentGithubSearch?.error ?? null,
   });
+  const githubUnauthenticated =
+    page.kind === "github-search" && currentGithubSearch?.status === "unauthenticated";
   const githubNeedsAuth =
-    page.kind === "github-search" &&
-    currentGithubSearch?.status === "unauthenticated" &&
-    Boolean(hostId && githubNativeAuthByHost.get(hostId) === true);
+    githubUnauthenticated &&
+    Boolean(
+      hostId &&
+      githubNativeAuthByHost.get(hostId) === true &&
+      githubOAuthConfiguredByHost.get(hostId) === true,
+    );
+  const githubAuthSetupRequired =
+    githubUnauthenticated &&
+    Boolean(
+      hostId &&
+      githubNativeAuthByHost.get(hostId) === true &&
+      githubOAuthConfiguredByHost.get(hostId) !== true,
+    );
   const handleGithubAuthenticated = useCallback(async () => {
     await githubQuery.refetch();
   }, [githubQuery]);
@@ -930,6 +943,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
                 {page.error}
               </Text>
             ) : null}
+            {!isSubmitting && githubAuthSetupRequired ? (
+              <Text style={styles.stateText} testID="add-project-flow-github-oauth-setup">
+                {t("workspace.git.forgeSetup.oauthNotConfigured", { brand: "GitHub" })}
+              </Text>
+            ) : null}
             {!isSubmitting && githubNeedsAuth && hostId ? (
               <GitHubAuthCallout
                 serverId={hostId}
@@ -937,7 +955,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
                 onAuthenticated={handleGithubAuthenticated}
               />
             ) : null}
-            {!isSubmitting && queryError && !githubNeedsAuth ? (
+            {!isSubmitting && queryError && !githubNeedsAuth && !githubAuthSetupRequired ? (
               <Text style={styles.errorText} testID="add-project-flow-query-error">
                 {queryError}
               </Text>

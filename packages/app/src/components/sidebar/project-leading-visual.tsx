@@ -3,7 +3,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react-native";
 import { ProjectIconView } from "@/components/project-icon-view";
 import { STATUS_BUCKET_LABELS } from "@/hooks/sidebar-status-view-model";
-import { ICON_SIZE, type Theme } from "@/styles/theme";
+import type { Theme } from "@/styles/theme";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import {
   getProjectStatusBadgeContent,
@@ -34,9 +34,9 @@ const STATUS_BADGE_OFFSET = -4;
 //
 // The filled alert occupies the full badge shell so needs-input remains more prominent than
 // the passive status dots.
-// Matches the workspace title's lineHeight (sidebar-workspace-row-content's
-// workspaceBranchText) so the icon centers on the title rather than floating above it.
-const LEADING_SLOT_HEIGHT = 20;
+// Matches a project title (18pt) plus the 1pt group gap and 16pt git metadata line.
+const PROJECT_ICON_SIZE = 35;
+const LEADING_SLOT_HEIGHT = PROJECT_ICON_SIZE;
 
 const ThemedActivityIndicator = withUnistyles(ActivityIndicator);
 const ThemedCircleAlert = withUnistyles(CircleAlert);
@@ -232,7 +232,7 @@ function ProjectIcon({
       iconDataUri={iconDataUri}
       initial={placeholderInitial}
       projectViewKey={projectViewKey}
-      size={ICON_SIZE.lg}
+      size={PROJECT_ICON_SIZE}
       textStyle={styles.projectIconFallbackText}
     />
   );
@@ -268,10 +268,9 @@ const styles = StyleSheet.create((theme) => {
     }) as const;
 
   return {
-    // Match the 20pt title line so the icon stays centered with the title and kebab.
-    // Keep the workspace status indicator's height in step with this slot.
+    // The icon owns the full leading slot; increasing it expands the project row naturally.
     projectLeadingVisualSlot: {
-      width: theme.iconSize.lg,
+      width: PROJECT_ICON_SIZE,
       height: LEADING_SLOT_HEIGHT,
       flexShrink: 0,
       alignItems: "center",
@@ -280,11 +279,11 @@ const styles = StyleSheet.create((theme) => {
     // Anchors the corner badge to the icon rather than to the taller slot.
     projectIconBox: {
       position: "relative",
-      width: theme.iconSize.lg,
-      height: theme.iconSize.lg,
+      width: PROJECT_ICON_SIZE,
+      height: PROJECT_ICON_SIZE,
     },
     projectIconFallbackText: {
-      fontSize: 11,
+      fontSize: 19,
     },
     // The shell the alert and dot statuses share. It straddles the icon's bottom-right corner
     // (half in, half out) so the lettered project box stays readable. The shell is a knockout:
