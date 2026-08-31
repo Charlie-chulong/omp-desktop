@@ -222,9 +222,6 @@ export interface LightThemeConfig {
   foregroundExtraMuted: string;
   border: string;
   borderAccent: string;
-  accent: string;
-  accentBright: string;
-  accentForeground?: string;
   primary: string;
   primaryForeground: string;
   destructive: string;
@@ -270,14 +267,14 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
     border: tint.border,
     borderAccent: tint.borderAccent,
 
-    accent: tint.accent,
-    accentBright: tint.accentBright,
-    accentForeground: tint.accentForeground ?? tint.surface0,
+    accent: ompBrandColors.cyanOnLight,
+    accentBright: ompBrandColors.cyanOnLight,
+    accentForeground: baseColors.white,
 
     destructive: tint.destructive,
     destructiveForeground: tint.surface0,
-    success: tint.accent,
-    successForeground: tint.surface0,
+    success: lightStatusColors.statusSuccess,
+    successForeground: baseColors.white,
 
     background: tint.surface0,
     popover: tint.surface0,
@@ -323,9 +320,6 @@ const lightSemanticColors = buildLightSemanticColors({
   foregroundExtraMuted: "#a1a1aa",
   border: "#e4e4e7",
   borderAccent: "#ececf1",
-  accent: "#20744A",
-  accentBright: "#239956",
-  accentForeground: "#ffffff",
   primary: "#18181b",
   primaryForeground: "#fafafa",
   destructive: "#b04138",
@@ -350,9 +344,6 @@ export interface DarkThemeConfig {
   foregroundExtraMuted: string;
   border: string;
   borderAccent: string;
-  accent: string;
-  accentBright: string;
-  accentForeground?: string;
   destructive: string;
   terminalBlack: string;
   terminalBrightBlack: string;
@@ -399,14 +390,14 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
     border: tint.border,
     borderAccent: tint.borderAccent,
 
-    accent: tint.accent,
-    accentBright: tint.accentBright,
-    accentForeground: tint.accentForeground ?? "#ffffff",
+    accent: ompBrandColors.cyan,
+    accentBright: ompBrandColors.cyan,
+    accentForeground: baseColors.black,
 
     destructive: tint.destructive,
     destructiveForeground: "#ffffff",
-    success: tint.accent,
-    successForeground: "#ffffff",
+    success: darkStatusColors.statusSuccess,
+    successForeground: baseColors.black,
 
     // Legacy aliases (for gradual migration)
     background: tint.surface0,
@@ -457,8 +448,6 @@ const paseoDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#717574",
   border: "#252B2A",
   borderAccent: "#2F3534",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
   destructive: "#c64f43", // warm red, hue ~7 — reads as red (not pink) against the green tint
   terminalBlack: "#141716",
   terminalBrightBlack: "#434645",
@@ -477,9 +466,6 @@ const zincDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#71717a",
   border: "#27272a",
   borderAccent: "#303036",
-  accent: "#e4e4e7",
-  accentBright: "#fafafa",
-  accentForeground: "#18181b", // monochrome zinc accent is near-white — needs dark text
   destructive: "#c44a4a", // neutral red, hue 0 — clearly red without screaming
   terminalBlack: "#131316",
   terminalBrightBlack: "#3f3f46",
@@ -498,8 +484,6 @@ const midnightDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#6b6e82",
   border: "#242636",
   borderAccent: "#2e3040",
-  accent: "#3b6fcf",
-  accentBright: "#7eaaeb",
   destructive: "#c44a52", // red with a hint of cool lean against the blue tint
   terminalBlack: "#121420",
   terminalBrightBlack: "#3c3e4c",
@@ -518,9 +502,7 @@ const claudeDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#78746f",
   border: "#2c2a27",
   borderAccent: "#36332f",
-  accent: "#d97757",
-  accentBright: "#e89a7f",
-  destructive: "#cf513e", // warm orange-red, hue ~10 — sits with the Claude orange accent
+  destructive: "#cf513e", // warm orange-red that matches the warm surface family
   terminalBlack: "#1a1918",
   terminalBrightBlack: "#4a4745",
 });
@@ -538,8 +520,6 @@ const ghosttyDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#a0a4b2",
   border: "#353a47",
   borderAccent: "#3f4454",
-  accent: "#89b4fa",
-  accentBright: "#b4d0fc",
   destructive: "#c44a55", // red with slight cool lean against the slate-blue surfaces
   terminalBlack: "#21252d",
   terminalBrightBlack: "#4a4f5e",
@@ -711,8 +691,6 @@ const pureBlackDarkColors = buildDarkSemanticColors({
   foregroundExtraMuted: "#71717a",
   border: "#1c1c1c",
   borderAccent: "#242424",
-  accent: "#20744A",
-  accentBright: "#7ccba0",
   destructive: "#c44a4a",
   terminalBlack: "#595959",
   terminalBrightBlack: "#8a8a8a",

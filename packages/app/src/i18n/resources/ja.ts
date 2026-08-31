@@ -1041,6 +1041,13 @@ export const ja: TranslationResources = {
         installCli: "{{brand}} の機能を使うには {{cli}} CLI をインストールしてください。",
         signIn: "{{brand}} の機能を使うには {{command}} を実行してください。",
         generic: "このホストで {{brand}} をセットアップすると、その機能を使えます。",
+        nativeSignIn: "{{brand}} にサインインして、リポジトリと Pull Request の機能を使用します。",
+        signInButton: "GitHub にサインイン",
+        deviceInstructions: "GitHub の認証ページでこのワンタイムコードを入力してください。",
+        copyCode: "コードをコピー",
+        openAuthorization: "認証ページを開く",
+        codeCopied: "認証コードをコピーしました",
+        signedIn: "{{login}} としてサインインしました",
       },
     },
   },
@@ -1164,12 +1171,6 @@ export const ja: TranslationResources = {
       workspaces: "ワークスペース",
       sessions: "履歴",
       schedules: "スケジュール",
-    },
-    worktreeSetup: {
-      title: "ワークツリースクリプトを設定",
-      description:
-        "新しいワークツリーが依存関係をインストールして自動的に準備できるようにセットアップコマンドを追加してください。",
-      openProjectSettings: "プロジェクト設定を開く",
     },
     project: {
       actions: {

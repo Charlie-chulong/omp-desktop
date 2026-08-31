@@ -167,6 +167,35 @@ describe("combined model selector data", () => {
     ]);
   });
 
+  it("keeps stale models selectable and attaches a refresh error notice", () => {
+    expect(
+      buildSelectableProviderSelectorProviders([
+        snapshotEntry({
+          provider: "codex",
+          status: "error",
+          error: "network timeout",
+          models: [codexModel],
+        }),
+      ]),
+    ).toEqual([
+      {
+        id: "codex",
+        label: "codex",
+        modelSelection: {
+          kind: "models",
+          error: "network timeout",
+          rows: [
+            expect.objectContaining({
+              provider: "codex",
+              modelId: "gpt-5.4",
+              modelLabel: "GPT-5.4",
+            }),
+          ],
+        },
+      },
+    ]);
+  });
+
   it("builds selector providers from an already-curated provider list", () => {
     const providerDefinitions: AgentProviderDefinition[] = [
       {

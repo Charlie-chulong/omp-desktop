@@ -538,6 +538,17 @@ function resolveImageGenerationConfig(
   };
 }
 
+function resolveGitHubConfig(
+  env: NodeJS.ProcessEnv,
+  persisted: PersistedConfig,
+): NonNullable<PaseoDaemonConfig["github"]> {
+  return {
+    githubComClientId:
+      nonEmptyEnv(env.PASEO_GITHUB_OAUTH_CLIENT_ID) ?? persisted.github?.clientId,
+    hosts: persisted.github?.hosts,
+  };
+}
+
 /**
  * Both profile lists stay `undefined` when absent rather than defaulting to an
  * empty array: for terminal profiles that is what selects the built-in
@@ -663,6 +674,7 @@ export function resolveConfigFromPersisted(
     webUi,
     appBaseUrl,
     auth: resolveAuthConfig(env, persisted),
+    github: resolveGitHubConfig(env, persisted),
     openai,
     speech,
     imageGeneration,

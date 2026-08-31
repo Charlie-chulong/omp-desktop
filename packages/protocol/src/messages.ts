@@ -2439,6 +2439,34 @@ export const ForgeSearchRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const ForgeAuthLoginStartRequestSchema = z.object({
+  type: z.literal("forge.auth.login.start.request"),
+  forge: z.string().trim().min(1),
+  cwd: z.string().optional(),
+  host: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const ForgeAuthLoginFinishRequestSchema = z.object({
+  type: z.literal("forge.auth.login.finish.request"),
+  flowId: z.string().min(1),
+  requestId: z.string(),
+});
+
+export const ForgeAuthLoginCancelRequestSchema = z.object({
+  type: z.literal("forge.auth.login.cancel.request"),
+  flowId: z.string().min(1),
+  requestId: z.string(),
+});
+
+export const ForgeAuthLogoutRequestSchema = z.object({
+  type: z.literal("forge.auth.logout.request"),
+  forge: z.string().trim().min(1),
+  cwd: z.string().optional(),
+  host: z.string().optional(),
+  requestId: z.string(),
+});
+
 // COMPAT(githubSearchRpc): added in v0.1.106, remove after 2026-12-28 once
 // clients use forge.search.*.
 export const GitHubSearchRequestSchema = z.object({
@@ -3227,6 +3255,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   BranchSuggestionsRequestSchema,
   ForgeSearchRequestSchema,
   GitHubSearchRequestSchema,
+  ForgeAuthLoginStartRequestSchema,
+  ForgeAuthLoginFinishRequestSchema,
+  ForgeAuthLoginCancelRequestSchema,
+  ForgeAuthLogoutRequestSchema,
   DirectorySuggestionsRequestSchema,
   DirectoryExistsRequestSchema,
   PaseoWorktreeListRequestSchema,
@@ -3556,6 +3588,8 @@ export const ServerInfoStatusPayloadSchema = z
         projectGithubClone: z.boolean().optional(),
         // COMPAT(workspaceGithubRepositorySearch): added in v0.1.108, remove gate after 2027-01-15.
         workspaceGithubRepositorySearch: z.boolean().optional(),
+        // COMPAT(githubNativeAuth): added in v0.3.X, remove after supported daemon floor includes it.
+        githubNativeAuth: z.boolean().optional(),
         // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
         projectCreateDirectory: z.boolean().optional(),
         // COMPAT(projectList): added in v0.2.4, drop the gate when floor >= v0.2.4.
@@ -5586,6 +5620,48 @@ export const GitHubSearchResponseSchema = z.object({
   payload: GitHubSearchResponsePayloadSchema,
 });
 
+export const ForgeAuthLoginStartResponseSchema = z.object({
+  type: z.literal("forge.auth.login.start.response"),
+  payload: z.object({
+    requestId: z.string(),
+    flowId: z.string(),
+    forge: z.string(),
+    host: z.string(),
+    verificationUri: z.url(),
+    userCode: z.string(),
+    expiresAt: z.string(),
+  }),
+});
+
+export const ForgeAuthLoginFinishResponseSchema = z.object({
+  type: z.literal("forge.auth.login.finish.response"),
+  payload: z.object({
+    requestId: z.string(),
+    forge: z.string(),
+    host: z.string(),
+    userId: z.number().int().positive(),
+    login: z.string(),
+    scopes: z.array(z.string()),
+  }),
+});
+
+export const ForgeAuthLoginCancelResponseSchema = z.object({
+  type: z.literal("forge.auth.login.cancel.response"),
+  payload: z.object({
+    requestId: z.string(),
+    cancelled: z.literal(true),
+  }),
+});
+
+export const ForgeAuthLogoutResponseSchema = z.object({
+  type: z.literal("forge.auth.logout.response"),
+  payload: z.object({
+    requestId: z.string(),
+    forge: z.string(),
+    host: z.string(),
+  }),
+});
+
 export const DirectorySuggestionsResponseSchema = z.object({
   type: z.literal("directory_suggestions_response"),
   payload: z.object({
@@ -6587,6 +6663,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   BranchSuggestionsResponseSchema,
   ForgeSearchResponseSchema,
   GitHubSearchResponseSchema,
+  ForgeAuthLoginStartResponseSchema,
+  ForgeAuthLoginFinishResponseSchema,
+  ForgeAuthLoginCancelResponseSchema,
+  ForgeAuthLogoutResponseSchema,
   DirectorySuggestionsResponseSchema,
   DirectoryExistsResponseSchema,
   PaseoWorktreeListResponseSchema,
@@ -7055,6 +7135,14 @@ export type ForgeSearchItem = z.infer<typeof ForgeSearchItemSchema>;
 export type ForgeSearchKind = "issue" | "change_request";
 export type ForgeSearchRequest = z.infer<typeof ForgeSearchRequestSchema>;
 export type ForgeSearchResponse = z.infer<typeof ForgeSearchResponseSchema>;
+export type ForgeAuthLoginStartRequest = z.infer<typeof ForgeAuthLoginStartRequestSchema>;
+export type ForgeAuthLoginFinishRequest = z.infer<typeof ForgeAuthLoginFinishRequestSchema>;
+export type ForgeAuthLoginCancelRequest = z.infer<typeof ForgeAuthLoginCancelRequestSchema>;
+export type ForgeAuthLogoutRequest = z.infer<typeof ForgeAuthLogoutRequestSchema>;
+export type ForgeAuthLoginStartResponse = z.infer<typeof ForgeAuthLoginStartResponseSchema>;
+export type ForgeAuthLoginFinishResponse = z.infer<typeof ForgeAuthLoginFinishResponseSchema>;
+export type ForgeAuthLoginCancelResponse = z.infer<typeof ForgeAuthLoginCancelResponseSchema>;
+export type ForgeAuthLogoutResponse = z.infer<typeof ForgeAuthLogoutResponseSchema>;
 export type GitHubSearchItem = z.infer<typeof GitHubSearchItemSchema>;
 export type GitHubSearchKind = z.infer<typeof GitHubSearchKindSchema>;
 export type GitHubSearchRequest = z.infer<typeof GitHubSearchRequestSchema>;

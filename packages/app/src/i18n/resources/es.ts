@@ -1061,6 +1061,14 @@ export const es: TranslationResources = {
         installCli: "Instala la CLI de {{cli}} para usar las funciones de {{brand}}.",
         signIn: "Ejecuta {{command}} para usar las funciones de {{brand}}.",
         generic: "Configura {{brand}} en este host para usar sus funciones.",
+        nativeSignIn: "Inicia sesión en {{brand}} para usar repositorios y pull requests.",
+        signInButton: "Iniciar sesión en GitHub",
+        deviceInstructions:
+          "Introduce este código de un solo uso en la página de autorización de GitHub.",
+        copyCode: "Copiar código",
+        openAuthorization: "Abrir página de autorización",
+        codeCopied: "Código de autorización copiado",
+        signedIn: "Sesión iniciada como {{login}}",
       },
     },
   },
@@ -1186,12 +1194,6 @@ export const es: TranslationResources = {
       workspaces: "Espacios de trabajo",
       sessions: "Historial",
       schedules: "Horarios",
-    },
-    worktreeSetup: {
-      title: "Configurar secuencias de comandos del árbol de trabajo",
-      description:
-        "Agregue comandos de configuración para que los nuevos árboles de trabajo puedan instalar dependencias y prepararse automáticamente.",
-      openProjectSettings: "Abrir la configuración del proyecto",
     },
     project: {
       actions: {

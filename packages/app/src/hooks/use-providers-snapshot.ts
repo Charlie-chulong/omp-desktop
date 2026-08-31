@@ -15,7 +15,9 @@ import {
 } from "@/data/provider-snapshot-cache";
 import { agentCommandsQueryRoot } from "@/hooks/agent-commands-query";
 import {
+  isProvidersSnapshotCacheable,
   isProvidersSnapshotHomeScope,
+  mergeProvidersSnapshotHistory,
   normalizeProvidersSnapshotCwd,
   providersSnapshotQueryKey,
   providersSnapshotQueryRoot,
@@ -49,7 +51,12 @@ export async function fetchProvidersSnapshot(input: {
     }
     return { ...snapshot, entries: cached.entries };
   }
-  if (snapshot.compactSnapshot && snapshot.snapshotHash) {
+  const entries = mergeProvidersSnapshotHistory(snapshot.entries, cached?.entries);
+  if (
+    snapshot.compactSnapshot &&
+    snapshot.snapshotHash &&
+    isProvidersSnapshotCacheable(snapshot.entries)
+  ) {
     await cache.write({
       serverId: input.serverId,
       cwd: input.cwd,
@@ -58,7 +65,7 @@ export async function fetchProvidersSnapshot(input: {
       compactSnapshot: snapshot.compactSnapshot,
     });
   }
-  return snapshot;
+  return { ...snapshot, entries };
 }
 
 export async function refreshAndApplyProvidersSnapshot(input: {

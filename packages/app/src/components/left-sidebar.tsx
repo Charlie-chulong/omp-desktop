@@ -47,7 +47,6 @@ import {
   type SidebarWorkspaceEntry,
 } from "@/hooks/use-sidebar-workspaces-list";
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
-import type { PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
@@ -83,7 +82,6 @@ interface SidebarSharedProps {
   theme: SidebarTheme;
   workspaceGroups: SidebarWorkspaceGroup[];
   projectIconTargets: SidebarProjectIconTarget[];
-  pinnedGroups: PinnedSidebarGroups;
   projects: SidebarProjectEntry[];
   hasProjectsBeforeFilter: boolean;
   hasActiveProjectFilter: boolean;
@@ -149,7 +147,6 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     refreshAll,
     workspaceGroups,
     projectIconTargets,
-    pinnedGroups,
     collapsedProjectKeys,
     toggleProjectCollapsed,
     groupMode,
@@ -277,7 +274,6 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     theme,
     workspaceGroups,
     projectIconTargets,
-    pinnedGroups,
     projects,
     hasProjectsBeforeFilter,
     hasActiveProjectFilter: resolvedProjectFilters.length > 0,
@@ -544,7 +540,6 @@ function MobileSidebar({
   theme,
   workspaceGroups,
   projectIconTargets,
-  pinnedGroups,
   projects,
   hasProjectsBeforeFilter,
   hasActiveProjectFilter,
@@ -671,7 +666,6 @@ function MobileSidebar({
             groupMode={groupMode}
             workspaceGroups={workspaceGroups}
             projectIconTargets={projectIconTargets}
-            pinnedGroups={pinnedGroups}
             projects={projects}
             hasProjectsBeforeFilter={hasProjectsBeforeFilter}
             hasActiveProjectFilter={hasActiveProjectFilter}
@@ -702,7 +696,6 @@ function DesktopSidebar({
   theme,
   workspaceGroups,
   projectIconTargets,
-  pinnedGroups,
   projects,
   hasProjectsBeforeFilter,
   hasActiveProjectFilter,
@@ -884,7 +877,6 @@ function DesktopSidebar({
             groupMode={groupMode}
             workspaceGroups={workspaceGroups}
             projectIconTargets={projectIconTargets}
-            pinnedGroups={pinnedGroups}
             projects={projects}
             hasProjectsBeforeFilter={hasProjectsBeforeFilter}
             hasActiveProjectFilter={hasActiveProjectFilter}

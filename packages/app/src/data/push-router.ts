@@ -4,12 +4,15 @@ import type {
   MutableDaemonConfig,
   SessionOutboundMessage,
 } from "@omp-desktop/protocol/messages";
+import type { ProviderSnapshotEntry } from "@omp-desktop/protocol/agent-types";
 import { agentCommandsQueryRoot } from "@/hooks/agent-commands-query";
 import { orderCheckoutDiffFiles } from "@/git/diff-order";
 import { daemonConfigQueryKey } from "@/data/daemon-config";
 import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { providerSnapshotCache, type ProviderSnapshotCache } from "@/data/provider-snapshot-cache";
 import {
+  isProvidersSnapshotCacheable,
+  mergeProvidersSnapshotHistory,
   normalizeProvidersSnapshotCwd,
   providersSnapshotQueryKey,
   providersSnapshotQueryRoot,
@@ -195,13 +198,20 @@ export function applyProvidersSnapshotUpdate(input: {
     return;
   }
   const queryKey = providersSnapshotQueryKey(input.serverId, input.message.payload.cwd);
-  input.queryClient.setQueryData(queryKey, {
-    entries: input.message.payload.entries,
-    generatedAt: input.message.payload.generatedAt,
-    requestId: "providers_snapshot_update",
-  });
+  input.queryClient.setQueryData(
+    queryKey,
+    (previous: { entries?: ProviderSnapshotEntry[] } | undefined) => ({
+      entries: mergeProvidersSnapshotHistory(input.message.payload.entries, previous?.entries),
+      generatedAt: input.message.payload.generatedAt,
+      requestId: "providers_snapshot_update",
+    }),
+  );
   const { compactSnapshot, snapshotHash } = input.message.payload;
-  if (compactSnapshot && snapshotHash) {
+  if (
+    compactSnapshot &&
+    snapshotHash &&
+    isProvidersSnapshotCacheable(input.message.payload.entries)
+  ) {
     void (input.cache ?? providerSnapshotCache).write({
       serverId: input.serverId,
       cwd: normalizeProvidersSnapshotCwd(input.message.payload.cwd),

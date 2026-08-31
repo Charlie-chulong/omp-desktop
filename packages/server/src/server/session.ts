@@ -213,10 +213,9 @@ import { ScheduleService } from "./schedule/service.js";
 import {
   createGitHubService,
   GitHubAuthenticationError,
-  GitHubCliMissingError,
-  GitHubCommandError,
-  type GitHubService,
+  GitHubHostNotConfiguredError,
 } from "../services/github-service.js";
+import type { GitHubService } from "../services/github-service.js";
 import type { ForgeService } from "../services/forge-service.js";
 import type { ProviderUsageService } from "../services/quota-fetcher/service.js";
 import {
@@ -2375,6 +2374,14 @@ export class Session {
       case "forge.search.request":
       case "github_search_request":
         return this.checkoutSession.handleForgeSearchRequest(msg);
+      case "forge.auth.login.start.request":
+        return this.handleForgeAuthLoginStartRequest(msg);
+      case "forge.auth.login.finish.request":
+        return this.handleForgeAuthLoginFinishRequest(msg);
+      case "forge.auth.login.cancel.request":
+        return this.handleForgeAuthLoginCancelRequest(msg);
+      case "forge.auth.logout.request":
+        return this.handleForgeAuthLogoutRequest(msg);
       case "stash_save_request":
         return this.checkoutSession.handleStashSaveRequest(msg);
       case "stash_pop_request":
@@ -6225,6 +6232,121 @@ export class Session {
     }
   }
 
+  private requireGitHubAuthService(): GitHubService {
+    const service = this.github as Partial<GitHubService>;
+    if (!service.beginLogin || !service.finishLogin || !service.cancelLogin || !service.logout) {
+      throw new Error("Native GitHub authentication is unavailable");
+    }
+    return service as GitHubService;
+  }
+
+  private emitForgeAuthError(input: {
+    requestId: string;
+    requestType: string;
+    code: string;
+    error: unknown;
+  }): void {
+    const error = input.error instanceof Error ? input.error : new Error(String(input.error));
+    this.sessionLogger.warn({ err: error }, "Forge authentication request failed");
+    this.emit({
+      type: "rpc_error",
+      payload: {
+        requestId: input.requestId,
+        requestType: input.requestType,
+        error: error.message,
+        code: input.code,
+      },
+    });
+  }
+
+  private async handleForgeAuthLoginStartRequest(
+    request: Extract<SessionInboundMessage, { type: "forge.auth.login.start.request" }>,
+  ): Promise<void> {
+    try {
+      if (request.forge !== "github") {
+        throw new Error(`Native authentication is not supported for ${request.forge}`);
+      }
+      const flow = await this.requireGitHubAuthService().beginLogin({
+        cwd: request.cwd,
+        host: request.host,
+      });
+      this.emit({
+        type: "forge.auth.login.start.response",
+        payload: { ...flow, forge: "github", requestId: request.requestId },
+      });
+    } catch (error) {
+      this.emitForgeAuthError({
+        requestId: request.requestId,
+        requestType: request.type,
+        code: "forge_auth_login_start_failed",
+        error,
+      });
+    }
+  }
+
+  private async handleForgeAuthLoginFinishRequest(
+    request: Extract<SessionInboundMessage, { type: "forge.auth.login.finish.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.requireGitHubAuthService().finishLogin(request.flowId);
+      this.emit({
+        type: "forge.auth.login.finish.response",
+        payload: { ...result, forge: "github", requestId: request.requestId },
+      });
+    } catch (error) {
+      this.emitForgeAuthError({
+        requestId: request.requestId,
+        requestType: request.type,
+        code: "forge_auth_login_finish_failed",
+        error,
+      });
+    }
+  }
+
+  private async handleForgeAuthLoginCancelRequest(
+    request: Extract<SessionInboundMessage, { type: "forge.auth.login.cancel.request" }>,
+  ): Promise<void> {
+    try {
+      this.requireGitHubAuthService().cancelLogin(request.flowId);
+      this.emit({
+        type: "forge.auth.login.cancel.response",
+        payload: { requestId: request.requestId, cancelled: true },
+      });
+    } catch (error) {
+      this.emitForgeAuthError({
+        requestId: request.requestId,
+        requestType: request.type,
+        code: "forge_auth_login_cancel_failed",
+        error,
+      });
+    }
+  }
+
+  private async handleForgeAuthLogoutRequest(
+    request: Extract<SessionInboundMessage, { type: "forge.auth.logout.request" }>,
+  ): Promise<void> {
+    try {
+      if (request.forge !== "github") {
+        throw new Error(`Native authentication is not supported for ${request.forge}`);
+      }
+      const host = await this.requireGitHubAuthService().logout({
+        cwd: request.cwd,
+        host: request.host,
+      });
+      this.emit({
+        type: "forge.auth.logout.response",
+        payload: { forge: "github", host, requestId: request.requestId },
+      });
+    } catch (error) {
+      this.emitForgeAuthError({
+        requestId: request.requestId,
+        requestType: request.type,
+        code: "forge_auth_logout_failed",
+        error,
+      });
+    }
+  }
+
   private async handleWorkspaceGithubSearchRepositoriesRequest(
     request: Extract<
       SessionInboundMessage,
@@ -6252,46 +6374,29 @@ export class Session {
         },
       });
     } catch (error) {
-      const missing = error instanceof GitHubCliMissingError;
-      const unauthenticated = error instanceof GitHubAuthenticationError;
-      const commandError = error instanceof GitHubCommandError ? error.stderr.trim() : "";
-      let message: string;
-      if (missing) {
-        message = "GitHub CLI (gh) is not installed or not in PATH";
-      } else if (unauthenticated) {
-        message = "GitHub CLI is not authenticated. Run gh auth login on the host.";
-      } else if (commandError) {
-        message = commandError;
-      } else {
-        message = error instanceof Error ? error.message : "GitHub search failed";
-      }
-      let payload: WorkspaceGithubSearchRepositoriesResponsePayload;
-      if (missing) {
-        payload = {
-          status: "unavailable",
-          requestId: request.requestId,
-          repositories: [],
-          reason: "gh_missing",
-          available: false,
-          error: message,
-        };
-      } else if (unauthenticated) {
-        payload = {
-          status: "unauthenticated",
-          requestId: request.requestId,
-          repositories: [],
-          available: false,
-          error: message,
-        };
-      } else {
-        payload = {
-          status: "error",
-          requestId: request.requestId,
-          repositories: [],
-          available: true,
-          error: message,
-        };
-      }
+      const unauthenticated =
+        error instanceof GitHubAuthenticationError || error instanceof GitHubHostNotConfiguredError;
+      const message =
+        error instanceof GitHubAuthenticationError
+          ? error.stderr
+          : error instanceof Error
+            ? error.message
+            : "GitHub search failed";
+      const payload: WorkspaceGithubSearchRepositoriesResponsePayload = unauthenticated
+        ? {
+            status: "unauthenticated",
+            requestId: request.requestId,
+            repositories: [],
+            available: false,
+            error: message,
+          }
+        : {
+            status: "error",
+            requestId: request.requestId,
+            repositories: [],
+            available: true,
+            error: message,
+          };
       this.sessionLogger.warn({ err: error }, "GitHub repository search failed");
       this.emit({
         type: "workspace.github.search_repositories.response",

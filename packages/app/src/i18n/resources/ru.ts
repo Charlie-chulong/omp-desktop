@@ -1045,6 +1045,13 @@ export const ru: TranslationResources = {
         installCli: "Установите CLI {{cli}}, чтобы использовать возможности {{brand}}.",
         signIn: "Выполните {{command}}, чтобы использовать возможности {{brand}}.",
         generic: "Настройте {{brand}} на этом хосте, чтобы использовать его функции.",
+        nativeSignIn: "Войдите в {{brand}}, чтобы использовать репозитории и pull request.",
+        signInButton: "Войти в GitHub",
+        deviceInstructions: "Введите этот одноразовый код на странице авторизации GitHub.",
+        copyCode: "Копировать код",
+        openAuthorization: "Открыть страницу авторизации",
+        codeCopied: "Код авторизации скопирован",
+        signedIn: "Выполнен вход как {{login}}",
       },
     },
   },
@@ -1168,12 +1175,6 @@ export const ru: TranslationResources = {
       workspaces: "Рабочие пространства",
       sessions: "История",
       schedules: "Расписания",
-    },
-    worktreeSetup: {
-      title: "Настроить скрипты worktree",
-      description:
-        "Добавьте команды настройки для автоматической установки зависимостей и подготовки новых worktree.",
-      openProjectSettings: "Открыть настройки проекта",
     },
     project: {
       actions: {

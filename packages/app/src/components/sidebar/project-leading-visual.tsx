@@ -232,7 +232,7 @@ function ProjectIcon({
       iconDataUri={iconDataUri}
       initial={placeholderInitial}
       projectViewKey={projectViewKey}
-      size={ICON_SIZE.md}
+      size={ICON_SIZE.lg}
       textStyle={styles.projectIconFallbackText}
     />
   );
@@ -268,12 +268,10 @@ const styles = StyleSheet.create((theme) => {
     }) as const;
 
   return {
-    // The slot is as tall as the title's line box, not as tall as the icon, and centers the
-    // icon inside it. Rows lay their leading visual out with alignItems:flex-start, so a
-    // 16pt slot next to a 20pt line box puts the icon 2pt above the title and the kebab —
-    // which is why the workspace status indicator is also 20 tall. Keep the two in step.
+    // Match the 20pt title line so the icon stays centered with the title and kebab.
+    // Keep the workspace status indicator's height in step with this slot.
     projectLeadingVisualSlot: {
-      width: theme.iconSize.md,
+      width: theme.iconSize.lg,
       height: LEADING_SLOT_HEIGHT,
       flexShrink: 0,
       alignItems: "center",
@@ -282,11 +280,11 @@ const styles = StyleSheet.create((theme) => {
     // Anchors the corner badge to the icon rather than to the taller slot.
     projectIconBox: {
       position: "relative",
-      width: theme.iconSize.md,
-      height: theme.iconSize.md,
+      width: theme.iconSize.lg,
+      height: theme.iconSize.lg,
     },
     projectIconFallbackText: {
-      fontSize: 9,
+      fontSize: 11,
     },
     // The shell the alert and dot statuses share. It straddles the icon's bottom-right corner
     // (half in, half out) so the lettered project box stays readable. The shell is a knockout:

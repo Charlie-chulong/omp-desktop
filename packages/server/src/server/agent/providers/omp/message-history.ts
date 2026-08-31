@@ -28,6 +28,11 @@ export interface OmpHistoryMapperHooks {
     result: OmpToolResult,
     context: { toolCallId: string },
   ) => ToolCallDetail | null;
+  mapToolResult?: (
+    toolCall: OmpTrackedToolCall,
+    result: OmpToolResult,
+    context: { toolCallId: string },
+  ) => AgentTimelineItem | null;
 }
 
 function isTextContentBlock(block: unknown): block is OmpTextContent {
@@ -192,6 +197,16 @@ export class OmpHistoryMapper {
       this.pendingToolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
     this.pendingToolCalls.delete(message.toolCallId);
     const result = parseToolResult({ content: message.content, details: message.details });
+    const mappedResult = this.hooks.mapToolResult?.(tracked, result, {
+      toolCallId: message.toolCallId,
+    });
+    if (mappedResult) {
+      return {
+        type: "timeline",
+        provider: this.provider,
+        item: mappedResult,
+      };
+    }
     const detail = this.mapToolDetail(message.toolCallId, tracked, result);
     if (!detail) {
       return null;

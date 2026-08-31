@@ -80,6 +80,44 @@ describe("project command-center protocol", () => {
     ).toBe(true);
   });
 
+  it("parses native forge device authorization requests and responses", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "forge.auth.login.start.request",
+        forge: "github",
+        cwd: "/repo",
+        requestId: "auth-start",
+      }),
+    ).toMatchObject({ forge: "github", cwd: "/repo" });
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "forge.auth.login.start.response",
+        payload: {
+          requestId: "auth-start",
+          flowId: "flow-1",
+          forge: "github",
+          host: "github.com",
+          verificationUri: "https://github.com/login/device",
+          userCode: "ABCD-EFGH",
+          expiresAt: "2026-08-27T00:15:00.000Z",
+        },
+      }).payload,
+    ).toMatchObject({ flowId: "flow-1", userCode: "ABCD-EFGH" });
+    expect(
+      SessionOutboundMessageSchema.safeParse({
+        type: "forge.auth.login.finish.response",
+        payload: {
+          requestId: "auth-finish",
+          forge: "github",
+          host: "github.com",
+          userId: 42,
+          login: "octocat",
+          scopes: ["repo"],
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it("parses atomic project directory creation request and response", () => {
     expect(
       SessionInboundMessageSchema.safeParse({
@@ -167,6 +205,7 @@ describe("project command-center protocol", () => {
     expect(parsed.features?.workspaceGithubRepositorySearch).toBeUndefined();
     expect(parsed.features?.projectGithubClone).toBeUndefined();
     expect(parsed.features?.projectCreateDirectory).toBeUndefined();
+    expect(parsed.features?.githubNativeAuth).toBeUndefined();
   });
 
   it("parses the agent thinking update capability", () => {

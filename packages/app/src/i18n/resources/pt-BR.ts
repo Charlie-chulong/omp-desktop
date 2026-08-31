@@ -1052,6 +1052,13 @@ export const ptBR: TranslationResources = {
         installCli: "Instale a CLI {{cli}} para usar os recursos do {{brand}}.",
         signIn: "Execute {{command}} para usar os recursos do {{brand}}.",
         generic: "Configure o {{brand}} neste host para usar seus recursos.",
+        nativeSignIn: "Entre no {{brand}} para usar repositórios e pull requests.",
+        signInButton: "Entrar no GitHub",
+        deviceInstructions: "Digite este código de uso único na página de autorização do GitHub.",
+        copyCode: "Copiar código",
+        openAuthorization: "Abrir página de autorização",
+        codeCopied: "Código de autorização copiado",
+        signedIn: "Conectado como {{login}}",
       },
     },
   },
@@ -1177,12 +1184,6 @@ export const ptBR: TranslationResources = {
       workspaces: "Espaços de trabalho",
       sessions: "Histórico",
       schedules: "Agendamentos",
-    },
-    worktreeSetup: {
-      title: "Configurar scripts de worktree",
-      description:
-        "Adicione comandos de configuração para que novos worktrees instalem dependências e se preparem automaticamente.",
-      openProjectSettings: "Abrir configurações do projeto",
     },
     project: {
       actions: {

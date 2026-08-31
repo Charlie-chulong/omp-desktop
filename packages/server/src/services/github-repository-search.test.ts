@@ -1,134 +1,111 @@
-import { describe, expect, it } from "vitest";
-import {
-  createGitHubService,
-  type GitHubCommandRunner,
-  type GitHubCommandRunnerOptions,
-} from "./github-service.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { GitHubAuthManager, MemoryGitHubCredentialStore } from "./github-auth.js";
+import { createGitHubService } from "./github-service.js";
 
-interface RunnerCall {
-  args: string[];
-  options: GitHubCommandRunnerOptions;
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  globalThis.fetch = originalFetch;
+});
+
+async function createAuthenticatedService(fetch: typeof globalThis.fetch) {
+  const store = new MemoryGitHubCredentialStore();
+  await store.set({
+    version: 1,
+    host: "github.com",
+    token: "token",
+    userId: 1,
+    login: "octocat",
+    scopes: ["repo"],
+  });
+  globalThis.fetch = fetch;
+  return createGitHubService({
+    authManager: new GitHubAuthManager({
+      config: { githubComClientId: "client" },
+      credentialStore: store,
+      env: {},
+    }),
+  });
 }
 
-function createRunner(outputs: string[]): { calls: RunnerCall[]; runner: GitHubCommandRunner } {
-  const calls: RunnerCall[] = [];
-  return {
-    calls,
-    runner: async (args, options) => {
-      calls.push({ args, options });
-      return { stdout: outputs.shift() ?? "", stderr: "" };
-    },
-  };
-}
-
-describe("GitHub repository search", () => {
-  it("lists recent owned repositories for an empty query and normalizes clone identity", async () => {
-    const runner = createRunner([
-      JSON.stringify([
-        {
-          id: " R_recent ",
-          name: " paseo ",
-          nameWithOwner: " getpaseo/paseo ",
-          description: null,
-          isPrivate: false,
-          updatedAt: "2026-07-15T12:00:00Z",
-          sshUrl: " git@github.com:getpaseo/paseo.git ",
-          url: "https://github.com/getpaseo/paseo",
-        },
-      ]),
-      "ssh\n",
-    ]);
-    const service = createGitHubService({
-      runner: runner.runner,
-      resolveGhPath: async () => "/usr/bin/gh",
-    });
+describe("GitHub repository discovery", () => {
+  it("lists repositories visible to the authenticated user without gh", async () => {
+    const service = await createAuthenticatedService(
+      vi.fn(async (input, init) => {
+        const request = new Request(input, init);
+        expect(request.url).toContain("/user/repos");
+        expect(request.url).toContain("affiliation=owner%2Ccollaborator%2Corganization_member");
+        return jsonResponse([
+          {
+            id: 1,
+            name: "paseo",
+            full_name: "getpaseo/paseo",
+            description: "Desktop agents",
+            private: false,
+            visibility: "public",
+            updated_at: "2026-08-27T12:00:00Z",
+            clone_url: "https://github.com/getpaseo/paseo.git",
+          },
+        ]);
+      }) as typeof fetch,
+    );
 
     await expect(
-      service.searchRepositories({ cwd: "/tmp", query: "  ", limit: 8 }),
+      service.searchRepositories({ cwd: "/tmp", query: "", limit: 10 }),
     ).resolves.toEqual([
       {
-        id: "R_recent",
+        id: "1",
         name: "paseo",
         nameWithOwner: "getpaseo/paseo",
-        description: null,
+        description: "Desktop agents",
         visibility: "public",
-        updatedAt: "2026-07-15T12:00:00Z",
-        cloneUrl: "git@github.com:getpaseo/paseo.git",
-      },
-    ]);
-    expect(runner.calls).toEqual([
-      {
-        args: [
-          "repo",
-          "list",
-          "--json",
-          "id,name,nameWithOwner,description,isPrivate,updatedAt,sshUrl,url",
-          "--limit",
-          "8",
-        ],
-        options: { cwd: "/tmp" },
-      },
-      {
-        args: ["config", "get", "git_protocol", "--host", "github.com"],
-        options: { cwd: "/tmp" },
+        updatedAt: "2026-08-27T12:00:00Z",
+        cloneUrl: "https://github.com/getpaseo/paseo.git",
       },
     ]);
   });
 
-  it("searches accessible repositories for a typed query", async () => {
-    const runner = createRunner([
-      JSON.stringify([
-        {
-          id: 42,
-          name: "private-repo",
-          fullName: "octo/private-repo",
-          description: "Private project",
-          isPrivate: true,
-          updatedAt: "2026-07-14T08:00:00Z",
-          url: "https://github.com/octo/private-repo",
-        },
-      ]),
-      "https",
-    ]);
-    const service = createGitHubService({
-      runner: runner.runner,
-      resolveGhPath: async () => "/usr/bin/gh",
-    });
+  it("uses GitHub repository search and preserves internal visibility", async () => {
+    const service = await createAuthenticatedService(
+      vi.fn(async (input, init) => {
+        const request = new Request(input, init);
+        expect(request.url).toContain("/search/repositories");
+        expect(request.url).toContain("q=desktop");
+        return jsonResponse({
+          total_count: 1,
+          incomplete_results: false,
+          items: [
+            {
+              id: 2,
+              name: "internal",
+              full_name: "acme/internal",
+              description: null,
+              private: true,
+              visibility: "internal",
+              updated_at: "2026-08-26T12:00:00Z",
+              clone_url: "https://github.com/acme/internal.git",
+            },
+          ],
+        });
+      }) as typeof fetch,
+    );
 
     await expect(
-      service.searchRepositories({ cwd: "/tmp", query: " private project ", limit: 5 }),
+      service.searchRepositories({ cwd: "/tmp", query: "desktop", limit: 10 }),
     ).resolves.toEqual([
-      {
-        id: "42",
-        name: "private-repo",
-        nameWithOwner: "octo/private-repo",
-        description: "Private project",
-        visibility: "private",
-        updatedAt: "2026-07-14T08:00:00Z",
-        cloneUrl: "https://github.com/octo/private-repo",
-      },
-    ]);
-    expect(runner.calls).toEqual([
-      {
-        args: [
-          "search",
-          "repos",
-          "private project",
-          "--json",
-          "id,name,fullName,description,isPrivate,updatedAt,url",
-          "--sort",
-          "updated",
-          "--order",
-          "desc",
-          "--limit",
-          "5",
-        ],
-        options: { cwd: "/tmp" },
-      },
-      {
-        args: ["config", "get", "git_protocol", "--host", "github.com"],
-        options: { cwd: "/tmp" },
-      },
+      expect.objectContaining({
+        id: "2",
+        nameWithOwner: "acme/internal",
+        visibility: "internal",
+      }),
     ]);
   });
 });
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}

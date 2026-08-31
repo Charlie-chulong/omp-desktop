@@ -45,10 +45,9 @@ import {
 import { isPlatform } from "../test-utils/platform.js";
 import {
   GitHubAuthenticationError,
-  GitHubCliMissingError,
-  GitHubCommandError,
-  type GitHubService,
+  GitHubHostNotConfiguredError,
 } from "../services/github-service.js";
+import type { GitHubService } from "../services/github-service.js";
 import type { CheckDetails, ForgeService } from "../services/forge-service.js";
 import type { GitHubPullRequestStatusFacts } from "../services/github-facts.js";
 
@@ -887,33 +886,27 @@ describe("project command-center RPCs", () => {
 
   test.each([
     {
-      error: new GitHubCliMissingError(),
-      expected: {
-        status: "unavailable",
-        requestId: "req-repositories-error",
-        reason: "gh_missing",
-        repositories: [],
-        available: false,
-        error: "GitHub CLI (gh) is not installed or not in PATH",
-      },
-    },
-    {
-      error: new GitHubAuthenticationError({ stderr: "gh auth login" }),
+      error: new GitHubAuthenticationError("github.com", "Sign in to GitHub"),
       expected: {
         status: "unauthenticated",
         requestId: "req-repositories-error",
         repositories: [],
         available: false,
-        error: "GitHub CLI is not authenticated. Run gh auth login on the host.",
+        error: "Sign in to GitHub",
       },
     },
     {
-      error: new GitHubCommandError({
-        args: ["search", "repos", "paseo"],
-        cwd: "/tmp",
-        exitCode: 1,
-        stderr: "GitHub API unavailable",
-      }),
+      error: new GitHubHostNotConfiguredError("github.acme.test"),
+      expected: {
+        status: "unauthenticated",
+        requestId: "req-repositories-error",
+        repositories: [],
+        available: false,
+        error: "GitHub Enterprise host github.acme.test is not configured",
+      },
+    },
+    {
+      error: new Error("GitHub API unavailable"),
       expected: {
         status: "error",
         requestId: "req-repositories-error",
@@ -939,6 +932,85 @@ describe("project command-center RPCs", () => {
       {
         type: "workspace.github.search_repositories.response",
         payload: expected,
+      },
+    ]);
+  });
+
+  test("runs native GitHub login and logout through correlated forge auth RPCs", async () => {
+    const messages: SessionOutboundMessage[] = [];
+    const github = {
+      beginLogin: vi.fn(async () => ({
+        flowId: "flow-1",
+        host: "github.com",
+        verificationUri: "https://github.com/login/device",
+        userCode: "ABCD-EFGH",
+        expiresAt: "2026-08-27T00:15:00.000Z",
+      })),
+      finishLogin: vi.fn(async () => ({
+        host: "github.com",
+        userId: 42,
+        login: "octocat",
+        scopes: ["repo"],
+      })),
+      cancelLogin: vi.fn(),
+      logout: vi.fn(async () => "github.com"),
+    };
+    const session = createSessionForTest({ messages, github });
+
+    await session.handleMessage({
+      type: "forge.auth.login.start.request",
+      forge: "github",
+      cwd: "/repo",
+      requestId: "auth-start",
+    });
+    await session.handleMessage({
+      type: "forge.auth.login.finish.request",
+      flowId: "flow-1",
+      requestId: "auth-finish",
+    });
+    await session.handleMessage({
+      type: "forge.auth.login.cancel.request",
+      flowId: "flow-2",
+      requestId: "auth-cancel",
+    });
+    await session.handleMessage({
+      type: "forge.auth.logout.request",
+      forge: "github",
+      host: "github.com",
+      requestId: "auth-logout",
+    });
+
+    expect(messages).toEqual([
+      {
+        type: "forge.auth.login.start.response",
+        payload: {
+          requestId: "auth-start",
+          flowId: "flow-1",
+          forge: "github",
+          host: "github.com",
+          verificationUri: "https://github.com/login/device",
+          userCode: "ABCD-EFGH",
+          expiresAt: "2026-08-27T00:15:00.000Z",
+        },
+      },
+      {
+        type: "forge.auth.login.finish.response",
+        payload: {
+          requestId: "auth-finish",
+          forge: "github",
+          host: "github.com",
+          userId: 42,
+          login: "octocat",
+          scopes: ["repo"],
+        },
+      },
+      {
+        type: "forge.auth.login.cancel.response",
+        payload: { requestId: "auth-cancel", cancelled: true },
+      },
+      {
+        type: "forge.auth.logout.response",
+        payload: { requestId: "auth-logout", forge: "github", host: "github.com" },
       },
     ]);
   });
@@ -4909,7 +4981,7 @@ describe("session pull request timeline handling", () => {
     });
   });
 
-  test("disables GitHub features when gh auth is unavailable", async () => {
+  test("disables GitHub features when native authentication is unavailable", async () => {
     const messages: unknown[] = [];
     const github = {
       invalidate: vi.fn(),
@@ -4937,7 +5009,7 @@ describe("session pull request timeline handling", () => {
         truncated: false,
         error: {
           kind: "unknown",
-          message: "GitHub CLI is unavailable or not authenticated",
+          message: "GitHub is unavailable or not authenticated",
         },
         requestId: "request-3",
         githubFeaturesEnabled: false,

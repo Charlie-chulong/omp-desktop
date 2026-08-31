@@ -36,6 +36,7 @@ import { createForgeService } from "../services/forge-registry.js";
 import {
   createForgeResolver,
   type ForgeResolution,
+  type ForgeHostProbe,
   type ForgeResolver,
 } from "../services/forge-resolver.js";
 import { parseGitRevParsePath } from "../utils/git-rev-parse-path.js";
@@ -341,6 +342,7 @@ interface WorkspaceGitServiceDependencies {
    * fakes. Any forge not listed here is built (and cached once) by the registry.
    */
   forgeOverrides?: Record<string, ForgeService>;
+  probeForge?: ForgeHostProbe;
   resolveAbsoluteGitDir: (cwd: string) => Promise<string | null>;
   runGitCommand: typeof runGitCommand;
   getWorkspaceGitSelfHealPhaseMs: typeof getWorkspaceGitObservationReensurePhaseMs;
@@ -552,6 +554,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
     );
     this.forgeResolver = createForgeResolver({
       createService: (forge) => this.deps.forgeOverrides?.[forge] ?? createForgeService(forge),
+      probeForge: this.deps.probeForge,
     });
   }
 

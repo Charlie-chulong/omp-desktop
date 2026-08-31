@@ -2962,6 +2962,88 @@ test("searches GitHub repositories through the dotted RPC", async () => {
   });
 });
 
+test("runs native forge authentication through correlated RPCs", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const start = client.startForgeLogin({ forge: "github", cwd: "/repo" }, "forge-auth-start");
+  expect(parseSentFrame(mock.sent.at(-1))).toEqual({
+    type: "forge.auth.login.start.request",
+    forge: "github",
+    cwd: "/repo",
+    requestId: "forge-auth-start",
+  });
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "forge.auth.login.start.response",
+      payload: {
+        requestId: "forge-auth-start",
+        flowId: "flow-1",
+        forge: "github",
+        host: "github.com",
+        verificationUri: "https://github.com/login/device",
+        userCode: "ABCD-EFGH",
+        expiresAt: "2026-08-27T00:15:00.000Z",
+      },
+    }),
+  );
+  await expect(start).resolves.toMatchObject({ flowId: "flow-1", userCode: "ABCD-EFGH" });
+
+  const finish = client.finishForgeLogin("flow-1", "forge-auth-finish");
+  expect(parseSentFrame(mock.sent.at(-1))).toEqual({
+    type: "forge.auth.login.finish.request",
+    flowId: "flow-1",
+    requestId: "forge-auth-finish",
+  });
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "forge.auth.login.finish.response",
+      payload: {
+        requestId: "forge-auth-finish",
+        forge: "github",
+        host: "github.com",
+        userId: 42,
+        login: "octocat",
+        scopes: ["repo"],
+      },
+    }),
+  );
+  await expect(finish).resolves.toMatchObject({ login: "octocat" });
+
+  const cancel = client.cancelForgeLogin("flow-2", "forge-auth-cancel");
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "forge.auth.login.cancel.response",
+      payload: { requestId: "forge-auth-cancel", cancelled: true },
+    }),
+  );
+  await expect(cancel).resolves.toEqual({ requestId: "forge-auth-cancel", cancelled: true });
+
+  const logout = client.logoutForge({ forge: "github", host: "github.com" }, "forge-auth-logout");
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "forge.auth.logout.response",
+      payload: {
+        requestId: "forge-auth-logout",
+        forge: "github",
+        host: "github.com",
+      },
+    }),
+  );
+  await expect(logout).resolves.toMatchObject({ host: "github.com" });
+});
+
 test("creates and registers a project directory through the dotted RPC", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

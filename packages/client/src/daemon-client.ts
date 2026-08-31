@@ -58,6 +58,10 @@ import type {
   BranchSuggestionsResponse,
   ForgeSearchResponse,
   ForgeSearchRequest,
+  ForgeAuthLoginStartResponse,
+  ForgeAuthLoginFinishResponse,
+  ForgeAuthLoginCancelResponse,
+  ForgeAuthLogoutResponse,
   GitHubSearchResponse,
   GitHubSearchRequest,
   DirectorySuggestionsResponse,
@@ -478,6 +482,10 @@ type OmpProviderModelDiscoveryPayload = OmpProviderModelDiscoveryResponseMessage
 type OmpProviderLoginStartPayload = OmpProviderLoginStartResponseMessage["payload"];
 type OmpProviderLoginFinishPayload = OmpProviderLoginFinishResponseMessage["payload"];
 type OmpProviderLogoutPayload = OmpProviderLogoutResponseMessage["payload"];
+type ForgeAuthLoginStartPayload = ForgeAuthLoginStartResponse["payload"];
+type ForgeAuthLoginFinishPayload = ForgeAuthLoginFinishResponse["payload"];
+type ForgeAuthLoginCancelPayload = ForgeAuthLoginCancelResponse["payload"];
+type ForgeAuthLogoutPayload = ForgeAuthLogoutResponse["payload"];
 type OmpInstallStatusPayload = OmpInstallStatusResponseMessage["payload"];
 type OmpInstallPayload = OmpInstallResponseMessage["payload"];
 type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
@@ -2290,6 +2298,52 @@ export class DaemonClient {
         },
       },
     );
+  }
+
+  async startForgeLogin(
+    input: { forge: string; cwd?: string; host?: string },
+    requestId?: string,
+  ): Promise<ForgeAuthLoginStartPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"forge.auth.login.start.response">({
+      requestId,
+      message: {
+        type: "forge.auth.login.start.request",
+        forge: input.forge,
+        cwd: input.cwd,
+        host: input.host,
+      },
+      timeout: 180_000,
+    });
+  }
+
+  async finishForgeLogin(flowId: string, requestId?: string): Promise<ForgeAuthLoginFinishPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"forge.auth.login.finish.response">({
+      requestId,
+      message: { type: "forge.auth.login.finish.request", flowId },
+      timeout: 17 * 60_000,
+    });
+  }
+
+  async cancelForgeLogin(flowId: string, requestId?: string): Promise<ForgeAuthLoginCancelPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"forge.auth.login.cancel.response">({
+      requestId,
+      message: { type: "forge.auth.login.cancel.request", flowId },
+    });
+  }
+
+  async logoutForge(
+    input: { forge: string; cwd?: string; host?: string },
+    requestId?: string,
+  ): Promise<ForgeAuthLogoutPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"forge.auth.logout.response">({
+      requestId,
+      message: {
+        type: "forge.auth.logout.request",
+        forge: input.forge,
+        cwd: input.cwd,
+        host: input.host,
+      },
+    });
   }
 
   async cloneGithubProject(

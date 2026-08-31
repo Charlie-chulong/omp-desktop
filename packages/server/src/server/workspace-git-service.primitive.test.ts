@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { createGitHubService } from "../services/github-service.js";
 import type { CurrentPullRequestStatus, ForgeService } from "../services/forge-service.js";
 import { defaultForgeRegistry } from "../services/forge-registry.js";
 import {
@@ -135,22 +134,6 @@ function createCurrentPullRequestStatus(
     reviewDecision: null,
     ...overrides,
   };
-}
-
-function currentPullRequestJson(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    number: 123,
-    url: "https://github.com/acme/repo/pull/123",
-    title: "Update feature",
-    state: "OPEN",
-    isDraft: false,
-    baseRefName: "main",
-    headRefName: "feature",
-    mergedAt: null,
-    statusCheckRollup: [],
-    reviewDecision: "REVIEW_REQUIRED",
-    ...overrides,
-  });
 }
 
 interface SnapshotOverrides {
@@ -309,6 +292,44 @@ function createGitHubServiceStub(): ForgeService {
     isAuthenticated: vi.fn(async () => true),
     invalidate: vi.fn(),
   };
+}
+
+function createRetainedPollingGitHub(input: {
+  status: CurrentPullRequestStatus;
+  intervalMs: number;
+  now: () => number;
+  onRead: (read: { reason: string | undefined; tickMs: number }) => void;
+}): ForgeService {
+  const github: ForgeService = {
+    ...createGitHubServiceStub(),
+    getCurrentPullRequestStatus: vi.fn(async (options) => {
+      input.onRead({ reason: options.reason, tickMs: input.now() });
+      return input.status;
+    }),
+    retainCurrentPullRequestStatusPoll(options) {
+      let timer: NodeJS.Timeout | null = null;
+      const poll = async () => {
+        const status = await github.getCurrentPullRequestStatus({
+          cwd: options.cwd,
+          headRef: options.headRef,
+          headSha: options.headSha,
+          headRepositoryOwner: options.headRepositoryOwner,
+          force: true,
+          reason: "self-heal-github",
+        });
+        options.onStatus?.(status);
+        timer = setTimeout(poll, input.intervalMs);
+      };
+      timer = setTimeout(poll, 0);
+      return {
+        unsubscribe() {
+          clearTimeout(timer);
+          timer = null;
+        },
+      };
+    },
+  };
+  return github;
 }
 
 interface CreateServiceOptions {
@@ -1020,24 +1041,15 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
   test("subscription starts GitHub self-heal reads within the fast poll window", async () => {
     let nowMs = 0;
     const githubReadCalls: Array<{ reason: string | undefined; tickMs: number }> = [];
-    const github = createGitHubService({
-      ttlMs: 0,
-      runner: vi.fn(async () => ({
-        stdout: currentPullRequestJson({
-          statusCheckRollup: [{ __typename: "StatusContext", context: "ci", state: "PENDING" }],
-        }),
-        stderr: "",
-      })),
-      resolveGhPath: async () => "/usr/bin/gh",
+    const github = createRetainedPollingGitHub({
+      status: createCurrentPullRequestStatus({
+        checks: [{ name: "ci", status: "pending", url: null }],
+        checksStatus: "pending",
+      }),
+      intervalMs: 20_000,
       now: () => nowMs,
+      onRead: (read) => githubReadCalls.push(read),
     });
-    const getCurrentPullRequestStatus = github.getCurrentPullRequestStatus.bind(github);
-    github.getCurrentPullRequestStatus = vi.fn(
-      async (options): Promise<CurrentPullRequestStatus | null> => {
-        githubReadCalls.push({ reason: options.reason, tickMs: nowMs });
-        return getCurrentPullRequestStatus(options);
-      },
-    );
     const getCheckoutStatus = vi.fn(async (cwd: string) =>
       createCheckoutStatus(cwd, { currentBranch: "feature" }),
     );
@@ -1074,7 +1086,6 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
 
     subscription.unsubscribe();
     service.dispose();
-    github.dispose?.();
   });
 
   test("GitHub self-heal polling uses the fork PR head branch instead of the owner-prefixed local branch", async () => {
@@ -1126,23 +1137,12 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
   test("settled GitHub self-heal reads stay on the slow poll window without refreshing git", async () => {
     let nowMs = 0;
     const githubReadCalls: Array<{ reason: string | undefined; tickMs: number }> = [];
-    const runner = vi.fn(async () => ({
-      stdout: currentPullRequestJson(),
-      stderr: "",
-    }));
-    const github = createGitHubService({
-      ttlMs: 0,
-      runner,
-      resolveGhPath: async () => "/usr/bin/gh",
+    const github = createRetainedPollingGitHub({
+      status: createCurrentPullRequestStatus(),
+      intervalMs: 120_000,
       now: () => nowMs,
+      onRead: (read) => githubReadCalls.push(read),
     });
-    const getCurrentPullRequestStatus = github.getCurrentPullRequestStatus.bind(github);
-    github.getCurrentPullRequestStatus = vi.fn(
-      async (options): Promise<CurrentPullRequestStatus | null> => {
-        githubReadCalls.push({ reason: options.reason, tickMs: nowMs });
-        return getCurrentPullRequestStatus(options);
-      },
-    );
     const getCheckoutStatus = vi.fn(async (cwd: string) =>
       createCheckoutStatus(cwd, { currentBranch: "feature" }),
     );
@@ -1154,16 +1154,12 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
     await flushPromises();
     await vi.advanceTimersByTimeAsync(0);
-    await vi.waitFor(() => {
-      expect(runner).toHaveBeenCalledTimes(1);
-    });
     await flushPromises();
     const gitReadsAfterInitialSnapshot = getCheckoutStatus.mock.calls.length;
 
     nowMs = 20_000;
     await vi.advanceTimersByTimeAsync(20_000);
     await flushPromises();
-
     expect(githubReadCalls).not.toContainEqual({
       reason: "self-heal-github",
       tickMs: 20_000,
@@ -1173,7 +1169,6 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     nowMs = 120_000;
     await vi.advanceTimersByTimeAsync(100_000);
     await flushPromises();
-
     expect(githubReadCalls).toContainEqual({
       reason: "self-heal-github",
       tickMs: 120_000,
@@ -1181,7 +1176,6 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
 
     subscription.unsubscribe();
     service.dispose();
-    github.dispose?.();
   });
 
   test("subscription self-heal polls a resolved non-GitHub forge for PR status", async () => {
