@@ -77,17 +77,19 @@ export function WorkspaceNewTabMenuContent({
   serverId,
   purpose,
   paneId,
+  align = "start",
 }: {
   serverId: string;
   purpose: WorkspaceTabLaunchPurpose;
   paneId?: string;
+  align?: "start" | "center" | "end";
 }) {
   const groups = useWorkspaceTabLaunchCatalog({ serverId, purpose });
 
   return (
     <DropdownMenuContent
       side="bottom"
-      align="start"
+      align={align}
       offset={4}
       minWidth={200}
       testID="workspace-new-tab-menu"

@@ -19,7 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, PanelRight } from "lucide-react-native";
+import { ChevronDown, PanelRight, Plus } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
@@ -28,6 +28,10 @@ import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { ScreenHeader } from "@/components/headers/screen-header";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
@@ -126,6 +130,7 @@ import {
   buildWorkspaceTabMenuEntries,
   type WorkspaceTabMenuLabels,
 } from "@/screens/workspace/workspace-tab-menu";
+import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
 import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import {
@@ -227,6 +232,7 @@ function buildWorkspaceFileLocation(
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedPanelRight = withUnistyles(PanelRight);
+const ThemedPlus = withUnistyles(Plus);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -3374,6 +3380,29 @@ function WorkspaceScreenContent({
             </HeaderToggleButton>
           </>
         ) : null}
+        {!isMobile && persistenceKey ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              testID="workspace-header-new-tab"
+              style={styles.compactHeaderActionButton}
+              accessibilityRole="button"
+              accessibilityLabel={t("workspace.tabs.actions.newTab")}
+            >
+              {({ hovered, open }) => (
+                <ThemedPlus
+                  size={16}
+                  uniProps={hovered || open ? foregroundColorMapping : mutedColorMapping}
+                />
+              )}
+            </DropdownMenuTrigger>
+            <WorkspaceNewTabMenuContent
+              serverId={normalizedServerId}
+              purpose="primary"
+              paneId={focusedPaneIdOrUndefined}
+              align="end"
+            />
+          </DropdownMenu>
+        ) : null}
         {isMobile ? (
           <HeaderToggleButton
             testID="workspace-explorer-toggle"
@@ -3397,7 +3426,9 @@ function WorkspaceScreenContent({
       </View>
     ),
     [
+      focusedPaneIdOrUndefined,
       isMobile,
+      persistenceKey,
       workspaceDescriptor,
       normalizedServerId,
       normalizedWorkspaceId,
@@ -3525,7 +3556,8 @@ function WorkspaceScreenContent({
   );
 
   const workspaceCenterColumn = (
-    <View style={styles.centerColumn}>
+    <NewTabLauncherProvider value={newTabLauncher}>
+      <View style={styles.centerColumn}>
       <ScreenHeader
         left={
           <>
@@ -3605,7 +3637,8 @@ function WorkspaceScreenContent({
       ) : null}
 
       <View style={styles.centerContent}>{workspacePanelContent}</View>
-    </View>
+      </View>
+    </NewTabLauncherProvider>
   );
 
   const renderedWorkspaceScreen = (
