@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   memo,
   useCallback,
@@ -9,7 +8,6 @@ import {
   type ReactElement,
   type RefObject,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import {
@@ -52,17 +50,14 @@ import {
   type AgentModeControlValue,
 } from "@/composer/agent-controls/mode-control";
 import { groupOmpModelsByProviderNamespace } from "@/composer/agent-controls/model-sheet-flow";
-import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
-import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
 import {
   formatOmpAccountSelectionLabel,
   resolveOmpAccountControlLabels,
-  selectOmpQuotaAccounts,
 } from "@/components/omp-provider-accounts";
 import {
-  resolveOmpRemainingQuotaPct,
-  shouldShowOmpFiveHourQuota,
-} from "@/components/omp-provider-quota";
+  useOmpAccountQuota,
+  type OmpAccountQuotaDisplayAccount,
+} from "@/hooks/use-omp-account-quota";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
@@ -72,7 +67,6 @@ import type {
   AgentProvider,
 } from "@omp-desktop/protocol/agent-types";
 import type { AgentProviderDefinition } from "@omp-desktop/protocol/provider-manifest";
-import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
@@ -116,10 +110,7 @@ interface AgentControlOption {
   id: string;
   label: string;
 }
-type OmpWorkflowQuotaAccount = NonNullable<
-  OmpProviderManagement["loginProviders"][number]["accounts"]
->[number];
-type OmpWorkflowQuotaDisplayAccount = OmpWorkflowQuotaAccount & { note?: string };
+type OmpWorkflowQuotaDisplayAccount = OmpAccountQuotaDisplayAccount;
 function formatFeatureOptionLabel(
   featureId: string,
   option: AgentControlOption,
@@ -137,52 +128,7 @@ function formatFeatureOptionLabel(
   }
   return formatAgentFeatureOptionLabel(featureId, option);
 }
-function isCodexWorkflowProvider(provider: string | undefined, modelId: string | null): boolean {
-  if (provider === "openai-codex") return true;
-  return provider === "omp" && resolveOmpModelProviderNamespace(modelId ?? "") === "openai-codex";
-}
-function useWorkflowQuota(
-  serverId: string | null | undefined,
-  provider: string | null | undefined,
-  modelId: string | null | undefined,
-): { accounts: OmpWorkflowQuotaDisplayAccount[]; loading: boolean } {
-  const client = useSessionStore((state) => state.sessions[serverId ?? ""]?.client ?? null);
-  const supportsOmpProviderManagement = useSessionStore(
-    (state) => state.sessions[serverId ?? ""]?.serverInfo?.features?.ompProviderManagement === true,
-  );
-  const shouldFetch = isCodexWorkflowProvider(provider ?? undefined, modelId ?? null);
-  const query = useQuery({
-    queryKey: ["ompWorkflowQuota", serverId ?? ""],
-    queryFn: async () => {
-      if (!client) throw new Error("OMP provider management is unavailable");
-      return client.getOmpProviderManagement();
-    },
-    enabled: Boolean(client && supportsOmpProviderManagement && shouldFetch),
-    staleTime: 0,
-    refetchInterval: 300_000,
-    refetchOnMount: true,
-    refetchOnReconnect: true,
-    refetchOnWindowFocus: true,
-  });
-  const notesQuery = useQuery({
-    queryKey: ["ompProviderAccountNotes", serverId ?? ""],
-    queryFn: () => loadOmpProviderAccountNotes(AsyncStorage, serverId ?? undefined),
-    enabled: Boolean(serverId && shouldFetch),
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
-  });
-  const accounts = shouldFetch
-    ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex")?.accounts ?? []).map(
-        (account) => ({
-          ...account,
-          note: notesQuery.data?.[String(account.credentialId)],
-        }),
-      )
-    : [];
-  return { accounts, loading: query.isFetching || notesQuery.isFetching };
-}
+ 
 
 type AgentControlSelector = "provider" | "mode" | "model" | "thinking" | `feature-${string}`;
 
@@ -214,7 +160,6 @@ interface ControlledAgentControlsProps {
   onModelSelectorOpen?: () => void;
   onRetryModelProvider?: (provider: AgentProvider) => void;
   workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
-  workflowQuotaLoading?: boolean;
   isRetryingModelProvider?: boolean;
   modeControl?: AgentModeControlValue | null;
   modelSelectorServerId?: string | null;
@@ -592,7 +537,6 @@ function ControlledAgentControls({
   modelSelectorServerId = null,
   isCompactLayout,
   workflowQuotaAccounts,
-  workflowQuotaLoading,
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -882,7 +826,6 @@ function ControlledAgentControls({
             handleCloseSheet={handleCloseSheet}
             modelSelectorServerId={modelSelectorServerId}
             workflowQuotaAccounts={workflowQuotaAccounts}
-            workflowQuotaLoading={workflowQuotaLoading}
           />
         ) : (
           <SheetAgentControlsContent
@@ -987,82 +930,8 @@ interface DesktopAgentControlsContentProps {
   handleCloseSheet: () => void;
   modelSelectorServerId: string | null;
   workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
-  workflowQuotaLoading?: boolean;
 }
 
-function WorkflowQuotaValue({
-  label,
-  usedPct,
-  limitReached,
-}: {
-  label: string;
-  usedPct: number | null | undefined;
-  limitReached?: boolean | null;
-}) {
-  const { theme } = useUnistyles();
-  const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
-  const reached = limitReached === true || remainingPct === 0;
-  const color = reached
-    ? theme.colors.destructive
-    : remainingPct !== null && remainingPct <= 30
-      ? theme.colors.palette.amber[500]
-      : remainingPct !== null
-        ? theme.colors.palette.green[500]
-        : theme.colors.foregroundMuted;
-  return (
-    <View style={styles.workflowQuotaValue}>
-      <Text style={styles.workflowQuotaValueLabel} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text style={[styles.workflowQuotaValueText, { color }]} numberOfLines={1}>
-        {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
-      </Text>
-    </View>
-  );
-}
-
-function WorkflowQuotaSummary({
-  accounts,
-  loading,
-}: {
-  accounts: OmpWorkflowQuotaDisplayAccount[];
-  loading: boolean;
-}) {
-  const { t } = useTranslation();
-  if (loading && accounts.length === 0) {
-    return (
-      <View style={styles.workflowQuota} testID="agent-workflow-quota">
-        <Text style={styles.workflowQuotaTitle}>{t("agentControls.quota.loading")}</Text>
-      </View>
-    );
-  }
-  if (accounts.length === 0) return null;
-  return (
-    <View style={styles.workflowQuota} testID="agent-workflow-quota">
-      {accounts.map((account, index) => (
-        <View
-          key={account.credentialId}
-          style={[
-            styles.workflowQuotaAccount,
-            index > 0 ? styles.workflowQuotaAccountSeparated : null,
-          ]}
-        >
-          <WorkflowQuotaValue
-            label={t("agentControls.quota.total")}
-            usedPct={account.quota?.weeklyUsedPct}
-          />
-          {shouldShowOmpFiveHourQuota(account.quota?.planLabel) ? (
-            <WorkflowQuotaValue
-              label={t("agentControls.quota.fiveHour")}
-              usedPct={account.quota?.fiveHourUsedPct}
-              limitReached={account.quota?.fiveHourLimitReached}
-            />
-          ) : null}
-        </View>
-      ))}
-    </View>
-  );
-}
 
 const DESKTOP_SEARCH_THRESHOLD = 6;
 
@@ -1120,20 +989,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     handleCloseSheet,
     modelSelectorServerId,
     workflowQuotaAccounts,
-    workflowQuotaLoading,
   } = props;
-  const selectedOAuthCredentialId = useMemo(() => {
-    const accountFeature = features?.find(
-      (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
-    );
-    if (!accountFeature || typeof accountFeature.value !== "string") return null;
-    const credentialId = Number(accountFeature.value);
-    return Number.isSafeInteger(credentialId) && credentialId > 0 ? credentialId : null;
-  }, [features]);
-  const displayedWorkflowQuotaAccounts = useMemo(
-    () => selectOmpQuotaAccounts(workflowQuotaAccounts ?? [], selectedOAuthCredentialId),
-    [selectedOAuthCredentialId, workflowQuotaAccounts],
-  );
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
     [glyphSize, presentation.showCarets],
@@ -1294,10 +1150,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           />
         ))
       )}
-      <WorkflowQuotaSummary
-        accounts={displayedWorkflowQuotaAccounts}
-        loading={Boolean(workflowQuotaLoading)}
-      />
     </>
   );
 }
@@ -1916,7 +1768,7 @@ export const AgentControls = memo(function AgentControls({
 
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
-  const { accounts: workflowQuotaAccounts, loading: workflowQuotaLoading } = useWorkflowQuota(
+  const { accounts: workflowQuotaAccounts } = useOmpAccountQuota(
     serverId,
     agentProvider,
     activeModelId,
@@ -2120,7 +1972,6 @@ export const AgentControls = memo(function AgentControls({
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         workflowQuotaAccounts={workflowQuotaAccounts}
-        workflowQuotaLoading={workflowQuotaLoading}
         isCompactLayout={isCompactLayout}
       />
     </>
@@ -2170,7 +2021,7 @@ export function DraftAgentControls({
       })),
     [models],
   );
-  const { accounts: workflowQuotaAccounts, loading: workflowQuotaLoading } = useWorkflowQuota(
+  const { accounts: workflowQuotaAccounts } = useOmpAccountQuota(
     modelSelectorServerId,
     selectedProvider,
     selectedModel,
@@ -2247,7 +2098,6 @@ export function DraftAgentControls({
         modeControl={modeControl}
         modelSelectorServerId={modelSelectorServerId}
         workflowQuotaAccounts={workflowQuotaAccounts}
-        workflowQuotaLoading={workflowQuotaLoading}
         isCompactLayout={isCompactLayout}
       />
     </>
@@ -2312,55 +2162,6 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     lineHeight: theme.fontSize.base * 1.4,
-  },
-  workflowQuota: {
-    height: 28,
-    minWidth: 220,
-    maxWidth: 520,
-    flexShrink: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    overflow: "hidden",
-    borderRadius: theme.borderRadius["2xl"],
-  },
-  workflowQuotaAccount: {
-    height: 28,
-    minWidth: 0,
-    flexShrink: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[3],
-    paddingHorizontal: theme.spacing[1],
-  },
-  workflowQuotaAccountSeparated: {
-    borderLeftWidth: 1,
-    borderLeftColor: theme.colors.border,
-  },
-  workflowQuotaTitle: {
-    maxWidth: 96,
-    minWidth: 0,
-    flexShrink: 1,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  workflowQuotaValue: {
-    minWidth: 54,
-    maxWidth: 112,
-    flexShrink: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  workflowQuotaValueLabel: {
-    flexShrink: 0,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  workflowQuotaValueText: {
-    width: 36,
-    flexShrink: 0,
-    textAlign: "right",
-    fontSize: theme.fontSize.sm,
   },
   combinedSheetControls: {
     gap: theme.spacing[1],

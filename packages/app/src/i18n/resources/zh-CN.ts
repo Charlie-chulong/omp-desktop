@@ -1143,7 +1143,7 @@ export const zhCN: TranslationResources = {
     },
     actions: {
       addProject: "添加项目",
-      newWorkspace: "新建空间",
+      newWorkspace: "新建对话",
       hosts: "主机",
       home: "首页",
       settings: "设置",
@@ -1199,10 +1199,10 @@ export const zhCN: TranslationResources = {
       },
       actions: {
         menu: "工作区操作",
-        newWorkspace: "新建工作区",
+        newWorkspace: "新建对话",
         showMore: "显示更多",
         showLess: "收起",
-        createWorkspaceFor: "为 {{projectName}} 新建工作区",
+        createWorkspaceFor: "为 {{projectName}} 新建对话",
         copyPath: "复制路径",
         copyBranchName: "复制分支名称",
         referenceContent: "引用内容",
@@ -1244,7 +1244,7 @@ export const zhCN: TranslationResources = {
     },
   },
   newWorkspace: {
-    title: "新建工作区",
+    title: "新建对话",
     create: "创建",
     isolation: {
       local: "本地",
@@ -2165,7 +2165,7 @@ export const zhCN: TranslationResources = {
       },
       help: {
         openProject: "打开项目",
-        newWorkspace: "新建 workspace",
+        newWorkspace: "新建对话",
         newWorktree: "新建 worktree",
         archiveWorkspace: "归档工作区",
         newTab: "新建标签",

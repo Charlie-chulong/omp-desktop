@@ -1,6 +1,6 @@
 {
   "name": "omp-desktop",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Desktop client for local Oh My Pi coding agents",
   "keywords": [
@@ -59,7 +59,7 @@
     "web": "npm run web --workspace=@omp-desktop/app",
     "dev:desktop": "cross-env PASEO_LISTEN=127.0.0.1:6770 npm run dev --workspace=@omp-desktop/desktop",
     "dev:win:desktop": "npm run dev:win --workspace=@omp-desktop/desktop",
-    "build:desktop": "npm run build:app-deps:clean && cd packages/app && cross-env PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build --workspace=@omp-desktop/desktop --",
+    "build:desktop": "npm run build:app-deps:clean && npm run clean --workspace=@omp-desktop/app && cd packages/app && cross-env PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build --workspace=@omp-desktop/desktop --",
     "db:query": "npm run db:query --workspace=@omp-desktop/server --",
     "cli": "./scripts/dev-home.sh npx tsx packages/cli/src/index.js"
   },

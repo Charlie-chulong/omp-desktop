@@ -26,6 +26,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-nativ
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useShallow } from "zustand/shallow";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { resolveDesktopSidebarWidth } from "@/components/desktop-sidebar-layout";
 import {
@@ -38,6 +39,12 @@ import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-pref
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  resolveOmpRemainingQuotaPct,
+  shouldShowOmpFiveHourQuota,
+} from "@/components/omp-provider-quota";
+import { selectOmpQuotaAccounts } from "@/components/omp-provider-accounts";
+import { resolveFocusedChatTarget } from "@/composer/focused-chat-target";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useOpenProject } from "@/hooks/use-open-project";
@@ -54,6 +61,13 @@ import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-vie
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
+import {
+  useActiveWorkspaceSelection,
+  useLastWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { useOmpAccountQuota } from "@/hooks/use-omp-account-quota";
+import { useSessionStore } from "@/stores/session-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
@@ -67,6 +81,7 @@ import {
   buildSettingsAddHostRoute,
   buildSettingsRoute,
 } from "@/utils/host-routes";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { openHostOverview } from "@/navigation/settings-navigation";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
@@ -486,6 +501,109 @@ const SidebarNewWorkspaceHeaderRow = memo(function SidebarNewWorkspaceHeaderRow(
   );
 });
 
+
+function SidebarQuotaValue({
+  label,
+  usedPct,
+  limitReached,
+}: {
+  label: string;
+  usedPct: number | null | undefined;
+  limitReached?: boolean | null;
+}) {
+  const { theme } = useUnistyles();
+  const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
+  const reached = limitReached === true || remainingPct === 0;
+  const color = reached
+    ? theme.colors.destructive
+    : remainingPct !== null && remainingPct <= 30
+      ? theme.colors.palette.amber[500]
+      : remainingPct !== null
+        ? theme.colors.palette.green[500]
+        : theme.colors.foregroundMuted;
+  return (
+    <View style={styles.sidebarQuotaValue}>
+      <Text style={styles.sidebarQuotaLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[styles.sidebarQuotaPercentage, { color }]} numberOfLines={1}>
+        {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
+      </Text>
+    </View>
+  );
+}
+
+function SidebarAccountQuota() {
+  const { t } = useTranslation();
+  const activeWorkspace = useActiveWorkspaceSelection();
+  const lastWorkspace = useLastWorkspaceSelection();
+  const localServerId = useLocalDaemonServerId();
+  const activeWorkspaceKey = activeWorkspace
+    ? buildWorkspaceTabPersistenceKey(activeWorkspace)
+    : null;
+  const layout = useWorkspaceLayoutStore((state) =>
+    activeWorkspaceKey ? state.layoutByWorkspace[activeWorkspaceKey] : undefined,
+  );
+  const focusedChat = useMemo(
+    () =>
+      activeWorkspace
+        ? resolveFocusedChatTarget({ serverId: activeWorkspace.serverId, layout })
+        : null,
+    [activeWorkspace, layout],
+  );
+  const serverId =
+    activeWorkspace?.serverId ?? lastWorkspace?.serverId ?? localServerId;
+  const agentId = focusedChat?.kind === "agent" ? focusedChat.agentId : null;
+  const agent = useSessionStore(
+    useShallow((state) => {
+      if (!serverId || !agentId) return null;
+      const current = state.sessions[serverId]?.agents.get(agentId);
+      if (!current) return null;
+      return { features: current.features };
+    }),
+  );
+  const { accounts, loading } = useOmpAccountQuota(serverId, "openai-codex", null);
+  const selectedCredentialId = useMemo(() => {
+    const accountFeature = agent?.features?.find(
+      (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
+    );
+    if (!accountFeature || typeof accountFeature.value !== "string") return null;
+    const credentialId = Number(accountFeature.value);
+    return Number.isSafeInteger(credentialId) && credentialId > 0 ? credentialId : null;
+  }, [agent?.features]);
+  const displayedAccounts = useMemo(
+    () => selectOmpQuotaAccounts(accounts, selectedCredentialId),
+    [accounts, selectedCredentialId],
+  );
+
+  if (loading && displayedAccounts.length === 0) {
+    return (
+      <View style={styles.sidebarQuota} testID="sidebar-account-quota">
+        <Text style={styles.sidebarQuotaLoading} numberOfLines={1}>
+          {t("agentControls.quota.loading")}
+        </Text>
+      </View>
+    );
+  }
+  const account = displayedAccounts[0] ?? accounts[0];
+  if (!account) return null;
+  return (
+    <View style={styles.sidebarQuota} testID="sidebar-account-quota">
+      <SidebarQuotaValue
+        label={t("agentControls.quota.total")}
+        usedPct={account.quota?.weeklyUsedPct}
+      />
+      {shouldShowOmpFiveHourQuota(account.quota?.planLabel) ? (
+        <SidebarQuotaValue
+          label={t("agentControls.quota.fiveHour")}
+          usedPct={account.quota?.fiveHourUsedPct}
+          limitReached={account.quota?.fiveHourLimitReached}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 function SidebarFooter({
   theme,
   handleHome,
@@ -532,6 +650,7 @@ function SidebarFooter({
           theme={theme}
         />
       </View>
+      <SidebarAccountQuota />
     </View>
   );
 }
@@ -1087,6 +1206,7 @@ const styles = StyleSheet.create((theme) => ({
   sidebarFooter: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[3],
@@ -1098,6 +1218,38 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[2],
     flexShrink: 0,
+  },
+  sidebarQuota: {
+    minWidth: 0,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: theme.spacing[2],
+    overflow: "hidden",
+  },
+  sidebarQuotaValue: {
+    minWidth: 0,
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  sidebarQuotaLabel: {
+    flexShrink: 1,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  sidebarQuotaPercentage: {
+    flexShrink: 0,
+    textAlign: "right",
+    fontSize: theme.fontSize.sm,
+  },
+  sidebarQuotaLoading: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   footerIconButton: {
     width: 28,
