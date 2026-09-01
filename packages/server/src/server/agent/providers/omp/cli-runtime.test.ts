@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import pino from "pino";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { OmpCliRuntime } from "./cli-runtime.js";
 import type { OmpRuntimeLaunch } from "./runtime.js";
@@ -143,6 +143,20 @@ describe("OMP CLI runtime", () => {
 
     await expect(session.setFastMode(true)).resolves.toEqual({ enabled: true, active: true });
     expect(commands).toEqual([{ type: "set_fast_mode", enabled: true }]);
+  });
+
+  test("does not arm the short control-plane timeout for LLM-backed compaction", async () => {
+    const child = createOmpChild();
+    replyToCommands(child, () => ({}));
+    const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+
+    try {
+      await expect(session.compact()).resolves.toBeUndefined();
+      expect(timeoutSpy).not.toHaveBeenCalled();
+    } finally {
+      timeoutSpy.mockRestore();
+    }
   });
 
   test("accepts session state without thinkingLevel for non-reasoning models", async () => {

@@ -27,6 +27,7 @@ import { QuotedSelectionContextMenu } from "@/components/quoted-selection-contex
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { Composer } from "@/composer";
 import { GoalBar, findLatestGoalSnapshot } from "@/composer/goal-bar";
+import { useWorkspaceHasBranch } from "@/composer/workspace-branch";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import {
   resolveComposerTrackControlClearance,
@@ -1543,8 +1544,9 @@ const AgentStreamSection = memo(function AgentStreamSection({
 }) {
   const isCompactFormFactor = useIsCompactFormFactor();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
+  const hasWorkspaceBranch = useWorkspaceHasBranch(serverId, workspaceId);
   const hasVisibleComposerTracks =
-    hasActiveComposer && (hasVisibleAgentTracks || hasWorkspaceDiffStat);
+    hasActiveComposer && (hasVisibleAgentTracks || hasWorkspaceDiffStat || hasWorkspaceBranch);
   const bottomOverlayTailClearance = hasVisibleComposerTracks
     ? resolveComposerTrackTailClearance(isCompactFormFactor)
     : 0;

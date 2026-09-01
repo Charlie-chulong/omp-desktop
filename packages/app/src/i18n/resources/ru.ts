@@ -1985,7 +1985,6 @@ export const ru: TranslationResources = {
       connections: "Подключения",
       agents: "Агенты",
       metadata: "Метаданные",
-      workspaces: "Рабочие пространства",
       providers: "Провайдеры",
       usage: "Использование",
       terminals: "Терминалы",
@@ -2430,9 +2429,6 @@ export const ru: TranslationResources = {
       },
       agents: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять агентами",
-      },
-      workspaces: {
-        unavailable: "Подключитесь к этому хосту, чтобы управлять рабочими пространствами",
       },
       terminalProfiles: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять профилями терминала",

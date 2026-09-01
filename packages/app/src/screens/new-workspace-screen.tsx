@@ -726,14 +726,6 @@ export function NewWorkspaceScreen({
     lastActiveProject,
     allowAllProjects: true,
   });
-  const selectedWorkspaceId = useMemo(() => {
-    const prefix = `${selectedServerId}:`;
-    const key = selectedProject?.workspaceKeys.find((workspaceKey) =>
-      workspaceKey.startsWith(prefix),
-    );
-    return key ? key.slice(prefix.length) : null;
-  }, [selectedProject?.workspaceKeys, selectedServerId]);
-  const selectedWorkspace = useWorkspace(selectedServerId, selectedWorkspaceId);
 
   const draftKey = buildNewWorkspaceDraftKey(draftId);
   const forkDraftSetup = usePendingWorkspaceDraftSetup(draftId);
@@ -852,7 +844,6 @@ export function NewWorkspaceScreen({
       withInitialAgent: boolean;
     }) => {
       if (createdWorkspace) return createdWorkspace;
-      if (selectedWorkspace) return selectedWorkspace;
       if (!selectedProject) throw new Error("Choose a project");
       if (!selectedSourceDirectory) throw new Error("Choose a host for this project");
       const normalizedWorkspace = await createWorkspaceForConversation({
@@ -875,7 +866,6 @@ export function NewWorkspaceScreen({
       selectedProject,
       selectedServerId,
       selectedSourceDirectory,
-      selectedWorkspace,
       t,
       withConnectedClient,
     ],

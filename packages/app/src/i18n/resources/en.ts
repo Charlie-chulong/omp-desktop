@@ -1965,7 +1965,6 @@ export const en = {
       connections: "Connections",
       agents: "Agents",
       metadata: "Metadata",
-      workspaces: "Workspaces",
       providers: "Providers",
       usage: "Usage",
       terminals: "Terminals",
@@ -2455,9 +2454,6 @@ export const en = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
-      },
-      workspaces: {
-        unavailable: "Connect to this host to manage workspaces",
       },
       terminalProfiles: {
         unavailable: "Connect to this host to manage terminal profiles",

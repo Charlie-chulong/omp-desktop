@@ -1934,7 +1934,6 @@ export const zhCN: TranslationResources = {
       connections: "连接",
       agents: "智能体",
       metadata: "元数据",
-      workspaces: "工作区",
       providers: "模型服务商",
       usage: "使用情况",
       terminals: "终端",
@@ -2361,9 +2360,6 @@ export const zhCN: TranslationResources = {
       },
       agents: {
         unavailable: "连接到这个 Host 以管理 Agent",
-      },
-      workspaces: {
-        unavailable: "连接到这个 Host 以管理 Workspace",
       },
       terminalProfiles: {
         unavailable: "Connect to this host to manage terminal profiles",

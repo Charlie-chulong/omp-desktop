@@ -1998,7 +1998,6 @@ export const fr: TranslationResources = {
       connections: "Relations",
       agents: "Agents",
       metadata: "Métadonnées",
-      workspaces: "Workspaces",
       providers: "Fournisseurs",
       usage: "Utilisation",
       terminals: "Terminals",
@@ -2439,9 +2438,6 @@ export const fr: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
-      },
-      workspaces: {
-        unavailable: "Connect to this host to manage workspaces",
       },
       terminalProfiles: {
         unavailable: "Connect to this host to manage terminal profiles",

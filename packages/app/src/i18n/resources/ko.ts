@@ -1958,7 +1958,6 @@ export const ko: TranslationResources = {
       connections: "연결",
       agents: "에이전트",
       metadata: "메타데이터",
-      workspaces: "워크스페이스",
       providers: "프로바이더",
       usage: "사용량",
       terminals: "터미널",
@@ -2392,9 +2391,6 @@ export const ko: TranslationResources = {
       },
       agents: {
         unavailable: "에이전트를 관리하려면 이 호스트에 연결하세요",
-      },
-      workspaces: {
-        unavailable: "워크스페이스를 관리하려면 이 호스트에 연결하세요",
       },
       terminalProfiles: {
         unavailable: "터미널 프로필을 관리하려면 이 호스트에 연결하세요",

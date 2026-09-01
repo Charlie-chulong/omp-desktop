@@ -1965,7 +1965,6 @@ export const ja: TranslationResources = {
       connections: "接続",
       agents: "エージェント",
       metadata: "メタデータ",
-      workspaces: "ワークスペース",
       providers: "プロバイダー",
       usage: "使用状況",
       terminals: "ターミナル",
@@ -2401,9 +2400,6 @@ export const ja: TranslationResources = {
       },
       agents: {
         unavailable: "エージェントを管理するにはこのホストに接続してください",
-      },
-      workspaces: {
-        unavailable: "ワークスペースを管理するにはこのホストに接続してください",
       },
       terminalProfiles: {
         unavailable: "ターミナルプロファイルを管理するにはこのホストに接続してください",

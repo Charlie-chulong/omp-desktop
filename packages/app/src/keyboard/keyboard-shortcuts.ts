@@ -1163,7 +1163,7 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
   {
     id: "agent-interrupt",
     action: "agent.interrupt",
-    combo: "Escape",
+    combo: "Ctrl+Escape",
     when: { commandCenter: false, focusScope: ["message-input", "other"] },
     preventDefault: false,
     stopPropagation: false,

@@ -5,6 +5,7 @@ import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import {
   JSONL_RPC_DEFAULT_TIMEOUT_MS,
   JsonlRpcProcess,
+  JSONL_RPC_NO_TIMEOUT,
   supportsJsonlRpcProtocolV2,
   type JsonlRpcLaunch,
 } from "../jsonl-rpc-process.js";
@@ -202,10 +203,13 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
   }
 
   async compact(customInstructions?: string): Promise<void> {
-    await this.request({
-      type: "compact",
-      ...(customInstructions ? { customInstructions } : {}),
-    });
+    await this.request(
+      {
+        type: "compact",
+        ...(customInstructions ? { customInstructions } : {}),
+      },
+      JSONL_RPC_NO_TIMEOUT,
+    );
   }
 
   async setAutoCompaction(enabled: boolean): Promise<void> {

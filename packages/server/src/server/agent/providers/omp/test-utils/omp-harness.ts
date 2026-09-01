@@ -417,6 +417,20 @@ export class OmpHarness {
     return this.events.flatMap((event) => (event.type === "timeline" ? [event.item] : []));
   }
 
+  async runOutOfBand(prompt: string): Promise<AgentStreamEvent[]> {
+    const handler = this.requireSession().tryHandleOutOfBand(prompt);
+    if (!handler) {
+      throw new Error(`OMP did not recognize out-of-band command: ${prompt}`);
+    }
+    const events: AgentStreamEvent[] = [];
+    await handler.run({ emit: (event) => events.push(event) });
+    return events;
+  }
+
+  compactRequests(): Array<{ customInstructions?: string }> {
+    return [...this.omp.latestSession().compactRequests];
+  }
+
   eventTypes(): AgentStreamEvent["type"][] {
     return this.events.map((event) => event.type);
   }

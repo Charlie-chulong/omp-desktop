@@ -346,8 +346,8 @@ describe("keyboard-shortcuts", () => {
       payload: { kind: "voice-mute-toggle" },
     },
     {
-      name: "routes Escape to agent interrupt outside terminal focus",
-      event: { key: "Escape", code: "Escape" },
+      name: "routes Ctrl+Escape to agent interrupt outside terminal focus",
+      event: { key: "Escape", code: "Escape", ctrlKey: true },
       context: { focusScope: "message-input" },
       action: "agent.interrupt",
       preventDefault: false,
@@ -514,14 +514,19 @@ describe("keyboard-shortcuts", () => {
       context: { isMac: false, focusScope: "message-input" },
     },
     {
-      name: "does not interrupt agent when terminal is focused",
-      event: { key: "Escape", code: "Escape" },
+      name: "does not interrupt agent with Ctrl+Escape when terminal is focused",
+      event: { key: "Escape", code: "Escape", ctrlKey: true },
       context: { focusScope: "terminal" },
     },
     {
-      name: "does not interrupt agent when command center is open",
-      event: { key: "Escape", code: "Escape" },
+      name: "does not interrupt agent with Ctrl+Escape when command center is open",
+      event: { key: "Escape", code: "Escape", ctrlKey: true },
       context: { commandCenterOpen: true },
+    },
+    {
+      name: "does not interrupt agent with unmodified Escape",
+      event: { key: "Escape", code: "Escape" },
+      context: { focusScope: "message-input" },
     },
     {
       name: "does not bind pane shortcuts on non-mac platforms",

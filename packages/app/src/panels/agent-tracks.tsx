@@ -1,4 +1,6 @@
 import { memo, useCallback, type ReactElement } from "react";
+import { WorkspaceBranchPill } from "@/composer/branch-pill";
+import { useWorkspaceHasBranch } from "@/composer/workspace-branch";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { ComposerTrackBar } from "@/composer/tracks";
@@ -40,6 +42,7 @@ export const AgentTracks = memo(function AgentTracks({
 }): ReactElement | null {
   const { tabId, openTab } = usePaneContext();
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
+  const hasWorkspaceBranch = useWorkspaceHasBranch(serverId, workspaceId);
   const isCompact = useIsCompactFormFactor();
   const canSplit = supportsDesktopPaneSplits() && !isCompact;
   const openInSidePanelByDefault = useSettings(
@@ -102,7 +105,11 @@ export const AgentTracks = memo(function AgentTracks({
     });
   }, [cwd, isCompact, openInSidePanelByDefault, serverId, workspaceKey]);
 
-  if (!hasWorkspaceDiffStat && !hasAgentTracks({ subagentRows, archiveFinishedStatus })) {
+  if (
+    !hasWorkspaceDiffStat &&
+    !hasWorkspaceBranch &&
+    !hasAgentTracks({ subagentRows, archiveFinishedStatus })
+  ) {
     return null;
   }
 
@@ -122,6 +129,7 @@ export const AgentTracks = memo(function AgentTracks({
         workspaceId={workspaceId}
         onPress={handleOpenChanges}
       />
+      <WorkspaceBranchPill serverId={serverId} workspaceId={workspaceId} />
     </ComposerTrackBar>
   );
 });

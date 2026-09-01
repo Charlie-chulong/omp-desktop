@@ -57,7 +57,8 @@ class ManualNoTurnScheduler implements OmpNoTurnScheduler {
 
   settle(): void {
     const resolve = this.settleResolve;
-    if (!resolve) throw new Error("OMP has not requested a no-turn settle wait");
+    if (!resolve)
+      throw new Error("OMP has not requested a no-turn settle wait");
     this.settleResolve = null;
     resolve();
   }
@@ -131,7 +132,11 @@ describe("OMP agent client and session", () => {
 
     expect(omp.features()).toEqual([
       expect.objectContaining({ id: "workflow_mode" }),
-      expect.objectContaining({ id: "fast_mode", type: "toggle", value: false }),
+      expect.objectContaining({
+        id: "fast_mode",
+        type: "toggle",
+        value: false,
+      }),
       expect.objectContaining({
         id: "oauth_account_credential",
         type: "select",
@@ -145,10 +150,15 @@ describe("OMP agent client and session", () => {
 
     await omp.setFeature("oauth_account_credential", "41");
 
-    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
+    expect(omp.recordedPrompts()).toEqual([
+      { message: "/session pin 1", imageCount: 0 },
+    ]);
     expect(omp.features()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "oauth_account_credential", value: "41" }),
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: "41",
+        }),
       ]),
     );
   });
@@ -165,24 +175,37 @@ describe("OMP agent client and session", () => {
       featureValues: { oauth_account_credential: "42" },
     });
 
-    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode" }),
+    ]);
 
     await omp.setModel("openai-codex", "gpt-5.6");
 
     expect(omp.features()).toEqual([
       expect.objectContaining({ id: "workflow_mode" }),
-      expect.objectContaining({ id: "fast_mode", type: "toggle", value: false }),
+      expect.objectContaining({
+        id: "fast_mode",
+        type: "toggle",
+        value: false,
+      }),
       expect.objectContaining({
         id: "oauth_account_credential",
         value: "42",
-        options: [expect.objectContaining({ id: "41" }), expect.objectContaining({ id: "42" })],
+        options: [
+          expect.objectContaining({ id: "41" }),
+          expect.objectContaining({ id: "42" }),
+        ],
       }),
     ]);
-    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 2", imageCount: 0 }]);
+    expect(omp.recordedPrompts()).toEqual([
+      { message: "/session pin 2", imageCount: 0 },
+    ]);
 
     await omp.setModel("custom-openai", "model");
 
-    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode" }),
+    ]);
   });
 
   test("hides OAuth account selection for a single account", async () => {
@@ -196,7 +219,11 @@ describe("OMP agent client and session", () => {
 
     expect(omp.features()).toEqual([
       expect.objectContaining({ id: "workflow_mode" }),
-      expect.objectContaining({ id: "fast_mode", type: "toggle", value: false }),
+      expect.objectContaining({
+        id: "fast_mode",
+        type: "toggle",
+        value: false,
+      }),
     ]);
     expect(omp.recordedPrompts()).toEqual([]);
   });
@@ -218,7 +245,9 @@ describe("OMP agent client and session", () => {
     await omp.setFeature("fast_mode", true);
     expect(omp.fastModeRequests()).toEqual([true]);
     expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: "fast_mode", value: true }),
+      ]),
     );
 
     await omp.setModel("custom-openai", "model");
@@ -229,13 +258,17 @@ describe("OMP agent client and session", () => {
     await omp.setModel("openai-codex", "gpt-5.6");
     expect(omp.fastModeRequests()).toEqual([true]);
     expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: "fast_mode", value: true }),
+      ]),
     );
 
     await omp.setFeature("fast_mode", false);
     expect(omp.fastModeRequests()).toEqual([true, false]);
     expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: false })]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: "fast_mode", value: false }),
+      ]),
     );
   });
 
@@ -248,7 +281,9 @@ describe("OMP agent client and session", () => {
 
     expect(omp.fastModeRequests()).toEqual([true]);
     expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      expect.arrayContaining([
+        expect.objectContaining({ id: "fast_mode", value: true }),
+      ]),
     );
   });
 
@@ -265,7 +300,11 @@ describe("OMP agent client and session", () => {
 
     expect(omp.features()).toEqual([
       expect.objectContaining({ id: "workflow_mode" }),
-      expect.objectContaining({ id: "fast_mode", type: "toggle", value: false }),
+      expect.objectContaining({
+        id: "fast_mode",
+        type: "toggle",
+        value: false,
+      }),
     ]);
 
     await omp.setFeature("fast_mode", true);
@@ -283,7 +322,9 @@ describe("OMP agent client and session", () => {
     });
     await omp.start({ model: "kimi/kimi-k3" });
 
-    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode" }),
+    ]);
     await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
       "OMP fast mode is unavailable for the current model",
     );
@@ -296,7 +337,9 @@ describe("OMP agent client and session", () => {
       featureValues: { fast_mode: true },
     });
 
-    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode" }),
+    ]);
     expect(omp.fastModeRequests()).toEqual([]);
     await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
       "OMP fast mode is unavailable for the current model",
@@ -315,7 +358,9 @@ describe("OMP agent client and session", () => {
       featureValues: { oauth_account_credential: "7" },
     });
 
-    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode" }),
+    ]);
     expect(omp.recordedPrompts()).toEqual([]);
   });
 
@@ -342,7 +387,9 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness();
     await omp.start({ thinkingOptionId: "max" });
 
-    expect(omp.launchConfiguration().argv).toEqual(expect.arrayContaining(["--thinking", "max"]));
+    expect(omp.launchConfiguration().argv).toEqual(
+      expect.arrayContaining(["--thinking", "max"]),
+    );
   });
 
   test("launches with write approval mode", async () => {
@@ -363,7 +410,10 @@ describe("OMP agent client and session", () => {
     "starts OMP native %s workflow with the first prompt",
     async (workflow, expectedPrompt) => {
       const omp = new OmpHarness();
-      await omp.start({ modeId: "ask", featureValues: { workflow_mode: workflow } });
+      await omp.start({
+        modeId: "ask",
+        featureValues: { workflow_mode: workflow },
+      });
 
       expect(omp.launchConfiguration()).toEqual({
         cwd: "/tmp/paseo-omp-agent-test",
@@ -392,7 +442,10 @@ describe("OMP agent client and session", () => {
 
   test("returns to standard workflow before the next message", async () => {
     const omp = new OmpHarness();
-    await omp.start({ modeId: "ask", featureValues: { workflow_mode: "plan" } });
+    await omp.start({
+      modeId: "ask",
+      featureValues: { workflow_mode: "plan" },
+    });
     await omp.runPrompt("make a plan", "ready");
 
     await omp.setFeature("workflow_mode", "standard");
@@ -405,14 +458,19 @@ describe("OMP agent client and session", () => {
   });
   test("publishes streamed plans for approval when the terminal message has no text", async () => {
     const omp = new OmpHarness();
-    await omp.start({ modeId: "ask", featureValues: { workflow_mode: "plan" } });
+    await omp.start({
+      modeId: "ask",
+      featureValues: { workflow_mode: "plan" },
+    });
 
     const { completion } = await omp.startPromptWithEmptyAgentEnd(
       "design the change",
       "# Implementation plan\n\n1. Inspect\n2. Edit",
     );
     await completion;
-    expect(omp.timeline().filter((item) => item.type === "assistant_message")).toEqual([
+    expect(
+      omp.timeline().filter((item) => item.type === "assistant_message"),
+    ).toEqual([
       expect.objectContaining({
         presentation: "plan",
       }),
@@ -460,7 +518,9 @@ describe("OMP agent client and session", () => {
     await omp.controlGoal("delete");
     await omp.runPrompt("continue normally", "done");
 
-    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["continue normally"]);
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual([
+      "continue normally",
+    ]);
     expect(omp.features()).toEqual([
       expect.objectContaining({ id: "workflow_mode", value: "standard" }),
     ]);
@@ -489,7 +549,10 @@ describe("OMP agent client and session", () => {
 
   test("passes --thinking when a thinking option is provided", async () => {
     const omp = new OmpHarness();
-    await omp.start({ modeId: "ask", thinkingOptionId: "xhigh" }, createToolCatalog());
+    await omp.start(
+      { modeId: "ask", thinkingOptionId: "xhigh" },
+      createToolCatalog(),
+    );
 
     expect(omp.launchConfiguration().argv).toEqual([
       "omp",
@@ -506,12 +569,18 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness();
     await omp.start();
 
-    await expect(omp.runPrompt("hello OMP", "hello from OMP")).resolves.toMatchObject({
+    await expect(
+      omp.runPrompt("hello OMP", "hello from OMP"),
+    ).resolves.toMatchObject({
       finalText: "hello from OMP",
     });
     expect(omp.timeline()).toEqual([
       { type: "user_message", text: "hello OMP", messageId: "user-1" },
-      { type: "assistant_message", text: "hello from OMP", messageId: "omp-assistant-1" },
+      {
+        type: "assistant_message",
+        text: "hello from OMP",
+        messageId: "omp-assistant-1",
+      },
     ]);
     expect(omp.eventTypes().slice(0, 2)).toEqual(["turn_started", "timeline"]);
     expect(omp.completedTurnCount()).toBe(1);
@@ -525,7 +594,8 @@ describe("OMP agent client and session", () => {
       "review this",
       {
         role: "custom",
-        content: '<advisory severity="concern">Exercise the failure path.</advisory>',
+        content:
+          '<advisory severity="concern">Exercise the failure path.</advisory>',
         customType: "advisor",
         id: "advisor-live-1",
         display: true,
@@ -557,7 +627,11 @@ describe("OMP agent client and session", () => {
         },
         error: null,
       },
-      { type: "assistant_message", text: "fixed", messageId: "omp-assistant-1" },
+      {
+        type: "assistant_message",
+        text: "fixed",
+        messageId: "omp-assistant-1",
+      },
     ]);
   });
 
@@ -623,7 +697,9 @@ describe("OMP agent client and session", () => {
       { isStreaming: false, isCompacting: false },
       { isStreaming: false, isCompacting: false },
     ]);
-    await expect(omp.runPrompt("follow-up", "follow-up done")).resolves.toMatchObject({
+    await expect(
+      omp.runPrompt("follow-up", "follow-up done"),
+    ).resolves.toMatchObject({
       finalText: "follow-up done",
     });
   });
@@ -633,10 +709,14 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness({ providerIdleScheduler: scheduler });
     await omp.start();
 
-    const { completion } = await omp.startPromptUntilProviderIdle("first", "first done", {
-      isStreaming: true,
-      isCompacting: false,
-    });
+    const { completion } = await omp.startPromptUntilProviderIdle(
+      "first",
+      "first done",
+      {
+        isStreaming: true,
+        isCompacting: false,
+      },
+    );
     await omp.waitForProviderStateChecks(2);
     await scheduler.waitForWaits(1);
 
@@ -648,7 +728,9 @@ describe("OMP agent client and session", () => {
 
     omp.reportProviderState({ isStreaming: false, isCompacting: false });
     scheduler.retry();
-    await expect(completion).resolves.toMatchObject({ finalText: "first done" });
+    await expect(completion).resolves.toMatchObject({
+      finalText: "first done",
+    });
   });
 
   test("stays active when OMP state checks fail", async () => {
@@ -657,10 +739,14 @@ describe("OMP agent client and session", () => {
     await omp.start();
     omp.failProviderStateChecks(new Error("state unavailable"));
 
-    const { completion } = await omp.startPromptUntilProviderIdle("first", "first done", {
-      isStreaming: true,
-      isCompacting: false,
-    });
+    const { completion } = await omp.startPromptUntilProviderIdle(
+      "first",
+      "first done",
+      {
+        isStreaming: true,
+        isCompacting: false,
+      },
+    );
     await omp.waitForProviderStateChecks(2);
     await scheduler.waitForWaits(1);
     expect(omp.completedTurnCount()).toBe(0);
@@ -668,7 +754,9 @@ describe("OMP agent client and session", () => {
     omp.failProviderStateChecks(null);
     omp.reportProviderState({ isStreaming: false, isCompacting: false });
     scheduler.retry();
-    await expect(completion).resolves.toMatchObject({ finalText: "first done" });
+    await expect(completion).resolves.toMatchObject({
+      finalText: "first done",
+    });
   });
 
   test("does not complete on OMP's extension-notice agent_end", async () => {
@@ -677,7 +765,9 @@ describe("OMP agent client and session", () => {
 
     await expect(
       omp.runPromptAfterExtensionNotice("hello OMP", "model turn completed"),
-    ).resolves.toMatchObject({ finalText: expect.stringContaining("model turn completed") });
+    ).resolves.toMatchObject({
+      finalText: expect.stringContaining("model turn completed"),
+    });
     expect(omp.completedTurnCount()).toBe(1);
   });
 
@@ -686,8 +776,14 @@ describe("OMP agent client and session", () => {
     await omp.start();
 
     await expect(
-      omp.runPromptAfterExtensionNotice("hello OMP", "model turn completed", false),
-    ).resolves.toMatchObject({ finalText: expect.stringContaining("model turn completed") });
+      omp.runPromptAfterExtensionNotice(
+        "hello OMP",
+        "model turn completed",
+        false,
+      ),
+    ).resolves.toMatchObject({
+      finalText: expect.stringContaining("model turn completed"),
+    });
     expect(omp.timeline()).toEqual([
       { type: "user_message", text: "hello OMP", messageId: "user-1" },
       {
@@ -717,14 +813,19 @@ describe("OMP agent client and session", () => {
       );
     omp.runtime().acceptCustomMessage("plain custom status text");
 
-    expect(omp.timeline().filter((item) => item.type === "tool_call")).toMatchObject([
-      { callId: "omp-notice:DocsSmokeTwo", name: "task_notification", status: "completed" },
+    expect(
+      omp.timeline().filter((item) => item.type === "tool_call"),
+    ).toMatchObject([
+      {
+        callId: "omp-notice:DocsSmokeTwo",
+        name: "task_notification",
+        status: "completed",
+      },
     ]);
     // Non-notice custom messages still fall through as assistant messages.
-    expect(omp.timeline().filter((item) => item.type === "assistant_message")).toMatchObject([
-      { text: "done" },
-      { text: "plain custom status text" },
-    ]);
+    expect(
+      omp.timeline().filter((item) => item.type === "assistant_message"),
+    ).toMatchObject([{ text: "done" }, { text: "plain custom status text" }]);
   });
 
   test("does not complete a queued model turn from OMP's local-only hint", async () => {
@@ -732,7 +833,10 @@ describe("OMP agent client and session", () => {
     await omp.start();
 
     await expect(
-      omp.runPromptAfterFalseLocalOnlyHint("hello OMP", "queued model turn completed"),
+      omp.runPromptAfterFalseLocalOnlyHint(
+        "hello OMP",
+        "queued model turn completed",
+      ),
     ).resolves.toMatchObject({ finalText: "queued model turn completed" });
     expect(omp.completedTurnCount()).toBe(1);
   });
@@ -741,7 +845,9 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness();
     await omp.start();
 
-    await expect(omp.runPromptWithoutTurn("/model")).resolves.toMatchObject({ finalText: "" });
+    await expect(omp.runPromptWithoutTurn("/model")).resolves.toMatchObject({
+      finalText: "",
+    });
     expect(omp.completedTurnCount()).toBe(1);
   });
 
@@ -755,7 +861,9 @@ describe("OMP agent client and session", () => {
     );
 
     expect(completion.completedBeforeTurn).toBe(false);
-    expect(completion.result).toMatchObject({ finalText: "delayed queued model turn completed" });
+    expect(completion.result).toMatchObject({
+      finalText: "delayed queued model turn completed",
+    });
     expect(omp.completedTurnCount()).toBe(1);
   });
 
@@ -794,7 +902,9 @@ describe("OMP agent client and session", () => {
     );
 
     expect(completion.completedBeforeTurn).toBe(false);
-    expect(completion.result).toMatchObject({ finalText: "correlated model turn completed" });
+    expect(completion.result).toMatchObject({
+      finalText: "correlated model turn completed",
+    });
     expect(omp.completedTurnCount()).toBe(1);
   });
 
@@ -826,7 +936,9 @@ describe("OMP agent client and session", () => {
       cwd: "/workspace/resumed",
       protocolMode: "rpc-ui",
       modeId: "ask",
-      session: expect.stringMatching(/[\\/]paseo-omp-resume-.*[\\/]session\.jsonl$/),
+      session: expect.stringMatching(
+        /[\\/]paseo-omp-resume-.*[\\/]session\.jsonl$/,
+      ),
       argv: [
         "omp",
         "--mode",
@@ -840,7 +952,11 @@ describe("OMP agent client and session", () => {
       ],
     });
     await expect(omp.history()).resolves.toEqual([
-      { type: "user_message", text: "continue the audit", messageId: "user-history" },
+      {
+        type: "user_message",
+        text: "continue the audit",
+        messageId: "user-history",
+      },
       {
         type: "assistant_message",
         text: "audit context restored",
@@ -853,7 +969,11 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness();
     await omp.start();
 
-    omp.requestToolApproval({ id: "approval-1", tool: "bash", detail: "git status" });
+    omp.requestToolApproval({
+      id: "approval-1",
+      tool: "bash",
+      detail: "git status",
+    });
     expect(omp.pendingPermissions()).toEqual([
       expect.objectContaining({ id: "approval-1", name: "bash", kind: "tool" }),
     ]);
@@ -866,7 +986,9 @@ describe("OMP agent client and session", () => {
 
   test("exposes OMP modes and commands through the domain session", async () => {
     const omp = new OmpHarness();
-    omp.queueCommands([{ name: "review", description: "Review changes", source: "skill" }]);
+    omp.queueCommands([
+      { name: "review", description: "Review changes", source: "skill" },
+    ]);
     await omp.start();
 
     await expect(omp.availableModes()).resolves.toEqual([
@@ -929,7 +1051,9 @@ describe("OMP agent client and session", () => {
       },
     });
     expect(omp.runningToolCallIds()).toEqual(["tool-1"]);
-    expect(omp.subagentUpserts()).toEqual([{ id: "child-1", status: "running" }]);
+    expect(omp.subagentUpserts()).toEqual([
+      { id: "child-1", status: "running" },
+    ]);
 
     await omp.interrupt();
 
@@ -954,6 +1078,49 @@ describe("OMP agent client and session", () => {
     expect(omp.runningToolCallIds()).toEqual([]);
   });
 
+  test("manual compact completes from the RPC response without provider lifecycle events", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    omp.runtime().emitCompactStart = false;
+    omp.runtime().emitCompactEnd = false;
+
+    const events = await omp.runOutOfBand("/compact preserve decisions");
+    expect(omp.compactRequests()).toEqual([
+      { customInstructions: "preserve decisions" },
+    ]);
+    expect(events).toEqual([
+      {
+        type: "timeline",
+        provider: "omp",
+        item: { type: "compaction", status: "loading", trigger: "manual" },
+      },
+      {
+        type: "timeline",
+        provider: "omp",
+        item: { type: "compaction", status: "completed", trigger: "manual" },
+      },
+    ]);
+  });
+
+  test("manual compact deduplicates provider lifecycle events", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+
+    const events = await omp.runOutOfBand("/compact");
+    expect(events).toEqual([
+      {
+        type: "timeline",
+        provider: "omp",
+        item: { type: "compaction", status: "loading", trigger: "manual" },
+      },
+      {
+        type: "timeline",
+        provider: "omp",
+        item: { type: "compaction", status: "completed", trigger: "manual" },
+      },
+    ]);
+  });
+
   test("a resumed session does not re-emit replayed events as live timeline items", async () => {
     const omp = new OmpHarness();
     await omp.resume({
@@ -973,7 +1140,11 @@ describe("OMP agent client and session", () => {
     });
     expect(omp.timeline()).toEqual([
       { type: "user_message", text: "next step", messageId: "user-1" },
-      { type: "assistant_message", text: "on it", messageId: "omp-assistant-1" },
+      {
+        type: "assistant_message",
+        text: "on it",
+        messageId: "omp-assistant-1",
+      },
     ]);
   });
 
@@ -981,12 +1152,16 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness();
     await omp.start();
 
-    await expect(omp.runPrompt("hello OMP", "hello from OMP")).resolves.toMatchObject({
+    await expect(
+      omp.runPrompt("hello OMP", "hello from OMP"),
+    ).resolves.toMatchObject({
       finalText: "hello from OMP",
     });
     // OMP can re-send message_end for an entry it already surfaced.
     omp.runtime().acceptPrompt("hello OMP", "user-1");
-    expect(omp.timeline().filter((item) => item.type === "user_message")).toEqual([
+    expect(
+      omp.timeline().filter((item) => item.type === "user_message"),
+    ).toEqual([
       { type: "user_message", text: "hello OMP", messageId: "user-1" },
     ]);
   });
@@ -995,13 +1170,21 @@ describe("OMP agent client and session", () => {
     const omp = new OmpHarness();
     await omp.start();
 
-    await expect(omp.runPrompt("describe this image", "done")).resolves.toMatchObject({
+    await expect(
+      omp.runPrompt("describe this image", "done"),
+    ).resolves.toMatchObject({
       finalText: "done",
     });
     omp.runtime().acceptPrompt("describe this image", "duplicate-image-entry");
 
-    expect(omp.timeline().filter((item) => item.type === "user_message")).toEqual([
-      { type: "user_message", text: "describe this image", messageId: "user-1" },
+    expect(
+      omp.timeline().filter((item) => item.type === "user_message"),
+    ).toEqual([
+      {
+        type: "user_message",
+        text: "describe this image",
+        messageId: "user-1",
+      },
     ]);
   });
 
@@ -1018,7 +1201,9 @@ describe("OMP agent client and session", () => {
     runtime.finishTurn();
     runtime.acceptPrompt("describe this image", "late-image-entry");
 
-    expect(omp.timeline().filter((item) => item.type === "user_message")).toEqual([
+    expect(
+      omp.timeline().filter((item) => item.type === "user_message"),
+    ).toEqual([
       {
         type: "user_message",
         text: "describe this image",

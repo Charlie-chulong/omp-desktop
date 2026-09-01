@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
-import { streamOmpCoreHistory, type OmpCapturedUserMessageEntry } from "./message-history.js";
+import {
+  streamOmpCoreHistory,
+  type OmpCapturedUserMessageEntry,
+} from "./message-history.js";
 import type { OmpAgentMessage } from "./rpc-types.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
 import { OMP_HISTORY_MAPPER_HOOKS } from "./history-hooks.js";
@@ -32,7 +35,12 @@ describe("OMP history mapper", () => {
       {
         role: "assistant",
         content: [
-          { type: "toolCall", id: "poll-1", name: "subagent", arguments: { poll: ["job-a"] } },
+          {
+            type: "toolCall",
+            id: "poll-1",
+            name: "subagent",
+            arguments: { poll: ["job-a"] },
+          },
         ],
       },
       {
@@ -44,8 +52,18 @@ describe("OMP history mapper", () => {
       {
         role: "assistant",
         content: [
-          { type: "toolCall", id: "poll-2", name: "subagent", arguments: { poll: ["job-a"] } },
-          { type: "toolCall", id: "poll-3", name: "subagent", arguments: { poll: ["job-b"] } },
+          {
+            type: "toolCall",
+            id: "poll-2",
+            name: "subagent",
+            arguments: { poll: ["job-a"] },
+          },
+          {
+            type: "toolCall",
+            id: "poll-3",
+            name: "subagent",
+            arguments: { poll: ["job-b"] },
+          },
           {
             type: "toolCall",
             id: "spawn-1",
@@ -75,7 +93,9 @@ describe("OMP history mapper", () => {
     ]);
 
     expect(
-      events.map((event) => (event.item.type === "tool_call" ? event.item.callId : null)),
+      events.map((event) =>
+        event.item.type === "tool_call" ? event.item.callId : null,
+      ),
     ).toEqual([
       "omp-poll:job-a",
       "omp-poll:job-a",
@@ -262,7 +282,14 @@ describe("OMP history mapper", () => {
       collectHistory([
         {
           role: "assistant",
-          content: [{ type: "toolCall", id: "todo-1", name: "todo", arguments: { op: "view" } }],
+          content: [
+            {
+              type: "toolCall",
+              id: "todo-1",
+              name: "todo",
+              arguments: { op: "view" },
+            },
+          ],
         },
         {
           role: "toolResult",
@@ -289,8 +316,16 @@ describe("OMP history mapper", () => {
         item: {
           type: "todo",
           items: [
-            { text: "Locate submit path", status: "completed", completed: true },
-            { text: "Add directory check", status: "in_progress", completed: false },
+            {
+              text: "Locate submit path",
+              status: "completed",
+              completed: true,
+            },
+            {
+              text: "Add directory check",
+              status: "in_progress",
+              completed: false,
+            },
           ],
         },
       },
@@ -315,7 +350,12 @@ describe("OMP history mapper", () => {
           role: "toolResult",
           toolCallId: "task-1",
           toolName: "task",
-          content: [{ type: "text", text: "done\ntranscript: /tmp/omp-task/Explore.jsonl" }],
+          content: [
+            {
+              type: "text",
+              text: "done\ntranscript: /tmp/omp-task/Explore.jsonl",
+            },
+          ],
         },
       ]),
     ).resolves.toEqual([
@@ -367,7 +407,8 @@ describe("OMP history mapper", () => {
             name: "write",
             arguments: {
               path: "xd://browser",
-              content: '{"action":"open","name":"docs","url":"https://example.com"}',
+              content:
+                '{"action":"open","name":"docs","url":"https://example.com"}',
             },
           },
         ],
@@ -399,7 +440,11 @@ describe("OMP history mapper", () => {
           input: { action: "open", name: "docs", url: "https://example.com" },
           output: {
             content: [{ type: "text", text: "Opened Example Domain" }],
-            details: { action: "open", name: "docs", url: "https://example.com" },
+            details: {
+              action: "open",
+              name: "docs",
+              url: "https://example.com",
+            },
           },
         },
       },
@@ -423,7 +468,10 @@ describe("OMP history mapper", () => {
           type: "message",
           id: "assistant-old",
           parentId: "user-old",
-          message: { role: "assistant", content: [{ type: "text", text: "old answer" }] },
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "old answer" }],
+          },
         },
         {
           type: "session_init",
@@ -444,9 +492,16 @@ describe("OMP history mapper", () => {
           message: { role: "user", content: "active branch" },
         },
         {
+          type: "compaction",
+          id: "compact-active",
+          parentId: "user-active",
+          timestamp: "2026-08-01T12:00:00.000Z",
+          tokensBefore: 1234,
+        },
+        {
           type: "title",
           id: "title-control",
-          parentId: "user-active",
+          parentId: "compact-active",
           title: "Updated title",
         },
         {
@@ -480,14 +535,22 @@ describe("OMP history mapper", () => {
     );
 
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile, provider: "omp" })) {
+    for await (const event of streamOmpHistory({
+      sessionFile,
+      provider: "omp",
+    })) {
       events.push(event);
     }
     expect(events.map((event) => event.item)).toEqual([
       { type: "user_message", text: "active branch", messageId: "user-active" },
-      { type: "assistant_message", text: "[future_control] Unsupported history record" },
+      { type: "compaction", status: "completed", preTokens: 1234 },
+      {
+        type: "assistant_message",
+        text: "[future_control] Unsupported history record",
+      },
       { type: "assistant_message", text: "[developer] developer note" },
     ]);
+    expect(events[1]).toMatchObject({ timestamp: "2026-08-01T12:00:00.000Z" });
 
     const omp = new FakeOmp();
     const runtimeSession = await omp.startSession({ cwd: dir });
@@ -501,7 +564,9 @@ describe("OMP history mapper", () => {
       selectedEvents.push(event);
     }
     expect(
-      selectedEvents.flatMap((event) => (event.type === "timeline" ? [event.item] : [])),
+      selectedEvents.flatMap((event) =>
+        event.type === "timeline" ? [event.item] : [],
+      ),
     ).toEqual([
       { type: "user_message", text: "old branch", messageId: "user-old" },
       {
@@ -524,20 +589,36 @@ describe("OMP history mapper", () => {
     mkdirSync(join(parentStem, echoId), { recursive: true });
 
     const writeEntries = (file: string, entries: object[]): void => {
-      writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+      writeFileSync(
+        file,
+        entries.map((entry) => JSON.stringify(entry)).join("\n"),
+      );
     };
     writeEntries(nestedFile, [
-      { type: "session", id: "nested-root", parentId: null, timestamp: "2026-07-07T03:00:00Z" },
+      {
+        type: "session",
+        id: "nested-root",
+        parentId: null,
+        timestamp: "2026-07-07T03:00:00Z",
+      },
       {
         type: "message",
         id: "nested-answer",
         parentId: "nested-root",
         timestamp: "2026-07-07T03:00:01Z",
-        message: { role: "assistant", content: [{ type: "text", text: "Nested answer" }] },
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Nested answer" }],
+        },
       },
     ]);
     writeEntries(echoFile, [
-      { type: "session", id: "echo-root", parentId: null, timestamp: "2026-07-07T02:00:00Z" },
+      {
+        type: "session",
+        id: "echo-root",
+        parentId: null,
+        timestamp: "2026-07-07T02:00:00Z",
+      },
       {
         type: "model_change",
         id: "echo-model",
@@ -551,7 +632,10 @@ describe("OMP history mapper", () => {
         id: "echo-answer",
         parentId: "echo-model",
         timestamp: "2026-07-07T02:00:01Z",
-        message: { role: "assistant", content: [{ type: "text", text: "Found it" }] },
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Found it" }],
+        },
       },
       {
         type: "message",
@@ -585,13 +669,28 @@ describe("OMP history mapper", () => {
       },
     ]);
     writeEntries(failedFile, [
-      { type: "session", id: "failed-root", parentId: null, timestamp: "2026-07-07T04:00:00Z" },
+      {
+        type: "session",
+        id: "failed-root",
+        parentId: null,
+        timestamp: "2026-07-07T04:00:00Z",
+      },
     ]);
     writeEntries(abortedFile, [
-      { type: "session", id: "aborted-root", parentId: null, timestamp: 1_752_000_000 },
+      {
+        type: "session",
+        id: "aborted-root",
+        parentId: null,
+        timestamp: 1_752_000_000,
+      },
     ]);
     writeEntries(parentFile, [
-      { type: "session", id: "parent-root", parentId: null, timestamp: "2026-07-07T01:00:00Z" },
+      {
+        type: "session",
+        id: "parent-root",
+        parentId: null,
+        timestamp: "2026-07-07T01:00:00Z",
+      },
       {
         type: "message",
         id: "task-call",
@@ -599,7 +698,14 @@ describe("OMP history mapper", () => {
         timestamp: "2026-07-07T01:00:01Z",
         message: {
           role: "assistant",
-          content: [{ type: "toolCall", id: "task-1", name: "task", arguments: { agent: "task" } }],
+          content: [
+            {
+              type: "toolCall",
+              id: "task-1",
+              name: "task",
+              arguments: { agent: "task" },
+            },
+          ],
         },
       },
       {
@@ -624,7 +730,10 @@ describe("OMP history mapper", () => {
     ]);
 
     const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({ sessionFile: parentFile, provider: "omp" })) {
+    for await (const event of streamOmpHistory({
+      sessionFile: parentFile,
+      provider: "omp",
+    })) {
       events.push(event);
     }
     const subagentEvents = events.flatMap((event) =>

@@ -1980,7 +1980,6 @@ export const ptBR: TranslationResources = {
       connections: "Conexões",
       agents: "Agentes",
       metadata: "Metadados",
-      workspaces: "Workspaces",
       providers: "Provedores",
       usage: "Uso",
       terminals: "Terminais",
@@ -2418,9 +2417,6 @@ export const ptBR: TranslationResources = {
       },
       agents: {
         unavailable: "Conecte-se a este host para gerenciar agentes",
-      },
-      workspaces: {
-        unavailable: "Conecte-se a este host para gerenciar workspaces",
       },
       terminalProfiles: {
         unavailable: "Conecte-se a este host para gerenciar perfis de terminal",

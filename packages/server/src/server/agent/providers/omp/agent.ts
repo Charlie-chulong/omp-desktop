@@ -3,7 +3,10 @@ import { createRequire } from "node:module";
 import { existsSync, promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
+import {
+  setImmediate as waitForImmediate,
+  setTimeout as delay,
+} from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
 import type {
@@ -77,16 +80,33 @@ import {
   type OmpModelRoleParams,
   type OmpRuntimeProviderParams,
 } from "./provider-config.js";
-export { formatOmpVersionSupport, resolveOmpDiagnosticPaths } from "./provider-config.js";
-import { OmpSubagentCardTracker, type OmpSubagentCardScheduler } from "./subagent-card-tracker.js";
+export {
+  formatOmpVersionSupport,
+  resolveOmpDiagnosticPaths,
+} from "./provider-config.js";
+import {
+  OmpSubagentCardTracker,
+  type OmpSubagentCardScheduler,
+} from "./subagent-card-tracker.js";
 import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
 import { getUserMessageText } from "./message-history.js";
 import { mapOmpSystemNoticeToToolCall } from "./system-notice.js";
 import { materializeProviderImage } from "../provider-image-output.js";
-import { ensureManagedOmpOnPath, getOmpInstallationStatus, installOmp } from "./installer.js";
+import {
+  ensureManagedOmpOnPath,
+  getOmpInstallationStatus,
+  installOmp,
+} from "./installer.js";
 import { OmpCliRuntime } from "./cli-runtime.js";
-import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
-import type { OmpRuntime, OmpRuntimeSession, OmpStartSessionInput } from "./runtime.js";
+import {
+  listOmpImportableSessions,
+  readOmpImportSessionConfig,
+} from "./session-descriptor.js";
+import type {
+  OmpRuntime,
+  OmpRuntimeSession,
+  OmpStartSessionInput,
+} from "./runtime.js";
 import type {
   OmpAgentSessionEvent,
   OmpAgentMessage,
@@ -103,9 +123,16 @@ import {
   type OmpToolResult,
   type OmpTrackedToolCall,
 } from "./tool-call-detail.js";
-import { mapOmpAvailableCommandsUpdate, mapOmpRuntimeSlashCommands } from "./commands.js";
+import {
+  mapOmpAvailableCommandsUpdate,
+  mapOmpRuntimeSlashCommands,
+} from "./commands.js";
 import { streamOmpHistory } from "./history.js";
-import { mapOmpTodoReminderEvent, mapOmpTodoState, mapOmpTodoToolResult } from "./todo-mapper.js";
+import {
+  mapOmpTodoReminderEvent,
+  mapOmpTodoState,
+  mapOmpTodoToolResult,
+} from "./todo-mapper.js";
 import { mapOmpRuntimeEventToTimelineItem } from "./event-mapper.js";
 import { mapOmpAdvisorMessageToToolCall } from "./advisor-message.js";
 import {
@@ -121,7 +148,10 @@ import {
   mapOmpRpcUiPermissionRequest,
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
-import { fetchCodexAccountQuota, type CodexAccountQuotaCredential } from "./codex-account-quota.js";
+import {
+  fetchCodexAccountQuota,
+  type CodexAccountQuotaCredential,
+} from "./codex-account-quota.js";
 
 const OMP_PROVIDER = "omp";
 const QUESTION_RESPONSE_HEADER = "Response";
@@ -164,16 +194,19 @@ function parseStoredOmpOAuthAccountCredential(
   } catch {
     return null;
   }
-  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  if (typeof data !== "object" || data === null || Array.isArray(data))
+    return null;
   const credential = data as Record<string, unknown>;
-  const accessToken = typeof credential.access === "string" ? credential.access.trim() : "";
+  const accessToken =
+    typeof credential.access === "string" ? credential.access.trim() : "";
   if (!accessToken) return null;
   const identityKey =
     typeof row.identity_key === "string" && row.identity_key.trim().length > 0
       ? row.identity_key.trim()
       : undefined;
   const accountId =
-    typeof credential.accountId === "string" && credential.accountId.trim().length > 0
+    typeof credential.accountId === "string" &&
+    credential.accountId.trim().length > 0
       ? credential.accountId.trim()
       : undefined;
   return {
@@ -235,7 +268,9 @@ function openOmpCredentialDatabase(agentDbPath: string): NodeSqliteDatabase {
   return database;
 }
 
-export function readStoredOmpOAuthAccounts(agentDbPath: string): StoredOmpOAuthAccount[] {
+export function readStoredOmpOAuthAccounts(
+  agentDbPath: string,
+): StoredOmpOAuthAccount[] {
   if (!existsSync(agentDbPath)) return [];
 
   const database = openOmpCredentialDatabase(agentDbPath);
@@ -247,7 +282,13 @@ export function readStoredOmpOAuthAccounts(agentDbPath: string): StoredOmpOAuthA
         .map((row) => row.name)
         .filter((name): name is string => typeof name === "string"),
     );
-    const requiredColumns = ["id", "provider", "credential_type", "disabled_cause", "identity_key"];
+    const requiredColumns = [
+      "id",
+      "provider",
+      "credential_type",
+      "disabled_cause",
+      "identity_key",
+    ];
     if (requiredColumns.some((column) => !columns.has(column))) return [];
 
     return database
@@ -269,7 +310,8 @@ export function readStoredOmpOAuthAccounts(agentDbPath: string): StoredOmpOAuthA
           return [];
         }
         const identityKey =
-          typeof row.identity_key === "string" && row.identity_key.trim().length > 0
+          typeof row.identity_key === "string" &&
+          row.identity_key.trim().length > 0
             ? row.identity_key.trim()
             : undefined;
         return [
@@ -474,14 +516,18 @@ function normalizeOmpWorkflowSelection(value: unknown): OmpWorkflowSelection {
   return value === "plan" || value === "goal" ? value : "standard";
 }
 
-function formatStoredOmpOAuthAccountLabel(account: StoredOmpOAuthAccount): string {
+function formatStoredOmpOAuthAccountLabel(
+  account: StoredOmpOAuthAccount,
+): string {
   const identityKey = account.identityKey?.trim();
   if (!identityKey) return `OAuth credential #${account.credentialId}`;
   const parts = identityKey
     .split("|")
     .map((part) => part.trim())
     .filter(Boolean);
-  const emailPart = parts.find((part) => part.toLowerCase().startsWith("email:"));
+  const emailPart = parts.find((part) =>
+    part.toLowerCase().startsWith("email:"),
+  );
   if (!emailPart) return identityKey;
   const email = emailPart.slice(emailPart.indexOf(":") + 1).trim();
   if (!email) return identityKey;
@@ -499,9 +545,12 @@ function createOmpFeatures(
       type: "select",
       id: OMP_WORKFLOW_FEATURE_ID,
       label: "Workflow",
-      description: "Choose an OMP-native conversation workflow independently from approvals.",
+      description:
+        "Choose an OMP-native conversation workflow independently from approvals.",
       icon: "Target",
-      value: normalizeOmpWorkflowSelection(config.featureValues?.[OMP_WORKFLOW_FEATURE_ID]),
+      value: normalizeOmpWorkflowSelection(
+        config.featureValues?.[OMP_WORKFLOW_FEATURE_ID],
+      ),
       options: [
         { id: "standard", label: "Standard" },
         { id: "plan", label: "Plan" },
@@ -537,7 +586,9 @@ function createOmpFeatures(
       icon: "User",
       value:
         configuredCredentialId &&
-        providerAccounts.some((account) => String(account.credentialId) === configuredCredentialId)
+        providerAccounts.some(
+          (account) => String(account.credentialId) === configuredCredentialId,
+        )
           ? configuredCredentialId
           : null,
       options: providerAccounts.map((account) => ({
@@ -574,13 +625,17 @@ function normalizeOmpModelLabel(label: string): string {
   return normalizedLabel.slice(vendorSeparatorIndex + 2).trim();
 }
 
-export function transformOmpModels(models: AgentModelDefinition[]): AgentModelDefinition[] {
+export function transformOmpModels(
+  models: AgentModelDefinition[],
+): AgentModelDefinition[] {
   return models.map((model) => {
     if (!model.label.includes("/")) {
       return model;
     }
 
-    const segments = model.label.split("/").filter((segment) => segment.length > 0);
+    const segments = model.label
+      .split("/")
+      .filter((segment) => segment.length > 0);
     const rawLabel = segments.at(-1);
     if (!rawLabel) {
       return model;
@@ -594,7 +649,9 @@ export function transformOmpModels(models: AgentModelDefinition[]): AgentModelDe
   });
 }
 
-function isOmpThinkingLevel(value: string | null | undefined): value is OmpThinkingLevel {
+function isOmpThinkingLevel(
+  value: string | null | undefined,
+): value is OmpThinkingLevel {
   return (
     value === "off" ||
     value === "minimal" ||
@@ -606,7 +663,9 @@ function isOmpThinkingLevel(value: string | null | undefined): value is OmpThink
   );
 }
 
-function normalizeOmpThinkingOption(value: string | null | undefined): OmpThinkingLevel | null {
+function normalizeOmpThinkingOption(
+  value: string | null | undefined,
+): OmpThinkingLevel | null {
   if (!value) {
     return null;
   }
@@ -615,10 +674,20 @@ function normalizeOmpThinkingOption(value: string | null | undefined): OmpThinki
 
 function parseAutoCompactMode(value: string | undefined): AutoCompactMode {
   const mode = (value ?? "toggle").trim().toLowerCase();
-  if (mode === "on" || mode === "true" || mode === "enable" || mode === "enabled") {
+  if (
+    mode === "on" ||
+    mode === "true" ||
+    mode === "enable" ||
+    mode === "enabled"
+  ) {
     return true;
   }
-  if (mode === "off" || mode === "false" || mode === "disable" || mode === "disabled") {
+  if (
+    mode === "off" ||
+    mode === "false" ||
+    mode === "disable" ||
+    mode === "disabled"
+  ) {
     return false;
   }
   if (mode === "toggle") {
@@ -627,11 +696,16 @@ function parseAutoCompactMode(value: string | undefined): AutoCompactMode {
   return "unknown";
 }
 
-function ompModelSupportsImageInput(model: OmpModel | null | undefined): boolean {
+function ompModelSupportsImageInput(
+  model: OmpModel | null | undefined,
+): boolean {
   return model?.input?.includes("image") === true;
 }
 
-function renderTextOnlyImageHint(image: { data: string; mimeType: string }): string {
+function renderTextOnlyImageHint(image: {
+  data: string;
+  mimeType: string;
+}): string {
   try {
     const materialized = materializeProviderImage({
       data: image.data,
@@ -711,9 +785,11 @@ function isOmpFastModeEligibleModel(
   model: OmpModel | null | undefined,
   configuredModel: string | null | undefined,
 ): boolean {
-  const provider = model?.provider ?? parseModelReference(configuredModel ?? null)?.provider;
+  const provider =
+    model?.provider ?? parseModelReference(configuredModel ?? null)?.provider;
   if (provider === "openai" || provider === "openai-codex") return true;
-  if (!model || provider === "fireworks" || provider === "github-copilot") return false;
+  if (!model || provider === "fireworks" || provider === "github-copilot")
+    return false;
   const usesOpenAIWireApi =
     model.api === "openai-completions" ||
     model.api === "openai-responses" ||
@@ -722,7 +798,9 @@ function isOmpFastModeEligibleModel(
   return /\bgpt(?:\b|\d)/i.test(`${model.id} ${model.name ?? ""}`);
 }
 
-function parsePersistenceMetadata(metadata: AgentMetadata | undefined): OmpPersistenceMetadata {
+function parsePersistenceMetadata(
+  metadata: AgentMetadata | undefined,
+): OmpPersistenceMetadata {
   if (!metadata) {
     return {};
   }
@@ -733,7 +811,9 @@ function parsePersistenceMetadata(metadata: AgentMetadata | undefined): OmpPersi
       ? { thinkingOptionId: metadata.thinkingOptionId }
       : {}),
     ...(typeof metadata.modeId === "string" ? { modeId: metadata.modeId } : {}),
-    ...(typeof metadata.systemPrompt === "string" ? { systemPrompt: metadata.systemPrompt } : {}),
+    ...(typeof metadata.systemPrompt === "string"
+      ? { systemPrompt: metadata.systemPrompt }
+      : {}),
   };
 }
 
@@ -745,7 +825,8 @@ function buildResumeConfig(
   const overrideConfig = overrides ?? {};
   const cwd = overrideConfig.cwd ?? metadata.cwd ?? process.cwd();
   const model = overrideConfig.model ?? metadata.model;
-  const thinkingOptionId = overrideConfig.thinkingOptionId ?? metadata.thinkingOptionId;
+  const thinkingOptionId =
+    overrideConfig.thinkingOptionId ?? metadata.thinkingOptionId;
   const modeId = overrideConfig.modeId ?? metadata.modeId;
   return {
     cwd,
@@ -776,9 +857,13 @@ function buildResumeStartInput(input: {
     env: input.launchContext?.env,
     session: input.sessionFile,
     model: input.resumeConfig.model,
-    thinkingOptionId: normalizeOmpThinkingOption(input.resumeConfig.thinkingOptionId) ?? undefined,
+    thinkingOptionId:
+      normalizeOmpThinkingOption(input.resumeConfig.thinkingOptionId) ??
+      undefined,
     ...(input.launchMode.modeId ? { modeId: input.launchMode.modeId } : {}),
-    ...(input.launchMode.extraArgs ? { extraArgs: input.launchMode.extraArgs } : {}),
+    ...(input.launchMode.extraArgs
+      ? { extraArgs: input.launchMode.extraArgs }
+      : {}),
     systemPrompt: composeSystemPromptParts(
       input.resumeConfig.config.systemPrompt,
       input.resumeConfig.config.daemonAppendSystemPrompt,
@@ -808,7 +893,9 @@ function isOmpRequestAbortError(error: unknown): boolean {
     return true;
   }
 
-  return /\brequest was aborted\b|\babort(ed)?\b/i.test(toDiagnosticErrorMessage(error));
+  return /\brequest was aborted\b|\babort(ed)?\b/i.test(
+    toDiagnosticErrorMessage(error),
+  );
 }
 
 function resolveThinkingOptionId(
@@ -823,7 +910,9 @@ function modelToId(model: OmpModel | null | undefined): string | null {
   return model?.provider && model.id ? `${model.provider}/${model.id}` : null;
 }
 
-function ompAssistantText(message: Extract<OmpAgentMessage, { role: "assistant" }>): string | null {
+function ompAssistantText(
+  message: Extract<OmpAgentMessage, { role: "assistant" }>,
+): string | null {
   const text = message.content
     .flatMap((part) => {
       if (part.type === "text") {
@@ -847,7 +936,9 @@ function latestOmpPlan(
   messages: readonly OmpAgentMessage[],
   streamedPlan: OmpPlanDraft | null,
 ): OmpPlanDraft | null {
-  const latestAssistant = messages.findLast((message) => message.role === "assistant");
+  const latestAssistant = messages.findLast(
+    (message) => message.role === "assistant",
+  );
   const terminalText = latestAssistant?.content
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n")
@@ -863,11 +954,15 @@ function latestOmpPlan(
   };
 }
 
-function formatOmpErrorMessage(message: Extract<OmpAgentMessage, { role: "assistant" }>): string {
+function formatOmpErrorMessage(
+  message: Extract<OmpAgentMessage, { role: "assistant" }>,
+): string {
   const headline = message.errorMessage?.trim() || "OMP turn failed";
   const details = [
     message.stopReason ? `stopReason=${message.stopReason}` : null,
-    message.provider && message.model ? `model=${message.provider}/${message.model}` : null,
+    message.provider && message.model
+      ? `model=${message.provider}/${message.model}`
+      : null,
     message.responseModel ? `responseModel=${message.responseModel}` : null,
     message.responseId ? `responseId=${message.responseId}` : null,
   ].filter((detail): detail is string => detail !== null);
@@ -879,7 +974,9 @@ function formatOmpErrorMessage(message: Extract<OmpAgentMessage, { role: "assist
 }
 
 function latestOmpErrorMessage(messages: OmpAgentMessage[]): string | null {
-  const latestAssistant = messages.findLast((message) => message.role === "assistant");
+  const latestAssistant = messages.findLast(
+    (message) => message.role === "assistant",
+  );
   if (!latestAssistant || !latestAssistant.errorMessage?.trim()) {
     return null;
   }
@@ -927,7 +1024,10 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function readActiveAskUserDialog(toolName: string, args: unknown): ActiveAskUserDialog | null {
+function readActiveAskUserDialog(
+  toolName: string,
+  args: unknown,
+): ActiveAskUserDialog | null {
   if (toolName !== "ask_user" || !isRecord(args)) {
     return null;
   }
@@ -942,7 +1042,10 @@ function isOptionalInputPlaceholder(placeholder: string | undefined): boolean {
   return /\boptional\b|\bskip\b/i.test(placeholder ?? "");
 }
 
-function getInputQuestionTitle(title: string | undefined, placeholder: string | undefined): string {
+function getInputQuestionTitle(
+  title: string | undefined,
+  placeholder: string | undefined,
+): string {
   if (!isOptionalInputPlaceholder(placeholder)) {
     return title ?? "Enter a value";
   }
@@ -1037,7 +1140,9 @@ function isProcessExitEvent(
   return event.type === "process_exit" && typeof event.error === "string";
 }
 
-function isOmpAgentSessionEvent(event: OmpRuntimeEvent): event is OmpAgentSessionEvent {
+function isOmpAgentSessionEvent(
+  event: OmpRuntimeEvent,
+): event is OmpAgentSessionEvent {
   switch (event.type) {
     case "agent_start":
     case "turn_start":
@@ -1105,8 +1210,11 @@ function buildCombinedAskUserQuestionPermission(
     allowFreeform: boolean;
   },
 ): AgentPermissionRequest {
-  const visibleOptions = input.options.filter((option) => !isOmpAskUserFreeformOption(option));
-  const allowOther = input.allowFreeform || visibleOptions.length !== input.options.length;
+  const visibleOptions = input.options.filter(
+    (option) => !isOmpAskUserFreeformOption(option),
+  );
+  const allowOther =
+    input.allowFreeform || visibleOptions.length !== input.options.length;
   return {
     id: event.id,
     provider: input.provider,
@@ -1138,12 +1246,17 @@ function buildCombinedAskUserQuestionPermission(
       commentHeader: QUESTION_COMMENT_HEADER,
       combinedAskUser: COMBINED_ASK_USER_METADATA,
       selectOptions: visibleOptions,
-      ...(allowOther ? { freeformSentinel: OMP_ASK_USER_FREEFORM_SENTINEL } : {}),
+      ...(allowOther
+        ? { freeformSentinel: OMP_ASK_USER_FREEFORM_SENTINEL }
+        : {}),
     },
   };
 }
 
-function permissionAnswer(input: AgentMetadata | undefined, header: string): string | null {
+function permissionAnswer(
+  input: AgentMetadata | undefined,
+  header: string,
+): string | null {
   const answers = isRecord(input?.answers) ? input.answers : null;
   if (!answers) {
     return null;
@@ -1152,12 +1265,16 @@ function permissionAnswer(input: AgentMetadata | undefined, header: string): str
   return typeof answer === "string" ? answer : null;
 }
 
-function firstPermissionAnswer(input: AgentMetadata | undefined): string | null {
+function firstPermissionAnswer(
+  input: AgentMetadata | undefined,
+): string | null {
   const answers = isRecord(input?.answers) ? input.answers : null;
   if (!answers) {
     return null;
   }
-  const first = Object.values(answers).find((value) => typeof value === "string");
+  const first = Object.values(answers).find(
+    (value) => typeof value === "string",
+  );
   return typeof first === "string" ? first : null;
 }
 
@@ -1176,15 +1293,20 @@ function buildCombinedAskUserSelectionResponse(
     return { uiResponse: { cancelled: true }, pendingResponse: null };
   }
 
-  const answer = permissionAnswer(response.updatedInput, QUESTION_RESPONSE_HEADER);
+  const answer = permissionAnswer(
+    response.updatedInput,
+    QUESTION_RESPONSE_HEADER,
+  );
   if (answer === null) {
     return { uiResponse: { cancelled: true }, pendingResponse: null };
   }
 
   const selectOptions = readStringArray(request.metadata?.selectOptions);
   const freeformSentinel = optionalString(request.metadata?.freeformSentinel);
-  const isFreeform = Boolean(freeformSentinel) && !selectOptions.includes(answer);
-  const comment = permissionAnswer(response.updatedInput, QUESTION_COMMENT_HEADER) ?? "";
+  const isFreeform =
+    Boolean(freeformSentinel) && !selectOptions.includes(answer);
+  const comment =
+    permissionAnswer(response.updatedInput, QUESTION_COMMENT_HEADER) ?? "";
   return {
     uiResponse: { value: isFreeform ? freeformSentinel : answer },
     pendingResponse: {
@@ -1233,9 +1355,13 @@ export class OmpAgentSession implements AgentSession {
 
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly activeToolCalls = new Map<string, OmpTrackedToolCall>();
-  private readonly pendingExtensionUiRequests = new Map<string, AgentPermissionRequest>();
+  private readonly pendingExtensionUiRequests = new Map<
+    string,
+    AgentPermissionRequest
+  >();
   private activeAskUserDialog: ActiveAskUserDialog | null = null;
-  private pendingCombinedAskUserResponse: PendingCombinedAskUserResponse | null = null;
+  private pendingCombinedAskUserResponse: PendingCombinedAskUserResponse | null =
+    null;
   private activeTurnId: string | null = null;
   private activeClientMessageId: string | null = null;
   private activeAssistantMessageId: string | null = null;
@@ -1245,19 +1371,24 @@ export class OmpAgentSession implements AgentSession {
   private activeTurnStarted = false;
   private activeTurnHasUserMessage = false;
   private activeNoTurnPromptText: string | null = null;
-  private readonly pendingNoTurnOutputs: Array<{ turnId: string; message: string }> = [];
+  private readonly pendingNoTurnOutputs: Array<{
+    turnId: string;
+    message: string;
+  }> = [];
   private activePromptRequestId: string | null = null;
   private activePromptAgentInvoked: boolean | null = null;
   private readonly pendingPromptResults = new Map<string, boolean>();
   private pendingNoTurnCompletionAbort: AbortController | null = null;
   private lastKnownThinkingOptionId: string | null;
-  private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
+  private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null =
+    null;
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
   private commandCache: AgentSlashCommand[] | null = null;
   private readonly subagentIndex = new OmpSubagentIndex();
   private readonly subagentCardTracker: OmpSubagentCardTracker;
-  private lastTodoItem: Extract<AgentTimelineItem, { type: "todo" }> | null = null;
+  private lastTodoItem: Extract<AgentTimelineItem, { type: "todo" }> | null =
+    null;
   private state: OmpSessionState;
   private currentModeId: string | null;
   private activeWorkflowMode: OmpWorkflowMode | null;
@@ -1282,14 +1413,18 @@ export class OmpAgentSession implements AgentSession {
       options.config.featureValues?.[OMP_WORKFLOW_FEATURE_ID],
     );
     this.currentModeId = configuredModeId;
-    this.fastModeSupported = typeof options.initialState.fastModeEnabled === "boolean";
+    this.fastModeSupported =
+      typeof options.initialState.fastModeEnabled === "boolean";
     const configuredFastMode = optionalBoolean(
       options.config.featureValues?.[OMP_FAST_MODE_FEATURE_ID],
     );
     this.fastModeEnabled = options.initialState.fastModeEnabled === true;
     this.features = createOmpFeatures(options.config, this.oauthAccounts, {
       supported: this.fastModeSupported,
-      eligible: isOmpFastModeEligibleModel(options.initialState.model, options.config.model),
+      eligible: isOmpFastModeEligibleModel(
+        options.initialState.model,
+        options.config.model,
+      ),
       enabled: configuredFastMode ?? this.fastModeEnabled,
     });
     this.activeWorkflowMode =
@@ -1303,8 +1438,10 @@ export class OmpAgentSession implements AgentSession {
     this.logger = options.logger;
     this.paseoTools = options.paseoTools;
     this.live = options.live ?? true;
-    this.providerIdleScheduler = options.providerIdleScheduler ?? createOmpProviderIdleScheduler();
-    this.noTurnScheduler = options.noTurnScheduler ?? createOmpNoTurnScheduler();
+    this.providerIdleScheduler =
+      options.providerIdleScheduler ?? createOmpProviderIdleScheduler();
+    this.noTurnScheduler =
+      options.noTurnScheduler ?? createOmpNoTurnScheduler();
     this.usagePoller = new OmpUsagePoller({
       scheduler: options.usagePollScheduler,
       readStats: () => this.runtimeSession.getSessionStats(),
@@ -1330,20 +1467,22 @@ export class OmpAgentSession implements AgentSession {
     this.runtimeSession.onEvent((event) => {
       this.handleRuntimeEvent(event);
     });
-    void this.runtimeSession.setSubagentSubscription("events").catch((eventsError: unknown) => {
-      this.logger.debug(
-        { err: eventsError },
-        "OMP subagent event subscription unavailable; falling back to progress",
-      );
-      void this.runtimeSession
-        .setSubagentSubscription("progress")
-        .catch((progressError: unknown) => {
-          this.logger.debug(
-            { err: progressError },
-            "OMP subagent progress subscription unavailable",
-          );
-        });
-    });
+    void this.runtimeSession
+      .setSubagentSubscription("events")
+      .catch((eventsError: unknown) => {
+        this.logger.debug(
+          { err: eventsError },
+          "OMP subagent event subscription unavailable; falling back to progress",
+        );
+        void this.runtimeSession
+          .setSubagentSubscription("progress")
+          .catch((progressError: unknown) => {
+            this.logger.debug(
+              { err: progressError },
+              "OMP subagent progress subscription unavailable",
+            );
+          });
+      });
   }
 
   private readonly runtimeSession: OmpRuntimeSession;
@@ -1367,7 +1506,10 @@ export class OmpAgentSession implements AgentSession {
     return this.state.sessionId;
   }
 
-  async run(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<AgentRunResult> {
+  async run(
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<AgentRunResult> {
     return runProviderTurn({
       prompt,
       runOptions: options,
@@ -1379,7 +1521,10 @@ export class OmpAgentSession implements AgentSession {
     });
   }
 
-  async startTurn(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<StartTurnResult> {
+  async startTurn(
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<StartTurnResult> {
     if (this.activeTurnId) {
       throw new Error("An OMP turn is already active");
     }
@@ -1417,7 +1562,10 @@ export class OmpAgentSession implements AgentSession {
 
     void (async () => {
       try {
-        const ack = await this.runtimeSession.prompt(payload.text, payload.images);
+        const ack = await this.runtimeSession.prompt(
+          payload.text,
+          payload.images,
+        );
         this.activePromptRequestId = ack.requestId ?? null;
         const correlatedResult = ack.requestId
           ? this.pendingPromptResults.get(ack.requestId)
@@ -1425,7 +1573,8 @@ export class OmpAgentSession implements AgentSession {
         if (ack.requestId) {
           this.pendingPromptResults.delete(ack.requestId);
         }
-        this.activePromptAgentInvoked = correlatedResult ?? ack.agentInvoked ?? null;
+        this.activePromptAgentInvoked =
+          correlatedResult ?? ack.agentInvoked ?? null;
         if (correlatedResult === false) {
           this.scheduleNoTurnPromptCompletion(turnId);
           return;
@@ -1529,7 +1678,9 @@ export class OmpAgentSession implements AgentSession {
       if (typeof value !== "boolean") {
         throw new Error(`Invalid OMP fast mode '${String(value)}'`);
       }
-      const feature = this.features.find((candidate) => candidate.id === featureId);
+      const feature = this.features.find(
+        (candidate) => candidate.id === featureId,
+      );
       if (feature?.type !== "toggle") {
         throw new Error("OMP fast mode is unavailable for the current model");
       }
@@ -1555,18 +1706,24 @@ export class OmpAgentSession implements AgentSession {
       if (!Number.isSafeInteger(credentialId) || credentialId <= 0) {
         throw new Error(`Invalid OMP OAuth account '${value}'`);
       }
-      const feature = this.features.find((candidate) => candidate.id === featureId);
+      const feature = this.features.find(
+        (candidate) => candidate.id === featureId,
+      );
       if (feature?.type !== "select") {
         throw new Error("OMP OAuth account feature is unavailable");
       }
       const modelProvider =
-        this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
+        this.state.model?.provider ??
+        parseModelReference(this.config.model ?? null)?.provider;
       const account = this.oauthAccounts.find(
         (candidate) =>
-          candidate.credentialId === credentialId && candidate.provider === modelProvider,
+          candidate.credentialId === credentialId &&
+          candidate.provider === modelProvider,
       );
       if (!account) {
-        throw new Error(`OMP OAuth account '${value}' is unavailable for the current model`);
+        throw new Error(
+          `OMP OAuth account '${value}' is unavailable for the current model`,
+        );
       }
       await this.pinOAuthAccount(account);
       feature.value = value;
@@ -1599,8 +1756,11 @@ export class OmpAgentSession implements AgentSession {
 
   private async applyConfiguredFastMode(): Promise<void> {
     if (!this.fastModeSupported) return;
-    if (!isOmpFastModeEligibleModel(this.state.model, this.config.model)) return;
-    const configured = optionalBoolean(this.config.featureValues?.[OMP_FAST_MODE_FEATURE_ID]);
+    if (!isOmpFastModeEligibleModel(this.state.model, this.config.model))
+      return;
+    const configured = optionalBoolean(
+      this.config.featureValues?.[OMP_FAST_MODE_FEATURE_ID],
+    );
     if (configured === undefined) {
       this.fastModeEnabled = this.state.fastModeEnabled === true;
       this.refreshFeatures();
@@ -1632,12 +1792,16 @@ export class OmpAgentSession implements AgentSession {
       providerPosition += 1;
     }
     if (position < 0) {
-      throw new Error(`OMP OAuth account '${account.credentialId}' is unavailable`);
+      throw new Error(
+        `OMP OAuth account '${account.credentialId}' is unavailable`,
+      );
     }
     if (this.activeTurnId) {
       throw new Error("Cannot pin an OMP OAuth account while a turn is active");
     }
-    const ack = await this.runtimeSession.prompt(`/session pin ${position + 1}`);
+    const ack = await this.runtimeSession.prompt(
+      `/session pin ${position + 1}`,
+    );
     if (ack.requestId) {
       this.pendingPromptResults.delete(ack.requestId);
     }
@@ -1648,9 +1812,15 @@ export class OmpAgentSession implements AgentSession {
       this.config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
     );
     if (!configuredCredentialId) return;
-    if (!this.features.some((feature) => feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)) return;
+    if (
+      !this.features.some(
+        (feature) => feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID,
+      )
+    )
+      return;
     const modelProvider =
-      this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
+      this.state.model?.provider ??
+      parseModelReference(this.config.model ?? null)?.provider;
     const account = this.oauthAccounts.find(
       (candidate) =>
         String(candidate.credentialId) === configuredCredentialId &&
@@ -1671,7 +1841,10 @@ export class OmpAgentSession implements AgentSession {
       throw new Error("OMP goal objective is required");
     }
     const workflowFeature = this.features[0];
-    if (workflowFeature?.type !== "select" || workflowFeature.value !== "goal") {
+    if (
+      workflowFeature?.type !== "select" ||
+      workflowFeature.value !== "goal"
+    ) {
       throw new Error("OMP goal mode is not active");
     }
     this.config.featureValues = {
@@ -1681,7 +1854,9 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async controlGoal(action: "start" | "pause" | "delete"): Promise<void> {
-    const objective = optionalString(this.config.featureValues?.goal_objective)?.trim();
+    const objective = optionalString(
+      this.config.featureValues?.goal_objective,
+    )?.trim();
     if (action === "start" && !objective) {
       throw new Error("OMP goal objective is required before starting");
     }
@@ -1690,7 +1865,11 @@ export class OmpAgentSession implements AgentSession {
       return;
     }
     const command =
-      action === "start" ? `/goal ${objective}` : action === "pause" ? "/goal pause" : "/goal drop";
+      action === "start"
+        ? `/goal ${objective}`
+        : action === "pause"
+          ? "/goal pause"
+          : "/goal drop";
     if (this.activeTurnId) {
       this.runtimeSession.followUp(command);
     } else {
@@ -1741,7 +1920,10 @@ export class OmpAgentSession implements AgentSession {
     if (isCombinedAskUserPermission(request)) {
       const combined = buildCombinedAskUserSelectionResponse(request, response);
       this.pendingCombinedAskUserResponse = combined.pendingResponse;
-      this.runtimeSession.respondToExtensionUiRequest(requestId, combined.uiResponse);
+      this.runtimeSession.respondToExtensionUiRequest(
+        requestId,
+        combined.uiResponse,
+      );
     } else {
       this.runtimeSession.respondToExtensionUiRequest(
         requestId,
@@ -1752,7 +1934,10 @@ export class OmpAgentSession implements AgentSession {
     this.emitPermissionResolution(requestId, response);
   }
 
-  private emitPermissionResolution(requestId: string, resolution: AgentPermissionResponse): void {
+  private emitPermissionResolution(
+    requestId: string,
+    resolution: AgentPermissionResponse,
+  ): void {
     this.emit({
       type: "permission_resolved",
       provider: this.provider,
@@ -1826,7 +2011,9 @@ export class OmpAgentSession implements AgentSession {
       metadata: {
         cwd: this.config.cwd,
         ...(this.config.model ? { model: this.config.model } : {}),
-        ...(this.config.thinkingOptionId ? { thinkingOptionId: this.config.thinkingOptionId } : {}),
+        ...(this.config.thinkingOptionId
+          ? { thinkingOptionId: this.config.thinkingOptionId }
+          : {}),
         ...(this.currentModeId ? { modeId: this.currentModeId } : {}),
       },
     };
@@ -1856,7 +2043,9 @@ export class OmpAgentSession implements AgentSession {
 
   async revertConversation(input: { messageId: string }): Promise<void> {
     if (this.activeTurnId) {
-      throw new Error("Cannot rewind the OMP conversation while a turn is active");
+      throw new Error(
+        "Cannot rewind the OMP conversation while a turn is active",
+      );
     }
     const target = input.messageId.trim();
     if (!target) {
@@ -1896,7 +2085,9 @@ export class OmpAgentSession implements AgentSession {
       this.emitToolCallEvent(toolCallId, toolCall, "canceled", null, null);
     }
     this.activeToolCalls.clear();
-    for (const event of this.subagentIndex.terminalizeRunning(this.runtimeSession)) {
+    for (const event of this.subagentIndex.terminalizeRunning(
+      this.runtimeSession,
+    )) {
       this.emit(event);
     }
     this.clearOmpTurnState();
@@ -1910,9 +2101,9 @@ export class OmpAgentSession implements AgentSession {
     return mapOmpRuntimeSlashCommands(commands);
   }
 
-  tryHandleOutOfBand(
-    prompt: AgentPromptInput,
-  ): { run(ctx: { emit: (event: AgentStreamEvent) => void }): Promise<void> } | null {
+  tryHandleOutOfBand(prompt: AgentPromptInput): {
+    run(ctx: { emit: (event: AgentStreamEvent) => void }): Promise<void>;
+  } | null {
     if (typeof prompt !== "string") {
       return null;
     }
@@ -1970,7 +2161,10 @@ export class OmpAgentSession implements AgentSession {
       throw new Error(`OMP model id must include a provider: ${modelId}`);
     }
 
-    const model = await this.runtimeSession.setModel(parsedReference.provider, parsedReference.id);
+    const model = await this.runtimeSession.setModel(
+      parsedReference.provider,
+      parsedReference.id,
+    );
     this.state = {
       ...this.state,
       model,
@@ -1983,7 +2177,8 @@ export class OmpAgentSession implements AgentSession {
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
     const thinkingLevel =
-      normalizeOmpThinkingOption(thinkingOptionId) ?? DEFAULT_OMP_THINKING_LEVEL;
+      normalizeOmpThinkingOption(thinkingOptionId) ??
+      DEFAULT_OMP_THINKING_LEVEL;
     await this.runtimeSession.setThinkingLevel(thinkingLevel);
     this.lastKnownThinkingOptionId = thinkingLevel;
     this.config.thinkingOptionId = thinkingLevel;
@@ -2018,7 +2213,10 @@ export class OmpAgentSession implements AgentSession {
       })
       .catch((error: unknown) => {
         if (!abort.signal.aborted) {
-          this.logger.debug({ err: error }, "OMP local-only settle wait failed");
+          this.logger.debug(
+            { err: error },
+            "OMP local-only settle wait failed",
+          );
         }
       });
   }
@@ -2053,7 +2251,9 @@ export class OmpAgentSession implements AgentSession {
 
   private emitBufferedNoTurnOutputs(turnId: string): void {
     const promptText = this.activeNoTurnPromptText;
-    const outputs = this.pendingNoTurnOutputs.filter((output) => output.turnId === turnId);
+    const outputs = this.pendingNoTurnOutputs.filter(
+      (output) => output.turnId === turnId,
+    );
     this.clearNoTurnBuffers();
     if (promptText) {
       this.emit({
@@ -2063,7 +2263,9 @@ export class OmpAgentSession implements AgentSession {
         item: {
           type: "user_message",
           text: promptText,
-          ...(this.activeClientMessageId ? { clientMessageId: this.activeClientMessageId } : {}),
+          ...(this.activeClientMessageId
+            ? { clientMessageId: this.activeClientMessageId }
+            : {}),
         },
       });
     }
@@ -2087,7 +2289,9 @@ export class OmpAgentSession implements AgentSession {
     this.pendingNoTurnOutputs.push({ turnId: this.activeTurnId, message });
   }
 
-  private parseSlashCommandInput(text: string): OmpSlashCommandInvocation | null {
+  private parseSlashCommandInput(
+    text: string,
+  ): OmpSlashCommandInvocation | null {
     const trimmed = text.trim();
     if (!trimmed.startsWith("/") || trimmed.length <= 1) {
       return null;
@@ -2095,13 +2299,19 @@ export class OmpAgentSession implements AgentSession {
     const withoutPrefix = trimmed.slice(1);
     const firstWhitespaceIdx = withoutPrefix.search(/\s/);
     const commandName =
-      firstWhitespaceIdx === -1 ? withoutPrefix : withoutPrefix.slice(0, firstWhitespaceIdx);
+      firstWhitespaceIdx === -1
+        ? withoutPrefix
+        : withoutPrefix.slice(0, firstWhitespaceIdx);
     if (!commandName || commandName.includes("/")) {
       return null;
     }
     const rawArgs =
-      firstWhitespaceIdx === -1 ? "" : withoutPrefix.slice(firstWhitespaceIdx + 1).trim();
-    return rawArgs.length > 0 ? { commandName, args: rawArgs } : { commandName };
+      firstWhitespaceIdx === -1
+        ? ""
+        : withoutPrefix.slice(firstWhitespaceIdx + 1).trim();
+    return rawArgs.length > 0
+      ? { commandName, args: rawArgs }
+      : { commandName };
   }
 
   private async executeCompactCommand(
@@ -2114,8 +2324,28 @@ export class OmpAgentSession implements AgentSession {
     this.outOfBandCompactionEmit = emit;
     this.outOfBandCompactionStarted = false;
     this.outOfBandCompactionCompleted = false;
+    this.emitCompactionTimeline({
+      turnId: undefined,
+      item: {
+        type: "compaction",
+        status: "loading",
+        trigger: "manual",
+      },
+    });
     try {
       await this.runtimeSession.compact(customInstructions);
+      // A successful compact response is authoritative. OMP may omit the
+      // optional compaction_end event even though the session was compacted.
+      if (this.outOfBandCompactionEmit === emit) {
+        this.emitCompactionTimeline({
+          turnId: undefined,
+          item: {
+            type: "compaction",
+            status: "completed",
+            trigger: "manual",
+          },
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (
@@ -2141,7 +2371,10 @@ export class OmpAgentSession implements AgentSession {
         },
       });
     } finally {
-      if (this.outOfBandCompactionEmit === emit && !this.outOfBandCompactionStarted) {
+      if (
+        this.outOfBandCompactionEmit === emit &&
+        !this.outOfBandCompactionStarted
+      ) {
         this.outOfBandCompactionEmit = null;
         this.outOfBandCompactionStarted = false;
         this.outOfBandCompactionCompleted = false;
@@ -2306,13 +2539,17 @@ export class OmpAgentSession implements AgentSession {
         ...pending,
         freeform: null,
       };
-      this.runtimeSession.respondToExtensionUiRequest(event.id, { value: pending.freeform });
+      this.runtimeSession.respondToExtensionUiRequest(event.id, {
+        value: pending.freeform,
+      });
       return true;
     }
 
     if (isOptionalInputPlaceholder(placeholder)) {
       this.pendingCombinedAskUserResponse = null;
-      this.runtimeSession.respondToExtensionUiRequest(event.id, { value: pending.comment });
+      this.runtimeSession.respondToExtensionUiRequest(event.id, {
+        value: pending.comment,
+      });
       return true;
     }
 
@@ -2347,7 +2584,9 @@ export class OmpAgentSession implements AgentSession {
     if (event.type !== "goal_updated") return;
     const goalStatus = event.state?.goal?.status ?? event.goal?.status;
     const goalActive =
-      event.state?.enabled === true && goalStatus !== "complete" && goalStatus !== "dropped";
+      event.state?.enabled === true &&
+      goalStatus !== "complete" &&
+      goalStatus !== "dropped";
     this.setActiveWorkflowMode(goalActive ? "goal" : null);
   }
 
@@ -2383,32 +2622,53 @@ export class OmpAgentSession implements AgentSession {
       return true;
     }
     if (event.type === "subagent_lifecycle") {
-      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_lifecycle" }>).payload;
-      if (payload.parentToolCallId && this.activeToolCalls.has(payload.parentToolCallId)) {
+      const payload = (
+        event as Extract<OmpRuntimeEvent, { type: "subagent_lifecycle" }>
+      ).payload;
+      if (
+        payload.parentToolCallId &&
+        this.activeToolCalls.has(payload.parentToolCallId)
+      ) {
         this.subagentCardTracker.handleLifecycle(payload, (toolCallId) =>
           this.emitActiveToolCall(toolCallId),
         );
       }
-      for (const mapped of this.subagentIndex.handleLifecycle(this.runtimeSession, payload)) {
+      for (const mapped of this.subagentIndex.handleLifecycle(
+        this.runtimeSession,
+        payload,
+      )) {
         this.emit(mapped);
       }
       return true;
     }
     if (event.type === "subagent_progress") {
-      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_progress" }>).payload;
-      if (payload.parentToolCallId && this.activeToolCalls.has(payload.parentToolCallId)) {
+      const payload = (
+        event as Extract<OmpRuntimeEvent, { type: "subagent_progress" }>
+      ).payload;
+      if (
+        payload.parentToolCallId &&
+        this.activeToolCalls.has(payload.parentToolCallId)
+      ) {
         this.subagentCardTracker.handleProgress(payload, (toolCallId) =>
           this.emitActiveToolCall(toolCallId),
         );
       }
-      for (const mapped of this.subagentIndex.handleProgress(this.runtimeSession, payload)) {
+      for (const mapped of this.subagentIndex.handleProgress(
+        this.runtimeSession,
+        payload,
+      )) {
         this.emit(mapped);
       }
       return true;
     }
     if (event.type === "subagent_event") {
-      const payload = (event as Extract<OmpRuntimeEvent, { type: "subagent_event" }>).payload;
-      for (const mapped of this.subagentIndex.handleEvent(this.runtimeSession, payload)) {
+      const payload = (
+        event as Extract<OmpRuntimeEvent, { type: "subagent_event" }>
+      ).payload;
+      for (const mapped of this.subagentIndex.handleEvent(
+        this.runtimeSession,
+        payload,
+      )) {
         this.emit(mapped);
       }
       return true;
@@ -2418,7 +2678,10 @@ export class OmpAgentSession implements AgentSession {
       if (item) {
         this.emitTodoItem(item);
       } else {
-        this.logger.debug({ event }, "Dropped malformed OMP todo reminder event");
+        this.logger.debug(
+          { event },
+          "Dropped malformed OMP todo reminder event",
+        );
       }
       return true;
     }
@@ -2427,7 +2690,10 @@ export class OmpAgentSession implements AgentSession {
       if (commands) {
         this.commandCache = commands;
       } else {
-        this.logger.debug({ event }, "Dropped malformed OMP command update event");
+        this.logger.debug(
+          { event },
+          "Dropped malformed OMP command update event",
+        );
       }
       return true;
     }
@@ -2452,7 +2718,9 @@ export class OmpAgentSession implements AgentSession {
 
   private emitActiveToolCall(toolCallId: string): boolean {
     const toolCall = this.activeToolCalls.get(toolCallId);
-    return toolCall ? this.emitToolCallEvent(toolCallId, toolCall, "running", null, null) : false;
+    return toolCall
+      ? this.emitToolCallEvent(toolCallId, toolCall, "running", null, null)
+      : false;
   }
 
   private emitTodoItem(item: AgentTimelineItem, turnId?: string): void {
@@ -2463,7 +2731,8 @@ export class OmpAgentSession implements AgentSession {
         previous.items.every((previousItem, index) => {
           const nextItem = item.items[index];
           return (
-            nextItem?.text === previousItem.text && nextItem.completed === previousItem.completed
+            nextItem?.text === previousItem.text &&
+            nextItem.completed === previousItem.completed
           );
         });
       if (isDuplicate) {
@@ -2584,8 +2853,17 @@ export class OmpAgentSession implements AgentSession {
       case "tool_execution_start": {
         const toolCall = parseToolArgs(event.toolName, event.args);
         this.activeToolCalls.set(event.toolCallId, toolCall);
-        this.activeAskUserDialog = readActiveAskUserDialog(event.toolName, event.args);
-        this.emitToolCallEvent(event.toolCallId, toolCall, "running", null, null);
+        this.activeAskUserDialog = readActiveAskUserDialog(
+          event.toolName,
+          event.args,
+        );
+        this.emitToolCallEvent(
+          event.toolCallId,
+          toolCall,
+          "running",
+          null,
+          null,
+        );
         return;
       }
       case "tool_execution_update": {
@@ -2595,7 +2873,13 @@ export class OmpAgentSession implements AgentSession {
         }
 
         const partialResult = parseToolResult(event.partialResult);
-        this.emitToolCallEvent(event.toolCallId, toolCall, "running", partialResult, null);
+        this.emitToolCallEvent(
+          event.toolCallId,
+          toolCall,
+          "running",
+          partialResult,
+          null,
+        );
         return;
       }
       case "tool_execution_end": {
@@ -2651,7 +2935,8 @@ export class OmpAgentSession implements AgentSession {
     turnId: string | undefined,
   ): void {
     const toolCall =
-      this.activeToolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null);
+      this.activeToolCalls.get(event.toolCallId) ??
+      parseToolArgs(event.toolName, null);
     this.activeToolCalls.delete(event.toolCallId);
 
     if (event.toolName === "ask_user") {
@@ -2683,6 +2968,9 @@ export class OmpAgentSession implements AgentSession {
     const emitOutOfBand = this.outOfBandCompactionEmit;
     if (emitOutOfBand && input.item.type === "compaction") {
       if (input.item.status === "loading") {
+        if (this.outOfBandCompactionStarted) {
+          return;
+        }
         this.outOfBandCompactionStarted = true;
       }
       if (input.item.status === "completed") {
@@ -2697,7 +2985,10 @@ export class OmpAgentSession implements AgentSession {
     };
     if (emitOutOfBand) {
       emitOutOfBand(event);
-      if (input.item.type === "compaction" && input.item.status === "completed") {
+      if (
+        input.item.type === "compaction" &&
+        input.item.status === "completed"
+      ) {
         this.outOfBandCompactionEmit = null;
         this.outOfBandCompactionStarted = false;
         this.outOfBandCompactionCompleted = false;
@@ -2716,7 +3007,8 @@ export class OmpAgentSession implements AgentSession {
     }
     if (event.assistantMessageEvent.type === "text_delta") {
       // Omp-compatible runtimes may emit updates without a preceding message_start.
-      this.activeAssistantMessageId ??= event.message.responseId || randomUUID();
+      this.activeAssistantMessageId ??=
+        event.message.responseId || randomUUID();
       const delta = event.assistantMessageEvent.delta ?? "";
       if (this.activeWorkflowMode === "plan") {
         this.activePlanText += delta;
@@ -2730,7 +3022,9 @@ export class OmpAgentSession implements AgentSession {
           type: "assistant_message",
           text: delta,
           messageId: this.activeAssistantMessageId,
-          ...(this.activeWorkflowMode === "plan" ? { presentation: "plan" as const } : {}),
+          ...(this.activeWorkflowMode === "plan"
+            ? { presentation: "plan" as const }
+            : {}),
         },
       });
       return;
@@ -2808,11 +3102,15 @@ export class OmpAgentSession implements AgentSession {
     ) {
       return;
     }
-    const nativeMessage = event.message as OmpAgentMessage & { id?: unknown; entryId?: unknown };
+    const nativeMessage = event.message as OmpAgentMessage & {
+      id?: unknown;
+      entryId?: unknown;
+    };
     const messageId = readNativeMessageId(nativeMessage);
     const clientMessageId =
       text === this.lastSubmittedPromptText
-        ? (this.activeClientMessageId ?? this.lastSubmittedPromptClientMessageId)
+        ? (this.activeClientMessageId ??
+          this.lastSubmittedPromptClientMessageId)
         : null;
     const emitUserMessage = (resolvedMessageId?: string): void => {
       if (resolvedMessageId) {
@@ -2844,7 +3142,10 @@ export class OmpAgentSession implements AgentSession {
     void this.runtimeSession
       .getBranchMessages()
       .then((messages) =>
-        emitUserMessage(messages.toReversed().find((message) => message.text === text)?.entryId),
+        emitUserMessage(
+          messages.toReversed().find((message) => message.text === text)
+            ?.entryId,
+        ),
       )
       .catch((error: unknown) => {
         this.logger.debug(
@@ -2874,7 +3175,9 @@ export class OmpAgentSession implements AgentSession {
       detail,
     };
     const item =
-      status === "failed" ? { ...baseItem, status, error } : { ...baseItem, status, error: null };
+      status === "failed"
+        ? { ...baseItem, status, error }
+        : { ...baseItem, status, error: null };
     this.emit({
       type: "timeline",
       provider: this.provider,
@@ -2896,12 +3199,17 @@ export class OmpAgentSession implements AgentSession {
     });
   }
 
-  private completeTurn(turnId: string | undefined, messages: OmpAgentMessage[]): void {
+  private completeTurn(
+    turnId: string | undefined,
+    messages: OmpAgentMessage[],
+  ): void {
     const streamedPlanText = this.activePlanText.trim();
     const streamedPlan: OmpPlanDraft | null = streamedPlanText
       ? {
           text: streamedPlanText,
-          ...(this.activePlanMessageId ? { messageId: this.activePlanMessageId } : {}),
+          ...(this.activePlanMessageId
+            ? { messageId: this.activePlanMessageId }
+            : {}),
         }
       : null;
     this.activeTurnId = null;
@@ -2938,7 +3246,11 @@ export class OmpAgentSession implements AgentSession {
     turnId: string | undefined,
     messages: OmpAgentMessage[],
   ): Promise<void> {
-    while (!this.closed && this.activeTurnStarted && this.currentTurnIdForEvent() === turnId) {
+    while (
+      !this.closed &&
+      this.activeTurnStarted &&
+      this.currentTurnIdForEvent() === turnId
+    ) {
       try {
         const state = await this.runtimeSession.getState();
         this.state = state;
@@ -2947,7 +3259,10 @@ export class OmpAgentSession implements AgentSession {
           return;
         }
       } catch (error) {
-        this.logger.debug({ err: error }, "OMP state unavailable while waiting for provider idle");
+        this.logger.debug(
+          { err: error },
+          "OMP state unavailable while waiting for provider idle",
+        );
       }
       await this.providerIdleScheduler.waitForRetry();
     }
@@ -3012,7 +3327,8 @@ export class OmpAgentClient implements AgentClient {
     this.usagePollScheduler = options.usagePollScheduler;
     this.quotaFetch = options.quotaFetch ?? fetch;
     this.quotaNow = options.quotaNow ?? Date.now;
-    this.runtime = options.runtime ?? createRuntime(options.logger, runtimeSettings);
+    this.runtime =
+      options.runtime ?? createRuntime(options.logger, runtimeSettings);
     this.oauthAccountsOverride = options.oauthAccounts;
   }
 
@@ -3025,12 +3341,18 @@ export class OmpAgentClient implements AgentClient {
     }
     await setOmpHostTools(runtimeSession, catalog);
   }
-  private readOAuthAccounts(launchEnv?: Record<string, string>): StoredOmpOAuthAccount[] {
+  private readOAuthAccounts(
+    launchEnv?: Record<string, string>,
+  ): StoredOmpOAuthAccount[] {
     if (this.oauthAccountsOverride !== undefined) {
       return [...this.oauthAccountsOverride];
     }
     try {
-      const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
+      const env = {
+        ...process.env,
+        ...this.runtimeSettings?.env,
+        ...launchEnv,
+      };
       const { agentDb } = resolveOmpDiagnosticPaths(env);
       return readStoredOmpOAuthAccounts(agentDb);
     } catch (error) {
@@ -3042,7 +3364,10 @@ export class OmpAgentClient implements AgentClient {
   private async createInitializedSession(
     runtimeSession: OmpRuntimeSession,
     config: AgentSessionConfig,
-    options: Omit<OmpAgentSessionOptions, "runtimeSession" | "config" | "oauthAccounts">,
+    options: Omit<
+      OmpAgentSessionOptions,
+      "runtimeSession" | "config" | "oauthAccounts"
+    >,
     oauthAccounts: readonly StoredOmpOAuthAccount[],
   ): Promise<OmpAgentSession> {
     const session = new OmpAgentSession({
@@ -3064,15 +3389,22 @@ export class OmpAgentClient implements AgentClient {
       cwd: config.cwd,
       protocolMode: "rpc-ui",
       model: config.model,
-      thinkingOptionId: normalizeOmpThinkingOption(config.thinkingOptionId) ?? undefined,
+      thinkingOptionId:
+        normalizeOmpThinkingOption(config.thinkingOptionId) ?? undefined,
       noSession: config.internal === true,
       modeId: launchMode.modeId,
       extraArgs: launchMode.extraArgs,
-      systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
+      systemPrompt: composeSystemPromptParts(
+        config.systemPrompt,
+        config.daemonAppendSystemPrompt,
+      ),
       env: launchContext?.env,
     });
     try {
-      await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      await this.configureNativePaseoTools(
+        runtimeSession,
+        launchContext?.paseoTools,
+      );
       return await this.createInitializedSession(
         runtimeSession,
         config,
@@ -3105,7 +3437,11 @@ export class OmpAgentClient implements AgentClient {
     }
 
     const persistenceMetadata = parsePersistenceMetadata(handle.metadata);
-    const resumeConfig = buildResumeConfig(persistenceMetadata, overrides, this.provider);
+    const resumeConfig = buildResumeConfig(
+      persistenceMetadata,
+      overrides,
+      this.provider,
+    );
 
     const launchMode = this.resolveLaunchMode(resumeConfig.modeId);
     const runtimeSession = await this.runtime.startSession(
@@ -3117,7 +3453,10 @@ export class OmpAgentClient implements AgentClient {
       }),
     );
     try {
-      await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      await this.configureNativePaseoTools(
+        runtimeSession,
+        launchContext?.paseoTools,
+      );
       return await this.createInitializedSession(
         runtimeSession,
         resumeConfig.config,
@@ -3169,8 +3508,10 @@ export class OmpAgentClient implements AgentClient {
       const catalogSession = runtimeSession;
       const models = transformOmpModels(
         (
-          await runProviderRefreshActivity(context, "get_available_models", () =>
-            catalogSession.getAvailableModels(null),
+          await runProviderRefreshActivity(
+            context,
+            "get_available_models",
+            () => catalogSession.getAvailableModels(null),
           )
         ).map((model) => mapOmpModel(model, this.provider)),
       );
@@ -3195,8 +3536,13 @@ export class OmpAgentClient implements AgentClient {
     });
   }
 
-  async importSession(input: ImportProviderSessionInput, context: ImportProviderSessionContext) {
-    const importConfig = await readOmpImportSessionConfig(input.providerHandleId);
+  async importSession(
+    input: ImportProviderSessionInput,
+    context: ImportProviderSessionContext,
+  ) {
+    const importConfig = await readOmpImportSessionConfig(
+      input.providerHandleId,
+    );
     return importSessionFromPersistence({
       provider: this.provider,
       request: input,
@@ -3235,15 +3581,22 @@ export class OmpAgentClient implements AgentClient {
     const contextWindowOverrides = new Map<string, Map<string, number>>();
     try {
       const configuredProviders = parseOmpModelsDocument(configYaml).providers;
-      for (const [providerId, configuredProvider] of Object.entries(configuredProviders ?? {})) {
+      for (const [providerId, configuredProvider] of Object.entries(
+        configuredProviders ?? {},
+      )) {
         providerModels.set(providerId, []);
         if (!isRecord(configuredProvider)) continue;
-        if (Array.isArray(configuredProvider.models) && configuredProvider.models.length > 0) {
+        if (
+          Array.isArray(configuredProvider.models) &&
+          configuredProvider.models.length > 0
+        ) {
           customProviderIds.add(providerId);
         }
         if (!isRecord(configuredProvider.modelOverrides)) continue;
         const providerOverrides = new Map<string, number>();
-        for (const [modelId, override] of Object.entries(configuredProvider.modelOverrides)) {
+        for (const [modelId, override] of Object.entries(
+          configuredProvider.modelOverrides,
+        )) {
           if (
             isRecord(override) &&
             Number.isSafeInteger(override.contextWindow) &&
@@ -3260,7 +3613,10 @@ export class OmpAgentClient implements AgentClient {
       // OMP reports the invalid config through runtimeError below.
     }
     const storedAccountsByProvider = new Map<string, StoredOmpOAuthAccount[]>();
-    const storedAccountCredentialsById = new Map<number, StoredOmpOAuthAccountCredential>();
+    const storedAccountCredentialsById = new Map<
+      number,
+      StoredOmpOAuthAccountCredential
+    >();
     try {
       const env = { ...process.env, ...this.runtimeSettings?.env };
       const { agentDb } = resolveOmpDiagnosticPaths(env);
@@ -3292,14 +3648,18 @@ export class OmpAgentClient implements AgentClient {
       ]);
       for (const model of models) {
         const providerModelList = providerModels.get(model.provider) ?? [];
-        const contextWindowOverride = contextWindowOverrides.get(model.provider)?.get(model.id);
+        const contextWindowOverride = contextWindowOverrides
+          .get(model.provider)
+          ?.get(model.id);
         providerModelList.push({
           id: model.id,
           name: model.name ?? model.id,
           ...(typeof model.contextWindow === "number" && model.contextWindow > 0
             ? { contextWindow: model.contextWindow }
             : {}),
-          ...(contextWindowOverride !== undefined ? { contextWindowOverride } : {}),
+          ...(contextWindowOverride !== undefined
+            ? { contextWindowOverride }
+            : {}),
         });
         providerModels.set(model.provider, providerModelList);
       }
@@ -3323,7 +3683,9 @@ export class OmpAgentClient implements AgentClient {
           ...provider,
           accounts: accounts.map(({ credentialId, identityKey }) => {
             const quota =
-              provider.id === "openai-codex" ? quotaByCredentialId.get(credentialId) : undefined;
+              provider.id === "openai-codex"
+                ? quotaByCredentialId.get(credentialId)
+                : undefined;
             return {
               credentialId,
               ...(identityKey ? { identityKey } : {}),
@@ -3334,7 +3696,10 @@ export class OmpAgentClient implements AgentClient {
       });
     } catch (error) {
       runtimeError = toDiagnosticErrorMessage(error);
-      this.logger.debug({ err: error }, "OMP provider management lookup failed");
+      this.logger.debug(
+        { err: error },
+        "OMP provider management lookup failed",
+      );
     } finally {
       await runtimeSession?.close().catch(() => undefined);
     }
@@ -3345,8 +3710,12 @@ export class OmpAgentClient implements AgentClient {
         .map(([id, models]) => ({
           id,
           modelCount: models.length,
-          source: customProviderIds.has(id) ? ("custom" as const) : ("built-in" as const),
-          models: models.sort((left, right) => left.name.localeCompare(right.name)),
+          source: customProviderIds.has(id)
+            ? ("custom" as const)
+            : ("built-in" as const),
+          models: models.sort((left, right) =>
+            left.name.localeCompare(right.name),
+          ),
         }))
         .sort((left, right) => left.id.localeCompare(right.id)),
       loginProviders,
@@ -3354,13 +3723,16 @@ export class OmpAgentClient implements AgentClient {
     };
   }
 
-  async saveOmpProviderConfig(configYaml: string): Promise<OmpProviderManagement> {
+  async saveOmpProviderConfig(
+    configYaml: string,
+  ): Promise<OmpProviderManagement> {
     const configPath = this.resolveModelsConfigPath();
     const previous = await fs
       .readFile(configPath, "utf8")
       .then((contents) => ({ exists: true, contents }) as const)
       .catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return { exists: false, contents: "" } as const;
+        if (error.code === "ENOENT")
+          return { exists: false, contents: "" } as const;
         throw error;
       });
     await writeFileAtomic(configPath, formatOmpModelsYaml(configYaml));
@@ -3373,11 +3745,17 @@ export class OmpAgentClient implements AgentClient {
     } else {
       await fs.rm(configPath, { force: true });
     }
-    throw new Error(`OMP rejected models configuration: ${management.runtimeError}`);
+    throw new Error(
+      `OMP rejected models configuration: ${management.runtimeError}`,
+    );
   }
-  async addOmpProvider(input: OmpCustomProviderInput): Promise<OmpProviderManagement> {
+  async addOmpProvider(
+    input: OmpCustomProviderInput,
+  ): Promise<OmpProviderManagement> {
     const management = await this.getOmpProviderManagement();
-    const { document, providers } = parseOmpModelsDocument(management.configYaml);
+    const { document, providers } = parseOmpModelsDocument(
+      management.configYaml,
+    );
     if (providers && Object.hasOwn(providers, input.providerId)) {
       throw new Error(`OMP provider '${input.providerId}' already exists`);
     }
@@ -3402,7 +3780,9 @@ export class OmpAgentClient implements AgentClient {
   }
   async removeOmpProvider(providerId: string): Promise<OmpProviderManagement> {
     const management = await this.getOmpProviderManagement();
-    const { document, providers } = parseOmpModelsDocument(management.configYaml);
+    const { document, providers } = parseOmpModelsDocument(
+      management.configYaml,
+    );
     if (!providers || !Object.hasOwn(providers, providerId)) {
       throw new Error(`OMP custom provider '${providerId}' does not exist`);
     }
@@ -3419,7 +3799,9 @@ export class OmpAgentClient implements AgentClient {
     return await installOmp();
   }
 
-  async startOmpProviderLogin(providerId: string): Promise<OmpProviderLoginStart> {
+  async startOmpProviderLogin(
+    providerId: string,
+  ): Promise<OmpProviderLoginStart> {
     const runtimeSession = await this.runtime.startSession({
       cwd: homedir(),
       protocolMode: "rpc-ui",
@@ -3432,10 +3814,12 @@ export class OmpAgentClient implements AgentClient {
     });
     let resolveStart!: (value: OmpProviderLoginStart) => void;
     let rejectStart!: (error: Error) => void;
-    const waitForStart = new Promise<OmpProviderLoginStart>((resolve, reject) => {
-      resolveStart = resolve;
-      rejectStart = reject;
-    });
+    const waitForStart = new Promise<OmpProviderLoginStart>(
+      (resolve, reject) => {
+        resolveStart = resolve;
+        rejectStart = reject;
+      },
+    );
     const flow: OmpProviderLoginFlow = {
       providerId,
       runtimeSession,
@@ -3473,7 +3857,9 @@ export class OmpAgentClient implements AgentClient {
       .then(() => {
         flow.completed = true;
         if (!flow.inputRequestId) {
-          rejectStart(new Error("OMP login completed without an authorization URL"));
+          rejectStart(
+            new Error("OMP login completed without an authorization URL"),
+          );
         }
         return undefined;
       })
@@ -3499,7 +3885,10 @@ export class OmpAgentClient implements AgentClient {
     }
   }
 
-  async finishOmpProviderLogin(flowId: string, input?: string): Promise<OmpProviderManagement> {
+  async finishOmpProviderLogin(
+    flowId: string,
+    input?: string,
+  ): Promise<OmpProviderManagement> {
     const flow = this.loginFlows.get(flowId);
     if (!flow) {
       throw new Error("OMP login flow is no longer active");
@@ -3514,9 +3903,13 @@ export class OmpAgentClient implements AgentClient {
     if (flow.inputRequestId) {
       const value = input?.trim();
       if (!value) {
-        throw new Error("Paste the OAuth code or redirect URL to complete login");
+        throw new Error(
+          "Paste the OAuth code or redirect URL to complete login",
+        );
       }
-      flow.runtimeSession.respondToExtensionUiRequest(flow.inputRequestId, { value });
+      flow.runtimeSession.respondToExtensionUiRequest(flow.inputRequestId, {
+        value,
+      });
       flow.inputRequestId = undefined;
     }
     await flow.loginPromise;
@@ -3550,7 +3943,9 @@ export class OmpAgentClient implements AgentClient {
         : disableStoredOmpCredential(agentDb, providerId, credentialId);
     if (changed === 0) {
       if (credentialId !== undefined) {
-        throw new Error(`No active OAuth credential ${credentialId} found for ${providerId}`);
+        throw new Error(
+          `No active OAuth credential ${credentialId} found for ${providerId}`,
+        );
       }
       throw new Error(
         `No stored credentials found for ${providerId}; remove environment or config credentials at their source`,
@@ -3570,11 +3965,13 @@ export class OmpAgentClient implements AgentClient {
           env: this.runtimeSettings?.env,
         },
       });
-      const version = binaryRows.find((row) => row.label === "Version")?.value ?? "unknown";
+      const version =
+        binaryRows.find((row) => row.label === "Version")?.value ?? "unknown";
       const env = { ...process.env, ...this.runtimeSettings?.env };
       const paths = resolveOmpDiagnosticPaths(env);
       const bunVersion =
-        (process.versions as NodeJS.ProcessVersions & { bun?: string }).bun ?? "unavailable";
+        (process.versions as NodeJS.ProcessVersions & { bun?: string }).bun ??
+        "unavailable";
 
       return {
         diagnostic: formatProviderDiagnostic("Oh My Pi (OMP)", [
@@ -3615,7 +4012,9 @@ export class OmpAgentClient implements AgentClient {
       clearTimeout(flow.timeout);
       flow.unsubscribe();
     }
-    await Promise.all(flows.map((flow) => flow.runtimeSession.close().catch(() => undefined)));
+    await Promise.all(
+      flows.map((flow) => flow.runtimeSession.close().catch(() => undefined)),
+    );
   }
 
   private deleteLoginFlow(flowId: string): void {

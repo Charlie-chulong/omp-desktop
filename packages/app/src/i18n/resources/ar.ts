@@ -1946,7 +1946,6 @@ export const ar: TranslationResources = {
       connections: "اتصالات",
       agents: "Agents",
       metadata: "البيانات الوصفية",
-      workspaces: "Workspaces",
       providers: "مقدمي الخدمات",
       usage: "الاستخدام",
       terminals: "Terminals",
@@ -2379,9 +2378,6 @@ export const ar: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
-      },
-      workspaces: {
-        unavailable: "Connect to this host to manage workspaces",
       },
       terminalProfiles: {
         unavailable: "Connect to this host to manage terminal profiles",

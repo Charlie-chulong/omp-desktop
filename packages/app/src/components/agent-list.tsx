@@ -5,7 +5,6 @@ import {
   Modal,
   RefreshControl,
   FlatList,
-  type GestureResponderEvent,
   type ListRenderItem,
   type PressableStateCallbackType,
 } from "react-native";
@@ -22,6 +21,7 @@ import { Archive, ChevronRight, Trash2 } from "lucide-react-native";
 import { getProviderIcon } from "@/components/provider-icons";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
+import { useDeleteAgent } from "@/hooks/use-delete-agent";
 import { HighlightedText } from "@/components/ui/highlighted-text";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import type { AgentSearchMatch } from "@omp-desktop/protocol/messages";
@@ -249,7 +249,7 @@ function SessionRow({
 
   const pressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.row,
+      styles.rowMain,
       isSelected && styles.rowSelected,
       Boolean(hovered) && styles.rowHovered,
       pressed && styles.rowPressed,
@@ -269,13 +269,9 @@ function SessionRow({
     [],
   );
 
-  const handleDeletePress = useCallback(
-    (event: GestureResponderEvent) => {
-      event.stopPropagation();
-      handleDelete();
-    },
-    [handleDelete],
-  );
+  const handleDeletePress = useCallback(() => {
+    handleDelete();
+  }, [handleDelete]);
   const sessionTitleStyle = useMemo(
     () => [styles.sessionTitle, isSelected && styles.sessionTitleHighlighted],
     [isSelected],
@@ -289,102 +285,109 @@ function SessionRow({
     !isMobile && showAttentionIndicator && Boolean(agent.requiresAttention);
 
   return (
-    <Pressable
-      style={pressableStyle}
-      onPress={handlePress}
-      onLongPress={handleLongPress}
-      testID={`agent-row-${agent.serverId}-${agent.id}`}
-    >
-      <View style={styles.rowContent}>
-        <View style={styles.rowTitleRow}>
-          <WorkspaceTitlePrefix
-            visible={!isMobile && Boolean(workspaceName)}
-            workspaceName={workspaceName}
-            ranges={rangesFor("workspace")}
-            testID={`agent-row-workspace-${agent.serverId}-${agent.id}`}
-            iconSize={theme.iconSize.xs}
-            color={theme.colors.foregroundMuted}
-          />
-          <View style={styles.providerIconWrap}>
-            <ProviderIcon size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+    <View style={styles.row}>
+      <Pressable
+        style={pressableStyle}
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        testID={`agent-row-${agent.serverId}-${agent.id}`}
+      >
+        <View style={styles.rowContent}>
+          <View style={styles.rowTitleRow}>
+            <WorkspaceTitlePrefix
+              visible={!isMobile && Boolean(workspaceName)}
+              workspaceName={workspaceName}
+              ranges={rangesFor("workspace")}
+              testID={`agent-row-workspace-${agent.serverId}-${agent.id}`}
+              iconSize={theme.iconSize.xs}
+              color={theme.colors.foregroundMuted}
+            />
+            <View style={styles.providerIconWrap}>
+              <ProviderIcon size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+            </View>
+            <HighlightedText
+              text={agent.title || t("agentList.fallbackTitle")}
+              ranges={agent.title ? rangesFor("title") : undefined}
+              style={sessionTitleStyle}
+              numberOfLines={1}
+            />
+            <SessionRowBadges
+              agent={agent}
+              archivedIcon={archivedIcon}
+              pendingPermissionCount={pendingPermissionCount}
+              showDesktopAttention={showDesktopAttention}
+            />
           </View>
-          <HighlightedText
-            text={agent.title || t("agentList.fallbackTitle")}
-            ranges={agent.title ? rangesFor("title") : undefined}
-            style={sessionTitleStyle}
-            numberOfLines={1}
-          />
-          <SessionRowBadges
-            agent={agent}
-            archivedIcon={archivedIcon}
-            pendingPermissionCount={pendingPermissionCount}
-            showDesktopAttention={showDesktopAttention}
-          />
+          {isMobile ? (
+            <View style={styles.rowMetaRow}>
+              <HighlightedText
+                text={projectName}
+                ranges={rangesFor("project")}
+                style={styles.sessionMetaText}
+                numberOfLines={1}
+                testID={`agent-row-project-${agent.serverId}-${agent.id}`}
+              />
+              <Text style={styles.sessionMetaSeparator}>·</Text>
+              <HighlightedText
+                text={branch}
+                ranges={rangesFor("branch")}
+                style={styles.sessionMetaText}
+                numberOfLines={1}
+                testID={`agent-row-branch-${agent.serverId}-${agent.id}`}
+              />
+              <Text style={styles.sessionMetaSeparator}>·</Text>
+              <HighlightedText
+                text={workspaceName}
+                ranges={rangesFor("workspace")}
+                style={styles.sessionMetaText}
+                numberOfLines={1}
+                testID={`agent-row-workspace-${agent.serverId}-${agent.id}`}
+              />
+              <Text style={styles.sessionMetaSeparator}>·</Text>
+              <Text style={styles.sessionMetaText}>{timeAgo}</Text>
+              {showHostColumn && agent.serverLabel ? (
+                <>
+                  <Text style={styles.sessionMetaSeparator}>·</Text>
+                  <Text style={styles.sessionMetaText} numberOfLines={1}>
+                    {agent.serverLabel}
+                  </Text>
+                </>
+              ) : null}
+            </View>
+          ) : null}
         </View>
-        {isMobile ? (
-          <View style={styles.rowMetaRow}>
+        {!isMobile ? (
+          <View style={styles.rowColumns}>
             <HighlightedText
               text={projectName}
               ranges={rangesFor("project")}
-              style={styles.sessionMetaText}
+              style={styles.columnMeta}
               numberOfLines={1}
               testID={`agent-row-project-${agent.serverId}-${agent.id}`}
             />
-            <Text style={styles.sessionMetaSeparator}>·</Text>
+            {showHostColumn ? (
+              <Text style={styles.columnMetaHost} numberOfLines={1}>
+                {agent.serverLabel}
+              </Text>
+            ) : null}
             <HighlightedText
               text={branch}
               ranges={rangesFor("branch")}
-              style={styles.sessionMetaText}
+              style={styles.columnMeta}
               numberOfLines={1}
               testID={`agent-row-branch-${agent.serverId}-${agent.id}`}
             />
-            <Text style={styles.sessionMetaSeparator}>·</Text>
-            <HighlightedText
-              text={workspaceName}
-              ranges={rangesFor("workspace")}
-              style={styles.sessionMetaText}
-              numberOfLines={1}
-              testID={`agent-row-workspace-${agent.serverId}-${agent.id}`}
-            />
-            <Text style={styles.sessionMetaSeparator}>·</Text>
-            <Text style={styles.sessionMetaText}>{timeAgo}</Text>
-            {showHostColumn && agent.serverLabel ? (
-              <>
-                <Text style={styles.sessionMetaSeparator}>·</Text>
-                <Text style={styles.sessionMetaText} numberOfLines={1}>
-                  {agent.serverLabel}
-                </Text>
-              </>
-            ) : null}
+            <Text style={styles.columnMetaFixed} numberOfLines={1}>
+              {timeAgo}
+            </Text>
           </View>
         ) : null}
-      </View>
-      {!isMobile ? (
-        <View style={styles.rowColumns}>
-          <HighlightedText
-            text={projectName}
-            ranges={rangesFor("project")}
-            style={styles.columnMeta}
-            numberOfLines={1}
-            testID={`agent-row-project-${agent.serverId}-${agent.id}`}
-          />
-          {showHostColumn ? (
-            <Text style={styles.columnMetaHost} numberOfLines={1}>
-              {agent.serverLabel}
-            </Text>
-          ) : null}
-          <HighlightedText
-            text={branch}
-            ranges={rangesFor("branch")}
-            style={styles.columnMeta}
-            numberOfLines={1}
-            testID={`agent-row-branch-${agent.serverId}-${agent.id}`}
-          />
-          <Text style={styles.columnMetaFixed} numberOfLines={1}>
-            {timeAgo}
-          </Text>
-        </View>
-      ) : null}
+        <SessionRowTrailingAttention
+          isMobile={isMobile}
+          showAttentionIndicator={showAttentionIndicator}
+          requiresAttention={agent.requiresAttention}
+        />
+      </Pressable>
       {showDeleteButton ? (
         <Pressable
           accessibilityRole="button"
@@ -397,12 +400,7 @@ function SessionRow({
           <Trash2 size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
         </Pressable>
       ) : null}
-      <SessionRowTrailingAttention
-        isMobile={isMobile}
-        showAttentionIndicator={showAttentionIndicator}
-        requiresAttention={agent.requiresAttention}
-      />
-    </Pressable>
+    </View>
   );
 }
 
@@ -425,6 +423,7 @@ export function AgentList({
   const [actionAgent, setActionAgent] = useState<AggregatedAgent | null>(null);
   const isMobile = useIsCompactFormFactor();
   const { archiveAgent } = useArchiveAgent();
+  const { deleteAgent, isDeleting } = useDeleteAgent();
 
   const actionClient = useSessionStore((state) =>
     actionAgent?.serverId ? (state.sessions[actionAgent.serverId]?.client ?? null) : null,
@@ -471,8 +470,17 @@ export function AgentList({
     [archiveAgent],
   );
   const handleAgentDelete = useCallback(
-    (agent: AggregatedAgent) => handleAgentLongPress(agent),
-    [handleAgentLongPress],
+    (agent: AggregatedAgent) => {
+      if (isDeleting) {
+        return;
+      }
+      void deleteAgent({
+        serverId: agent.serverId,
+        agentId: agent.id,
+        workspaceId: agent.workspaceId,
+      }).catch(() => {});
+    },
+    [deleteAgent, isDeleting],
   );
 
   const handleCloseActionSheet = useCallback(() => {
@@ -668,8 +676,6 @@ const styles = StyleSheet.create((theme) => ({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
     borderRadius: {
       xs: theme.borderRadius.lg,
       md: 0,
@@ -679,11 +685,19 @@ const styles = StyleSheet.create((theme) => ({
       md: 0,
     },
   },
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.spacing[2],
+    paddingLeft: theme.spacing[3],
+  },
   rowContent: {
     flex: 1,
     minWidth: 0,
     overflow: "hidden",
-    paddingRight: 40,
+    paddingRight: theme.spacing[3],
   },
   rowTitleRow: {
     flexDirection: "row",
@@ -723,9 +737,10 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface2,
   },
   deleteButton: {
-    position: "absolute",
-    right: theme.spacing[3],
-    top: theme.spacing[1],
+    width: 32,
+    height: 32,
+    marginHorizontal: theme.spacing[1],
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.borderRadius.md,
