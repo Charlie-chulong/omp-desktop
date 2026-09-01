@@ -39,7 +39,7 @@ import { ScreenHeader } from "@/components/headers/screen-header";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
-import { useAgentInputDraft } from "@/composer/draft/input-draft";
+import { useAgentInputDraft, type AgentInputDraft } from "@/composer/draft/input-draft";
 import { useForgeSearchQuery } from "@/git/use-forge-search-query";
 import { useCheckoutStatusQuery } from "@/git/use-status-query";
 import { ensureCheckoutStatus } from "@/git/checkout-status-cache";
@@ -73,6 +73,7 @@ import {
   useWorkspaceDraftSubmissionStore,
   type PendingWorkspaceDraftSetup,
 } from "@/stores/workspace-draft-submission-store";
+import { useSidebarConversationDraftStore } from "@/stores/sidebar-conversation-draft-store";
 import { useKeyboardShiftStyle } from "@/hooks/use-keyboard-shift-style";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionId } from "@/keyboard/keyboard-action-dispatcher";
@@ -1299,8 +1300,6 @@ function useNewWorkspaceInitialContext({
   };
 }
 
-
-
 export function NewWorkspaceScreen({
   serverId,
   sourceDirectory: sourceDirectoryProp,
@@ -1421,6 +1420,68 @@ export function NewWorkspaceScreen({
       initialSetup: forkDraftSetup?.setup,
     }),
   });
+  const setSidebarDraftHasContent = useSidebarConversationDraftStore(
+    (state) => state.setDraftHasContent,
+  );
+  const removeSidebarConversationDraft = useSidebarConversationDraftStore(
+    (state) => state.removeDraft,
+  );
+  const sidebarDraftHasContentRef = useRef(
+    draftId
+      ? useSidebarConversationDraftStore.getState().drafts[draftId]?.hasContent === true
+      : false,
+  );
+  const publishSidebarDraftContent = useCallback(
+    (hasContent: boolean) => {
+      sidebarDraftHasContentRef.current = hasContent;
+      if (draftId) {
+        setSidebarDraftHasContent(draftId, hasContent);
+      }
+    },
+    [draftId, setSidebarDraftHasContent],
+  );
+  const handleChatDraftTextChange = useCallback(
+    (text: string) => {
+      publishSidebarDraftContent(text.length > 0 || chatDraft.attachments.length > 0);
+      chatDraft.editText(text);
+    },
+    [chatDraft, publishSidebarDraftContent],
+  );
+  const handleChatDraftAttachmentsChange = useCallback<AgentInputDraft["setAttachments"]>(
+    (updater) => {
+      const nextAttachments =
+        typeof updater === "function" ? updater(chatDraft.attachments) : updater;
+      publishSidebarDraftContent(chatDraft.text.length > 0 || nextAttachments.length > 0);
+      chatDraft.setAttachments(nextAttachments);
+    },
+    [chatDraft, publishSidebarDraftContent],
+  );
+  const completeSidebarConversationDraft = useCallback(() => {
+    if (draftId) {
+      removeSidebarConversationDraft(draftId);
+    }
+  }, [draftId, removeSidebarConversationDraft]);
+
+  useEffect(() => {
+    if (!chatDraft.isHydrated) {
+      return;
+    }
+    publishSidebarDraftContent(chatDraft.text.length > 0 || chatDraft.attachments.length > 0);
+  }, [
+    chatDraft.attachments.length,
+    chatDraft.isHydrated,
+    chatDraft.text.length,
+    publishSidebarDraftContent,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (draftId && !sidebarDraftHasContentRef.current) {
+        removeSidebarConversationDraft(draftId);
+      }
+    },
+    [draftId, removeSidebarConversationDraft],
+  );
   const composerState = chatDraft.composerState;
   const [pickerSelection, dispatchPickerSelection] = useReducer(
     reducePickerSelection,
@@ -1533,10 +1594,10 @@ export function NewWorkspaceScreen({
       });
 
       dispatchPickerSelection({ type: "picker-selected", item });
-      chatDraft.setAttachments(nextAttachments);
+      handleChatDraftAttachmentsChange(nextAttachments);
       setPickerOpen(false);
     },
-    [chatDraft],
+    [chatDraft.attachments, handleChatDraftAttachmentsChange],
   );
 
   const handleSelectOption = useCallback(
@@ -1556,10 +1617,10 @@ export function NewWorkspaceScreen({
         nextTargetId,
       });
       if (nextAttachments === chatDraft.attachments) return;
-      chatDraft.setAttachments(nextAttachments);
+      handleChatDraftAttachmentsChange(nextAttachments);
       dispatchPickerSelection({ type: "target-changed" });
     },
-    [chatDraft],
+    [chatDraft.attachments, handleChatDraftAttachmentsChange],
   );
 
   const handleSelectProjectOption = useCallback(
@@ -1791,8 +1852,10 @@ export function NewWorkspaceScreen({
             payload,
             ensureWorkspace,
             serverId: selectedServerId,
-            navigate: (targetServerId, workspaceId) =>
-              navigateToWorkspace({ serverId: targetServerId, workspaceId }),
+            navigate: (targetServerId, workspaceId) => {
+              completeSidebarConversationDraft();
+              navigateToWorkspace({ serverId: targetServerId, workspaceId });
+            },
           });
           return;
         }
@@ -1812,6 +1875,7 @@ export function NewWorkspaceScreen({
             selectModel: t("newWorkspace.errors.selectModel"),
           },
         });
+        completeSidebarConversationDraft();
       } catch (error) {
         const message = toErrorMessage(error);
         setPendingAction(null);
@@ -1823,6 +1887,7 @@ export function NewWorkspaceScreen({
       composerState,
       draftId,
       chatDraft.clear,
+      completeSidebarConversationDraft,
       ensureWorkspace,
       forkDraftSetup,
       launchTarget,
@@ -1862,8 +1927,10 @@ export function NewWorkspaceScreen({
           withConnectedClient().sendTerminalInput(terminalId, { type: "input", data });
         },
         serverId: selectedServerId,
-        navigate: (targetServerId, workspaceId, target) =>
-          navigateToWorkspace({ serverId: targetServerId, workspaceId, target }),
+        navigate: (targetServerId, workspaceId, target) => {
+          completeSidebarConversationDraft();
+          navigateToWorkspace({ serverId: targetServerId, workspaceId, target });
+        },
       });
     } catch (error) {
       const message = toErrorMessage(error);
@@ -1873,6 +1940,7 @@ export function NewWorkspaceScreen({
     }
   }, [
     ensureWorkspace,
+    completeSidebarConversationDraft,
     launchTarget,
     selectedServerId,
     selectedSourceDirectory,
@@ -1972,7 +2040,6 @@ export function NewWorkspaceScreen({
     branchSuggestionsQuery.isFetching || githubPrSearchQuery.isFetching
       ? t("newWorkspace.refPicker.searching")
       : t("newWorkspace.refPicker.noMatchingRefs");
-
 
   const screenHeaderLeft = useMemo(() => <SidebarMenuToggle />, []);
   const headerWorkspaceKey = useMemo(
@@ -2097,11 +2164,11 @@ export function NewWorkspaceScreen({
                 submitBehavior="preserve-and-lock"
                 blurOnSubmit={true}
                 value={chatDraft.text}
-                onChangeText={chatDraft.editText}
+                onChangeText={handleChatDraftTextChange}
                 textReplacementKey={chatDraft.textReplacementKey}
                 attachments={chatDraft.attachments}
                 attachmentScopeKeys={visibleDraftContextScopeKeys}
-                onChangeAttachments={chatDraft.setAttachments}
+                onChangeAttachments={handleChatDraftAttachmentsChange}
                 onGithubPrDetected={handleGithubPrDetected}
                 onGithubPrAutoAttach={handleGithubPrAutoAttach}
                 cwd={selectedSourceDirectory ?? ""}

@@ -23,6 +23,7 @@ vi.mock("expo-router", () => ({
     dismissTo: vi.fn(),
   },
   useLocalSearchParams: () => ({}),
+  useGlobalSearchParams: () => ({}),
   usePathname: () => pathnameState.value,
 }));
 
