@@ -36,8 +36,18 @@ export function renderTerminalSnapshotToAnsi(state: TerminalState): string {
   // plus a hard newline per row.
   const hasWrapInfo = wrapFlags.length === rows.length;
   const lines: string[] = hasWrapInfo ? [] : ["\u001b[?7l"];
+  const promptMarkers = new Map(
+    state.promptMarkers?.map((marker) => [marker.row, marker.executed] as const),
+  );
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const promptExecuted = promptMarkers.get(rowIndex);
+    if (promptExecuted !== undefined) {
+      lines.push("\u001b]633;A\u0007");
+      if (promptExecuted) {
+        lines.push("\u001b]633;B\u0007");
+      }
+    }
     const row = rows[rowIndex] ?? [];
     const continuesToNextRow = hasWrapInfo && wrapFlags[rowIndex] === true;
     // A continuation row must fill the full width so the next row first cell

@@ -30,3 +30,4 @@ function _paseo_preexec() {
 
 add-zsh-hook precmd _paseo_precmd
 add-zsh-hook preexec _paseo_preexec
+_paseo_osc633 "A"

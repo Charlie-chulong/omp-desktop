@@ -6221,6 +6221,11 @@ export const TerminalCursorSchema = z.object({
   blink: z.boolean().optional(),
 });
 
+export const TerminalPromptMarkerSchema = z.object({
+  row: z.number().int().nonnegative(),
+  executed: z.boolean(),
+});
+
 export const TerminalStateSchema = z.object({
   rows: z.number(),
   cols: z.number(),
@@ -6235,6 +6240,7 @@ export const TerminalStateSchema = z.object({
   // `terminalReflowableSnapshot` capability, so old daemons/clients are unaffected.
   gridWrapped: z.array(z.boolean()).optional(),
   scrollbackWrapped: z.array(z.boolean()).optional(),
+  promptMarkers: z.array(TerminalPromptMarkerSchema).optional(),
 });
 
 export const ListTerminalsResponseSchema = z.object({

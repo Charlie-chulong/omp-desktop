@@ -1,6 +1,7 @@
 import { page } from "@vitest/browser/context";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TerminalInputModeState } from "@omp-desktop/protocol/terminal-input-mode";
+import type { TerminalState } from "@omp-desktop/protocol/messages";
 import { encodeTerminalOutput, TerminalEmulatorRuntime } from "./terminal-emulator-runtime";
 
 vi.mock("@xterm/addon-webgl", () => ({
@@ -220,6 +221,126 @@ describe("terminal emulator runtime in a real browser", () => {
 
     expect(window.__paseoTerminal).toBe(terminal);
     expect(window.__paseoTerminal?.options.scrollback).toBe(42_000);
+  });
+
+  it("renders Cursor-style prompt dots in the terminal gutter", async () => {
+    await page.viewport(900, 600);
+    const mounted = createTerminalHost({ width: 720, height: 360 });
+
+    mounted.runtime.write({
+      data: terminalOutput("\x1b]633;A\x07user@host project % "),
+    });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="idle"]') !== null,
+    });
+
+    const terminalElement = mounted.host.querySelector<HTMLElement>(".xterm");
+    const idleDecoration = mounted.host.querySelector<HTMLElement>(
+      '[data-terminal-prompt-decoration="idle"]',
+    );
+    expect(terminalElement?.style.paddingLeft).toBe("14px");
+    expect(idleDecoration?.style.transform).toBe("translateX(-14px)");
+    expect(idleDecoration?.firstElementChild).toBeInstanceOf(HTMLSpanElement);
+
+    mounted.runtime.write({ data: terminalOutput("\x1b]633;B\x07") });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="executed"]') !== null,
+    });
+
+    const executedDot = mounted.host.querySelector<HTMLElement>(
+      '[data-terminal-prompt-decoration="executed"] > span',
+    );
+    expect(executedDot?.style.backgroundColor).toBe("rgb(55, 148, 255)");
+  });
+
+  it("creates the first prompt dot when prompt-start output was missed", async () => {
+    await page.viewport(900, 600);
+    const mounted = createTerminalHost({ width: 720, height: 360 });
+
+    mounted.runtime.write({
+      data: terminalOutput("user@host project % \x1b]633;B\x07"),
+    });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="executed"]') !== null,
+    });
+
+    expect(
+      mounted.host.querySelectorAll('[data-terminal-prompt-decoration="executed"]'),
+    ).toHaveLength(1);
+  });
+
+  it("infers the first prompt dot from delayed live shell output", async () => {
+    await page.viewport(900, 600);
+    const mounted = createTerminalHost({ width: 720, height: 360 });
+
+    mounted.runtime.write({ data: terminalOutput("user@host project % ") });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="idle"]') !== null,
+    });
+
+    expect(mounted.host.querySelectorAll('[data-terminal-prompt-decoration="idle"]')).toHaveLength(
+      1,
+    );
+  });
+
+  it("infers the first prompt dot from a restored shell prompt", async () => {
+    await page.viewport(900, 600);
+    const mounted = createTerminalHost({ width: 720, height: 360 });
+
+    await new Promise<void>((resolve) => {
+      mounted.runtime.restoreOutput({
+        data: terminalOutput("user@host project % "),
+        onCommitted: resolve,
+      });
+    });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="idle"]') !== null,
+    });
+
+    expect(mounted.host.querySelectorAll('[data-terminal-prompt-decoration="idle"]')).toHaveLength(
+      1,
+    );
+  });
+
+  it("restores the first prompt dot from a terminal snapshot", async () => {
+    await page.viewport(900, 600);
+    const mounted = createTerminalHost({ width: 720, height: 360 });
+    const prompt = "user@host project % ";
+    const state: TerminalState = {
+      rows: 5,
+      cols: 80,
+      grid: Array.from({ length: 5 }, (_, row) =>
+        Array.from({ length: 80 }, (_, col) => ({
+          char: row === 0 ? (prompt[col] ?? " ") : " ",
+        })),
+      ),
+      scrollback: [],
+      cursor: { row: 0, col: prompt.length },
+      promptMarkers: [{ row: 0, executed: false }],
+    };
+
+    await new Promise<void>((resolve) => {
+      mounted.runtime.renderSnapshot({ state, onCommitted: resolve });
+    });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="idle"]') !== null,
+    });
+
+    mounted.runtime.write({ data: terminalOutput("\x1b]633;B\x07") });
+    await waitFor({
+      predicate: () =>
+        mounted.host.querySelector('[data-terminal-prompt-decoration="executed"]') !== null,
+    });
+
+    expect(
+      mounted.host.querySelectorAll('[data-terminal-prompt-decoration="executed"]'),
+    ).toHaveLength(1);
   });
 
   it("does not claim PTY ownership from passive mount refits", async () => {

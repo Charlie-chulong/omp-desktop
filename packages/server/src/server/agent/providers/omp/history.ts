@@ -432,6 +432,9 @@ function isControlEntryType(type: string): boolean {
     type === "custom" ||
     type === "system_prompt" ||
     type === "model_change" ||
+    type === "credential_pin" ||
+    type === "ttsr_injection" ||
+    type === "custom_message" ||
     type === "thinking_level_change" ||
     type === "tool_execution" ||
     type === "compaction" ||

@@ -707,11 +707,11 @@ function TabChip({
   );
   const isCompact = useIsCompactFormFactor();
   const [hovered, setHovered] = useState(false);
-  // An active tab in a pane that does not have focus stays legible but quiet: it keeps the fill of
-  // a hovered chip and the muted label, so only one chip in the window reads as the live one.
+  // Every pane's active tab uses the same label and icon emphasis. Pane focus remains visible
+  // through the stronger chip fill, without making the active tab in a sibling pane look disabled.
   const isActiveFocused = isActive && isFocused;
   const isHovered = hovered || isCloseHovered;
-  const isHighlighted = isActiveFocused || isHovered;
+  const isHighlighted = isActive || isHovered;
   const chipBackdrop: SurfaceBackdrop = resolveChipBackdrop({
     isActiveFocused,
     isFilled: isActive || isHovered,

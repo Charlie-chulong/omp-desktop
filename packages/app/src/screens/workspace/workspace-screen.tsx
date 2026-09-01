@@ -19,7 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, PanelRight, Plus } from "lucide-react-native";
+import { ChevronDown, PanelRight, Plus, Rows2 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
@@ -28,10 +28,7 @@ import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { ScreenHeader } from "@/components/headers/screen-header";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
@@ -104,6 +101,7 @@ import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { removeResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
 import { createWorkspaceBrowser, useBrowserStore } from "@/desktop/browser/store";
 import { getDesktopHost } from "@/desktop/host";
@@ -232,6 +230,7 @@ function buildWorkspaceFileLocation(
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedPanelRight = withUnistyles(PanelRight);
+const ThemedRows2 = withUnistyles(Rows2);
 const ThemedPlus = withUnistyles(Plus);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -1195,6 +1194,13 @@ interface WorkspaceTerminalTabActionsInput {
     tabId: string,
     target: WorkspaceTabTarget,
   ) => string | null;
+  splitWorkspacePaneEmpty: (
+    workspaceKey: string,
+    input: {
+      targetPaneId: string;
+      position: "left" | "right" | "top" | "bottom";
+    },
+  ) => string | null;
   labels: {
     workspacePathUnavailable: string;
     terminalQueued: string;
@@ -1220,12 +1226,28 @@ function useWorkspaceTerminalTabActions({
   persistenceKey,
   openWorkspaceTabFocused,
   replaceWorkspaceTabTarget,
+  splitWorkspacePaneEmpty,
   labels,
   toast,
 }: WorkspaceTerminalTabActionsInput): WorkspaceTerminalTabActions {
   const handleTerminalCreated = useCallback(
     ({ terminalId, destination }: { terminalId: string; destination: TerminalTabDestination }) => {
       if (!persistenceKey) {
+        return;
+      }
+      if (destination.kind === "split") {
+        const paneId = splitWorkspacePaneEmpty(persistenceKey, {
+          targetPaneId: destination.targetPaneId,
+          position: destination.position,
+        });
+        if (!paneId) {
+          return;
+        }
+        openWorkspaceTabFocused(
+          persistenceKey,
+          { kind: "terminal", terminalId },
+          paneLocalPlacement(paneId),
+        );
         return;
       }
       if (destination.kind === "replace") {
@@ -1241,7 +1263,7 @@ function useWorkspaceTerminalTabActions({
         paneLocalPlacement(destination.paneId),
       );
     },
-    [openWorkspaceTabFocused, persistenceKey, replaceWorkspaceTabTarget],
+    [openWorkspaceTabFocused, persistenceKey, replaceWorkspaceTabTarget, splitWorkspacePaneEmpty],
   );
   const handleScriptTerminalSelected = useCallback(
     (terminalId: string) => {
@@ -1402,6 +1424,7 @@ function WorkspaceScreenContent({
     }));
   }, []);
   const focusWorkspacePane = useWorkspaceLayoutStore((state) => state.focusPane);
+  const splitWorkspacePaneEmpty = useWorkspaceLayoutStore((state) => state.splitPaneEmpty);
   const hasHydratedWorkspaces = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.hasHydratedWorkspaces ?? false,
   );
@@ -1437,6 +1460,7 @@ function WorkspaceScreenContent({
     persistenceKey,
     openWorkspaceTabFocused,
     replaceWorkspaceTabTarget,
+    splitWorkspacePaneEmpty,
     labels: {
       workspacePathUnavailable: t("workspace.header.toasts.workspacePathUnavailable"),
       terminalQueued: t("workspace.header.toasts.terminalQueued"),
@@ -1589,7 +1613,6 @@ function WorkspaceScreenContent({
   const setWorkspaceTabState = useWorkspaceLayoutStore((state) => state.setTabState);
   const reconcileWorkspaceTabs = useWorkspaceLayoutStore((state) => state.reconcileTabs);
   const splitWorkspacePane = useWorkspaceLayoutStore((state) => state.splitPane);
-  const splitWorkspacePaneEmpty = useWorkspaceLayoutStore((state) => state.splitPaneEmpty);
   const moveWorkspaceTabToPane = useWorkspaceLayoutStore((state) => state.moveTabToPane);
   const closeWorkspacePane = useWorkspaceLayoutStore((state) => state.closePane);
   const handleToggleSidePanel = useCallback(() => {
@@ -2082,6 +2105,16 @@ function WorkspaceScreenContent({
   const handleCreateTerminal = useStableEvent((input?: { paneId?: string }) => {
     createTerminal({
       destination: input?.paneId ? { kind: "open", paneId: input.paneId } : { kind: "open" },
+    });
+  });
+
+  const splitPaneDownKeys = useShortcutKeys("workspace-pane-split-down");
+  const handleCreateTerminalBelowFocusedPane = useStableEvent(() => {
+    if (!focusedPaneId) {
+      return;
+    }
+    createTerminal({
+      destination: { kind: "split", targetPaneId: focusedPaneId, position: "bottom" },
     });
   });
 
@@ -3363,6 +3396,22 @@ function WorkspaceScreenContent({
           <>
             <WorkspaceActions serverId={normalizedServerId} cwd={workspaceDirectory} />
             <HeaderToggleButton
+              testID="workspace-header-split-pane-down"
+              onPress={handleCreateTerminalBelowFocusedPane}
+              tooltipLabel={t("workspace.tabs.actions.splitDown")}
+              tooltipKeys={splitPaneDownKeys?.[0] ?? []}
+              tooltipSide="left"
+              style={styles.compactHeaderActionButton}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={t("workspace.tabs.actions.splitDown")}
+            >
+              {({ hovered }) => {
+                const colorMapping = hovered ? foregroundColorMapping : extraMutedColorMapping;
+                return <ThemedRows2 size={16} uniProps={colorMapping} />;
+              }}
+            </HeaderToggleButton>
+            <HeaderToggleButton
               testID="workspace-explorer-toggle"
               onPress={handleToggleSidePanel}
               tooltipLabel={t("workspace.tabs.sidePanel.toggle")}
@@ -3439,6 +3488,8 @@ function WorkspaceScreenContent({
       handleScriptTerminalStarted,
       handleViewScriptTerminal,
       handleOpenUrlInBrowserTab,
+      handleCreateTerminalBelowFocusedPane,
+      splitPaneDownKeys,
       handleToggleSidePanel,
       sidePanelToggleLabel,
       sidePanelToggleAccessibilityState,
@@ -3558,85 +3609,85 @@ function WorkspaceScreenContent({
   const workspaceCenterColumn = (
     <NewTabLauncherProvider value={newTabLauncher}>
       <View style={styles.centerColumn}>
-      <ScreenHeader
-        left={
-          <>
-            <SidebarMenuToggle />
-            {isMobile && workspaceScripts.length > 0 ? (
-              <WorkspaceScriptsButton
-                serverId={normalizedServerId}
-                workspaceId={normalizedWorkspaceId}
-                scripts={workspaceScripts}
-                liveTerminalIds={liveTerminalIds}
-                onScriptTerminalStarted={handleScriptTerminalStarted}
-                onViewTerminal={handleViewScriptTerminal}
-                onOpenUrlInBrowserTab={handleOpenUrlInBrowserTab}
-                hideLabels
-                presentation="ghost"
-              />
-            ) : null}
-          </>
-        }
-        right={headerRight}
-      />
-
-      {isMobile ? (
-        <MobileWorkspaceTabSwitcher
-          tabs={tabs}
-          activeTabKey={activeTabKey}
-          activeTab={activeTabDescriptor}
-          tabSwitcherOptions={tabSwitcherOptions}
-          tabByKey={tabByKey}
-          normalizedServerId={normalizedServerId}
-          normalizedWorkspaceId={normalizedWorkspaceId}
-          onSelectSwitcherTab={handleSelectSwitcherTab}
-          onCopyResumeCommand={handleCopyResumeCommand}
-          onCopyAgentId={handleCopyAgentId}
-          onCopyTerminalId={handleCopyTerminalId}
-          onCopyFilePath={handleCopyFilePath}
-          onReloadAgent={handleReloadAgent}
-          onRenameTab={handleRenameTab}
-          onCloseTab={handleCloseTabById}
-          onCloseTabsAbove={handleCloseTabsToLeft}
-          onCloseTabsBelow={handleCloseTabsToRight}
-          onCloseOtherTabs={handleCloseOtherTabs}
+        <ScreenHeader
+          left={
+            <>
+              <SidebarMenuToggle />
+              {isMobile && workspaceScripts.length > 0 ? (
+                <WorkspaceScriptsButton
+                  serverId={normalizedServerId}
+                  workspaceId={normalizedWorkspaceId}
+                  scripts={workspaceScripts}
+                  liveTerminalIds={liveTerminalIds}
+                  onScriptTerminalStarted={handleScriptTerminalStarted}
+                  onViewTerminal={handleViewScriptTerminal}
+                  onOpenUrlInBrowserTab={handleOpenUrlInBrowserTab}
+                  hideLabels
+                  presentation="ghost"
+                />
+              ) : null}
+            </>
+          }
+          right={headerRight}
         />
-      ) : null}
 
-      {shouldRenderDesktopPaneFallback ? (
-        // The splits path renders tab rows inside WorkspacePanelContent, which is what
-        // provides NewTabLauncherProvider. This fallback row sits outside it, and its
-        // new-tab menu content mounts eagerly, so without its own provider every
-        // non-compact native layout (tablets, foldables in landscape) crashed on mount
-        // with "NewTabLauncherProvider is required" (#3750).
-        <NewTabLauncherProvider value={newTabLauncher}>
-          <WorkspaceDesktopTabsRow
-            paneId={focusedPaneIdOrUndefined}
-            isFocused={isRouteFocused}
-            tabs={desktopTabRowItems}
+        {isMobile ? (
+          <MobileWorkspaceTabSwitcher
+            tabs={tabs}
+            activeTabKey={activeTabKey}
+            activeTab={activeTabDescriptor}
+            tabSwitcherOptions={tabSwitcherOptions}
+            tabByKey={tabByKey}
             normalizedServerId={normalizedServerId}
             normalizedWorkspaceId={normalizedWorkspaceId}
-            setHoveredCloseTabKey={setHoveredCloseTabKey}
-            onNavigateTab={navigateToTabId}
-            onCloseTab={handleCloseTabById}
+            onSelectSwitcherTab={handleSelectSwitcherTab}
             onCopyResumeCommand={handleCopyResumeCommand}
             onCopyAgentId={handleCopyAgentId}
             onCopyTerminalId={handleCopyTerminalId}
             onCopyFilePath={handleCopyFilePath}
             onReloadAgent={handleReloadAgent}
             onRenameTab={handleRenameTab}
-            onCloseTabsToLeft={handleCloseTabsToLeft}
-            onCloseTabsToRight={handleCloseTabsToRight}
+            onCloseTab={handleCloseTabById}
+            onCloseTabsAbove={handleCloseTabsToLeft}
+            onCloseTabsBelow={handleCloseTabsToRight}
             onCloseOtherTabs={handleCloseOtherTabs}
-            onCreateNewTab={handleCreateNewTab}
-            onReorderTabs={handleReorderTabsInFocusedPane}
-            focusModeEnabled={desktopFocusModeEnabled}
-            onExitFocusMode={toggleFocusMode}
           />
-        </NewTabLauncherProvider>
-      ) : null}
+        ) : null}
 
-      <View style={styles.centerContent}>{workspacePanelContent}</View>
+        {shouldRenderDesktopPaneFallback ? (
+          // The splits path renders tab rows inside WorkspacePanelContent, which is what
+          // provides NewTabLauncherProvider. This fallback row sits outside it, and its
+          // new-tab menu content mounts eagerly, so without its own provider every
+          // non-compact native layout (tablets, foldables in landscape) crashed on mount
+          // with "NewTabLauncherProvider is required" (#3750).
+          <NewTabLauncherProvider value={newTabLauncher}>
+            <WorkspaceDesktopTabsRow
+              paneId={focusedPaneIdOrUndefined}
+              isFocused={isRouteFocused}
+              tabs={desktopTabRowItems}
+              normalizedServerId={normalizedServerId}
+              normalizedWorkspaceId={normalizedWorkspaceId}
+              setHoveredCloseTabKey={setHoveredCloseTabKey}
+              onNavigateTab={navigateToTabId}
+              onCloseTab={handleCloseTabById}
+              onCopyResumeCommand={handleCopyResumeCommand}
+              onCopyAgentId={handleCopyAgentId}
+              onCopyTerminalId={handleCopyTerminalId}
+              onCopyFilePath={handleCopyFilePath}
+              onReloadAgent={handleReloadAgent}
+              onRenameTab={handleRenameTab}
+              onCloseTabsToLeft={handleCloseTabsToLeft}
+              onCloseTabsToRight={handleCloseTabsToRight}
+              onCloseOtherTabs={handleCloseOtherTabs}
+              onCreateNewTab={handleCreateNewTab}
+              onReorderTabs={handleReorderTabsInFocusedPane}
+              focusModeEnabled={desktopFocusModeEnabled}
+              onExitFocusMode={toggleFocusMode}
+            />
+          </NewTabLauncherProvider>
+        ) : null}
+
+        <View style={styles.centerContent}>{workspacePanelContent}</View>
       </View>
     </NewTabLauncherProvider>
   );

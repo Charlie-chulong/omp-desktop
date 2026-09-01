@@ -496,6 +496,26 @@ it("injects parent-minted terminal activity env through the worker", async () =>
   expect(env.path?.split(delimiter)[0]).toBe(paseoCliBinDir);
 });
 
+it.skipIf(isPlatform("win32") || !existsSync("/bin/zsh"))(
+  "preserves prompt markers from the terminal worker",
+  async () => {
+    manager = createWorkerTerminalManager();
+    const cwd = mkdtempSync(join(tmpdir(), "worker-terminal-manager-prompt-marker-"));
+    temporaryDirs.push(cwd);
+    const session = trackTerminal(
+      await manager.createTerminal({ cwd, workspaceId: "ws-test", command: "/bin/zsh" }),
+    );
+
+    await waitForCondition(async () => {
+      const snapshot = await manager.getTerminalState(session.id);
+      return snapshot ? getRenderedTextFromState(snapshot.state).trim().length > 0 : false;
+    }, 10000);
+
+    const snapshot = await manager.getTerminalState(session.id);
+    expect(snapshot?.state.promptMarkers?.at(-1)?.executed).toBe(false);
+  },
+);
+
 it("starts the default shell through the worker and accepts quoted commands", async () => {
   manager = createWorkerTerminalManager();
   const cwd = mkdtempSync(join(tmpdir(), "worker-terminal-manager-shell-"));

@@ -451,7 +451,7 @@ describe("OMP history mapper", () => {
     });
   });
 
-  test("maps only the active JSONL chain with native user ids and visible unknown roles", async () => {
+  test("maps only the active JSONL chain while hiding internal control records", async () => {
     const dir = mkdtempSync(join(tmpdir(), "omp-history-"));
     const sessionFile = join(dir, "session.jsonl");
     writeFileSync(
@@ -518,9 +518,27 @@ describe("OMP history mapper", () => {
           command: "secret internal command",
         },
         {
+          type: "credential_pin",
+          id: "credential-control",
+          parentId: "tool-control",
+          credentialId: "must stay hidden",
+        },
+        {
+          type: "ttsr_injection",
+          id: "ttsr-control",
+          parentId: "credential-control",
+          text: "must stay hidden",
+        },
+        {
+          type: "custom_message",
+          id: "custom-message-control",
+          parentId: "ttsr-control",
+          content: "<system-reminder>must stay hidden</system-reminder>",
+        },
+        {
           type: "future_control",
           id: "unknown-active",
-          parentId: "tool-control",
+          parentId: "custom-message-control",
           secret: "must not stringify",
         },
         {

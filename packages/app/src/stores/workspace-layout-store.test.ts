@@ -761,6 +761,34 @@ describe("workspace-layout-store actions", () => {
     expect(collectTabIds(layout.root)).not.toContain(initialMainTabId);
   });
 
+  it("replaces a new bottom pane with only the created terminal", () => {
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    workspaceLayoutStore.setState({
+      layoutByWorkspace: { [workspaceKey]: createWorkspaceLayoutWithSidePanel() },
+    });
+    useWorkspaceLayoutIds("bottom-pane", "bottom-group");
+    const paneId = store.splitPaneEmpty(workspaceKey, {
+      targetPaneId: "main",
+      position: "bottom",
+    }) as string;
+
+    const terminalTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-below" },
+      intent: "reveal",
+      placement: { mode: "pane", paneId },
+    });
+
+    const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const bottomPane = findPaneById(layout.root, paneId);
+    expect(bottomPane?.tabIds).toEqual([terminalTabId]);
+    expect(collectAllTabs(layout.root).find((tab) => tab.tabId === terminalTabId)?.target).toEqual({
+      kind: "terminal",
+      terminalId: "terminal-below",
+    });
+  });
+
   it("keeps a New tab's random identity when its launcher selects content", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();

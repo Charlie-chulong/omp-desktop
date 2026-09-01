@@ -46,4 +46,24 @@ describe("renderTerminalSnapshotToAnsi", () => {
     expect(ansi).toContain("[?7l");
     expect(ansi).toContain("ABCDEFGHIJ\r\nKLMNOP");
   });
+
+  it("replays prompt markers before their snapshot rows", () => {
+    const state: TerminalState = {
+      rows: 3,
+      cols: 20,
+      scrollback: [],
+      grid: [cells("first prompt"), cells("output"), cells("current prompt")],
+      cursor: { row: 2, col: 14 },
+      promptMarkers: [
+        { row: 0, executed: true },
+        { row: 2, executed: false },
+      ],
+    };
+
+    const ansi = renderTerminalSnapshotToAnsi(state);
+
+    expect(ansi).toContain(
+      "\u001b]633;A\u0007\u001b]633;B\u0007first prompt\r\noutput\r\n\u001b]633;A\u0007current prompt",
+    );
+  });
 });

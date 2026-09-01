@@ -1,5 +1,5 @@
 import * as pty from "node-pty";
-import xterm, { type Terminal as TerminalType } from "@xterm/headless";
+import xterm, { type IMarker, type Terminal as TerminalType } from "@xterm/headless";
 import { randomUUID } from "crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
@@ -36,6 +36,10 @@ export interface TerminalExitInfo {
   lastOutputLines: string[];
 }
 
+interface TerminalPromptMarker {
+  marker: IMarker;
+  executed: boolean;
+}
 export interface TerminalCommandFinishedInfo {
   exitCode: number | null;
 }
@@ -499,6 +503,14 @@ export function buildTerminalEnvironment(
     TERM: "xterm-256color",
     TERM_PROGRAM: "kitty",
   });
+  if (
+    process.platform !== "win32" &&
+    !baseEnv.LC_ALL?.trim() &&
+    !baseEnv.LC_CTYPE?.trim() &&
+    !baseEnv.LANG?.trim()
+  ) {
+    baseEnv.LC_CTYPE = "C.UTF-8";
+  }
   const envWithAgentHooks = prependPaseoCliToPath(
     baseEnv,
     input.paseoCliBinDir === undefined ? resolvePaseoCliBinDir() : input.paseoCliBinDir,
@@ -698,6 +710,26 @@ function extractScrollbackWrapped(
     wrapped.push(lineContinuesToNext(terminal, row));
   }
   return wrapped;
+}
+
+function extractPromptMarkers(
+  terminal: TerminalType,
+  promptMarkers: ReadonlySet<TerminalPromptMarker>,
+  options?: { scrollbackLines?: number },
+): NonNullable<TerminalState["promptMarkers"]> {
+  const buffer = terminal.buffer.active;
+  if (buffer.type !== "normal") {
+    return [];
+  }
+  const startRow =
+    typeof options?.scrollbackLines === "number"
+      ? Math.max(0, buffer.baseY - options.scrollbackLines)
+      : 0;
+  const endRow = buffer.baseY + terminal.rows;
+  return [...promptMarkers]
+    .filter(({ marker }) => !marker.isDisposed && marker.line >= startRow && marker.line < endRow)
+    .map(({ marker, executed }) => ({ row: marker.line - startRow, executed }))
+    .sort((left, right) => left.row - right.row);
 }
 
 function extractCursorState(terminal: TerminalType): TerminalState["cursor"] {
@@ -937,6 +969,8 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     scrollback: 1000,
     allowProposedApi: true,
   });
+  const promptMarkers = new Set<TerminalPromptMarker>();
+  let currentPromptMarker: TerminalPromptMarker | null = null;
 
   ensureNodePtySpawnHelperExecutableForCurrentPlatform();
 
@@ -957,6 +991,15 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
         PASEO_WORKSPACE_ID: workspaceId,
       },
     }),
+  });
+  const pendingPtyData: string[] = [];
+  let handlePtyData: ((data: string) => void) | null = null;
+  const disposePtyDataSubscription = ptyProcess.onData((data) => {
+    if (handlePtyData) {
+      handlePtyData(data);
+      return;
+    }
+    pendingPtyData.push(data);
   });
 
   function emitTitleChange(nextTitle: string | undefined): void {
@@ -1071,18 +1114,57 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     });
   }
 
+  const recordPromptMarker = (): void => {
+    const cursorLine = terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
+    if (
+      currentPromptMarker &&
+      !currentPromptMarker.executed &&
+      !currentPromptMarker.marker.isDisposed &&
+      currentPromptMarker.marker.line === cursorLine
+    ) {
+      return;
+    }
+    const marker = terminal.registerMarker();
+    if (!marker) {
+      currentPromptMarker = null;
+      return;
+    }
+    const promptMarker: TerminalPromptMarker = { marker, executed: false };
+    currentPromptMarker = promptMarker;
+    promptMarkers.add(promptMarker);
+    marker.onDispose(() => {
+      promptMarkers.delete(promptMarker);
+      if (currentPromptMarker === promptMarker) {
+        currentPromptMarker = null;
+      }
+    });
+  };
+
   const disposeCommandLifecycleSubscription = terminal.parser.registerOscHandler(633, (data) => {
-    const commandFinished = parseCommandFinishedOsc(data);
-    if (!commandFinished) {
-      return true;
+    const command = data.split(";", 1)[0];
+    if (command === "A") {
+      recordPromptMarker();
+    } else if (command === "B") {
+      if (!currentPromptMarker || currentPromptMarker.executed) {
+        recordPromptMarker();
+      }
+      if (currentPromptMarker) {
+        currentPromptMarker.executed = true;
+      }
     }
 
-    for (const listener of Array.from(commandFinishedListeners)) {
-      try {
-        listener(commandFinished);
-      } catch {
-        // no-op
+    const commandFinished = parseCommandFinishedOsc(data);
+    if (commandFinished) {
+      for (const listener of Array.from(commandFinishedListeners)) {
+        try {
+          listener(commandFinished);
+        } catch {
+          // no-op
+        }
       }
+    }
+    if (command === "D") {
+      currentPromptMarker = null;
     }
     return true;
   });
@@ -1152,6 +1234,7 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
       clearImmediate(inputFlushImmediate);
       inputFlushImmediate = null;
     }
+    disposePtyDataSubscription.dispose();
     clearPendingTitleChange();
     disposeTitleChangeSubscription();
     disposeCommandLifecycleSubscription.dispose();
@@ -1177,7 +1260,7 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
   }
 
   // Pipe PTY output to terminal emulator
-  ptyProcess.onData((data) => {
+  handlePtyData = (data) => {
     if (killed) return;
     const inputModeUpdate = inputModeTracker.feed(data);
     for (const response of inputModeUpdate.responses) {
@@ -1202,7 +1285,11 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
       recentOutputLength = tail.length;
     }
     writeOutputToHeadless(data);
-  });
+  };
+  for (const data of pendingPtyData) {
+    handlePtyData(data);
+  }
+  pendingPtyData.length = 0;
 
   ptyProcess.onExit((event) => {
     killed = true;
@@ -1250,6 +1337,9 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
       }),
       cursor: extractCursorState(terminal),
       ...(title ? { title } : {}),
+      promptMarkers: extractPromptMarkers(terminal, promptMarkers, {
+        scrollbackLines: snapshotOptions?.scrollbackLines,
+      }),
       ...(snapshotOptions?.includeWrapFlags
         ? {
             gridWrapped: extractGridWrapped(terminal),

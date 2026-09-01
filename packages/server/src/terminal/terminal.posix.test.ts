@@ -279,6 +279,75 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
     expect(existsSync(join(resolvedEnv.ZDOTDIR, "paseo-integration.zsh"))).toBe(true);
   });
 
+  it("defaults empty terminal locale variables to UTF-8", () => {
+    const resolvedEnv = buildTerminalEnvironment({
+      shell: "/bin/sh",
+      env: {
+        LANG: "",
+        LC_ALL: "",
+        LC_CTYPE: "",
+      },
+      paseoCliBinDir: null,
+      paseoHookCliPath: null,
+    });
+
+    expect(resolvedEnv.LC_CTYPE).toBe("C.UTF-8");
+  });
+
+  it("preserves an explicitly configured terminal locale", () => {
+    const resolvedEnv = buildTerminalEnvironment({
+      shell: "/bin/sh",
+      env: {
+        LANG: "zh_CN.UTF-8",
+        LC_ALL: "",
+        LC_CTYPE: "",
+      },
+      paseoCliBinDir: null,
+      paseoHookCliPath: null,
+    });
+
+    expect(resolvedEnv.LANG).toBe("zh_CN.UTF-8");
+    expect(resolvedEnv.LC_CTYPE).toBe("");
+  });
+
+  it.skipIf(!hasZsh)("keeps interactive zsh input in UTF-8 when locale is absent", async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "terminal-zsh-utf8-home-"));
+    temporaryDirs.push(homeDir);
+    writeFileSync(join(homeDir, ".zshrc"), "PS1='$ '\n");
+
+    const session = trackSession(
+      await createTerminal({
+        workspaceId: "ws-test",
+        cwd: homeDir,
+        shell: "/bin/zsh",
+        env: {
+          HOME: homeDir,
+          LANG: "",
+          LC_ALL: "",
+          LC_CTYPE: "",
+        },
+      }),
+    );
+
+    await waitForLines(session, ["$"]);
+
+    let output = "";
+    const unsubscribe = session.subscribe((message) => {
+      if (message.type === "output") {
+        output += message.data;
+      }
+    });
+    session.send({ type: "input", data: "printf '中文\\n'\r" });
+
+    await waitForState(session, () => output.includes("中文"));
+
+    expect(output).toContain("printf '中文");
+    expect(output).not.toContain("\uFFFD");
+    expect(output).not.toMatch(/<00[0-9a-f]{2}>/i);
+
+    unsubscribe();
+  });
+
   it("reuses zsh shell integration copied from read-only source files", () => {
     const integrationSourceDir = mkdtempSync(join(tmpdir(), "paseo-zsh-readonly-source-"));
     const tmpHome = mkdtempSync(join(tmpdir(), "paseo-zsh-readonly-home-"));
@@ -481,6 +550,24 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
       expect(session.getState().title).toBe("typecheck");
     });
 
+    it("records the first prompt when prompt-start output was missed", async () => {
+      const session = trackSession(
+        await createTerminal({
+          workspaceId: "ws-test",
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ \x1b]633;B\x07" },
+        }),
+      );
+
+      const state = await waitForState(
+        session,
+        (nextState) => nextState.promptMarkers?.some((marker) => marker.executed) === true,
+      );
+
+      expect(state.promptMarkers).toEqual([{ row: 0, executed: true }]);
+    });
+
     it("emits command completion from VS Code OSC 633 without visible output", async () => {
       const packageRoot = mkdtempSync(join(tmpdir(), "terminal-command-finished-"));
       temporaryDirs.push(packageRoot);
@@ -605,11 +692,23 @@ describe.skipIf(isPlatform("win32"))("terminal POSIX-only", () => {
 
       await waitForLines(session, ["$"]);
       await waitForTitle(session, (title) => title === "~/dev/faro");
+      const initialPromptState = await waitForState(
+        session,
+        (state) => state.promptMarkers?.some((marker) => !marker.executed) === true,
+      );
+      expect(initialPromptState.promptMarkers?.at(-1)?.executed).toBe(false);
 
       session.send({ type: "input", data: "sleep 1\r" });
 
       await waitForTitle(session, (title) => title === "sleep 1");
       await waitForTitle(session, (title) => title === "~/dev/faro", 4000);
+      const completedPromptState = await waitForState(
+        session,
+        (state) =>
+          state.promptMarkers?.some((marker) => marker.executed) === true &&
+          state.promptMarkers.at(-1)?.executed === false,
+      );
+      expect(completedPromptState.promptMarkers?.some((marker) => marker.executed)).toBe(true);
     });
 
     it.skipIf(!hasZsh)("loads the user's zsh prompt when the integration dir is packaged", () => {

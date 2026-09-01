@@ -21,7 +21,12 @@ import {
 
 export type TerminalTabDestination =
   | { kind: "open"; paneId?: string }
-  | { kind: "replace"; tabId: string };
+  | { kind: "replace"; tabId: string }
+  | {
+      kind: "split";
+      targetPaneId: string;
+      position: "left" | "right" | "top" | "bottom";
+    };
 
 interface PendingTerminalCreateInput {
   destination: TerminalTabDestination;

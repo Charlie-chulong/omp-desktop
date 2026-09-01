@@ -6,7 +6,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { LigaturesAddon } from "@xterm/addon-ligatures/lib/addon-ligatures.mjs";
-import { Terminal, type ITheme } from "@xterm/xterm";
+import { Terminal, type IDecoration, type ITheme } from "@xterm/xterm";
 import type { TerminalState } from "@omp-desktop/protocol/messages";
 import {
   type TerminalInputModeState,
@@ -92,6 +92,7 @@ export function createTerminalResizeEvent(input: {
 }
 
 interface TerminalEmulatorRuntimeDisposables {
+  disposePromptDecorations: () => void;
   disposeInput: () => void;
   disconnectResizeObserver: () => void;
   removeWindowResize: () => void;
@@ -164,6 +165,168 @@ function withOverviewRulerBorderHidden(theme: ITheme): ITheme {
   };
 }
 
+const TERMINAL_PROMPT_GUTTER_WIDTH_PX = 14;
+const TERMINAL_PROMPT_DOT_SIZE_PX = 8;
+const TERMINAL_PROMPT_DOT_ACTIVE_COLOR = "#3794ff";
+const TERMINAL_PROMPT_DOT_IDLE_COLOR_PROPERTY = "--paseo-terminal-prompt-dot-idle-color";
+
+type TerminalPromptMarker = NonNullable<TerminalState["promptMarkers"]>[number];
+
+interface TerminalPromptDecorationState {
+  decoration: IDecoration;
+  executed: boolean;
+}
+
+interface TerminalPromptDecorationController {
+  dispose: () => void;
+  restore: (markers: TerminalPromptMarker[]) => void;
+  ensureCurrentPrompt: () => void;
+}
+
+function applyTerminalPromptGutter(terminal: Terminal, theme: ITheme): void {
+  const element = terminal.element;
+  if (!element) {
+    return;
+  }
+  element.style.boxSizing = "border-box";
+  element.style.paddingLeft = `${TERMINAL_PROMPT_GUTTER_WIDTH_PX}px`;
+  element.style.setProperty(TERMINAL_PROMPT_DOT_IDLE_COLOR_PROPERTY, theme.foreground ?? "#8a8a8a");
+}
+
+function renderTerminalPromptDecoration(state: TerminalPromptDecorationState): void {
+  const element = state.decoration.element;
+  if (!element) {
+    return;
+  }
+  element.dataset.terminalPromptDecoration = state.executed ? "executed" : "idle";
+  element.style.pointerEvents = "none";
+  element.style.transform = `translateX(-${TERMINAL_PROMPT_GUTTER_WIDTH_PX}px)`;
+
+  let dot = element.firstElementChild as HTMLSpanElement | null;
+  if (!dot) {
+    dot = document.createElement("span");
+    dot.style.position = "absolute";
+    dot.style.top = "50%";
+    dot.style.left = "50%";
+    dot.style.width = `${TERMINAL_PROMPT_DOT_SIZE_PX}px`;
+    dot.style.height = `${TERMINAL_PROMPT_DOT_SIZE_PX}px`;
+    dot.style.borderRadius = "50%";
+    dot.style.boxSizing = "border-box";
+    dot.style.transform = "translate(-50%, -50%)";
+    element.appendChild(dot);
+  }
+
+  const color = state.executed
+    ? TERMINAL_PROMPT_DOT_ACTIVE_COLOR
+    : `var(${TERMINAL_PROMPT_DOT_IDLE_COLOR_PROPERTY})`;
+  dot.style.backgroundColor = state.executed ? color : "transparent";
+  dot.style.border = `1.5px solid ${color}`;
+  dot.style.opacity = state.executed ? "1" : "0.55";
+}
+
+function registerTerminalPromptDecorations(terminal: Terminal): TerminalPromptDecorationController {
+  let currentPrompt: TerminalPromptDecorationState | null = null;
+  const decorations = new Set<IDecoration>();
+
+  const createDecoration = (
+    cursorYOffset: number,
+    executed: boolean,
+  ): TerminalPromptDecorationState | null => {
+    const marker = terminal.registerMarker(cursorYOffset);
+    if (!marker) {
+      return null;
+    }
+    const decoration = terminal.registerDecoration({
+      marker,
+      x: 0,
+      width: 1,
+      height: 1,
+      layer: "top",
+    });
+    if (!decoration) {
+      marker.dispose();
+      return null;
+    }
+    const state: TerminalPromptDecorationState = { decoration, executed };
+    decorations.add(decoration);
+    decoration.onDispose(() => {
+      decorations.delete(decoration);
+      if (currentPrompt === state) {
+        currentPrompt = null;
+      }
+    });
+    decoration.onRender(() => {
+      renderTerminalPromptDecoration(state);
+    });
+    return state;
+  };
+
+  const clearDecorations = (): void => {
+    currentPrompt = null;
+    for (const decoration of [...decorations]) {
+      decoration.dispose();
+    }
+    decorations.clear();
+  };
+
+  const oscDisposable = terminal.parser.registerOscHandler(633, (data) => {
+    const command = data.split(";", 1)[0];
+    if (command === "A") {
+      currentPrompt = createDecoration(0, false);
+      return false;
+    }
+    if (command === "B") {
+      if (!currentPrompt || currentPrompt.decoration.isDisposed || currentPrompt.executed) {
+        currentPrompt = createDecoration(0, false);
+      }
+      if (currentPrompt) {
+        currentPrompt.executed = true;
+        renderTerminalPromptDecoration(currentPrompt);
+      }
+      return false;
+    }
+    if (command === "D") {
+      currentPrompt = null;
+    }
+    return false;
+  });
+
+  return {
+    dispose: () => {
+      clearDecorations();
+      oscDisposable.dispose();
+    },
+    ensureCurrentPrompt: () => {
+      const hasRenderedDecoration = [...decorations].some(
+        (decoration) => !decoration.isDisposed && decoration.element !== null,
+      );
+      if (hasRenderedDecoration) {
+        return;
+      }
+      const buffer = terminal.buffer.active;
+      const line = buffer.getLine(buffer.baseY + buffer.cursorY);
+      const promptText = line?.translateToString(false, 0, buffer.cursorX) ?? "";
+      if (!/[#$%>❯]\s*$/u.test(promptText)) {
+        return;
+      }
+      clearDecorations();
+      currentPrompt = createDecoration(0, false);
+      terminal.refresh(buffer.cursorY, buffer.cursorY);
+    },
+    restore: (markers) => {
+      clearDecorations();
+      const buffer = terminal.buffer.active;
+      const cursorRow = buffer.baseY + buffer.cursorY;
+      for (const marker of markers) {
+        const state = createDecoration(marker.row - cursorRow, marker.executed);
+        if (state && !marker.executed) {
+          currentPrompt = state;
+        }
+      }
+    },
+  };
+}
+
 export class TerminalEmulatorRuntime {
   private callbacks: TerminalEmulatorRuntimeCallbacks = {};
   private pendingModifiers: PendingTerminalModifiers = {
@@ -175,6 +338,7 @@ export class TerminalEmulatorRuntime {
   private fitAddon: FitAddon | null = null;
   private fitAndEmitResize: ((input?: TerminalResizeRequest) => void) | null = null;
   private lastSize: { rows: number; cols: number } | null = null;
+  private promptDecorations: TerminalPromptDecorationController | null = null;
   private cleanup: (() => void) | null = null;
   private outputOperations: TerminalOutputOperation[] = [];
   private inFlightOutputOperation: TerminalOutputOperation | null = null;
@@ -275,6 +439,9 @@ export class TerminalEmulatorRuntime {
       // Ligatures require Font Access API or compatible environment
     }
     terminal.open(input.host);
+    applyTerminalPromptGutter(terminal, input.theme);
+    const promptDecorations = registerTerminalPromptDecorations(terminal);
+    this.promptDecorations = promptDecorations;
     this.themeBackgroundElements = this.collectThemeBackgroundElements(input);
     this.applyThemeBackground(input.theme);
     try {
@@ -545,6 +712,12 @@ export class TerminalEmulatorRuntime {
     this.processOutputQueue();
 
     const disposables: TerminalEmulatorRuntimeDisposables = {
+      disposePromptDecorations: () => {
+        promptDecorations.dispose();
+        if (this.promptDecorations === promptDecorations) {
+          this.promptDecorations = null;
+        }
+      },
       disposeInput: () => {
         inputDisposable.dispose();
       },
@@ -593,6 +766,7 @@ export class TerminalEmulatorRuntime {
 
     this.cleanup = () => {
       disposables.disposeInput();
+      disposables.disposePromptDecorations();
       disposables.disconnectResizeObserver();
       disposables.removeWindowResize();
       disposables.removeWindowFocus();
@@ -622,7 +796,10 @@ export class TerminalEmulatorRuntime {
       type: "write",
       data: input.data,
       suppressInput: input.suppressInput ?? false,
-      ...(input.onCommitted ? { onCommitted: input.onCommitted } : {}),
+      onCommitted: () => {
+        this.promptDecorations?.ensureCurrentPrompt();
+        input.onCommitted?.();
+      },
     });
     this.processOutputQueue();
   }
@@ -646,11 +823,19 @@ export class TerminalEmulatorRuntime {
       this.clear(input);
       return;
     }
+    const state = input.state;
     this.restoreOutput({
-      data: encodeTerminalOutput(renderTerminalSnapshotToAnsi(input.state)),
-      rows: input.state.rows,
-      cols: input.state.cols,
-      ...(input.onCommitted ? { onCommitted: input.onCommitted } : {}),
+      data: encodeTerminalOutput(renderTerminalSnapshotToAnsi(state)),
+      rows: state.rows,
+      cols: state.cols,
+      onCommitted: () => {
+        if (state.promptMarkers?.length) {
+          this.promptDecorations?.restore(state.promptMarkers);
+        } else {
+          this.promptDecorations?.ensureCurrentPrompt();
+        }
+        input.onCommitted?.();
+      },
     });
   }
 
@@ -666,7 +851,10 @@ export class TerminalEmulatorRuntime {
       rows: input.rows,
       cols: input.cols,
       suppressInput: true,
-      ...(input.onCommitted ? { onCommitted: input.onCommitted } : {}),
+      onCommitted: () => {
+        this.promptDecorations?.ensureCurrentPrompt();
+        input.onCommitted?.();
+      },
     });
     this.processOutputQueue();
   }
@@ -683,6 +871,7 @@ export class TerminalEmulatorRuntime {
 
     try {
       terminal.options.theme = withOverviewRulerBorderHidden(input.theme);
+      applyTerminalPromptGutter(terminal, input.theme);
     } catch {
       // ignore
       return;
