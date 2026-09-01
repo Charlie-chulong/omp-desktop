@@ -891,7 +891,7 @@ export const ja: TranslationResources = {
           updateCurrent: "このブランチはすでに{{baseRef}}と最新の状態のため、更新は利用できません",
           mergePrNoGithub: "GitHubが接続されていないため、PRのマージは現在利用できません",
           archiveNotWorktree:
-            "このワークスペースはOMP Desktopワークツリーとして作成されていないため、アーカイブはここでは利用できません",
+            "このワークスペースは OMP Desktop によって管理されていないため、ここではアーカイブを利用できません",
           mergePrNoForge: "{{brand}}が接続されていないため、{{noun}}のマージは現在利用できません",
           mergePrMissing: "プルリクエストがまだないため、PRのマージは利用できません",
           mergePrDraft: "プルリクエストがまだドラフトのため、PRのマージは利用できません",
@@ -1261,11 +1261,6 @@ export const ja: TranslationResources = {
   newWorkspace: {
     title: "新しいワークスペース",
     create: "作成",
-    isolation: {
-      local: "ローカル",
-      worktree: "新しいワークツリー",
-      label: "分離方法",
-    },
     fields: {
       project: "プロジェクト",
       base: "ベース",
@@ -1274,7 +1269,7 @@ export const ja: TranslationResources = {
     titlePlaceholder: "タイトル（任意）",
     errors: {
       hostDisconnected: "ホストが接続されていません",
-      createWorktreeFailed: "ワークツリーの作成に失敗しました",
+      createWorkspaceFailed: "ワークスペースの作成に失敗しました",
       composerStateRequired: "コンポーザーの状態が必要です",
       selectModel: "モデルを選択してください",
     },
@@ -1543,7 +1538,7 @@ export const ja: TranslationResources = {
   workspaceSetup: {
     title: "ワークスペースを作成",
     errors: {
-      failedCreateWorktree: "ワークツリーの作成に失敗しました",
+      failedCreateWorkspace: "ワークスペースの作成に失敗しました",
       failedOpenProject: "プロジェクトを開けませんでした",
       selectModel: "モデルを選択してください",
       hostDisconnected: "ホストが接続されていません",
@@ -2203,7 +2198,6 @@ export const ja: TranslationResources = {
       help: {
         openProject: "プロジェクトを開く",
         newWorkspace: "新しいワークスペース",
-        newWorktree: "新しいワークツリー",
         archiveWorkspace: "ワークスペースをアーカイブ",
         newTab: "新しいタブ",
         closeCurrentTab: "現在のタブを閉じる",
@@ -2655,20 +2649,6 @@ export const ja: TranslationResources = {
         transportFallback: "ホストが応答しませんでした。",
         failedTitle: "paseo.jsonを読み込めませんでした",
         failedDescription: "再読み込みして再試行してください。",
-      },
-      worktree: {
-        title: "ワークツリーライフサイクルフック",
-        info: "このプロジェクトのワークツリーが作成または削除されたときに実行されるコマンド",
-        docs: "ドキュメント",
-        docsTooltip:
-          "これらのコマンドで使用可能な詳細と環境変数についてはドキュメントを参照してください",
-        setup: "セットアップ",
-        setupAccessibility: "ワークツリーセットアップコマンド",
-        uncommittedTitle: "paseo.json の変更をコミットしてください",
-        uncommittedDescription:
-          "新しいワークツリーでは、選択したベースブランチのセットアップスクリプトが使われます。",
-        teardown: "削除時",
-        teardownAccessibility: "ワークツリー削除時のコマンド",
       },
       scripts: {
         title: "スクリプト",

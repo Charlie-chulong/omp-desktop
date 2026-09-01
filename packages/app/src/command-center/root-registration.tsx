@@ -138,7 +138,7 @@ export function CommandCenterRootActions() {
         group: "actions",
         groupRank: 0,
         rank: 1,
-        keywords: ["new", "workspace", "worktree", "branch"],
+        keywords: ["new", "workspace", "conversation"],
         visibility: "always",
         run: () => {
           keyboardActionDispatcher.dispatch({ id: "workspace.new", scope: "sidebar" });

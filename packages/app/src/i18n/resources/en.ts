@@ -898,7 +898,7 @@ export const en = {
             "Update isn't available because this branch is already up to date with {{baseRef}}",
           mergePrNoGithub: "Merge PR isn't available right now because GitHub isn't connected",
           archiveNotWorktree:
-            "Archive isn't available here because this workspace was not created as a OMP Desktop worktree",
+            "Archive isn't available here because this workspace is not managed by OMP Desktop",
           mergePrNoForge:
             "Merge {{noun}} isn't available right now because {{brand}} isn't connected",
           mergePrMissing: "Merge PR isn't available because there isn't a pull request yet",
@@ -1266,11 +1266,6 @@ export const en = {
   newWorkspace: {
     title: "New workspace",
     create: "Create",
-    isolation: {
-      local: "Local",
-      worktree: "New worktree",
-      label: "Isolation",
-    },
     fields: {
       project: "Project",
       base: "Base",
@@ -1279,7 +1274,7 @@ export const en = {
     titlePlaceholder: "Title (optional)",
     errors: {
       hostDisconnected: "Host is not connected",
-      createWorktreeFailed: "Failed to create worktree",
+      createWorkspaceFailed: "Failed to create workspace",
       composerStateRequired: "Composer state is required",
       selectModel: "Select a model",
     },
@@ -1546,7 +1541,7 @@ export const en = {
   workspaceSetup: {
     title: "Create workspace",
     errors: {
-      failedCreateWorktree: "Failed to create worktree",
+      failedCreateWorkspace: "Failed to create workspace",
       failedOpenProject: "Failed to open project",
       selectModel: "Select a model",
       hostDisconnected: "Host is not connected",
@@ -2256,7 +2251,6 @@ export const en = {
       help: {
         openProject: "Open project",
         newWorkspace: "New workspace",
-        newWorktree: "New worktree",
         archiveWorkspace: "Archive workspace",
         newTab: "New tab",
         closeCurrentTab: "Close current tab",
@@ -2705,20 +2699,6 @@ export const en = {
         transportFallback: "The host didn't respond.",
         failedTitle: "Couldn't load paseo.json",
         failedDescription: "Reload to try again.",
-      },
-      worktree: {
-        title: "Worktree lifecycle hooks",
-        info: "Commands that run when a worktree is created or torn down for this project",
-        docs: "Docs",
-        docsTooltip:
-          "See docs for more details and the environment variables available to these commands",
-        setup: "Setup",
-        setupAccessibility: "Worktree setup commands",
-        uncommittedTitle: "Commit paseo.json changes",
-        uncommittedDescription:
-          "New worktrees use the setup script from the base branch you select.",
-        teardown: "Teardown",
-        teardownAccessibility: "Worktree teardown commands",
       },
       scripts: {
         title: "Scripts",

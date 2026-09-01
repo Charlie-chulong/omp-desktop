@@ -104,7 +104,7 @@ function buildCanonicalDetailDisplay(input: ToolCallDisplayInput): DetailDisplay
       };
     case "worktree_setup":
       return {
-        displayName: "Worktree Setup",
+        displayName: "Workspace Setup",
         summary: input.detail.branchName,
       };
     case "sub_agent":

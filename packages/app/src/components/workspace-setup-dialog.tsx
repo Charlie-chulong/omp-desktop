@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { createNameId } from "mnemonic-id";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { Composer } from "@/composer";
@@ -13,7 +12,7 @@ import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useProjectIcon } from "@/projects/icons";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { normalizeWorkspaceDescriptor, useSessionStore } from "@/stores/session-store";
-import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
+import { useWorkspaceSetupStore, type PendingWorkspaceSetup } from "@/stores/workspace-setup-store";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
 import { encodeImages } from "@/utils/encode-images";
@@ -22,10 +21,7 @@ import {
   resolveComposerAttachmentSubmitFormat,
   splitComposerAttachmentsForSubmit,
 } from "@/composer/attachments/submit";
-import type {
-  CreateAgentRequestOptions,
-  DaemonClient,
-} from "@omp-desktop/client/internal/daemon-client";
+import type { CreateAgentRequestOptions } from "@omp-desktop/client/internal/daemon-client";
 import { projectIconPlaceholderLabelFromDisplayName } from "@/utils/project-display-name";
 import { requireWorkspaceDirectory } from "@/utils/workspace-directory";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
@@ -70,7 +66,7 @@ function buildChatDraftComposerArgs({
   isConnected: boolean;
   workspaceDirectory: string | undefined;
   sourceDirectory: string;
-  pendingWorkspaceSetup: { creationMethod: string } | null;
+  pendingWorkspaceSetup: PendingWorkspaceSetup | null;
 }) {
   return {
     initialServerId: serverId || null,
@@ -82,35 +78,6 @@ function buildChatDraftComposerArgs({
     onlineServerIds: isConnected && serverId ? [serverId] : [],
     lockedWorkingDir: workspaceDirectory || sourceDirectory || undefined,
   };
-}
-
-async function callWorkspaceCreation({
-  creationMethod,
-  connectedClient,
-  input,
-}: {
-  creationMethod: "create_worktree" | "open_project";
-  connectedClient: DaemonClient;
-  input: { cwd: string };
-}) {
-  if (creationMethod === "create_worktree") {
-    return connectedClient.createPaseoWorktree({
-      cwd: input.cwd,
-      worktreeSlug: createNameId(),
-    });
-  }
-  return connectedClient.createWorkspace({
-    source: { kind: "directory", path: input.cwd },
-  });
-}
-
-function failureMessageForCreationMethod(
-  method: "create_worktree" | "open_project",
-  t: ReturnType<typeof useTranslation>["t"],
-) {
-  return method === "create_worktree"
-    ? t("workspaceSetup.errors.failedCreateWorktree")
-    : t("workspaceSetup.errors.failedOpenProject");
 }
 
 function buildCreateAgentOptions({
@@ -207,7 +174,7 @@ export function WorkspaceSetupDialog() {
     setErrorMessage(null);
     setCreatedWorkspace(null);
     setPendingAction(null);
-  }, [pendingWorkspaceSetup?.creationMethod, serverId, sourceDirectory]);
+  }, [serverId, sourceDirectory]);
 
   const handleClose = useCallback(() => {
     clearWorkspaceSetup();
@@ -258,23 +225,17 @@ export function WorkspaceSetupDialog() {
       }
 
       const connectedClient = withConnectedClient();
-      const payload = await callWorkspaceCreation({
-        creationMethod: pendingWorkspaceSetup.creationMethod,
-        connectedClient,
-        input,
+      const payload = await connectedClient.createWorkspace({
+        source: { kind: "directory", path: input.cwd },
       });
 
       if (payload.error || !payload.workspace) {
-        throw new Error(
-          payload.error ?? failureMessageForCreationMethod(pendingWorkspaceSetup.creationMethod, t),
-        );
+        throw new Error(payload.error ?? t("workspaceSetup.errors.failedOpenProject"));
       }
 
       const normalizedWorkspace = normalizeWorkspaceDescriptor(payload.workspace);
       mergeWorkspaces(pendingWorkspaceSetup.serverId, [normalizedWorkspace]);
-      if (pendingWorkspaceSetup.creationMethod === "open_project") {
-        setHasHydratedWorkspaces(pendingWorkspaceSetup.serverId, true);
-      }
+      setHasHydratedWorkspaces(pendingWorkspaceSetup.serverId, true);
       setCreatedWorkspace(normalizedWorkspace);
       return normalizedWorkspace;
     },
@@ -292,14 +253,9 @@ export function WorkspaceSetupDialog() {
     const current = useWorkspaceSetupStore.getState().pendingWorkspaceSetup;
     return (
       current?.serverId === pendingWorkspaceSetup?.serverId &&
-      current?.sourceDirectory === pendingWorkspaceSetup?.sourceDirectory &&
-      current?.creationMethod === pendingWorkspaceSetup?.creationMethod
+      current?.sourceDirectory === pendingWorkspaceSetup?.sourceDirectory
     );
-  }, [
-    pendingWorkspaceSetup?.creationMethod,
-    pendingWorkspaceSetup?.serverId,
-    pendingWorkspaceSetup?.sourceDirectory,
-  ]);
+  }, [pendingWorkspaceSetup?.serverId, pendingWorkspaceSetup?.sourceDirectory]);
 
   const handleCreateChatAgent = useCallback(
     async ({ text, attachments, cwd }: MessagePayload) => {

@@ -281,7 +281,6 @@ describe("translation resources", () => {
     expect(en.settings.providers.title).toBe("Providers");
     expect(en.settings.providers.models.addModel).toBe("Add model");
     expect(en.settings.providers.diagnostic.title).toBe("Diagnostic");
-    expect(en.settings.project.worktree.title).toBe("Worktree lifecycle hooks");
     expect(en.settings.project.scripts.actions.add).toBe("Add script");
     expect(en.settings.project.metadata.title).toBe("Metadata generation");
     expect(en.settings.project.actions.save).toBe("Save");
@@ -516,7 +515,7 @@ describe("translation resources", () => {
     expect(en.branchSwitcher.stashAndSwitch).toBe("Stash & Switch");
     expect(en.branchSwitcher.failedToStash).toBe("Failed to stash changes");
     expect(en.branchSwitcher.failedToSwitch).toBe("Failed to switch branch");
-    expect(en.workspaceSetup.errors.failedCreateWorktree).toBe("Failed to create worktree");
+    expect(en.workspaceSetup.errors.failedCreateWorkspace).toBe("Failed to create workspace");
     expect(en.workspaceSetup.errors.failedOpenProject).toBe("Failed to open project");
     expect(en.workspaceSetup.errors.selectModel).toBe("Select a model");
     expect(en.workspaceSetup.errors.hostDisconnected).toBe("Host is not connected");

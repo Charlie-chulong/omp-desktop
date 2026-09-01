@@ -336,7 +336,7 @@ describe("schedule form model", () => {
       selectedProjectOptionId: "",
       selectedModelDisplay: null,
       selectedThinkingDisplay: null,
-      archiveOnFinish: true,
+      archiveOnFinish: false,
       isolation: "local",
       effectiveIsolation: "local",
       providerResolutionByServerId: {},
@@ -365,7 +365,7 @@ describe("schedule form model", () => {
       showModelField: true,
       showThinkingField: false,
       showModeField: false,
-      showIsolationField: true,
+      showIsolationField: false,
       showArchiveOnFinishField: true,
     });
 
@@ -377,12 +377,12 @@ describe("schedule form model", () => {
       showModelField: true,
       showThinkingField: true,
       showModeField: true,
-      showIsolationField: true,
+      showIsolationField: false,
       showArchiveOnFinishField: true,
     });
   });
 
-  it("hides isolation unless the selected project can create a worktree", () => {
+  it("keeps the workspace creation form free of isolation controls", () => {
     const nonGitTarget = target({
       serverId: "host-a",
       projectKey: "plain-project",

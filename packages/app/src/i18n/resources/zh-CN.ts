@@ -882,7 +882,7 @@ export const zhCN: TranslationResources = {
           updateDirty: "有本地变更时无法更新，请先 commit 或 stash",
           updateCurrent: "无法更新，因为此分支已与 {{baseRef}} 保持最新",
           mergePrNoGithub: "当前无法 merge PR，因为 GitHub 未连接",
-          archiveNotWorktree: "此处无法归档，因为此 workspace 不是作为 OMP Desktop worktree 创建的",
+          archiveNotWorktree: "此处无法归档，因为该工作区不是由 OMP Desktop 管理的",
           mergePrNoForge: "当前无法 merge {{noun}}，因为 {{brand}} 未连接",
           mergePrMissing: "无法 merge PR，因为还没有 pull request",
           mergePrDraft: "无法 merge PR，因为 pull request 仍是 draft",
@@ -1246,11 +1246,6 @@ export const zhCN: TranslationResources = {
   newWorkspace: {
     title: "新建对话",
     create: "创建",
-    isolation: {
-      local: "本地",
-      worktree: "新建 worktree",
-      label: "隔离",
-    },
     fields: {
       project: "项目",
       base: "基线",
@@ -1259,7 +1254,7 @@ export const zhCN: TranslationResources = {
     titlePlaceholder: "标题（可选）",
     errors: {
       hostDisconnected: "Host 未连接",
-      createWorktreeFailed: "创建 worktree 失败",
+      createWorkspaceFailed: "创建工作区失败",
       composerStateRequired: "Composer 状态必填",
       selectModel: "请选择模型",
     },
@@ -1519,7 +1514,7 @@ export const zhCN: TranslationResources = {
   workspaceSetup: {
     title: "创建 workspace",
     errors: {
-      failedCreateWorktree: "创建 worktree 失败",
+      failedCreateWorkspace: "创建工作区失败",
       failedOpenProject: "打开 project 失败",
       selectModel: "请选择模型",
       hostDisconnected: "Host 未连接",
@@ -2166,7 +2161,6 @@ export const zhCN: TranslationResources = {
       help: {
         openProject: "打开项目",
         newWorkspace: "新建对话",
-        newWorktree: "新建 worktree",
         archiveWorkspace: "归档工作区",
         newTab: "新建标签",
         closeCurrentTab: "关闭当前标签",
@@ -2607,18 +2601,6 @@ export const zhCN: TranslationResources = {
         transportFallback: "Host 没有响应。",
         failedTitle: "无法加载 paseo.json",
         failedDescription: "重新加载以重试。",
-      },
-      worktree: {
-        title: "Worktree 生命周期 hooks",
-        info: "为此 Project 创建或清理 worktree 时运行的命令",
-        docs: "文档",
-        docsTooltip: "查看命令可用的环境变量和更多细节",
-        setup: "Setup",
-        setupAccessibility: "Worktree setup 命令",
-        uncommittedTitle: "提交 paseo.json 更改",
-        uncommittedDescription: "新工作树使用所选基础分支中的设置脚本。",
-        teardown: "Teardown",
-        teardownAccessibility: "Worktree teardown 命令",
       },
       scripts: {
         title: "Scripts",

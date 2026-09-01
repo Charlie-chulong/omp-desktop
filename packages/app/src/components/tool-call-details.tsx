@@ -213,7 +213,7 @@ function WorktreeSetupDetailSection({
           >
             <View style={styles.codeLine} dataSet={CODE_SURFACE_DATASET}>
               <Text selectable style={styles.scrollText}>
-                {hasLog ? setupLog : `Preparing worktree ${branchName} at ${worktreePath}`}
+                {hasLog ? setupLog : `Preparing workspace ${branchName} at ${worktreePath}`}
               </Text>
             </View>
           </ScrollView>

@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { Text, View } from "react-native";
-import { Brain, Folder, GitBranch } from "lucide-react-native";
+import { Brain, Folder } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { AgentProvider } from "@omp-desktop/protocol/agent-types";
 import type { ScheduleCadence, ScheduleSummary } from "@omp-desktop/protocol/schedule/types";
@@ -159,7 +159,7 @@ function updateSelectionPreferences(input: {
   model: string;
   mode: string;
   thinkingOptionId: string;
-  isolation: "local" | "worktree";
+  isolation: "local";
 }): FormPreferences {
   const model = input.model.trim();
   const mode = input.mode.trim();
@@ -174,7 +174,7 @@ function updateSelectionPreferences(input: {
         ...(model && thinkingOptionId ? { thinkingByModel: { [model]: thinkingOptionId } } : {}),
       },
     }),
-    isolation: input.isolation,
+    isolation: "local",
   };
 }
 
@@ -302,11 +302,10 @@ function OpenScheduleFormSheet({
         model: state.selectedModel,
         mode: state.selectedMode,
         thinkingOptionId: state.selectedThinkingOptionId,
-        isolation: state.isolation,
+        isolation: "local",
       }),
     );
   }, [
-    state.isolation,
     state.selectedMode,
     state.selectedModel,
     state.selectedProvider,
@@ -794,10 +793,6 @@ function ScheduleTargetFields({
         />
       ) : null}
 
-      {state.disclosure.showIsolationField ? (
-        <ScheduleIsolationField model={model} state={state} size={controlSize} />
-      ) : null}
-
       {state.disclosure.showArchiveOnFinishField ? (
         <Field label="Archive on finish">
           <Switch
@@ -809,81 +804,6 @@ function ScheduleTargetFields({
         </Field>
       ) : null}
     </>
-  );
-}
-
-function ScheduleIsolationField({
-  model,
-  state,
-  size,
-}: {
-  model: ScheduleFormModel;
-  state: ScheduleFormState;
-  size: FieldControlSize;
-}): ReactElement {
-  const options = useMemo<SelectFieldOption<"local" | "worktree">[]>(
-    () => [
-      {
-        id: "local",
-        value: "local",
-        label: "Local",
-        testID: "schedule-isolation-local",
-      },
-      {
-        id: "worktree",
-        value: "worktree",
-        label: "Worktree",
-        testID: "schedule-isolation-worktree",
-      },
-    ],
-    [],
-  );
-  const selectedDisplay = useMemo<SelectFieldDisplay>(
-    () => ({ label: state.effectiveIsolation === "worktree" ? "Worktree" : "Local" }),
-    [state.effectiveIsolation],
-  );
-  const triggerLeading = useMemo(
-    () => (
-      <View style={styles.optionIconBox}>
-        {state.effectiveIsolation === "worktree" ? (
-          <GitBranch size={16} color={styles.providerIcon.color} />
-        ) : (
-          <Folder size={16} color={styles.providerIcon.color} />
-        )}
-      </View>
-    ),
-    [state.effectiveIsolation],
-  );
-  const handleSelectIsolation = useCallback(
-    (value: "local" | "worktree") => {
-      model.setIsolation(value);
-    },
-    [model],
-  );
-  const renderIsolationOption = useCallback(
-    (input: SelectFieldRenderOptionInput<"local" | "worktree">) => (
-      <IsolationOptionItem {...input} />
-    ),
-    [],
-  );
-
-  return (
-    <SelectField
-      label="Isolation"
-      value={state.effectiveIsolation}
-      selectedDisplay={selectedDisplay}
-      options={options}
-      onChange={handleSelectIsolation}
-      placeholder="Select isolation"
-      emptyText="No isolation options found"
-      searchable={false}
-      title="Isolation"
-      size={size}
-      testID="schedule-isolation"
-      triggerTestID="schedule-isolation-trigger"
-      triggerLeading={triggerLeading}
-      renderOption={renderIsolationOption}
-    />
   );
 }
 
@@ -911,37 +831,6 @@ function ScheduleAgentTargetField({
         </Text>
       </View>
     </Field>
-  );
-}
-
-function IsolationOptionItem({
-  option,
-  selected,
-  active,
-  onPress,
-}: SelectFieldRenderOptionInput<"local" | "worktree">): ReactElement {
-  const leadingSlot = useMemo(
-    () => (
-      <View style={styles.optionIconBox}>
-        {option.value === "worktree" ? (
-          <GitBranch size={16} color={styles.providerIcon.color} />
-        ) : (
-          <Folder size={16} color={styles.providerIcon.color} />
-        )}
-      </View>
-    ),
-    [option.value],
-  );
-
-  return (
-    <ComboboxItem
-      testID={option.testID}
-      label={option.label}
-      selected={selected}
-      active={active}
-      onPress={onPress}
-      leadingSlot={leadingSlot}
-    />
   );
 }
 

@@ -3335,6 +3335,7 @@ function WorkspaceScreenContent({
     workspaceKey: persistenceKey,
   });
 
+  const focusedPaneIdOrUndefined = useMemo(() => focusedPaneId ?? undefined, [focusedPaneId]);
   const headerRight = useMemo(
     () => (
       <View style={styles.headerRight}>
@@ -3466,7 +3467,6 @@ function WorkspaceScreenContent({
       showCreateBrowserTab,
     ],
   );
-  const focusedPaneIdOrUndefined = useMemo(() => focusedPaneId ?? undefined, [focusedPaneId]);
   const desktopFocusModeEnabled = useMemo(
     () => isFocusModeEnabled && !isMobile,
     [isFocusModeEnabled, isMobile],

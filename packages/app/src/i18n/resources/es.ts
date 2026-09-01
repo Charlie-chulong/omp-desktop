@@ -905,7 +905,7 @@ export const es: TranslationResources = {
           mergePrNoGithub:
             "FusionarPRno está disponible en este momento porqueGitHubno está conectado",
           archiveNotWorktree:
-            "El archivo no está disponible aquí porque este espacio de trabajo no se creó como un árbol de trabajoOMP Desktop",
+            "El archivo no está disponible aquí porque este espacio de trabajo no está gestionado por OMP Desktop",
           mergePrNoForge:
             "Fusionar {{noun}} no está disponible en este momento porque {{brand}} no está conectado",
           mergePrMissing:
@@ -1284,11 +1284,6 @@ export const es: TranslationResources = {
   newWorkspace: {
     title: "Nuevo espacio de trabajo",
     create: "Crear",
-    isolation: {
-      local: "Local",
-      worktree: "Nuevo worktree",
-      label: "Aislamiento",
-    },
     fields: {
       project: "Proyecto",
       base: "Base",
@@ -1297,7 +1292,7 @@ export const es: TranslationResources = {
     titlePlaceholder: "Título (opcional)",
     errors: {
       hostDisconnected: "Hostno está conectado",
-      createWorktreeFailed: "No se pudo crear el árbol de trabajo",
+      createWorkspaceFailed: "No se pudo crear el espacio de trabajo",
       composerStateRequired: "Se requiere el estado del compositor",
       selectModel: "Selecciona un modelo",
     },
@@ -1573,7 +1568,7 @@ export const es: TranslationResources = {
   workspaceSetup: {
     title: "Crear espacio de trabajo",
     errors: {
-      failedCreateWorktree: "No se pudo crear el árbol de trabajo",
+      failedCreateWorkspace: "No se pudo crear el espacio de trabajo",
       failedOpenProject: "No se pudo abrir el proyecto",
       selectModel: "Selecciona un modelo",
       hostDisconnected: "Hostno está conectado",
@@ -2237,7 +2232,6 @@ export const es: TranslationResources = {
       help: {
         openProject: "Abrir proyecto",
         newWorkspace: "Nuevo espacio de trabajo",
-        newWorktree: "Nuevo árbol de trabajo",
         archiveWorkspace: "Archivar espacio de trabajo",
         newTab: "Nueva pestaña",
         closeCurrentTab: "Cerrar pestaña actual",
@@ -2688,20 +2682,6 @@ export const es: TranslationResources = {
         transportFallback: "El anfitrión no respondió.",
         failedTitle: "No se pudo cargar paseo.json",
         failedDescription: "Vuelva a cargar para intentarlo de nuevo.",
-      },
-      worktree: {
-        title: "Ganchos del ciclo de vida del árbol de trabajo",
-        info: "Comandos que se ejecutan cuando se crea o elimina un árbol de trabajo para este proyecto",
-        docs: "Documentos",
-        docsTooltip:
-          "Consulte los documentos para obtener más detalles y las variables de entorno disponibles para estos comandos.",
-        setup: "Configuración",
-        setupAccessibility: "Comandos de configuración del árbol de trabajo",
-        uncommittedTitle: "Confirma los cambios de paseo.json",
-        uncommittedDescription:
-          "Los árboles de trabajo nuevos usan el script de configuración de la rama base que selecciones.",
-        teardown: "Demoler",
-        teardownAccessibility: "Comandos de desmontaje del árbol de trabajo",
       },
       scripts: {
         title: "Scripts",

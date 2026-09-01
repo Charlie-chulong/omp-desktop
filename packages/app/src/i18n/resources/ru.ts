@@ -903,7 +903,7 @@ export const ru: TranslationResources = {
           updateCurrent: "Обновление недоступно: эта ветка уже синхронизирована с {{baseRef}}.",
           mergePrNoGithub: "Слияние PR сейчас недоступно: GitHub не подключён.",
           archiveNotWorktree:
-            "Архивирование недоступно: это рабочее пространство не было создано как worktree OMP Desktop.",
+            "Архивирование недоступно: это рабочее пространство не управляется OMP Desktop.",
           mergePrNoForge: "Слияние {{noun}} сейчас недоступно: {{brand}} не подключён.",
           mergePrMissing: "Слияние PR недоступно: PR ещё не создан.",
           mergePrDraft: "Слияние PR недоступно: PR всё ещё является черновиком.",
@@ -1272,11 +1272,6 @@ export const ru: TranslationResources = {
   newWorkspace: {
     title: "Новое рабочее пространство",
     create: "Создать",
-    isolation: {
-      local: "Локально",
-      worktree: "Новый worktree",
-      label: "Изоляция",
-    },
     fields: {
       project: "Проект",
       base: "Базовая ветка",
@@ -1285,7 +1280,7 @@ export const ru: TranslationResources = {
     titlePlaceholder: "Заголовок (необязательно)",
     errors: {
       hostDisconnected: "Хост не подключён",
-      createWorktreeFailed: "Не удалось создать worktree.",
+      createWorkspaceFailed: "Не удалось создать рабочее пространство.",
       composerStateRequired: "Редактор сообщения ещё не готов.",
       selectModel: "Выберите модель",
     },
@@ -1562,7 +1557,7 @@ export const ru: TranslationResources = {
   workspaceSetup: {
     title: "Создать рабочее пространство",
     errors: {
-      failedCreateWorktree: "Не удалось создать worktree.",
+      failedCreateWorkspace: "Не удалось создать рабочее пространство.",
       failedOpenProject: "Не удалось открыть проект",
       selectModel: "Выберите модель",
       hostDisconnected: "Хост не подключён",
@@ -2230,7 +2225,6 @@ export const ru: TranslationResources = {
       help: {
         openProject: "Открыть проект",
         newWorkspace: "Новое рабочее пространство",
-        newWorktree: "Новый worktree",
         archiveWorkspace: "Архивировать рабочее пространство",
         newTab: "Новая вкладка",
         closeCurrentTab: "Закрыть текущую вкладку",
@@ -2686,20 +2680,6 @@ export const ru: TranslationResources = {
         transportFallback: "Хост не ответил.",
         failedTitle: "Не удалось загрузить paseo.json.",
         failedDescription: "Загрузите данные заново, чтобы повторить попытку.",
-      },
-      worktree: {
-        title: "Хуки жизненного цикла worktree",
-        info: "Команды, которые выполняются при создании или удалении worktree для этого проекта.",
-        docs: "Документация",
-        docsTooltip:
-          "Дополнительную информацию и переменные среды, доступные для этих команд, см. в документации.",
-        setup: "Настройка",
-        setupAccessibility: "Команды настройки worktree",
-        uncommittedTitle: "Закоммитьте изменения в paseo.json",
-        uncommittedDescription:
-          "Новые worktree используют скрипт настройки из выбранной базовой ветки.",
-        teardown: "Удаление",
-        teardownAccessibility: "Команды удаления worktree",
       },
       scripts: {
         title: "Скрипты",

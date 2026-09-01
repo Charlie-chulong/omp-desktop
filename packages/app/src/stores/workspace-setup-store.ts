@@ -1,15 +1,13 @@
 import type { SessionOutboundMessage } from "@omp-desktop/protocol/messages";
 import { create } from "zustand";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
-
-export type WorkspaceCreationMethod = "open_project" | "create_worktree";
+export type WorkspaceCreationMethod = "open_project";
 
 export interface PendingWorkspaceSetup {
   serverId: string;
   sourceDirectory: string;
   sourceWorkspaceId?: string;
   displayName?: string;
-  creationMethod: WorkspaceCreationMethod;
 }
 
 export type WorkspaceSetupProgressPayload = Extract<

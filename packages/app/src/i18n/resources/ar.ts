@@ -882,8 +882,7 @@ export const ar: TranslationResources = {
           updateDirty: "التحديث غير متاح أثناء وجود تغييرات محلية، لذا قم بتنفيذها أو تخزينها أولاً",
           updateCurrent: "التحديث غير متاح لأن هذا الفرع محدث بالفعل باستخدام{{baseRef}}",
           mergePrNoGithub: "دمج PR غير متاح الآن لأن GitHub غير متصل",
-          archiveNotWorktree:
-            "الأرشيف غير متاح هنا لأنه لم يتم إنشاء مساحة العمل هذه كشجرة عمل OMP Desktop",
+          archiveNotWorktree: "لا تتوفر الأرشفة هنا لأن مساحة العمل هذه ليست مُدارة بواسطة OMP Desktop",
           mergePrNoForge: "دمج {{noun}} غير متاح الآن لأن {{brand}} غير متصل",
           mergePrMissing: "دمج PR غير متاح لأنه لا يوجد طلب سحب حتى الآن",
           mergePrDraft: "دمج PR غير متاح لأن طلب السحب لا يزال مسودة",
@@ -1249,11 +1248,6 @@ export const ar: TranslationResources = {
   newWorkspace: {
     title: "مساحة عمل جديدة",
     create: "يخلق",
-    isolation: {
-      local: "محلي",
-      worktree: "شجرة عمل جديدة",
-      label: "العزل",
-    },
     fields: {
       project: "المشروع",
       base: "الأساس",
@@ -1262,7 +1256,7 @@ export const ar: TranslationResources = {
     titlePlaceholder: "العنوان (اختياري)",
     errors: {
       hostDisconnected: "Host غير متصل",
-      createWorktreeFailed: "فشل في إنشاء شجرة العمل",
+      createWorkspaceFailed: "فشل في إنشاء مساحة العمل",
       composerStateRequired: "حالة الملحن مطلوبة",
       selectModel: "اختر نموذجا",
     },
@@ -1528,7 +1522,7 @@ export const ar: TranslationResources = {
   workspaceSetup: {
     title: "إنشاء مساحة عمل",
     errors: {
-      failedCreateWorktree: "فشل في إنشاء شجرة العمل",
+      failedCreateWorkspace: "فشل في إنشاء مساحة العمل",
       failedOpenProject: "فشل في فتح المشروع",
       selectModel: "اختر نموذجا",
       hostDisconnected: "Host غير متصل",
@@ -2185,7 +2179,6 @@ export const ar: TranslationResources = {
       help: {
         openProject: "مشروع مفتوح",
         newWorkspace: "مساحة عمل جديدة",
-        newWorktree: "شجرة عمل جديدة",
         archiveWorkspace: "أرشفة مساحة العمل",
         newTab: "علامة تبويب جديدة",
         closeCurrentTab: "إغلاق علامة التبويب الحالية",
@@ -2629,19 +2622,6 @@ export const ar: TranslationResources = {
         transportFallback: "المضيف لم يستجب.",
         failedTitle: "تعذر تحميل paseo.json",
         failedDescription: "أعد التحميل للمحاولة مرة أخرى.",
-      },
-      worktree: {
-        title: "خطافات دورة حياة شجرة العمل",
-        info: "الأوامر التي يتم تشغيلها عند إنشاء شجرة عمل أو هدمها لهذا المشروع",
-        docs: "المستندات",
-        docsTooltip: "راجع المستندات لمزيد من التفاصيل ومتغيرات البيئة المتاحة لهذه الأوامر",
-        setup: "يثبت",
-        setupAccessibility: "أوامر إعداد شجرة العمل",
-        uncommittedTitle: "ثبّت تغييرات paseo.json",
-        uncommittedDescription:
-          "تستخدم أشجار العمل الجديدة نص الإعداد البرمجي من الفرع الأساسي الذي تحدده.",
-        teardown: "هدم",
-        teardownAccessibility: "أوامر هدم شجرة العمل",
       },
       scripts: {
         title: "البرامج النصية",

@@ -98,7 +98,7 @@ describe("tool-call-display", () => {
     });
 
     expect(display).toEqual({
-      displayName: "Worktree Setup",
+      displayName: "Workspace Setup",
       summary: "feature-branch",
     });
   });

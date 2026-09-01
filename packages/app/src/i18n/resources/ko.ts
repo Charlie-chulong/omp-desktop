@@ -888,7 +888,7 @@ export const ko: TranslationResources = {
             "이 브랜치가 이미 {{baseRef}}와 최신 상태이므로 업데이트를 사용할 수 없습니다",
           mergePrNoGithub: "GitHub가 연결되어 있지 않아 지금은 PR 병합을 사용할 수 없습니다",
           archiveNotWorktree:
-            "이 워크스페이스가 OMP Desktop 워크트리로 생성되지 않아 여기서 보관을 사용할 수 없습니다",
+            "이 워크스페이스는 OMP Desktop에서 관리하지 않으므로 여기서 보관할 수 없습니다",
           mergePrNoForge:
             "{{brand}}가 연결되어 있지 않기 때문에 지금은 {{noun}} 병합을 사용할 수 없습니다.",
           mergePrMissing: "아직 풀 리퀘스트가 없어 PR 병합을 사용할 수 없습니다",
@@ -1256,11 +1256,6 @@ export const ko: TranslationResources = {
   newWorkspace: {
     title: "새 워크스페이스",
     create: "생성",
-    isolation: {
-      local: "로컬",
-      worktree: "새 워크트리",
-      label: "격리",
-    },
     fields: {
       project: "프로젝트",
       base: "기준",
@@ -1269,7 +1264,7 @@ export const ko: TranslationResources = {
     titlePlaceholder: "제목(선택 사항)",
     errors: {
       hostDisconnected: "호스트가 연결되어 있지 않습니다",
-      createWorktreeFailed: "워크트리를 생성하지 못했습니다",
+      createWorkspaceFailed: "워크스페이스를 생성하지 못했습니다",
       composerStateRequired: "작성기 상태가 필요합니다",
       selectModel: "모델을 선택하세요",
     },
@@ -1539,7 +1534,7 @@ export const ko: TranslationResources = {
   workspaceSetup: {
     title: "워크스페이스 생성",
     errors: {
-      failedCreateWorktree: "워크트리를 생성하지 못했습니다",
+      failedCreateWorkspace: "워크스페이스를 생성하지 못했습니다",
       failedOpenProject: "프로젝트를 열지 못했습니다",
       selectModel: "모델을 선택하세요",
       hostDisconnected: "호스트가 연결되어 있지 않습니다",
@@ -2196,7 +2191,6 @@ export const ko: TranslationResources = {
       help: {
         openProject: "프로젝트 열기",
         newWorkspace: "새 워크스페이스",
-        newWorktree: "새 워크트리",
         archiveWorkspace: "워크스페이스 보관",
         newTab: "새 탭",
         closeCurrentTab: "현재 탭 닫기",
@@ -2645,18 +2639,6 @@ export const ko: TranslationResources = {
         transportFallback: "호스트가 응답하지 않았습니다.",
         failedTitle: "paseo.json을 불러올 수 없습니다",
         failedDescription: "다시 로드하여 재시도하세요.",
-      },
-      worktree: {
-        title: "워크트리 수명 주기 훅",
-        info: "이 프로젝트에서 워크트리가 생성되거나 정리될 때 실행되는 명령",
-        docs: "문서",
-        docsTooltip: "자세한 내용과 이 명령에 사용할 수 있는 환경 변수는 문서를 참조하세요",
-        setup: "설정",
-        setupAccessibility: "워크트리 설정 명령",
-        uncommittedTitle: "paseo.json 변경 사항을 커밋하세요",
-        uncommittedDescription: "새 워크트리는 선택한 기본 브랜치의 설정 스크립트를 사용합니다.",
-        teardown: "정리",
-        teardownAccessibility: "워크트리 정리 명령",
       },
       scripts: {
         title: "스크립트",

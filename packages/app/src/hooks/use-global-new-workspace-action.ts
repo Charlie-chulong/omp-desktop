@@ -2,8 +2,6 @@ import { useCallback } from "react";
 import { router } from "expo-router";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionId } from "@/keyboard/keyboard-action-dispatcher";
-import { canCreateWorktreeForProjectKind } from "@/projects/host-projects";
-import { useHostFeature } from "@/runtime/host-features";
 import { useHosts } from "@/runtime/host-runtime";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
@@ -17,11 +15,7 @@ export function useGlobalNewWorkspaceAction() {
   const workspaceId = selection?.workspaceId ?? null;
   const hosts = useHosts();
   const activeWorkspace = useWorkspace(serverId, workspaceId);
-  const supportsWorkspaceMultiplicity = useHostFeature(serverId, "workspaceMultiplicity");
-  const canUseActiveWorkspaceContext = Boolean(
-    activeWorkspace &&
-    (supportsWorkspaceMultiplicity || canCreateWorktreeForProjectKind(activeWorkspace.projectKind)),
-  );
+  const canUseActiveWorkspaceContext = activeWorkspace !== null;
 
   const handle = useCallback(() => {
     if (hosts.length === 0) {

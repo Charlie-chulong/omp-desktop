@@ -57,7 +57,7 @@ describe("shared tool-call display mapping", () => {
     });
   });
 
-  it("builds display model for worktree setup detail", () => {
+  it("builds workspace setup display for a legacy worktree detail", () => {
     const display = buildToolCallDisplayModel({
       name: "paseo_worktree_setup",
       status: "running",
@@ -81,7 +81,7 @@ describe("shared tool-call display mapping", () => {
     });
 
     expect(display).toEqual({
-      displayName: "Worktree Setup",
+      displayName: "Workspace Setup",
       summary: "feature-branch",
     });
   });
