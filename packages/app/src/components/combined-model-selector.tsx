@@ -47,6 +47,8 @@ interface CombinedModelSelectorProps {
   isRetryingProvider?: boolean;
   disabled?: boolean;
   serverId?: string | null;
+  /** Open the active provider's models directly; provider switching is owned by another surface. */
+  browseProviders?: boolean;
   desktopPlacement?: ComboboxProps["desktopPlacement"];
   desktopMinWidth?: number;
   /**
@@ -82,6 +84,7 @@ export function CombinedModelSelector({
   isRetryingProvider = false,
   disabled = false,
   serverId = null,
+  browseProviders = true,
   desktopPlacement,
   desktopMinWidth,
   triggerFill = false,
@@ -103,21 +106,26 @@ export function CombinedModelSelector({
     isLoading,
     profiles,
     serverId,
+    browseProviders,
   });
-  const { showAll, reset } = browser;
+  const { prepareToOpen, reset, showAll } = browser;
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
       setIsOpen(open);
       if (open) {
-        showAll();
+        if (browseProviders) {
+          showAll();
+        } else {
+          prepareToOpen();
+        }
         onOpen?.();
         return;
       }
       reset();
       onClose?.();
     },
-    [onClose, onOpen, reset, showAll],
+    [browseProviders, onClose, onOpen, prepareToOpen, reset, showAll],
   );
 
   const handleSelect = useCallback(

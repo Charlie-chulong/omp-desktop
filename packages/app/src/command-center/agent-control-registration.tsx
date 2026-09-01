@@ -21,7 +21,7 @@ import {
   type AgentControlContributionSource,
 } from "./agent-control-contributions";
 import { getCommandCenterIcon } from "./icon";
-import { useCommandCenterActions } from "./provider";
+import { useActiveAgentControlRegistration, useCommandCenterActions } from "./provider";
 
 export interface AgentControlCommandCenterSource {
   serverId: string;
@@ -88,6 +88,7 @@ export function useAgentControlCommandCenterActions(input: {
   const { t } = useTranslation();
   const { controls } = input;
   const { features, models, modes, thinking } = controls;
+  useActiveAgentControlRegistration(input);
   const actions = useMemo(
     () =>
       buildAgentControlContributions({

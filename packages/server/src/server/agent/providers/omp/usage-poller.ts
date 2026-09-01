@@ -105,6 +105,23 @@ export class OmpUsagePoller {
     this.publishUsage(usage, turnId);
   }
 
+  async refresh(): Promise<void> {
+    if (this.closed || this.active) {
+      return;
+    }
+    const refreshGeneration = this.generation;
+    let usage: AgentUsage | undefined;
+    try {
+      usage = toAgentUsage(await this.options.readStats());
+    } catch {
+      return;
+    }
+    if (this.closed || this.active || this.generation !== refreshGeneration) {
+      return;
+    }
+    this.publishUsage(usage);
+  }
+
   close(): void {
     this.closed = true;
     this.active = false;

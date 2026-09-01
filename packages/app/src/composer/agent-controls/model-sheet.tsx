@@ -170,6 +170,7 @@ export function CompactModelSheet({
     autoFocusSearch: isWeb && !usesBottomSheet && !canBrowseProviders,
     profiles,
     serverId,
+    browseProviders: usesBottomSheet,
   });
   const modelBrowser = useModelBrowser({
     providers: availableProviders,
@@ -179,6 +180,7 @@ export function CompactModelSheet({
     autoFocusSearch: isWeb && !usesBottomSheet,
     profiles,
     serverId,
+    browseProviders: false,
   });
   const ProviderIcon =
     browserSelectedProvider.trim().length > 0 ? getProviderIcon(browserSelectedProvider) : null;
@@ -208,10 +210,14 @@ export function CompactModelSheet({
 
   const open = useCallback(() => {
     Keyboard.dismiss();
-    rootBrowser.showAll();
+    if (usesBottomSheet) {
+      rootBrowser.showAll();
+    } else {
+      rootBrowser.prepareToOpen();
+    }
     setIsOpen(true);
     onOpen?.();
-  }, [onOpen, rootBrowser]);
+  }, [onOpen, rootBrowser, usesBottomSheet]);
 
   const close = useCallback(() => {
     setIsModelBrowserOpen(false);

@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -82,6 +83,7 @@ import {
   useAgentControlCommandCenterActions,
   type AgentControlCommandCenterSource,
 } from "@/command-center/agent-control-registration";
+import { useActiveAgentControlRegistration } from "@/command-center/provider";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { isNative } from "@/constants/platform";
 import {
@@ -128,7 +130,6 @@ function formatFeatureOptionLabel(
   }
   return formatAgentFeatureOptionLabel(featureId, option);
 }
- 
 
 type AgentControlSelector = "provider" | "mode" | "model" | "thinking" | `feature-${string}`;
 
@@ -647,7 +648,7 @@ function ControlledAgentControls({
     }
   }, [updateDensityForWidth]);
 
-  const modelDisabled = disabled;
+  const modelDisabled = disabled || !provider;
 
   const comboboxProviderOptions = useMemo<ComboboxOption[]>(
     () => toComboboxOptions(providerOptions),
@@ -863,9 +864,7 @@ function ControlledAgentControls({
             modeControl={modeControl}
             glyphSize={layoutContextValue.glyphSize}
             modelSelectorServerId={modelSelectorServerId}
-            canSwitchProvider={
-              effectiveModelSelectorProviders.length > 1 && Boolean(onSelectProviderAndModel)
-            }
+            canSwitchProvider={false}
           />
         )}
       </View>
@@ -931,7 +930,6 @@ interface DesktopAgentControlsContentProps {
   modelSelectorServerId: string | null;
   workflowQuotaAccounts?: OmpWorkflowQuotaDisplayAccount[];
 }
-
 
 const DESKTOP_SEARCH_THRESHOLD = 6;
 
@@ -1037,6 +1035,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 selectedProvider={provider}
                 selectedModel={selectedModelId ?? ""}
                 onSelect={handleDesktopModelSelect}
+                browseProviders={false}
                 profiles={agentProfiles}
                 onApplyProfile={onApplyAgentProfile}
                 onEditProfiles={onEditAgentProfiles}
@@ -2006,9 +2005,12 @@ export function DraftAgentControls({
   isCompactLayout,
 }: DraftAgentControlsProps) {
   const { t } = useTranslation();
-  const mappedThinkingOptions = useMemo<AgentControlOption[]>(() => {
-    return toThinkingControlOptions(thinkingOptions);
-  }, [thinkingOptions, t]);
+  const activeControlSourceId = useId();
+  const { isActiveComposer } = useComposerKeyboardScope();
+  const mappedThinkingOptions = useMemo<AgentControlOption[]>(
+    () => toThinkingControlOptions(thinkingOptions),
+    [thinkingOptions, t],
+  );
 
   const effectiveSelectedThinkingOption =
     selectedThinkingOptionId || mappedThinkingOptions[0]?.id || undefined;
@@ -2069,6 +2071,56 @@ export function DraftAgentControls({
     [selectedProvider, providerDefinitions, modeOptions, selectedMode, onSelectMode, disabled],
   );
 
+  const activeControlSource = useMemo<AgentControlCommandCenterSource>(
+    () => ({
+      serverId: modelSelectorServerId ?? "",
+      ownerKey: activeControlSourceId,
+      provider: selectedProvider,
+      providerDefinitions,
+      models: {
+        providers: modelSelectorProviders,
+        selectedProvider,
+        selectedModelId: selectedModel,
+        select: onSelectProviderAndModel,
+      },
+      thinking: {
+        options: thinkingOptions,
+        selectedId: selectedThinkingOptionId,
+        select: onSelectThinkingOption,
+      },
+      modes: {
+        options: modeOptions,
+        selectedId: selectedMode,
+        select: onSelectMode,
+      },
+      features: {
+        list: features,
+        set: onSetFeature,
+      },
+    }),
+    [
+      activeControlSourceId,
+      features,
+      modeOptions,
+      modelSelectorProviders,
+      modelSelectorServerId,
+      onSelectMode,
+      onSelectProviderAndModel,
+      onSelectThinkingOption,
+      onSetFeature,
+      providerDefinitions,
+      selectedMode,
+      selectedModel,
+      selectedProvider,
+      selectedThinkingOptionId,
+      thinkingOptions,
+    ],
+  );
+  useActiveAgentControlRegistration({
+    sourceId: `draft-controls:${activeControlSourceId}`,
+    enabled: isActiveComposer && !disabled,
+    controls: activeControlSource,
+  });
   return (
     <>
       {profileEditor.element}

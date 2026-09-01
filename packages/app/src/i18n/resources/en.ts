@@ -243,7 +243,7 @@ export const en = {
       loading: "Loading quota…",
       account: "Account {{number}}",
       noNote: "No note",
-      total: "Total quota",
+      weekly: "Weekly quota",
       fiveHour: "5-hour quota",
       resetAt: "Resets at {{time}}",
     },

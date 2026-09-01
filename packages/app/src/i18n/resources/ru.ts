@@ -245,7 +245,7 @@ export const ru: TranslationResources = {
       loading: "Загрузка квоты…",
       account: "Аккаунт {{number}}",
       noNote: "Без заметки",
-      total: "Общая квота",
+      weekly: "Недельная квота",
       fiveHour: "Квота на 5 часов",
       resetAt: "Сброс в {{time}}",
     },

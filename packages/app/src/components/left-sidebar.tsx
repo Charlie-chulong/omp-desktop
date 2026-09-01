@@ -1,6 +1,9 @@
 import { router, usePathname, type Href } from "expo-router";
 import {
+  Bot,
   CalendarClock,
+  ChevronDown,
+  CircleUserRound,
   GitBranch,
   History,
   Home,
@@ -26,7 +29,6 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-nativ
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { useShallow } from "zustand/shallow";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { resolveDesktopSidebarWidth } from "@/components/desktop-sidebar-layout";
 import {
@@ -37,14 +39,24 @@ import { HostPicker } from "@/components/hosts/host-picker";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
-import { Shortcut } from "@/components/ui/shortcut";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ModelProviderGlyph } from "@/components/model-browser";
+import {
+  formatOmpAccountIdentity,
+  formatOmpAccountSelectionLabel,
+} from "@/components/omp-provider-accounts";
 import {
   resolveOmpRemainingQuotaPct,
   shouldShowOmpFiveHourQuota,
 } from "@/components/omp-provider-quota";
-import { selectOmpQuotaAccounts } from "@/components/omp-provider-accounts";
-import { resolveFocusedChatTarget } from "@/composer/focused-chat-target";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
+import { Shortcut } from "@/components/ui/shortcut";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useActiveAgentControls } from "@/command-center/provider";
+import {
+  groupOmpModelsByProviderNamespace,
+  resolveModelBrowserProviderId,
+} from "@/composer/agent-controls/model-sheet-flow";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useOpenProject } from "@/hooks/use-open-project";
@@ -61,18 +73,13 @@ import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-vie
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
-import {
-  useActiveWorkspaceSelection,
-  useLastWorkspaceSelection,
-} from "@/stores/navigation-active-workspace-store";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { useOmpAccountQuota } from "@/hooks/use-omp-account-quota";
-import { useSessionStore } from "@/stores/session-store";
 import { usePanelStore } from "@/stores/panel-store";
 import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { useIsMobilePanelPresented } from "@/mobile-panels/provider";
+import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import {
   buildHostAgentDetailRoute,
   buildOpenProjectRoute,
@@ -81,7 +88,6 @@ import {
   buildSettingsAddHostRoute,
   buildSettingsRoute,
 } from "@/utils/host-routes";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { openHostOverview } from "@/navigation/settings-navigation";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
@@ -501,7 +507,7 @@ const SidebarNewWorkspaceHeaderRow = memo(function SidebarNewWorkspaceHeaderRow(
   );
 });
 
-function SidebarQuotaValue({
+function SidebarQuotaMeter({
   label,
   usedPct,
   limitReached,
@@ -520,83 +526,260 @@ function SidebarQuotaValue({
       : remainingPct !== null
         ? theme.colors.palette.green[500]
         : theme.colors.foregroundMuted;
+  const percentage = remainingPct === null ? "—" : `${Math.round(remainingPct)}%`;
+
   return (
-    <View style={styles.sidebarQuotaValue}>
-      <Text style={styles.sidebarQuotaLabel} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text style={[styles.sidebarQuotaPercentage, { color }]} numberOfLines={1}>
-        {remainingPct === null ? "—" : `${Math.round(remainingPct)}%`}
-      </Text>
+    <View style={styles.sidebarQuotaMeter}>
+      <View style={styles.sidebarQuotaHeader}>
+        <Text style={styles.sidebarQuotaLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={[styles.sidebarQuotaPercentage, { color }]} numberOfLines={1}>
+          {percentage}
+        </Text>
+      </View>
+      <View
+        accessibilityRole="progressbar"
+        accessibilityLabel={label}
+        accessibilityValue={
+          remainingPct === null ? undefined : { min: 0, max: 100, now: Math.round(remainingPct) }
+        }
+        style={styles.sidebarQuotaTrack}
+      >
+        {remainingPct !== null ? (
+          <View
+            style={[styles.sidebarQuotaFill, { width: `${remainingPct}%`, backgroundColor: color }]}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
 
-function SidebarAccountQuota() {
+function resolveProviderSwitchModel(provider: ProviderSelectorProvider) {
+  if (provider.modelSelection.kind !== "models") return null;
+  return (
+    provider.modelSelection.rows.find((row) => row.isDefault) ??
+    provider.modelSelection.rows[0] ??
+    null
+  );
+}
+
+function SidebarProviderAccountPanel() {
   const { t } = useTranslation();
-  const activeWorkspace = useActiveWorkspaceSelection();
-  const lastWorkspace = useLastWorkspaceSelection();
-  const localServerId = useLocalDaemonServerId();
-  const activeWorkspaceKey = activeWorkspace
-    ? buildWorkspaceTabPersistenceKey(activeWorkspace)
-    : null;
-  const layout = useWorkspaceLayoutStore((state) =>
-    activeWorkspaceKey ? state.layoutByWorkspace[activeWorkspaceKey] : undefined,
+  const { theme } = useUnistyles();
+  const active = useActiveAgentControls();
+  const controls = active?.controls ?? null;
+  const providerAnchorRef = useRef<View>(null);
+  const accountAnchorRef = useRef<View>(null);
+  const [providerOpen, setProviderOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const selectedModelId = controls?.models.selectedModelId ?? "";
+  const providers = useMemo(
+    () => groupOmpModelsByProviderNamespace([...(controls?.models.providers ?? [])]),
+    [controls?.models.providers],
   );
-  const focusedChat = useMemo(
+  const selectedProviderId = useMemo(
     () =>
-      activeWorkspace
-        ? resolveFocusedChatTarget({ serverId: activeWorkspace.serverId, layout })
-        : null,
-    [activeWorkspace, layout],
+      controls
+        ? resolveModelBrowserProviderId(
+            controls.models.selectedProvider ?? controls.provider ?? "",
+            selectedModelId,
+            providers,
+          )
+        : "",
+    [controls, providers, selectedModelId],
   );
-  const serverId = activeWorkspace?.serverId ?? lastWorkspace?.serverId ?? localServerId;
-  const agentId = focusedChat?.kind === "agent" ? focusedChat.agentId : null;
-  const agent = useSessionStore(
-    useShallow((state) => {
-      if (!serverId || !agentId) return null;
-      const current = state.sessions[serverId]?.agents.get(agentId);
-      if (!current) return null;
-      return { features: current.features };
-    }),
+  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
+  const providerOptions = useMemo<ComboboxOption[]>(
+    () => providers.map((provider) => ({ id: provider.id, label: provider.label })),
+    [providers],
   );
-  const { accounts, loading } = useOmpAccountQuota(serverId, "openai-codex", null);
-  const selectedCredentialId = useMemo(() => {
-    const accountFeature = agent?.features?.find(
-      (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
-    );
-    if (!accountFeature || typeof accountFeature.value !== "string") return null;
-    const credentialId = Number(accountFeature.value);
-    return Number.isSafeInteger(credentialId) && credentialId > 0 ? credentialId : null;
-  }, [agent?.features]);
-  const displayedAccounts = useMemo(
-    () => selectOmpQuotaAccounts(accounts, selectedCredentialId),
-    [accounts, selectedCredentialId],
+  const accountFeature = controls?.features.list?.find(
+    (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
+  );
+  const { accounts, loading } = useOmpAccountQuota(
+    controls?.serverId,
+    controls?.provider,
+    selectedModelId,
+  );
+  const selectableAccounts = useMemo(() => {
+    if (!accountFeature || accountFeature.type !== "select") return accounts;
+    const ids = new Set(accountFeature.options.map((option) => option.id));
+    return accounts.filter((account) => ids.has(String(account.credentialId)));
+  }, [accountFeature, accounts]);
+  const selectedAccountId =
+    accountFeature?.type === "select" && accountFeature.value !== undefined
+      ? String(accountFeature.value)
+      : String(selectableAccounts[0]?.credentialId ?? "");
+  const selectedAccount =
+    selectableAccounts.find((account) => String(account.credentialId) === selectedAccountId) ??
+    (selectableAccounts.length === 1 ? selectableAccounts[0] : null);
+  const accountOptions = useMemo<ComboboxOption[]>(
+    () =>
+      selectableAccounts.map((account, index) => ({
+        id: String(account.credentialId),
+        label: formatOmpAccountSelectionLabel({
+          note: account.note,
+          identityKey: account.identityKey,
+          fallback: t("agentControls.quota.account", { number: index + 1 }),
+        }),
+      })),
+    [selectableAccounts, t],
+  );
+  const accountIdentity = formatOmpAccountIdentity(selectedAccount?.identityKey);
+  const accountNote = selectedAccount?.note?.trim();
+  const selectedAccountOption = accountOptions.find((option) => option.id === selectedAccountId);
+  const accountPrimary =
+    accountNote ||
+    accountIdentity.primary ||
+    selectedAccountOption?.label ||
+    t("agentControls.features.oauthAccount.title");
+  const accountSecondary = accountNote ? null : accountIdentity.secondary;
+  const canSwitchProvider = selectedProvider
+    ? providerOptions.length > 1
+    : providerOptions.length > 0;
+  const canSwitchAccount =
+    Boolean(controls?.features.set && accountFeature?.type === "select") &&
+    accountOptions.length > 1;
+
+  const providerTriggerStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.sidebarProviderTrigger,
+      (hovered || pressed || providerOpen) && styles.sidebarProviderTriggerActive,
+    ],
+    [providerOpen],
+  );
+  const accountTriggerStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.sidebarAccountTrigger,
+      (hovered || pressed || accountOpen) && styles.sidebarProviderTriggerActive,
+    ],
+    [accountOpen],
+  );
+  const handleProviderSelect = useCallback(
+    (providerId: string) => {
+      const target = providers.find((provider) => provider.id === providerId);
+      const model = target ? resolveProviderSwitchModel(target) : null;
+      if (!controls || !model) return;
+      void controls.models.select(model.provider, model.modelId);
+      setProviderOpen(false);
+    },
+    [controls, providers],
+  );
+  const handleAccountSelect = useCallback(
+    (credentialId: string) => {
+      if (!controls?.features.set || accountFeature?.type !== "select") return;
+      void controls.features.set(accountFeature.id, credentialId);
+      setAccountOpen(false);
+    },
+    [accountFeature, controls],
   );
 
-  if (loading && displayedAccounts.length === 0) {
-    return (
-      <View style={styles.sidebarQuota} testID="sidebar-account-quota">
-        <Text style={styles.sidebarQuotaLoading} numberOfLines={1}>
-          {t("agentControls.quota.loading")}
-        </Text>
-      </View>
-    );
-  }
-  const account = displayedAccounts[0] ?? accounts[0];
-  if (!account) return null;
+  if (!controls || providers.length === 0) return null;
+
   return (
-    <View style={styles.sidebarQuota} testID="sidebar-account-quota">
-      <SidebarQuotaValue
-        label={t("agentControls.quota.total")}
-        usedPct={account.quota?.weeklyUsedPct}
+    <View style={styles.sidebarProviderCard} testID="sidebar-provider-account-panel">
+      <ComboboxTrigger
+        ref={providerAnchorRef}
+        collapsable={false}
+        disabled={!canSwitchProvider}
+        onPress={() => setProviderOpen(!providerOpen)}
+        style={providerTriggerStyle}
+        accessibilityRole="button"
+        accessibilityLabel={t("agentControls.provider.select")}
+        testID="sidebar-provider-selector"
+        chevron={null}
+      >
+        <View style={styles.sidebarProviderIcon}>
+          {selectedProvider ? (
+            <ModelProviderGlyph provider={selectedProvider.id} size={18} tone="foreground" />
+          ) : (
+            <Bot size={18} color={theme.colors.foreground} />
+          )}
+        </View>
+        <View style={styles.sidebarProviderCopy}>
+          <Text style={styles.sidebarProviderName} numberOfLines={1}>
+            {selectedProvider?.label ?? t("agentControls.provider.fallback")}
+          </Text>
+        </View>
+        {canSwitchProvider ? <ChevronDown size={14} color={theme.colors.foregroundMuted} /> : null}
+      </ComboboxTrigger>
+      <Combobox
+        options={providerOptions}
+        value={selectedProviderId}
+        onSelect={handleProviderSelect}
+        searchable={providerOptions.length > 6}
+        open={providerOpen}
+        onOpenChange={setProviderOpen}
+        anchorRef={providerAnchorRef}
+        desktopPlacement="top-start"
+        desktopMinWidth={240}
       />
-      {shouldShowOmpFiveHourQuota(account.quota?.planLabel) ? (
-        <SidebarQuotaValue
-          label={t("agentControls.quota.fiveHour")}
-          usedPct={account.quota?.fiveHourUsedPct}
-          limitReached={account.quota?.fiveHourLimitReached}
-        />
+
+      {loading && selectableAccounts.length === 0 ? (
+        <View style={styles.sidebarAccountLoading}>
+          <CircleUserRound size={16} color={theme.colors.foregroundMuted} />
+          <Text style={styles.sidebarQuotaLoading} numberOfLines={1}>
+            {t("agentControls.quota.loading")}
+          </Text>
+        </View>
+      ) : accountOptions.length > 0 ? (
+        <>
+          <View style={styles.sidebarProviderDivider} />
+          <ComboboxTrigger
+            ref={accountAnchorRef}
+            collapsable={false}
+            disabled={!canSwitchAccount}
+            onPress={() => setAccountOpen(!accountOpen)}
+            style={accountTriggerStyle}
+            accessibilityRole="button"
+            accessibilityLabel={t("agentControls.features.oauthAccount.title")}
+            testID="sidebar-account-selector"
+            chevron={null}
+          >
+            <CircleUserRound size={16} color={theme.colors.foregroundMuted} />
+            <View style={styles.sidebarAccountCopy}>
+              <Text style={styles.sidebarAccountName} numberOfLines={1}>
+                {accountPrimary}
+              </Text>
+              {accountSecondary ? (
+                <Text style={styles.sidebarAccountSecondary} numberOfLines={1}>
+                  {accountSecondary}
+                </Text>
+              ) : null}
+            </View>
+            {canSwitchAccount ? (
+              <ChevronDown size={14} color={theme.colors.foregroundMuted} />
+            ) : null}
+          </ComboboxTrigger>
+          <Combobox
+            options={accountOptions}
+            value={selectedAccountId}
+            onSelect={handleAccountSelect}
+            searchable={false}
+            open={accountOpen}
+            onOpenChange={setAccountOpen}
+            anchorRef={accountAnchorRef}
+            desktopPlacement="top-start"
+            desktopMinWidth={240}
+          />
+          {selectedAccount ? (
+            <View style={styles.sidebarQuota}>
+              <SidebarQuotaMeter
+                label={t("agentControls.quota.weekly")}
+                usedPct={selectedAccount.quota?.weeklyUsedPct}
+              />
+              {shouldShowOmpFiveHourQuota(selectedAccount.quota?.planLabel) ? (
+                <SidebarQuotaMeter
+                  label={t("agentControls.quota.fiveHour")}
+                  usedPct={selectedAccount.quota?.fiveHourUsedPct}
+                  limitReached={selectedAccount.quota?.fiveHourLimitReached}
+                />
+              ) : null}
+            </View>
+          ) : null}
+        </>
       ) : null}
     </View>
   );
@@ -625,6 +808,7 @@ function SidebarFooter({
 
   return (
     <View style={styles.sidebarFooter}>
+      <SidebarProviderAccountPanel />
       <View style={styles.footerIconRow}>
         <SidebarHostPicker
           theme={theme}
@@ -648,7 +832,6 @@ function SidebarFooter({
           theme={theme}
         />
       </View>
-      <SidebarAccountQuota />
     </View>
   );
 }
@@ -1201,12 +1384,9 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
   },
   sidebarFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    paddingVertical: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
@@ -1216,21 +1396,97 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     flexShrink: 0,
   },
-  sidebarQuota: {
-    minWidth: 0,
-    flexShrink: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: theme.spacing[2],
+  sidebarProviderCard: {
+    width: "100%",
     overflow: "hidden",
+    padding: theme.spacing[1],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surfaceSidebarHover,
   },
-  sidebarQuotaValue: {
+  sidebarProviderTrigger: {
     minWidth: 0,
-    flexShrink: 1,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+  },
+  sidebarProviderTriggerActive: {
+    backgroundColor: theme.colors.surfaceSidebarSelected,
+  },
+  sidebarProviderIcon: {
+    width: 30,
+    height: 30,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.surfaceSidebarSelected,
+  },
+  sidebarProviderCopy: {
+    minWidth: 0,
+    flex: 1,
+  },
+  sidebarProviderName: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sidebarProviderDivider: {
+    height: 1,
+    marginHorizontal: theme.spacing[2],
+    backgroundColor: theme.colors.border,
+  },
+  sidebarAccountTrigger: {
+    minWidth: 0,
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: theme.spacing[1],
+    borderRadius: theme.borderRadius.md,
+  },
+  sidebarAccountCopy: {
+    minWidth: 0,
+    flex: 1,
+    gap: 1,
+  },
+  sidebarAccountName: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  sidebarAccountSecondary: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  sidebarAccountLoading: {
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+  },
+  sidebarQuota: {
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2],
+    paddingTop: theme.spacing[1],
+    paddingBottom: theme.spacing[2],
+  },
+  sidebarQuotaMeter: {
+    gap: theme.spacing[1],
+  },
+  sidebarQuotaHeader: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[2],
   },
   sidebarQuotaLabel: {
     flexShrink: 1,
@@ -1241,6 +1497,17 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     textAlign: "right",
     fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  sidebarQuotaTrack: {
+    height: 4,
+    overflow: "hidden",
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.border,
+  },
+  sidebarQuotaFill: {
+    height: "100%",
+    borderRadius: theme.borderRadius.full,
   },
   sidebarQuotaLoading: {
     minWidth: 0,

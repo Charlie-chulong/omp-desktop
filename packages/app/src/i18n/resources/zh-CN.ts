@@ -245,7 +245,7 @@ export const zhCN: TranslationResources = {
       loading: "正在加载额度…",
       account: "账户 {{number}}",
       noNote: "未备注",
-      total: "总额度",
+      weekly: "周额度",
       fiveHour: "5 小时额度",
       resetAt: "{{time}} 重置",
     },

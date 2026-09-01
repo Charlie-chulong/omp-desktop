@@ -150,6 +150,8 @@ interface ModelBrowserInput {
   /** Pinned above the provider list on the root view. `null` hides the section. */
   profiles?: AgentProfilePicker | null;
   serverId?: string | null;
+  /** Keep provider navigation outside this browser and open the selected provider directly. */
+  browseProviders?: boolean;
 }
 
 export interface ModelBrowserState {
@@ -264,6 +266,7 @@ export function useModelBrowser({
   autoFocusSearch = isWeb,
   profiles = null,
   serverId = null,
+  browseProviders = true,
 }: ModelBrowserInput): ModelBrowserState {
   const { t } = useTranslation();
   const [view, setView] = useState<ModelBrowserView>({ kind: "all" });
@@ -272,16 +275,24 @@ export function useModelBrowser({
   const [searchResetKey, bumpSearchResetKey] = useReducer((key: number) => key + 1, 0);
   const hasProfiles = (profiles?.rows.length ?? 0) > 0;
 
-  const initialView = useMemo(
-    () =>
-      resolveInitialModelBrowserView({
-        providers,
-        selectedProvider,
-        selectedModel,
-        hasProfiles,
-      }),
-    [hasProfiles, providers, selectedModel, selectedProvider],
-  );
+  const initialView = useMemo(() => {
+    if (!browseProviders) {
+      const provider = providers.find((entry) => entry.id === selectedProvider);
+      if (provider) {
+        return {
+          kind: "provider" as const,
+          providerId: provider.id,
+          providerLabel: provider.label,
+        };
+      }
+    }
+    return resolveInitialModelBrowserView({
+      providers,
+      selectedProvider,
+      selectedModel,
+      hasProfiles,
+    });
+  }, [browseProviders, hasProfiles, providers, selectedModel, selectedProvider]);
 
   const prepareToOpen = useCallback(() => {
     setView(initialView);
@@ -331,7 +342,7 @@ export function useModelBrowser({
       leading: (
         <ModelProviderGlyph provider={view.providerId} size={ICON_SIZE.md} tone="foreground" />
       ),
-      back: singleProviderView ? undefined : { onPress: showAll },
+      back: browseProviders && !singleProviderView ? { onPress: showAll } : undefined,
       actions: (
         <View style={styles.headerActionRow}>
           <ProviderSettingsAction
@@ -355,6 +366,7 @@ export function useModelBrowser({
     };
   }, [
     autoFocusSearch,
+    browseProviders,
     handleSearchQueryChange,
     searchResetKey,
     serverId,
