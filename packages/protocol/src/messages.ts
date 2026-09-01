@@ -1772,6 +1772,7 @@ export const OmpProviderLoginCancelRequestMessageSchema = z.object({
 export const OmpProviderLogoutRequestMessageSchema = z.object({
   type: z.literal("omp.provider.logout.request"),
   providerId: z.string().min(1),
+  credentialId: z.number().int().positive().optional(),
   requestId: z.string(),
 });
 

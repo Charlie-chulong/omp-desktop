@@ -1,5 +1,6 @@
 import type {
   OmpAgentMessage,
+  OmpFastModeResult,
   OmpModel,
   OmpLoginProvider,
   OmpPromptAck,
@@ -53,6 +54,7 @@ export interface OmpRuntimeSession {
   setAutoCompaction(enabled: boolean): Promise<void>;
   abort(): Promise<void>;
   getState(): Promise<OmpSessionState>;
+  setFastMode(enabled: boolean): Promise<OmpFastModeResult>;
   getMessages(): Promise<OmpAgentMessage[]>;
   getAvailableModels(timeoutMs?: number | null): Promise<OmpModel[]>;
   getLoginProviders(): Promise<OmpLoginProvider[]>;

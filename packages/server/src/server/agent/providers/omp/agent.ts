@@ -307,6 +307,32 @@ export function disableStoredOmpProviderCredentials(
   }
 }
 
+export function disableStoredOmpCredential(
+  agentDbPath: string,
+  providerId: string,
+  credentialId: number,
+): number {
+  if (!Number.isSafeInteger(credentialId) || credentialId <= 0) {
+    throw new Error(`Invalid OMP credential id '${credentialId}'`);
+  }
+  if (!existsSync(agentDbPath)) {
+    throw new Error(`OMP credential database does not exist at ${agentDbPath}`);
+  }
+  const database = openOmpCredentialDatabase(agentDbPath);
+  try {
+    const result = database
+      .prepare(
+        `UPDATE auth_credentials
+         SET disabled_cause = ?, updated_at = CAST(strftime('%s','now') AS INTEGER)
+         WHERE id = ? AND provider = ? AND credential_type = 'oauth' AND disabled_cause IS NULL`,
+      )
+      .run("deleted by user", credentialId, providerId);
+    return Number(result.changes);
+  } finally {
+    database.close();
+  }
+}
+
 const OMP_CORE_CAPABILITIES: AgentCapabilityFlags = {
   supportsStreaming: true,
   supportsSessionPersistence: true,
@@ -438,6 +464,7 @@ interface OmpSlashCommandInvocation {
 }
 const OMP_WORKFLOW_FEATURE_ID = "workflow_mode";
 const OMP_OAUTH_ACCOUNT_FEATURE_ID = "oauth_account_credential";
+const OMP_FAST_MODE_FEATURE_ID = "fast_mode";
 const OMP_PLAN_APPROVAL_REQUEST_ID = "omp-plan-approval";
 const OMP_PLAN_APPROVAL_REQUEST_NAME = "OmpPlanApproval";
 type OmpWorkflowMode = "plan" | "goal";
@@ -465,6 +492,7 @@ function formatStoredOmpOAuthAccountLabel(account: StoredOmpOAuthAccount): strin
 function createOmpFeatures(
   config: AgentSessionConfig,
   oauthAccounts: readonly StoredOmpOAuthAccount[] = [],
+  fastMode?: { supported: boolean; eligible: boolean; enabled: boolean },
 ): AgentFeature[] {
   const features: AgentFeature[] = [
     {
@@ -481,10 +509,23 @@ function createOmpFeatures(
       ],
     },
   ];
-  if (
-    parseModelReference(config.model ?? null)?.provider === "openai-codex" &&
-    oauthAccounts.length > 1
-  ) {
+  const modelProvider = parseModelReference(config.model ?? null)?.provider;
+  if (fastMode?.supported && fastMode.eligible) {
+    features.push({
+      type: "toggle",
+      id: OMP_FAST_MODE_FEATURE_ID,
+      label: "Fast mode",
+      description: "Use the model's priority service tier for lower latency.",
+      tooltip: "Toggle fast mode.",
+      icon: "zap",
+      value: fastMode.enabled,
+    });
+  }
+  const providerAccounts =
+    modelProvider === "openai-codex"
+      ? oauthAccounts.filter((account) => account.provider === modelProvider)
+      : [];
+  if (providerAccounts.length > 1) {
     const configuredCredentialId = optionalString(
       config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
     );
@@ -496,10 +537,10 @@ function createOmpFeatures(
       icon: "User",
       value:
         configuredCredentialId &&
-        oauthAccounts.some((account) => String(account.credentialId) === configuredCredentialId)
+        providerAccounts.some((account) => String(account.credentialId) === configuredCredentialId)
           ? configuredCredentialId
           : null,
-      options: oauthAccounts.map((account) => ({
+      options: providerAccounts.map((account) => ({
         id: String(account.credentialId),
         label: formatStoredOmpOAuthAccountLabel(account),
       })),
@@ -664,6 +705,21 @@ function parseModelReference(modelId: string | null): OmpModelReference | null {
     }
   }
   return { id: modelId };
+}
+
+function isOmpFastModeEligibleModel(
+  model: OmpModel | null | undefined,
+  configuredModel: string | null | undefined,
+): boolean {
+  const provider = model?.provider ?? parseModelReference(configuredModel ?? null)?.provider;
+  if (provider === "openai" || provider === "openai-codex") return true;
+  if (!model || provider === "fireworks" || provider === "github-copilot") return false;
+  const usesOpenAIWireApi =
+    model.api === "openai-completions" ||
+    model.api === "openai-responses" ||
+    model.api === "openai-codex-responses";
+  if (!usesOpenAIWireApi) return false;
+  return /\bgpt(?:\b|\d)/i.test(`${model.id} ${model.name ?? ""}`);
 }
 
 function parsePersistenceMetadata(metadata: AgentMetadata | undefined): OmpPersistenceMetadata {
@@ -1226,7 +1282,16 @@ export class OmpAgentSession implements AgentSession {
       options.config.featureValues?.[OMP_WORKFLOW_FEATURE_ID],
     );
     this.currentModeId = configuredModeId;
-    this.features = createOmpFeatures(options.config, this.oauthAccounts);
+    this.fastModeSupported = typeof options.initialState.fastModeEnabled === "boolean";
+    const configuredFastMode = optionalBoolean(
+      options.config.featureValues?.[OMP_FAST_MODE_FEATURE_ID],
+    );
+    this.fastModeEnabled = options.initialState.fastModeEnabled === true;
+    this.features = createOmpFeatures(options.config, this.oauthAccounts, {
+      supported: this.fastModeSupported,
+      eligible: isOmpFastModeEligibleModel(options.initialState.model, options.config.model),
+      enabled: configuredFastMode ?? this.fastModeEnabled,
+    });
     this.activeWorkflowMode =
       options.live === false && configuredWorkflowMode !== "standard"
         ? configuredWorkflowMode
@@ -1286,6 +1351,17 @@ export class OmpAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly paseoTools?: PaseoToolCatalog;
   private readonly oauthAccounts: readonly StoredOmpOAuthAccount[];
+  private readonly fastModeSupported: boolean;
+  private fastModeEnabled: boolean;
+
+  private refreshFeatures(): void {
+    const nextFeatures = createOmpFeatures(this.config, this.oauthAccounts, {
+      eligible: isOmpFastModeEligibleModel(this.state.model, this.config.model),
+      supported: this.fastModeSupported,
+      enabled: this.fastModeEnabled,
+    });
+    this.features.splice(0, this.features.length, ...nextFeatures);
+  }
 
   get id(): string | null {
     return this.state.sessionId;
@@ -1449,6 +1525,28 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
+    if (featureId === OMP_FAST_MODE_FEATURE_ID) {
+      if (typeof value !== "boolean") {
+        throw new Error(`Invalid OMP fast mode '${String(value)}'`);
+      }
+      const feature = this.features.find((candidate) => candidate.id === featureId);
+      if (feature?.type !== "toggle") {
+        throw new Error("OMP fast mode is unavailable for the current model");
+      }
+      const result = await this.runtimeSession.setFastMode(value);
+      this.fastModeEnabled = result.enabled;
+      this.state = {
+        ...this.state,
+        fastModeEnabled: result.enabled,
+        fastModeActive: result.active,
+      };
+      feature.value = result.enabled;
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        [OMP_FAST_MODE_FEATURE_ID]: result.enabled,
+      };
+      return;
+    }
     if (featureId === OMP_OAUTH_ACCOUNT_FEATURE_ID) {
       if (typeof value !== "string" || !/^\d+$/.test(value)) {
         throw new Error(`Invalid OMP OAuth account '${String(value)}'`);
@@ -1499,8 +1597,40 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
+  private async applyConfiguredFastMode(): Promise<void> {
+    if (!this.fastModeSupported) return;
+    if (!isOmpFastModeEligibleModel(this.state.model, this.config.model)) return;
+    const configured = optionalBoolean(this.config.featureValues?.[OMP_FAST_MODE_FEATURE_ID]);
+    if (configured === undefined) {
+      this.fastModeEnabled = this.state.fastModeEnabled === true;
+      this.refreshFeatures();
+      return;
+    }
+    if (configured === this.fastModeEnabled) {
+      this.refreshFeatures();
+      return;
+    }
+    const result = await this.runtimeSession.setFastMode(configured);
+    this.fastModeEnabled = result.enabled;
+    this.state = {
+      ...this.state,
+      fastModeEnabled: result.enabled,
+      fastModeActive: result.active,
+    };
+    this.refreshFeatures();
+  }
+
   private async pinOAuthAccount(account: StoredOmpOAuthAccount): Promise<void> {
-    const position = this.oauthAccounts.indexOf(account);
+    let position = -1;
+    let providerPosition = 0;
+    for (const candidate of this.oauthAccounts) {
+      if (candidate.provider !== account.provider) continue;
+      if (candidate.credentialId === account.credentialId) {
+        position = providerPosition;
+        break;
+      }
+      providerPosition += 1;
+    }
     if (position < 0) {
       throw new Error(`OMP OAuth account '${account.credentialId}' is unavailable`);
     }
@@ -1513,7 +1643,7 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
-  async initialize(): Promise<void> {
+  private async pinConfiguredOAuthAccount(): Promise<void> {
     const configuredCredentialId = optionalString(
       this.config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
     );
@@ -1528,6 +1658,11 @@ export class OmpAgentSession implements AgentSession {
     );
     if (!account) return;
     await this.pinOAuthAccount(account);
+  }
+
+  async initialize(): Promise<void> {
+    await this.applyConfiguredFastMode();
+    await this.pinConfiguredOAuthAccount();
   }
 
   async setGoalObjective(objective: string): Promise<void> {
@@ -1841,6 +1976,9 @@ export class OmpAgentSession implements AgentSession {
       model,
     };
     this.config.model = `${model.provider}/${model.id}`;
+    this.refreshFeatures();
+    await this.applyConfiguredFastMode();
+    await this.pinConfiguredOAuthAccount();
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
@@ -2817,6 +2955,14 @@ export class OmpAgentSession implements AgentSession {
 
   private async refreshState(): Promise<void> {
     this.state = await this.runtimeSession.getState();
+    if (
+      this.fastModeSupported &&
+      typeof this.state.fastModeEnabled === "boolean" &&
+      this.fastModeEnabled !== this.state.fastModeEnabled
+    ) {
+      this.fastModeEnabled = this.state.fastModeEnabled;
+      this.refreshFeatures();
+    }
   }
 
   private async refreshAfterTurn(finalUsage: Promise<void>): Promise<void> {
@@ -2879,21 +3025,14 @@ export class OmpAgentClient implements AgentClient {
     }
     await setOmpHostTools(runtimeSession, catalog);
   }
-  private readOAuthAccounts(
-    config: AgentSessionConfig,
-    launchEnv?: Record<string, string>,
-  ): StoredOmpOAuthAccount[] {
-    const modelProvider = parseModelReference(config.model ?? null)?.provider;
-    if (!modelProvider) return [];
+  private readOAuthAccounts(launchEnv?: Record<string, string>): StoredOmpOAuthAccount[] {
     if (this.oauthAccountsOverride !== undefined) {
-      return this.oauthAccountsOverride.filter((account) => account.provider === modelProvider);
+      return [...this.oauthAccountsOverride];
     }
     try {
       const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
       const { agentDb } = resolveOmpDiagnosticPaths(env);
-      return readStoredOmpOAuthAccounts(agentDb).filter(
-        (account) => account.provider === modelProvider,
-      );
+      return readStoredOmpOAuthAccounts(agentDb);
     } catch (error) {
       this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
       return [];
@@ -2947,7 +3086,7 @@ export class OmpAgentClient implements AgentClient {
           usagePollScheduler: this.usagePollScheduler,
           paseoTools: launchContext?.paseoTools,
         },
-        this.readOAuthAccounts(config, launchContext?.env),
+        this.readOAuthAccounts(launchContext?.env),
       );
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
@@ -2993,7 +3132,7 @@ export class OmpAgentClient implements AgentClient {
           paseoTools: launchContext?.paseoTools,
           live: false,
         },
-        this.readOAuthAccounts(resumeConfig.config, launchContext?.env),
+        this.readOAuthAccounts(launchContext?.env),
       );
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
@@ -3043,7 +3182,7 @@ export class OmpAgentClient implements AgentClient {
   }
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return createOmpFeatures(config, this.readOAuthAccounts(config));
+    return createOmpFeatures(config, this.readOAuthAccounts());
   }
 
   async listImportableSessions(
@@ -3399,11 +3538,20 @@ export class OmpAgentClient implements AgentClient {
     await flow.runtimeSession.close();
     return true;
   }
-  async logoutOmpProvider(providerId: string): Promise<OmpProviderManagement> {
+  async logoutOmpProvider(
+    providerId: string,
+    credentialId?: number,
+  ): Promise<OmpProviderManagement> {
     const env = { ...process.env, ...this.runtimeSettings?.env };
     const { agentDb } = resolveOmpDiagnosticPaths(env);
-    const changed = disableStoredOmpProviderCredentials(agentDb, providerId);
+    const changed =
+      credentialId === undefined
+        ? disableStoredOmpProviderCredentials(agentDb, providerId)
+        : disableStoredOmpCredential(agentDb, providerId, credentialId);
     if (changed === 0) {
+      if (credentialId !== undefined) {
+        throw new Error(`No active OAuth credential ${credentialId} found for ${providerId}`);
+      }
       throw new Error(
         `No stored credentials found for ${providerId}; remove environment or config credentials at their source`,
       );

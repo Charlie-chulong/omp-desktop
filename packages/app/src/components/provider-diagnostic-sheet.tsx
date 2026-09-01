@@ -339,10 +339,13 @@ function OmpProviderAccountRow({
   editing,
   noteDraft,
   saving,
+  loggingOut,
+  disabled,
   onEdit,
   onChangeNote,
   onSave,
   onCancel,
+  onLogout,
 }: {
   account: OmpProviderAccount;
   showQuota: boolean;
@@ -351,10 +354,13 @@ function OmpProviderAccountRow({
   editing: boolean;
   noteDraft: string;
   saving: boolean;
+  loggingOut: boolean;
+  disabled: boolean;
   onEdit: () => void;
   onChangeNote: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
+  onLogout: () => void;
 }) {
   const { t } = useTranslation();
   const identity = formatOmpAccountIdentity(account.identityKey);
@@ -418,19 +424,36 @@ function OmpProviderAccountRow({
               <OmpAccountQuotaSummary credentialId={account.credentialId} quota={account.quota} />
             ) : null}
           </View>
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={Pencil}
-            onPress={onEdit}
-            testID={`omp-provider-account-note-edit-${account.credentialId}`}
-          >
-            {t(
-              note
-                ? "settings.providers.omp.multiAccount.editNote"
-                : "settings.providers.omp.multiAccount.addNote",
-            )}
-          </Button>
+          <View style={sheetStyles.accountActions}>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={Pencil}
+              onPress={onEdit}
+              disabled={disabled}
+              testID={`omp-provider-account-note-edit-${account.credentialId}`}
+            >
+              {t(
+                note
+                  ? "settings.providers.omp.multiAccount.editNote"
+                  : "settings.providers.omp.multiAccount.addNote",
+              )}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              leftIcon={loggingOut ? undefined : LogOut}
+              onPress={onLogout}
+              disabled={disabled}
+              testID={`omp-provider-account-logout-${account.credentialId}`}
+            >
+              {t(
+                loggingOut
+                  ? "settings.providers.omp.provider.signingOut"
+                  : "settings.providers.omp.provider.signOut",
+              )}
+            </Button>
+          </View>
         </>
       )}
     </View>
@@ -441,6 +464,7 @@ function OmpProviderSummaryRow({
   summary,
   loggingInProviderId,
   loggingOutProviderId,
+  loggingOutCredentialId,
   loginFlowActive,
   removingProviderId,
   accountNotes = {},
@@ -452,6 +476,7 @@ function OmpProviderSummaryRow({
   onLogin,
   onRemove,
   onLogout,
+  onLogoutAccount,
   onEditAccountNote,
   onChangeAccountNote,
   onSaveAccountNote,
@@ -460,6 +485,7 @@ function OmpProviderSummaryRow({
   summary: OmpProviderSummary;
   loggingInProviderId: string | null;
   loggingOutProviderId: string | null;
+  loggingOutCredentialId: number | null;
   loginFlowActive: boolean;
   removingProviderId?: string | null;
   accountNotes?: Record<string, string>;
@@ -470,6 +496,7 @@ function OmpProviderSummaryRow({
   onEdit?: (providerId: string) => void;
   onLogin: (providerId: string) => void;
   onLogout?: (providerId: string) => void;
+  onLogoutAccount?: (providerId: string, credentialId: number) => void;
   onRemove?: (providerId: string) => void;
   onEditAccountNote?: (credentialId: number) => void;
   onChangeAccountNote?: (value: string) => void;
@@ -480,6 +507,8 @@ function OmpProviderSummaryRow({
   const { login } = summary;
   const accounts = login?.accounts ?? [];
   const loginAction = login ? resolveOmpLoginAction(login) : null;
+  const loggingOutAll =
+    login !== undefined && loggingOutProviderId === login.id && loggingOutCredentialId === null;
   const handleLogin = useCallback(() => {
     if (login) onLogin(login.id);
   }, [login, onLogin]);
@@ -557,12 +586,12 @@ function OmpProviderSummaryRow({
             <Button
               variant="destructive"
               size="sm"
-              leftIcon={loggingOutProviderId === login.id ? undefined : LogOut}
+              leftIcon={loggingOutAll ? undefined : LogOut}
               onPress={handleLogout}
               disabled={Boolean(loggingInProviderId || loggingOutProviderId)}
               testID={`omp-logout-provider-${login.id}`}
             >
-              {loggingOutProviderId === login.id
+              {loggingOutAll
                 ? t("settings.providers.omp.provider.signingOut")
                 : t(
                     accounts.length > 1
@@ -611,10 +640,15 @@ function OmpProviderSummaryRow({
               editing={editingAccountId === account.credentialId}
               noteDraft={accountNoteDraft}
               saving={savingAccountNoteId === account.credentialId}
+              loggingOut={loggingOutCredentialId === account.credentialId}
+              disabled={Boolean(loggingInProviderId || loggingOutProviderId)}
               onEdit={() => onEditAccountNote?.(account.credentialId)}
               onChangeNote={(value) => onChangeAccountNote?.(value)}
               onSave={() => onSaveAccountNote?.()}
               onCancel={() => onCancelAccountNote?.()}
+              onLogout={() => {
+                if (login) onLogoutAccount?.(login.id, account.credentialId);
+              }}
             />
           ))}
         </View>
@@ -1252,6 +1286,7 @@ function OmpCustomProvidersTab({
               summary={summary}
               loggingInProviderId={null}
               loggingOutProviderId={null}
+              loggingOutCredentialId={null}
               loginFlowActive={false}
               removingProviderId={removingProviderId}
               onLogin={NOOP}
@@ -1326,6 +1361,7 @@ function OmpManagementPanel({
   const [loginProviderId, setLoginProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
   const [logoutProviderId, setLogoutProviderId] = useState<string | null>(null);
+  const [logoutCredentialId, setLogoutCredentialId] = useState<number | null>(null);
   const [loginFlow, setLoginFlow] = useState<OmpProviderLoginFlowState | null>(null);
   const [loginInput, setLoginInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -1521,21 +1557,32 @@ function OmpManagementPanel({
     }
   }, [applyManagement, client, loginFlow, loginInput]);
   const logout = useCallback(
-    async (providerId: string) => {
+    async (providerId: string, credentialId?: number) => {
       if (!client) return;
       setLogoutProviderId(providerId);
+      setLogoutCredentialId(credentialId ?? null);
       setError(null);
       try {
-        applyManagement(await client.logoutOmpProvider(providerId));
+        applyManagement(
+          await client.logoutOmpProvider(
+            providerId,
+            credentialId === undefined ? undefined : { credentialId },
+          ),
+        );
       } catch (logoutError) {
         setError(logoutError instanceof Error ? logoutError.message : String(logoutError));
       } finally {
         setLogoutProviderId(null);
+        setLogoutCredentialId(null);
       }
     },
     [applyManagement, client],
   );
   const handleLogout = useCallback((providerId: string) => void logout(providerId), [logout]);
+  const handleAccountLogout = useCallback(
+    (providerId: string, credentialId: number) => void logout(providerId, credentialId),
+    [logout],
+  );
   const editAccountNote = useCallback(
     (credentialId: number) => {
       setEditingAccountId(credentialId);
@@ -1757,6 +1804,7 @@ function OmpManagementPanel({
                       loggingInProviderId={loginProviderId}
                       loginFlowActive={loginFlow !== null}
                       loggingOutProviderId={logoutProviderId}
+                      loggingOutCredentialId={logoutCredentialId}
                       accountNotes={accountNotes}
                       editingAccountId={editingAccountId}
                       accountNoteDraft={accountNoteDraft}
@@ -1768,6 +1816,7 @@ function OmpManagementPanel({
                       onCancelAccountNote={cancelAccountNote}
                       onLogin={startLogin}
                       onLogout={handleLogout}
+                      onLogoutAccount={handleAccountLogout}
                     />
                   ))}
                 </View>
@@ -2550,6 +2599,13 @@ const sheetStyles = StyleSheet.create((theme) => ({
     marginLeft: theme.spacing[4],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+  },
+  accountActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: theme.spacing[2],
   },
   accountTitle: {
     color: theme.colors.foreground,

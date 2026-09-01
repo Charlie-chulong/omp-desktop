@@ -63,6 +63,8 @@ export class FakeOmp implements OmpRuntime {
   private readonly queuedModels: OmpModel[][] = [];
   private readonly queuedLoginProviders: OmpLoginProvider[][] = [];
   private readonly queuedLoginFlows: FakeOmpLoginFlow[] = [];
+  private fastModeSupported = true;
+  private initialModel: OmpModel | null = null;
   private nextStartError: Error | undefined;
   private readonly queuedSubagentSubscriptionErrors = new Map<
     FakeOmpSubagentSubscriptionLevel,
@@ -85,6 +87,10 @@ export class FakeOmp implements OmpRuntime {
     });
     this.recordedLaunches.push(launch);
     const session = new FakeOmpSession(launch);
+    session.state = { ...session.state, model: this.initialModel };
+    if (!this.fastModeSupported) {
+      session.state = { ...session.state, fastModeEnabled: undefined, fastModeActive: undefined };
+    }
     session.commands = this.queuedCommands.shift() ?? [];
     session.models = this.queuedModels.shift() ?? [];
     session.loginProviders = this.queuedLoginProviders.shift() ?? [];
@@ -106,6 +112,12 @@ export class FakeOmp implements OmpRuntime {
 
   queueLoginProviders(providers: OmpLoginProvider[]): void {
     this.queuedLoginProviders.push(providers);
+  }
+  setFastModeSupported(supported: boolean): void {
+    this.fastModeSupported = supported;
+  }
+  setInitialModel(model: OmpModel | null): void {
+    this.initialModel = model;
   }
   queueLoginFlow(flow: FakeOmpLoginFlow): void {
     this.queuedLoginFlows.push(flow);
@@ -136,6 +148,7 @@ export class FakeOmpSession implements OmpRuntimeSession {
   readonly subagentMessageRequests: FakeOmpSubagentMessagesSelector[] = [];
   readonly setModelRequests: Array<{ provider: string; modelId: string }> = [];
   readonly setThinkingLevelRequests: OmpThinkingLevel[] = [];
+  readonly setFastModeRequests: boolean[] = [];
   readonly handoffRequests: Array<{ customInstructions?: string }> = [];
   readonly steerRequests: Array<{ message: string; imageCount: number }> = [];
   readonly followUpRequests: Array<{ message: string; imageCount: number }> = [];
@@ -193,6 +206,8 @@ export class FakeOmpSession implements OmpRuntimeSession {
       isStreaming: false,
       isCompacting: false,
       autoCompactionEnabled: true,
+      fastModeEnabled: false,
+      fastModeActive: false,
       sessionFile: launch.session ?? "/tmp/omp-session",
       sessionId: "omp-session-1",
       messageCount: 0,
@@ -337,6 +352,19 @@ export class FakeOmpSession implements OmpRuntimeSession {
       throw new Error("FakeOmp setModel requires setModelResult to be scripted");
     }
     return this.setModelResult;
+  }
+
+  async setFastMode(enabled: boolean): Promise<{ enabled: boolean; active: boolean }> {
+    if (this.state.fastModeEnabled === undefined) {
+      throw new Error("FakeOmp set_fast_mode is unsupported");
+    }
+    this.setFastModeRequests.push(enabled);
+    this.state = {
+      ...this.state,
+      fastModeEnabled: enabled,
+      fastModeActive: enabled,
+    };
+    return { enabled, active: enabled };
   }
 
   async setThinkingLevel(level: OmpThinkingLevel): Promise<void> {

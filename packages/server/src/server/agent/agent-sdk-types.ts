@@ -814,7 +814,7 @@ export interface AgentClient {
   startOmpProviderLogin?(providerId: string): Promise<OmpProviderLoginStart>;
   finishOmpProviderLogin?(flowId: string, input?: string): Promise<OmpProviderManagement>;
   cancelOmpProviderLogin?(flowId: string): Promise<boolean>;
-  logoutOmpProvider?(providerId: string): Promise<OmpProviderManagement>;
+  logoutOmpProvider?(providerId: string, credentialId?: number): Promise<OmpProviderManagement>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().
    * Called when Paseo archives an agent so the provider's own UI reflects the same state.

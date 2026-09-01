@@ -728,7 +728,10 @@ export class ProviderCatalogSession {
     msg: Extract<SessionInboundMessage, { type: "omp.provider.logout.request" }>,
   ): Promise<void> {
     try {
-      const management = await this.providerSnapshotManager.logoutOmpProvider(msg.providerId);
+      const management = await this.providerSnapshotManager.logoutOmpProvider(
+        msg.providerId,
+        msg.credentialId,
+      );
       await this.providerSnapshotManager.refreshSettingsSnapshot({ providers: ["omp"] });
       this.host.emit({
         type: "omp.provider.logout.response",

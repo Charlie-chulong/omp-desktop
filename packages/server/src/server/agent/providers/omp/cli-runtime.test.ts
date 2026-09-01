@@ -132,6 +132,19 @@ describe("OMP CLI runtime", () => {
     });
   });
 
+  test("sends live fast-mode RPC commands and validates their result", async () => {
+    const child = createOmpChild();
+    const commands: Record<string, unknown>[] = [];
+    replyToCommands(child, (command) => {
+      commands.push(withoutRequestId(command));
+      return { enabled: command.enabled, active: command.enabled };
+    });
+    const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
+
+    await expect(session.setFastMode(true)).resolves.toEqual({ enabled: true, active: true });
+    expect(commands).toEqual([{ type: "set_fast_mode", enabled: true }]);
+  });
+
   test("accepts session state without thinkingLevel for non-reasoning models", async () => {
     const child = createOmpChild();
     // Models like cursor-grok-4.5-high-fast encode effort in the model ID, so
