@@ -48,6 +48,11 @@ export function mapOmpModel(model: OmpModel, provider: AgentProvider): AgentMode
       provider: model.provider,
       modelId: model.id,
     },
+    ...(typeof model.contextWindow === "number" &&
+    Number.isSafeInteger(model.contextWindow) &&
+    model.contextWindow > 0
+      ? { contextWindowMaxTokens: model.contextWindow }
+      : {}),
     thinkingOptions,
     defaultThinkingOptionId,
   };

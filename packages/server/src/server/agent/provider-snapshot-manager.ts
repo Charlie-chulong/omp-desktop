@@ -491,6 +491,20 @@ export class ProviderSnapshotManager {
     }
     return await client.saveOmpProviderConfig(configYaml);
   }
+  async updateOmpModelContextWindowOverrides(
+    providerId: string,
+    overrides: Record<string, number | null>,
+  ): Promise<OmpProviderManagement> {
+    const definition = this.providerRegistry.omp;
+    if (!definition) {
+      throw new Error("OMP provider is not configured");
+    }
+    const client = this.ensureClient("omp", definition);
+    if (!client.updateOmpModelContextWindowOverrides) {
+      throw new Error("OMP model context-window configuration is read-only");
+    }
+    return await client.updateOmpModelContextWindowOverrides(providerId, overrides);
+  }
   async addOmpProvider(input: OmpCustomProviderInput): Promise<OmpProviderManagement> {
     const definition = this.providerRegistry.omp;
     if (!definition) throw new Error("OMP provider is not configured");

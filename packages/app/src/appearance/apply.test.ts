@@ -45,10 +45,10 @@ function makeFakeTheme(): FakeTheme {
     colorScheme: "dark",
     fontFamily: { ui: "seed-ui-stack", mono: "seed-mono-stack" },
     fontSize: {
-      code: 12,
+      code: 13,
       content: 15,
       sm: 12,
-      base: 14,
+      base: 13,
       lg: 16,
       xl: 18,
       "2xl": 20,
@@ -64,9 +64,9 @@ function makeInput(overrides: Partial<AppearanceInput> = {}): AppearanceInput {
   return {
     uiFontFamily: "",
     monoFontFamily: "",
-    uiBaseFontSize: 14,
+    uiBaseFontSize: 13,
     contentFontSize: 15,
-    codeFontSize: 12,
+    codeFontSize: 13,
     syntaxTheme: "one",
     ...overrides,
   };
@@ -119,10 +119,10 @@ describe("applyAppearance", () => {
 
     const { fontSize } = runCapturedUpdater();
     expect(fontSize.base).toBe(15);
-    expect(fontSize.sm).toBe(13);
-    expect(fontSize.lg).toBe(17);
-    expect(fontSize.xl).toBe(19);
-    expect(fontSize["4xl"]).toBe(28);
+    expect(fontSize.sm).toBe(14);
+    expect(fontSize.lg).toBe(18);
+    expect(fontSize.xl).toBe(21);
+    expect(fontSize["4xl"]).toBe(30);
   });
 
   it("derives the UI ramp from the canonical sizes, not the live theme (no compounding)", () => {
@@ -146,30 +146,30 @@ describe("applyAppearance", () => {
 
     const { fontSize } = updater(alreadyScaled);
     expect(fontSize.base).toBe(15); // rebuilt from FONT_SIZE, not the live value of 4
-    expect(fontSize.lg).toBe(17);
+    expect(fontSize.lg).toBe(18);
   });
 
   it("leaves the UI ramp at authored sizes when only the code size changes", () => {
-    applyAppearance(makeInput({ uiBaseFontSize: 14, codeFontSize: 10 }));
+    applyAppearance(makeInput({ uiBaseFontSize: 13, codeFontSize: 10 }));
 
     const { fontSize } = runCapturedUpdater();
-    expect(fontSize.base).toBe(14);
+    expect(fontSize.base).toBe(13);
     expect(fontSize.lg).toBe(16);
     expect(fontSize.sm).toBe(12);
     expect(fontSize.code).toBe(10);
   });
 
   it("sets content size independently of the interface and code sizes", () => {
-    applyAppearance(makeInput({ uiBaseFontSize: 14, contentFontSize: 19, codeFontSize: 10 }));
+    applyAppearance(makeInput({ uiBaseFontSize: 13, contentFontSize: 19, codeFontSize: 10 }));
 
     const { fontSize } = runCapturedUpdater();
-    expect(fontSize.base).toBe(14);
+    expect(fontSize.base).toBe(13);
     expect(fontSize.content).toBe(19);
     expect(fontSize.code).toBe(10);
   });
 
   it("sets fontSize.code to codeFontSize regardless of the UI font size", () => {
-    applyAppearance(makeInput({ uiBaseFontSize: 14, codeFontSize: 18 }));
+    applyAppearance(makeInput({ uiBaseFontSize: 13, codeFontSize: 18 }));
 
     expect(runCapturedUpdater().fontSize.code).toBe(18);
   });

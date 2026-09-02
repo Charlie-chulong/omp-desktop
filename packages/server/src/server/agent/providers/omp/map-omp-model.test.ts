@@ -143,4 +143,19 @@ describe("mapOmpModel thinking options", () => {
     expect(result.label).toBe("pioneer/GLM-5.2");
     expect(result.metadata).toEqual({ provider: "pioneer", modelId: "canada-quant/glm-5.2" });
   });
+
+  test("maps a valid context window into the agent model definition", () => {
+    expect(mapOmpModel(baseModel({ contextWindow: 1_000_000 }), "omp")).toMatchObject({
+      contextWindowMaxTokens: 1_000_000,
+    });
+  });
+
+  test.each([null, undefined, 0, -1, 1.5])(
+    "omits an invalid context window value %s",
+    (contextWindow) => {
+      expect(
+        mapOmpModel(baseModel({ contextWindow }), "omp").contextWindowMaxTokens,
+      ).toBeUndefined();
+    },
+  );
 });

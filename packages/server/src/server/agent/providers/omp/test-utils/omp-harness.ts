@@ -22,7 +22,12 @@ import {
   type StoredOmpOAuthAccount,
 } from "../agent.js";
 import type { OmpUsagePollScheduler } from "../usage-poller.js";
-import type { OmpAgentMessage, OmpModel, OmpRpcSlashCommand } from "../rpc-types.js";
+import type {
+  OmpAgentMessage,
+  OmpModel,
+  OmpRpcSlashCommand,
+  OmpSessionStats,
+} from "../rpc-types.js";
 import { FakeOmp } from "./fake-omp.js";
 
 const CWD = "/tmp/paseo-omp-agent-test";
@@ -77,10 +82,14 @@ export class OmpHarness {
       providerIdleScheduler?: OmpProviderIdleScheduler;
       noTurnScheduler?: OmpNoTurnScheduler;
       usagePollScheduler?: OmpUsagePollScheduler;
+      initialStats?: OmpSessionStats;
     } = {},
   ) {
     this.omp.setFastModeSupported(options.fastModeSupported ?? true);
     this.omp.setInitialModel(options.initialModel ?? null);
+    if (options.initialStats) {
+      this.omp.setInitialStats(options.initialStats);
+    }
     this.client = new OmpAgentClient({
       logger: pino({ level: "silent" }),
       runtime: this.omp,
@@ -149,6 +158,15 @@ export class OmpHarness {
       ...(launch.session ? { session: launch.session } : {}),
       argv: launch.argv,
     };
+  }
+  async listFeatures(config: Partial<AgentSessionConfig> = {}) {
+    return await this.client.listFeatures({ provider: "omp", cwd: CWD, ...config });
+  }
+  launchCount(): number {
+    return this.omp.recordedLaunches.length;
+  }
+  latestRuntimeClosed(): boolean {
+    return this.omp.latestSession().closed;
   }
   recordedPrompts(): Array<{ message: string; imageCount: number }> {
     return [...this.omp.latestSession().prompts];

@@ -3,6 +3,7 @@ import type { JsonValue } from "@omp-desktop/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@omp-desktop/protocol/agent-labels";
 import {
   memo,
+  type ComponentProps,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -147,7 +148,10 @@ import {
   deriveWorkspaceAgentVisibility,
   workspaceAgentVisibilityEqual,
 } from "@/workspace-tabs/agent-visibility";
-import { deriveWorkspacePaneState } from "@/screens/workspace/workspace-pane-state";
+import {
+  deriveWorkspacePaneState,
+  findBottomTerminalPaneId,
+} from "@/screens/workspace/workspace-pane-state";
 import {
   buildWorkspacePaneContentModel,
   WorkspacePaneContent,
@@ -238,6 +242,46 @@ const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMut
 const extraMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundExtraMuted,
 });
+const EMPTY_SHORTCUT_KEYS: ShortcutKey[] = [];
+
+interface WorkspaceBottomPaneToggleProps {
+  isOpen: boolean;
+  onPress: () => void;
+  shortcutKeys: ShortcutKey[];
+  style: ComponentProps<typeof HeaderToggleButton>["style"];
+}
+
+function WorkspaceBottomPaneToggle({
+  isOpen,
+  onPress,
+  shortcutKeys,
+  style,
+}: WorkspaceBottomPaneToggleProps) {
+  const { t } = useTranslation();
+  const label = isOpen
+    ? t("workspace.tabs.actions.closePane")
+    : t("workspace.tabs.actions.splitDown");
+  const accessibilityState = useMemo(() => ({ expanded: isOpen }), [isOpen]);
+  return (
+    <HeaderToggleButton
+      testID="workspace-header-split-pane-down"
+      onPress={onPress}
+      tooltipLabel={label}
+      tooltipKeys={isOpen ? EMPTY_SHORTCUT_KEYS : shortcutKeys}
+      tooltipSide="left"
+      style={style}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={accessibilityState}
+    >
+      {({ hovered }) => {
+        const colorMapping = hovered ? foregroundColorMapping : extraMutedColorMapping;
+        return <ThemedRows2 size={16} uniProps={colorMapping} />;
+      }}
+    </HeaderToggleButton>
+  );
+}
 
 const GATED_WORKSPACE_HEADER_LEFT = <SidebarMenuToggle />;
 
@@ -1201,6 +1245,7 @@ interface WorkspaceTerminalTabActionsInput {
       position: "left" | "right" | "top" | "bottom";
     },
   ) => string | null;
+  onSplitPaneCreated: (paneId: string) => void;
   labels: {
     workspacePathUnavailable: string;
     terminalQueued: string;
@@ -1227,6 +1272,7 @@ function useWorkspaceTerminalTabActions({
   openWorkspaceTabFocused,
   replaceWorkspaceTabTarget,
   splitWorkspacePaneEmpty,
+  onSplitPaneCreated,
   labels,
   toast,
 }: WorkspaceTerminalTabActionsInput): WorkspaceTerminalTabActions {
@@ -1248,6 +1294,7 @@ function useWorkspaceTerminalTabActions({
           { kind: "terminal", terminalId },
           paneLocalPlacement(paneId),
         );
+        onSplitPaneCreated(paneId);
         return;
       }
       if (destination.kind === "replace") {
@@ -1263,7 +1310,13 @@ function useWorkspaceTerminalTabActions({
         paneLocalPlacement(destination.paneId),
       );
     },
-    [openWorkspaceTabFocused, persistenceKey, replaceWorkspaceTabTarget, splitWorkspacePaneEmpty],
+    [
+      onSplitPaneCreated,
+      openWorkspaceTabFocused,
+      persistenceKey,
+      replaceWorkspaceTabTarget,
+      splitWorkspacePaneEmpty,
+    ],
   );
   const handleScriptTerminalSelected = useCallback(
     (terminalId: string) => {
@@ -1425,6 +1478,9 @@ function WorkspaceScreenContent({
   }, []);
   const focusWorkspacePane = useWorkspaceLayoutStore((state) => state.focusPane);
   const splitWorkspacePaneEmpty = useWorkspaceLayoutStore((state) => state.splitPaneEmpty);
+  const [preferredHeaderBottomPaneId, setPreferredHeaderBottomPaneId] = useState<string | null>(
+    null,
+  );
   const hasHydratedWorkspaces = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.hasHydratedWorkspaces ?? false,
   );
@@ -1461,6 +1517,7 @@ function WorkspaceScreenContent({
     openWorkspaceTabFocused,
     replaceWorkspaceTabTarget,
     splitWorkspacePaneEmpty,
+    onSplitPaneCreated: setPreferredHeaderBottomPaneId,
     labels: {
       workspacePathUnavailable: t("workspace.header.toasts.workspacePathUnavailable"),
       terminalQueued: t("workspace.header.toasts.terminalQueued"),
@@ -2109,14 +2166,6 @@ function WorkspaceScreenContent({
   });
 
   const splitPaneDownKeys = useShortcutKeys("workspace-pane-split-down");
-  const handleCreateTerminalBelowFocusedPane = useStableEvent(() => {
-    if (!focusedPaneId) {
-      return;
-    }
-    createTerminal({
-      destination: { kind: "split", targetPaneId: focusedPaneId, position: "bottom" },
-    });
-  });
 
   const handleCreateBrowserTab = useCallback(
     (input?: { paneId?: string }) => {
@@ -2680,6 +2729,28 @@ function WorkspaceScreenContent({
       workspaceLayout,
     ],
   );
+  const headerBottomPaneId = useMemo(
+    () =>
+      findBottomTerminalPaneId({
+        layout: workspaceLayout,
+        tabs: uiTabs,
+        preferredPaneId: preferredHeaderBottomPaneId,
+      }),
+    [preferredHeaderBottomPaneId, uiTabs, workspaceLayout],
+  );
+  const isHeaderBottomPaneOpen = headerBottomPaneId !== null;
+  const handleToggleTerminalBelowFocusedPane = useStableEvent(() => {
+    if (headerBottomPaneId) {
+      void handleClosePane(headerBottomPaneId);
+      return;
+    }
+    if (!focusedPaneId) {
+      return;
+    }
+    createTerminal({
+      destination: { kind: "split", targetPaneId: focusedPaneId, position: "bottom" },
+    });
+  });
 
   const handleWorkspacePanelOpenAction = useCallback(
     (action: KeyboardActionDefinition): boolean => {
@@ -3395,22 +3466,12 @@ function WorkspaceScreenContent({
         {!isMobile && workspaceDirectory ? (
           <>
             <WorkspaceActions serverId={normalizedServerId} cwd={workspaceDirectory} />
-            <HeaderToggleButton
-              testID="workspace-header-split-pane-down"
-              onPress={handleCreateTerminalBelowFocusedPane}
-              tooltipLabel={t("workspace.tabs.actions.splitDown")}
-              tooltipKeys={splitPaneDownKeys?.[0] ?? []}
-              tooltipSide="left"
+            <WorkspaceBottomPaneToggle
+              isOpen={isHeaderBottomPaneOpen}
+              onPress={handleToggleTerminalBelowFocusedPane}
+              shortcutKeys={splitPaneDownKeys?.[0] ?? []}
               style={styles.compactHeaderActionButton}
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel={t("workspace.tabs.actions.splitDown")}
-            >
-              {({ hovered }) => {
-                const colorMapping = hovered ? foregroundColorMapping : extraMutedColorMapping;
-                return <ThemedRows2 size={16} uniProps={colorMapping} />;
-              }}
-            </HeaderToggleButton>
+            />
             <HeaderToggleButton
               testID="workspace-explorer-toggle"
               onPress={handleToggleSidePanel}
@@ -3488,7 +3549,8 @@ function WorkspaceScreenContent({
       handleScriptTerminalStarted,
       handleViewScriptTerminal,
       handleOpenUrlInBrowserTab,
-      handleCreateTerminalBelowFocusedPane,
+      handleToggleTerminalBelowFocusedPane,
+      isHeaderBottomPaneOpen,
       splitPaneDownKeys,
       handleToggleSidePanel,
       sidePanelToggleLabel,

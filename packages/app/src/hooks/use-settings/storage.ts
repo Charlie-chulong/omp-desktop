@@ -55,13 +55,16 @@ const VALID_TOOL_CALL_DETAIL_LEVELS = new Set<ToolCallDetailLevel>(["overview", 
 export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 10_000;
 export const MIN_TERMINAL_SCROLLBACK_LINES = 0;
 export const MAX_TERMINAL_SCROLLBACK_LINES = 1_000_000;
-export function defaultUiBaseFontSize(native: boolean): number {
-  return native ? 15 : FONT_SIZE.base;
+export function defaultUiBaseFontSize(_native: boolean): number {
+  return 13;
 }
 
 export const DEFAULT_UI_BASE_FONT_SIZE = defaultUiBaseFontSize(isNative);
 export const MIN_UI_BASE_FONT_SIZE = 10;
 export const MAX_UI_BASE_FONT_SIZE = 21;
+// `uiFontSize` scaled the pre-v0.4 14px interface tier; keep migrations stable
+// when the current authored default changes.
+const LEGACY_UI_BASE_FONT_SIZE = 14;
 export function defaultContentFontSize(native: boolean): number {
   return native ? 15 : FONT_SIZE.content;
 }
@@ -69,7 +72,7 @@ export function defaultContentFontSize(native: boolean): number {
 export const DEFAULT_CONTENT_FONT_SIZE = defaultContentFontSize(isNative);
 export const MIN_CONTENT_FONT_SIZE = 10;
 export const MAX_CONTENT_FONT_SIZE = 21;
-export const DEFAULT_CODE_FONT_SIZE = 12; // == FONT_SIZE.code
+export const DEFAULT_CODE_FONT_SIZE = FONT_SIZE.code;
 export const MIN_CODE_FONT_SIZE = 9;
 export const MAX_CODE_FONT_SIZE = 22; // line-height 1.5×22=33 stays safe
 export const MAX_FONT_FAMILY_LENGTH = 200;
@@ -85,9 +88,9 @@ export interface AppSettings {
   useLegacyTerminalRenderer: boolean;
   uiFontFamily: string; // "" = platform default UI stack
   monoFontFamily: string; // "" = platform default mono stack
-  uiBaseFontSize: number; // clamped px, platform default 14 or 15
+  uiBaseFontSize: number; // clamped px, default 13
   contentFontSize: number; // clamped px, default 15
-  codeFontSize: number; // clamped px, default 12
+  codeFontSize: number; // clamped px, default 13
   syntaxTheme: SyntaxThemeId; // default "one"
   workspaceTitleSource: WorkspaceTitleSource;
   sidebarWorkspaceTrailing: SidebarWorkspaceTrailing;
@@ -433,7 +436,7 @@ function pickAppSettings(stored: StoredAppSettings): Partial<AppSettings> {
       max: 24,
     });
     if (legacyUiFontSize !== null) {
-      result.uiBaseFontSize = Math.round((FONT_SIZE.base * legacyUiFontSize) / 16);
+      result.uiBaseFontSize = Math.round((LEGACY_UI_BASE_FONT_SIZE * legacyUiFontSize) / 16);
     }
   }
   const contentFontSize = parseClampedFontSize(stored.contentFontSize, {

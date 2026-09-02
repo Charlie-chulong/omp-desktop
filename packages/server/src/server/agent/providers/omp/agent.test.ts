@@ -216,6 +216,39 @@ describe("OMP agent client and session", () => {
     expect(omp.recordedPrompts()).toEqual([]);
   });
 
+  test("probes fast-mode capability once for an eligible draft model", async () => {
+    const omp = new OmpHarness();
+
+    const features = await omp.listFeatures({
+      model: "openai-codex/gpt-5.6",
+      featureValues: { fast_mode: true },
+    });
+
+    expect(features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "fast_mode",
+          type: "toggle",
+          value: true,
+        }),
+      ]),
+    );
+    expect(omp.launchCount()).toBe(1);
+    expect(omp.latestRuntimeClosed()).toBe(true);
+  });
+
+  test("keeps fast mode hidden when the draft capability probe reports it unsupported", async () => {
+    const omp = new OmpHarness({ fastModeSupported: false });
+
+    const features = await omp.listFeatures({ model: "openai-codex/gpt-5.6" });
+
+    expect(features).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "fast_mode" })]),
+    );
+    expect(omp.launchCount()).toBe(1);
+    expect(omp.latestRuntimeClosed()).toBe(true);
+  });
+
   test("toggles OMP fast mode through the live RPC feature", async () => {
     const omp = new OmpHarness();
     await omp.start({ model: "openai-codex/gpt-5.6" });
@@ -609,6 +642,31 @@ describe("OMP agent client and session", () => {
       finalText: "empty terminal payload recovered",
     });
     expect(omp.completedTurnCount()).toBe(1);
+  });
+
+  test("probes current context usage once when a historical session opens", async () => {
+    const omp = new OmpHarness({
+      initialStats: {
+        contextUsage: { tokens: 48_000, contextWindow: 272_000 },
+      },
+    });
+
+    await omp.resume({
+      user: { id: "user-history", text: "continue the audit" },
+      assistant: { id: "assistant-history", text: "audit context restored" },
+    });
+    await waitForImmediate();
+
+    expect(omp.usageUpdates()).toEqual([
+      {
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalCostUsd: 0,
+        contextWindowMaxTokens: 272_000,
+        contextWindowUsedTokens: 48_000,
+      },
+    ]);
   });
 
   test("starts and stops context usage polling with the active turn", async () => {

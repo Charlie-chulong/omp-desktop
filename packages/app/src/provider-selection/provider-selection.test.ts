@@ -21,6 +21,7 @@ describe("combined model selector data", () => {
     provider: "codex",
     id: "gpt-5.4",
     label: "GPT-5.4",
+    contextWindowMaxTokens: 272_000,
   };
 
   function snapshotEntry(
@@ -62,6 +63,7 @@ describe("combined model selector data", () => {
               modelId: "gpt-5.4",
               modelLabel: "GPT-5.4",
               description: "gpt-5.4",
+              contextWindowMaxTokens: 272_000,
               isDefault: undefined,
             },
           ],

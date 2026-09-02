@@ -1218,6 +1218,30 @@ test("OMP provider actions use the native management RPCs", async () => {
     }),
   );
   await expect(savePromise).resolves.toMatchObject({ requestId: "omp-management-save" });
+
+  const contextWindowPromise = client.omp.updateModelContextWindowOverrides(
+    "openai-codex",
+    { "gpt-5.6-sol": 1_000_000, "gpt-5.4": null },
+    { requestId: "omp-context-window-update" },
+  );
+  expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
+    type: "session",
+    message: {
+      type: "omp.provider.management.context_windows.update.request",
+      providerId: "openai-codex",
+      overrides: { "gpt-5.6-sol": 1_000_000, "gpt-5.4": null },
+      requestId: "omp-context-window-update",
+    },
+  });
+  ws.message(
+    sessionMessage({
+      type: "omp.provider.management.context_windows.update.response",
+      payload: { ...managementPayload, requestId: "omp-context-window-update" },
+    }),
+  );
+  await expect(contextWindowPromise).resolves.toMatchObject({
+    requestId: "omp-context-window-update",
+  });
   const addPromise = client.omp.addProvider(
     {
       providerId: "mintcat",

@@ -2527,6 +2527,10 @@ export class Session {
         return this.providerCatalogSession.handleOmpProviderManagementGetRequest(msg);
       case "omp.provider.management.save.request":
         return this.providerCatalogSession.handleOmpProviderManagementSaveRequest(msg);
+      case "omp.provider.management.context_windows.update.request":
+        return this.providerCatalogSession.handleOmpProviderContextWindowOverridesUpdateRequest(
+          msg,
+        );
       case "omp.provider.management.add.request":
         return this.providerCatalogSession.handleOmpProviderManagementAddRequest(msg);
       case "omp.provider.models.discover.request":

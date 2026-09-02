@@ -805,6 +805,10 @@ export interface AgentClient {
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   getOmpProviderManagement?(): Promise<OmpProviderManagement>;
   saveOmpProviderConfig?(configYaml: string): Promise<OmpProviderManagement>;
+  updateOmpModelContextWindowOverrides?(
+    providerId: string,
+    overrides: Record<string, number | null>,
+  ): Promise<OmpProviderManagement>;
   addOmpProvider?(input: OmpCustomProviderInput): Promise<OmpProviderManagement>;
   removeOmpProvider?(providerId: string): Promise<OmpProviderManagement>;
   getOmpInstallationStatus?(options?: {

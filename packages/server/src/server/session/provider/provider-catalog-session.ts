@@ -528,6 +528,36 @@ export class ProviderCatalogSession {
       });
     }
   }
+  async handleOmpProviderContextWindowOverridesUpdateRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      { type: "omp.provider.management.context_windows.update.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const management = await this.providerSnapshotManager.updateOmpModelContextWindowOverrides(
+        msg.providerId,
+        msg.overrides,
+      );
+      await this.providerSnapshotManager.refreshSettingsSnapshot({ providers: ["omp"] });
+      this.host.emit({
+        type: "omp.provider.management.context_windows.update.response",
+        payload: { ...management, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to update OMP model context windows");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to update OMP model context windows: ${err.message}`,
+          code: "omp_provider_context_windows_update_failed",
+        },
+      });
+    }
+  }
   async handleOmpProviderManagementAddRequest(
     msg: Extract<SessionInboundMessage, { type: "omp.provider.management.add.request" }>,
   ): Promise<void> {

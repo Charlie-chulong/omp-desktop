@@ -51,18 +51,20 @@ import {
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { formatTokenCount } from "@/components/context-window-meter.utils";
 import {
   groupProfilesByProviderModel,
   resolveInitialModelBrowserView,
   resolveModelBrowserAllView,
   type ModelBrowserView,
 } from "@/components/model-browser-view";
+import { isModelBrowserRowSelected } from "@/composer/agent-controls/model-sheet-flow";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 
 const DESKTOP_PROVIDER_VIEW_MIN_HEIGHT = 220;
-const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 400;
-const DESKTOP_PROVIDER_VIEW_BASE_HEIGHT = 80;
-const DESKTOP_MODEL_ROW_HEIGHT = 40;
+const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 560;
+const DESKTOP_PROVIDER_VIEW_BASE_HEIGHT = 188;
+const DESKTOP_MODEL_ROW_HEIGHT = 34;
 
 const ThemedAlertTriangle = withUnistyles(AlertTriangle);
 const ThemedCheck = withUnistyles(Check);
@@ -72,6 +74,7 @@ const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedSearch = withUnistyles(Search);
 const ThemedSettings = withUnistyles(Settings);
+const accentMapping = (theme: Theme) => ({ color: theme.colors.accent });
 
 function ProviderSettingsAction({
   accessibilityLabel,
@@ -689,6 +692,8 @@ function ModelRow({
 
   const description = showProviderLabel ? buildProviderQualifiedDescription(row) : row.description;
   const primary = profiledRows[profiledRows.length - 1];
+  const contextWindowLabel =
+    row.contextWindowMaxTokens !== undefined ? formatTokenCount(row.contextWindowMaxTokens) : null;
 
   const handleCreateProfile = useCallback(() => {
     onCreateProfile?.({
@@ -774,7 +779,7 @@ function ModelRow({
   const pressableStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.browserRow,
-      styles.browserModelRow,
+      isSelected && styles.browserRowSelected,
       Boolean(hovered) && styles.browserRowHovered,
       pressed && styles.browserRowPressed,
     ],
@@ -806,12 +811,13 @@ function ModelRow({
             ) : null}
           </View>
           <View style={styles.browserRowTrailing}>
-            <View style={styles.browserRowSelection}>
-              {isSelected ? (
-                <ThemedCheck size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
-              ) : null}
-            </View>
+            {contextWindowLabel ? (
+              <Text style={styles.modelContextWindow}>{contextWindowLabel}</Text>
+            ) : null}
             {profileAction}
+            <View style={styles.browserRowSelection}>
+              {isSelected ? <ThemedCheck size={ICON_SIZE.sm} uniProps={accentMapping} /> : null}
+            </View>
           </View>
         </View>
       </ModelBrowserPressable>
@@ -1158,7 +1164,12 @@ function ModelRowList({
     ({ item }: { item: ProviderSelectionModelRow }) => (
       <SelectableModelRow
         row={item}
-        isSelected={item.provider === selectedProvider && item.modelId === selectedModel}
+        isSelected={isModelBrowserRowSelected(
+          item.provider,
+          item.modelId,
+          selectedProvider,
+          selectedModel,
+        )}
         showProviderLabel={showProviderLabel}
         onSelect={onSelect}
         profiledRows={profiledLookup.get(`${item.provider}:${item.modelId}`) ?? []}
@@ -1592,26 +1603,26 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: theme.spacing[1],
     paddingHorizontal: isWeb ? theme.spacing[3] : theme.spacing[6],
-    paddingTop: theme.spacing[2],
-    paddingBottom: theme.spacing[1],
+    paddingTop: theme.spacing[1],
+    paddingBottom: 2,
   },
   sectionHeadingAction: {
     position: "absolute",
-    top: theme.spacing[1],
+    top: 0,
     right: isWeb ? theme.spacing[3] : theme.spacing[6],
   },
   sectionHeadingText: {
     flex: 1,
-    fontSize: theme.fontSize.sm,
+    fontSize: 11,
     fontWeight: theme.fontWeight.normal,
     color: theme.colors.foregroundMuted,
   },
   browserRow: {
     flexDirection: "row",
-    paddingVertical: theme.spacing[2],
-    minHeight: 36,
+    paddingVertical: 5,
+    minHeight: 32,
   },
   modelRowHoverBoundary: {
     position: "relative",
@@ -1629,15 +1640,18 @@ const styles = StyleSheet.create((theme) => ({
   browserRowPressedElevated: {
     backgroundColor: theme.colors.surface2,
   },
+  browserRowSelected: {
+    backgroundColor: theme.colors.surface1,
+  },
   browserRowContent: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[2],
+    gap: 6,
     paddingHorizontal: isWeb ? theme.spacing[3] : theme.spacing[6],
   },
   browserRowLeading: {
-    width: 16,
+    width: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1648,20 +1662,20 @@ const styles = StyleSheet.create((theme) => ({
   browserRowTextInline: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: theme.spacing[2],
+    gap: 6,
   },
   browserRowLabel: {
-    fontSize: theme.fontSize.base,
+    fontSize: 13,
     color: theme.colors.foreground,
     flexShrink: 0,
   },
   browserRowLabelMuted: {
-    fontSize: theme.fontSize.base,
+    fontSize: 13,
     color: theme.colors.foregroundMuted,
     flexShrink: 0,
   },
   browserRowDescription: {
-    fontSize: theme.fontSize.sm,
+    fontSize: 11,
     color: theme.colors.foregroundMuted,
     flexShrink: 1,
   },
@@ -1671,8 +1685,13 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
     marginLeft: "auto",
   },
+  modelContextWindow: {
+    fontSize: 11,
+    color: theme.colors.foregroundMuted,
+    fontVariant: ["tabular-nums"],
+  },
   browserRowSelection: {
-    width: 16,
+    width: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1682,7 +1701,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
   },
   drillDownCount: {
-    fontSize: theme.fontSize.sm,
+    fontSize: 11,
     color: theme.colors.foregroundMuted,
   },
   rowStateInline: {
@@ -1744,8 +1763,8 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   virtualizedModelListContent: {
-    paddingTop: theme.spacing[1],
-    paddingBottom: theme.spacing[8],
+    paddingTop: 2,
+    paddingBottom: theme.spacing[4],
   },
   virtualizedProviderListContent: {
     paddingTop: 0,

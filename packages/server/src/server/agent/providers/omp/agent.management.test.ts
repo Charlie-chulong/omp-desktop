@@ -329,6 +329,62 @@ describe("OMP provider management", () => {
       ],
     });
   });
+
+  test("updates only requested model context-window overrides", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    const configPath = path.join(agentDir, "models.yml");
+    await writeFile(
+      configPath,
+      `# Keep this comment
+providers:
+  openai-codex:
+    modelOverrides:
+      gpt-empty:
+        contextWindow: 32000
+      gpt-sibling:
+        contextWindow: 64000
+        maxTokens: 4096
+  mintcat:
+    baseUrl: https://api.example.test/v1
+`,
+      "utf8",
+    );
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([]);
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([]);
+
+    await client.updateOmpModelContextWindowOverrides("openai-codex", {
+      "gpt-empty": null,
+      "gpt-sibling": null,
+      "gpt-new": 1_000_000,
+    });
+
+    const updatedYaml = await readFile(configPath, "utf8");
+    expect(updatedYaml).toContain("# Keep this comment");
+    expect(parse(updatedYaml)).toEqual({
+      providers: {
+        "openai-codex": {
+          modelOverrides: {
+            "gpt-sibling": { maxTokens: 4096 },
+            "gpt-new": { contextWindow: 1_000_000 },
+          },
+        },
+        mintcat: { baseUrl: "https://api.example.test/v1" },
+      },
+    });
+  });
+
+  test("rejects invalid context-window overrides before starting OMP", async () => {
+    const { client, runtime } = await createClient();
+
+    await expect(
+      client.updateOmpModelContextWindowOverrides("openai-codex", {
+        "gpt-5.6-sol": 1.5,
+      }),
+    ).rejects.toThrow("Invalid OMP context window");
+    expect(runtime.recordedLaunches).toHaveLength(0);
+  });
   test("formats models.yml as readable block YAML and preserves comments", () => {
     expect(
       formatOmpModelsYaml(

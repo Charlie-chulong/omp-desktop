@@ -453,6 +453,7 @@ function wrapClientProvider(
     getDiagnostic: inner.getDiagnostic?.bind(inner),
     getOmpProviderManagement: inner.getOmpProviderManagement?.bind(inner),
     saveOmpProviderConfig: inner.saveOmpProviderConfig?.bind(inner),
+    updateOmpModelContextWindowOverrides: inner.updateOmpModelContextWindowOverrides?.bind(inner),
     addOmpProvider: inner.addOmpProvider?.bind(inner),
     removeOmpProvider: inner.removeOmpProvider?.bind(inner),
     getOmpInstallationStatus: inner.getOmpInstallationStatus?.bind(inner),

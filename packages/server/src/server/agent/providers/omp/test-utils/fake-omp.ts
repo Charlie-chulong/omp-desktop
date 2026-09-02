@@ -65,6 +65,7 @@ export class FakeOmp implements OmpRuntime {
   private readonly queuedLoginFlows: FakeOmpLoginFlow[] = [];
   private fastModeSupported = true;
   private initialModel: OmpModel | null = null;
+  private initialStats: OmpSessionStats | null = null;
   private nextStartError: Error | undefined;
   private readonly queuedSubagentSubscriptionErrors = new Map<
     FakeOmpSubagentSubscriptionLevel,
@@ -90,6 +91,9 @@ export class FakeOmp implements OmpRuntime {
     session.state = { ...session.state, model: this.initialModel };
     if (!this.fastModeSupported) {
       session.state = { ...session.state, fastModeEnabled: undefined, fastModeActive: undefined };
+    }
+    if (this.initialStats) {
+      session.stats = this.initialStats;
     }
     session.commands = this.queuedCommands.shift() ?? [];
     session.models = this.queuedModels.shift() ?? [];
@@ -118,6 +122,9 @@ export class FakeOmp implements OmpRuntime {
   }
   setInitialModel(model: OmpModel | null): void {
     this.initialModel = model;
+  }
+  setInitialStats(stats: OmpSessionStats): void {
+    this.initialStats = stats;
   }
   queueLoginFlow(flow: FakeOmpLoginFlow): void {
     this.queuedLoginFlows.push(flow);

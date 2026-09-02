@@ -1693,6 +1693,13 @@ export const OmpProviderManagementSaveRequestMessageSchema = z.object({
   configYaml: z.string().max(1_000_000),
   requestId: z.string(),
 });
+export const OmpProviderContextWindowOverridesUpdateRequestMessageSchema = z.object({
+  type: z.literal("omp.provider.management.context_windows.update.request"),
+  providerId: z.string().trim().min(1),
+  overrides: z.record(z.string().trim().min(1), z.number().int().positive().nullable()),
+  requestId: z.string(),
+});
+
 export const OmpProviderApiSchema = z.enum([
   "openai-completions",
   "openai-responses",
@@ -3200,6 +3207,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderDiagnosticRequestMessageSchema,
   OmpProviderManagementGetRequestMessageSchema,
   OmpProviderManagementSaveRequestMessageSchema,
+  OmpProviderContextWindowOverridesUpdateRequestMessageSchema,
   OmpProviderManagementAddRequestMessageSchema,
   OmpProviderManagementRemoveRequestMessageSchema,
   OmpProviderModelDiscoveryRequestMessageSchema,
@@ -6052,6 +6060,10 @@ export const OmpProviderManagementSaveResponseMessageSchema = z.object({
   type: z.literal("omp.provider.management.save.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
 });
+export const OmpProviderContextWindowOverridesUpdateResponseMessageSchema = z.object({
+  type: z.literal("omp.provider.management.context_windows.update.response"),
+  payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
+});
 export const OmpProviderManagementAddResponseMessageSchema = z.object({
   type: z.literal("omp.provider.management.add.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
@@ -6748,6 +6760,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderDiagnosticResponseMessageSchema,
   OmpProviderManagementGetResponseMessageSchema,
   OmpProviderManagementSaveResponseMessageSchema,
+  OmpProviderContextWindowOverridesUpdateResponseMessageSchema,
   OmpProviderManagementAddResponseMessageSchema,
   OmpProviderManagementRemoveResponseMessageSchema,
   OmpProviderModelDiscoveryResponseMessageSchema,
@@ -6945,6 +6958,9 @@ export type OmpProviderManagementGetResponseMessage = z.infer<
 export type OmpProviderManagementSaveResponseMessage = z.infer<
   typeof OmpProviderManagementSaveResponseMessageSchema
 >;
+export type OmpProviderContextWindowOverridesUpdateResponseMessage = z.infer<
+  typeof OmpProviderContextWindowOverridesUpdateResponseMessageSchema
+>;
 export type OmpProviderApi = z.infer<typeof OmpProviderApiSchema>;
 export type OmpCustomProviderInput = z.infer<typeof OmpCustomProviderInputSchema>;
 export type OmpProviderManagementAddResponseMessage = z.infer<
@@ -7053,6 +7069,9 @@ export type OmpProviderManagementGetRequestMessage = z.infer<
 >;
 export type OmpProviderManagementSaveRequestMessage = z.infer<
   typeof OmpProviderManagementSaveRequestMessageSchema
+>;
+export type OmpProviderContextWindowOverridesUpdateRequestMessage = z.infer<
+  typeof OmpProviderContextWindowOverridesUpdateRequestMessageSchema
 >;
 export type OmpProviderManagementAddRequestMessage = z.infer<
   typeof OmpProviderManagementAddRequestMessageSchema

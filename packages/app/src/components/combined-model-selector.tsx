@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -26,7 +26,7 @@ interface CombinedModelSelectorProps {
   providers: ProviderSelectorProvider[];
   selectedProvider: string;
   selectedModel: string;
-  onSelect: (provider: AgentProvider, modelId: string) => void;
+  onSelect: (provider: AgentProvider, modelId: string) => void | Promise<void>;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
@@ -64,6 +64,10 @@ interface CombinedModelSelectorProps {
     glyphSize: number;
     showCaret: boolean;
   };
+  footer?: ReactNode;
+  triggerAccessory?: ReactNode;
+  dismissOnSelect?: boolean;
+  open?: boolean;
 }
 
 export function CombinedModelSelector({
@@ -89,10 +93,16 @@ export function CombinedModelSelector({
   desktopMinWidth,
   triggerFill = false,
   toolbar,
+  footer,
+  triggerAccessory,
+  dismissOnSelect = true,
+  open,
 }: CombinedModelSelectorProps) {
   const { t } = useTranslation();
   const anchorRef = useRef<View>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = open ?? internalOpen;
+  const selectionPendingRef = useRef(false);
   const [isContentReady, setIsContentReady] = useState(isWeb);
   const browserSelectedProvider = resolveModelBrowserProviderId(
     selectedProvider,
@@ -111,9 +121,10 @@ export function CombinedModelSelector({
   const { prepareToOpen, reset, showAll } = browser;
 
   const handleOpenChange = useCallback(
-    (open: boolean) => {
-      setIsOpen(open);
-      if (open) {
+    (nextOpen: boolean) => {
+      if (!nextOpen && !dismissOnSelect && selectionPendingRef.current) return;
+      if (open === undefined) setInternalOpen(nextOpen);
+      if (nextOpen) {
         if (browseProviders) {
           showAll();
         } else {
@@ -125,15 +136,22 @@ export function CombinedModelSelector({
       reset();
       onClose?.();
     },
-    [browseProviders, onClose, onOpen, prepareToOpen, reset, showAll],
+    [browseProviders, dismissOnSelect, onClose, onOpen, open, prepareToOpen, reset, showAll],
   );
 
   const handleSelect = useCallback(
     (provider: string, modelId: string) => {
-      onSelect(provider, modelId);
-      handleOpenChange(false);
+      if (!dismissOnSelect) selectionPendingRef.current = true;
+      const selection = onSelect(provider, modelId);
+      if (dismissOnSelect) {
+        handleOpenChange(false);
+        return;
+      }
+      void Promise.resolve(selection).finally(() => {
+        selectionPendingRef.current = false;
+      });
     },
-    [handleOpenChange, onSelect],
+    [dismissOnSelect, handleOpenChange, onSelect],
   );
 
   useEffect(() => {
@@ -202,7 +220,7 @@ export function CombinedModelSelector({
     [handleOpenChange, onEditProfile],
   );
 
-  const selectorBody = isContentReady ? (
+  const browserBody = isContentReady ? (
     <ModelBrowser
       state={browser}
       onSelect={handleSelect}
@@ -219,6 +237,14 @@ export function CombinedModelSelector({
       <ThemedLoadingSpinner size={ICON_SIZE.sm} uniProps={foregroundMutedMapping} />
       <Text style={styles.sheetLoadingText}>{t("modelSelector.loadingSelector")}</Text>
     </View>
+  );
+  const selectorBody = footer ? (
+    <View style={styles.selectorContent}>
+      <View style={styles.selectorBrowser}>{browserBody}</View>
+      {footer}
+    </View>
+  ) : (
+    browserBody
   );
 
   return (
@@ -272,6 +298,9 @@ export function CombinedModelSelector({
           <Text style={styles.triggerText} numberOfLines={1} ellipsizeMode="tail">
             {browser.triggerLabel}
           </Text>
+          {triggerAccessory ? (
+            <View style={styles.triggerAccessory}>{triggerAccessory}</View>
+          ) : null}
         </ComboboxTrigger>
       )}
       <Combobox
@@ -336,6 +365,20 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
+  },
+  triggerAccessory: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  selectorContent: {
+    flex: 1,
+    minHeight: 0,
+  },
+  selectorBrowser: {
+    flex: 1,
+    minHeight: 0,
   },
   customTriggerWrapper: {
     paddingHorizontal: 0,

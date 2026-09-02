@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveWorkspacePaneState,
+  findBottomTerminalPaneId,
   getWorkspacePaneDescriptors,
   resolveSideFileOpenPlacement,
 } from "@/screens/workspace/workspace-pane-state";
@@ -104,6 +105,75 @@ describe("workspace-pane-state", () => {
       kind: "file",
       path: "/repo/README.md",
     });
+  });
+
+  it("finds a terminal pane opened beneath another pane", () => {
+    const tabs: WorkspaceTab[] = [
+      createTab("agent_agent-a", { kind: "agent", agentId: "agent-a" }),
+      createTab("terminal_term-1", { kind: "terminal", terminalId: "term-1" }),
+    ];
+    const layout: WorkspaceLayout = {
+      root: {
+        kind: "group",
+        group: {
+          id: "group-root",
+          direction: "vertical",
+          sizes: [0.5, 0.5],
+          children: [
+            {
+              kind: "pane",
+              pane: {
+                id: "top",
+                tabIds: ["agent_agent-a"],
+                focusedTabId: "agent_agent-a",
+              },
+            },
+            {
+              kind: "pane",
+              pane: {
+                id: "bottom-terminal",
+                tabIds: ["terminal_term-1"],
+                focusedTabId: "terminal_term-1",
+              },
+            },
+          ],
+        },
+      },
+      focusedPaneId: "bottom-terminal",
+    };
+
+    expect(findBottomTerminalPaneId({ layout, tabs })).toBe("bottom-terminal");
+  });
+
+  it("does not treat a terminal pane to the right as a bottom pane", () => {
+    const tabs = [createTab("terminal_term-1", { kind: "terminal", terminalId: "term-1" })];
+    const layout: WorkspaceLayout = {
+      root: {
+        kind: "group",
+        group: {
+          id: "group-root",
+          direction: "horizontal",
+          sizes: [0.5, 0.5],
+          children: [
+            {
+              kind: "pane",
+              pane: { id: "left", tabIds: [], focusedTabId: null },
+            },
+            {
+              kind: "pane",
+              pane: {
+                id: "right-terminal",
+                tabIds: ["terminal_term-1"],
+                focusedTabId: "terminal_term-1",
+              },
+            },
+          ],
+        },
+      },
+      focusedPaneId: "right-terminal",
+    };
+
+    expect(findBottomTerminalPaneId({ layout, tabs })).toBeNull();
   });
 
   it("resolves side file opens to an existing file tab", () => {

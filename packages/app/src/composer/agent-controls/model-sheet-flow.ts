@@ -52,6 +52,19 @@ export function resolveModelBrowserProviderId(
   }
   return provider;
 }
+export function resolveModelBrowserProviderNamespaceId(providerId: string): string {
+  return providerId.startsWith("omp:") ? providerId.slice("omp:".length) : providerId;
+}
+
+export function isModelBrowserRowSelected(
+  rowProvider: string,
+  rowModelId: string,
+  selectedProvider: string,
+  selectedModel: string,
+): boolean {
+  if (rowModelId !== selectedModel) return false;
+  return rowProvider === selectedProvider || selectedProvider.startsWith(`${rowProvider}:`);
+}
 
 export function resolveModelSheetOpening({
   canSwitchProvider,

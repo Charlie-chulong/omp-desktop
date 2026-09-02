@@ -90,6 +90,7 @@ import type {
   ProviderDiagnosticResponseMessage,
   OmpProviderManagementGetResponseMessage,
   OmpProviderManagementSaveResponseMessage,
+  OmpProviderContextWindowOverridesUpdateResponseMessage,
   OmpProviderManagementAddResponseMessage,
   OmpProviderManagementRemoveResponseMessage,
   OmpCustomProviderInput,
@@ -477,6 +478,8 @@ type RefreshProvidersSnapshotPayload = RefreshProvidersSnapshotResponseMessage["
 type ProviderDiagnosticPayload = ProviderDiagnosticResponseMessage["payload"];
 type OmpProviderManagementGetPayload = OmpProviderManagementGetResponseMessage["payload"];
 type OmpProviderManagementSavePayload = OmpProviderManagementSaveResponseMessage["payload"];
+type OmpProviderContextWindowOverridesUpdatePayload =
+  OmpProviderContextWindowOverridesUpdateResponseMessage["payload"];
 type OmpProviderManagementAddPayload = OmpProviderManagementAddResponseMessage["payload"];
 type OmpProviderManagementRemovePayload = OmpProviderManagementRemoveResponseMessage["payload"];
 type OmpProviderModelDiscoveryPayload = OmpProviderModelDiscoveryResponseMessage["payload"];
@@ -4956,6 +4959,22 @@ export class DaemonClient {
       requestId: options?.requestId,
       message: { type: "omp.provider.management.save.request", configYaml },
       responseType: "omp.provider.management.save.response",
+      timeout: 180000,
+    });
+  }
+  async updateOmpModelContextWindowOverrides(
+    providerId: string,
+    overrides: Record<string, number | null>,
+    options?: { requestId?: string },
+  ): Promise<OmpProviderContextWindowOverridesUpdatePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "omp.provider.management.context_windows.update.request",
+        providerId,
+        overrides,
+      },
+      responseType: "omp.provider.management.context_windows.update.response",
       timeout: 180000,
     });
   }

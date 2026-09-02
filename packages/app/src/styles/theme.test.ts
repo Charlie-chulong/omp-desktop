@@ -11,12 +11,12 @@ import {
 } from "./theme";
 
 describe("Typography scale", () => {
-  it("names 14px as the default interface tier", () => {
+  it("names 13px as the default interface and code tier", () => {
     expect(FONT_SIZE).toEqual({
-      code: 12,
+      code: 13,
       content: 15,
       sm: 12,
-      base: 14,
+      base: 13,
       lg: 16,
       xl: 18,
       "2xl": 20,

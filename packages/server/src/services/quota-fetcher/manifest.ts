@@ -1,13 +1,19 @@
+import { CursorQuotaProvider } from "./providers/cursor.js";
 import type {
   ProviderUsageFetcher,
   ProviderUsageFetcherFactoryOptions,
   ProviderUsageFetcherManifestEntry,
 } from "./provider.js";
 
-export const PROVIDER_USAGE_FETCHERS: readonly ProviderUsageFetcherManifestEntry[] = [];
+export const PROVIDER_USAGE_FETCHERS: readonly ProviderUsageFetcherManifestEntry[] = [
+  {
+    providerId: "cursor",
+    create: (options) => new CursorQuotaProvider(options),
+  },
+];
 
 export function createProviderUsageFetchers(
-  _options: ProviderUsageFetcherFactoryOptions,
+  options: ProviderUsageFetcherFactoryOptions,
 ): ProviderUsageFetcher[] {
-  return [];
+  return PROVIDER_USAGE_FETCHERS.map((entry) => entry.create(options));
 }

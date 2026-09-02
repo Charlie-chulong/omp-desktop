@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Keyboard, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { Bot } from "lucide-react-native";
+import { Bot, Zap } from "lucide-react-native";
 import type { AgentProvider } from "@omp-desktop/protocol/agent-types";
 import type { AgentProfilePicker, AgentProfileSeed } from "@/agent-profiles";
 import { AdaptiveModalSheet } from "@/components/adaptive-modal-sheet";
@@ -33,7 +33,8 @@ interface CompactModelSheetProps {
   selectedProvider: string;
   selectedModel: string;
   thinkingLabel: string | null;
-  onSelect: (provider: string, modelId: string) => void;
+  fastModeEnabled: boolean;
+  onSelect: (provider: string, modelId: string) => void | Promise<void>;
   isLoading: boolean;
   profiles?: AgentProfilePicker | null;
   onApplyProfile?: (profileId: string) => void;
@@ -133,6 +134,7 @@ export function CompactModelSheet({
   selectedProvider,
   selectedModel,
   thinkingLabel,
+  fastModeEnabled,
   onSelect,
   isLoading,
   profiles = null,
@@ -205,7 +207,13 @@ export function CompactModelSheet({
   const displayModelLabel =
     resolveGroupedModelLabel(availableProviders, selectedModel) ?? rootBrowser.selectedModelLabel;
   const selectedModelAccessibilityLabel = t("modelSelector.selectedModel", {
-    model: `${selectedProviderLabel} · ${displayModelLabel}`,
+    model: [
+      `${selectedProviderLabel} · ${displayModelLabel}`,
+      thinkingLabel,
+      fastModeEnabled ? t("shell.commandCenter.fastModeGroupLabel") : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
   });
 
   const open = useCallback(() => {
@@ -354,10 +362,15 @@ export function CompactModelSheet({
           <Text style={styles.triggerText} numberOfLines={1}>
             {shortModelLabel(displayModelLabel)}
           </Text>
-          {thinkingLabel ? (
-            <Text style={styles.triggerThinking} numberOfLines={1}>
-              {thinkingLabel}
-            </Text>
+          {thinkingLabel || fastModeEnabled ? (
+            <View style={styles.triggerSummary}>
+              {thinkingLabel ? (
+                <Text style={styles.triggerThinking} numberOfLines={1}>
+                  {thinkingLabel}
+                </Text>
+              ) : null}
+              {fastModeEnabled ? <Zap size={12} color={styles.fastModeIcon.color} /> : null}
+            </View>
           ) : null}
         </View>
       </ComboboxTrigger>
@@ -484,6 +497,15 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundExtraMuted,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
+  },
+  triggerSummary: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  fastModeIcon: {
+    color: theme.colors.palette.yellow[400],
   },
   providerIcon: {
     color: theme.colors.foregroundMuted,

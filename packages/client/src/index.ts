@@ -22,6 +22,7 @@ import type {
   OmpInstallationStatus,
   OmpProviderManagementGetResponseMessage,
   OmpProviderManagementSaveResponseMessage,
+  OmpProviderContextWindowOverridesUpdateResponseMessage,
   OmpProviderManagementAddResponseMessage,
   OmpProviderManagementRemoveResponseMessage,
   ProviderDiagnosticResponseMessage,
@@ -374,6 +375,11 @@ export interface OmpProviderActions {
     configYaml: string,
     options?: { requestId?: string },
   ): Promise<OmpProviderManagementSaveResponseMessage["payload"]>;
+  updateModelContextWindowOverrides(
+    providerId: string,
+    overrides: Record<string, number | null>,
+    options?: { requestId?: string },
+  ): Promise<OmpProviderContextWindowOverridesUpdateResponseMessage["payload"]>;
   addProvider(
     provider: OmpCustomProviderInput,
     options?: { requestId?: string },
@@ -528,6 +534,8 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
       getProviderManagement: (options) => daemonClient.getOmpProviderManagement(options),
       saveProviderConfig: (configYaml, options) =>
         daemonClient.saveOmpProviderConfig(configYaml, options),
+      updateModelContextWindowOverrides: (providerId, overrides, options) =>
+        daemonClient.updateOmpModelContextWindowOverrides(providerId, overrides, options),
       addProvider: (provider, options) => daemonClient.addOmpProvider(provider, options),
       removeProvider: (providerId, options) => daemonClient.removeOmpProvider(providerId, options),
       getInstallationStatus: (options) => daemonClient.getOmpInstallationStatus(options),

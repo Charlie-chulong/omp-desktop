@@ -541,9 +541,9 @@ describe("appearance settings", () => {
     expect((await loadAppSettingsFromStorage(deps)).sidebarChecksDisplay).toBe("icon");
   });
 
-  it("uses a 15px mobile base and a 14px web base", () => {
-    expect(defaultUiBaseFontSize(true)).toBe(15);
-    expect(defaultUiBaseFontSize(false)).toBe(14);
+  it("uses a 13px interface default on mobile and web", () => {
+    expect(defaultUiBaseFontSize(true)).toBe(13);
+    expect(defaultUiBaseFontSize(false)).toBe(13);
   });
 
   it("uses a 15px content default on mobile and web", () => {

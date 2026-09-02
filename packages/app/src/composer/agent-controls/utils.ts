@@ -9,6 +9,26 @@ export type AgentControlHintKey =
   | "agentControls.hints.thinking"
   | "agentControls.hints.model"
   | "agentControls.hints.mode";
+export type FastModeFeature = Extract<AgentFeature, { type: "toggle" }>;
+export interface PartitionedModelFeatures {
+  fastMode: FastModeFeature | null;
+  remaining: AgentFeature[];
+}
+
+export function partitionModelFeatures(
+  features: AgentFeature[] | undefined,
+): PartitionedModelFeatures {
+  let fastMode: FastModeFeature | null = null;
+  const remaining: AgentFeature[] = [];
+  for (const feature of features ?? []) {
+    if (feature.id === FAST_MODE_FEATURE_ID && feature.type === "toggle") {
+      fastMode = feature;
+    } else {
+      remaining.push(feature);
+    }
+  }
+  return { fastMode, remaining };
+}
 
 export function getAgentControlHintKey(selector: ExplainedAgentControl): AgentControlHintKey {
   switch (selector) {

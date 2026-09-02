@@ -11,7 +11,7 @@ import type {
   OmpInstallationStatus,
   OmpProviderAccountQuota,
 } from "@omp-desktop/protocol/messages";
-import { parseDocument } from "yaml";
+import { isMap, parseDocument } from "yaml";
 
 import {
   type AgentCapabilityFlags,
@@ -515,7 +515,6 @@ function createOmpFeatures(
       type: "toggle",
       id: OMP_FAST_MODE_FEATURE_ID,
       label: "Fast mode",
-      description: "Use the model's priority service tier for lower latency.",
       tooltip: "Toggle fast mode.",
       icon: "zap",
       value: fastMode.enabled,
@@ -1270,6 +1269,7 @@ export class OmpAgentSession implements AgentSession {
   private readonly usagePoller: OmpUsagePoller;
   private closed = false;
   private live: boolean;
+  private initialUsageProbeStarted = false;
   private readonly emittedUserMessageIds = new Set<string>();
   private lastEmittedLiveUserMessageText: string | null = null;
   private lastSubmittedPromptText: string | null = null;
@@ -1472,6 +1472,10 @@ export class OmpAgentSession implements AgentSession {
 
   subscribe(callback: (event: AgentStreamEvent) => void): () => void {
     this.subscribers.add(callback);
+    if (!this.live && !this.initialUsageProbeStarted) {
+      this.initialUsageProbeStarted = true;
+      void this.usagePoller.refresh();
+    }
     return () => {
       this.subscribers.delete(callback);
     };
@@ -3220,7 +3224,33 @@ export class OmpAgentClient implements AgentClient {
   }
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return createOmpFeatures(config, this.readOAuthAccounts());
+    const oauthAccounts = this.readOAuthAccounts();
+    const fallbackFeatures = createOmpFeatures(config, oauthAccounts);
+    const launchMode = this.resolveLaunchMode(config.modeId);
+    let runtimeSession: OmpRuntimeSession | undefined;
+    try {
+      runtimeSession = await this.runtime.startSession({
+        cwd: config.cwd,
+        protocolMode: "rpc-ui",
+        model: config.model,
+        thinkingOptionId: normalizeOmpThinkingOption(config.thinkingOptionId) ?? undefined,
+        noSession: true,
+        modeId: launchMode.modeId,
+        extraArgs: launchMode.extraArgs,
+      });
+      const state = await runtimeSession.getState();
+      const configuredFastMode = optionalBoolean(config.featureValues?.[OMP_FAST_MODE_FEATURE_ID]);
+      return createOmpFeatures(config, oauthAccounts, {
+        supported: typeof state.fastModeEnabled === "boolean",
+        eligible: isOmpFastModeEligibleModel(state.model, config.model),
+        enabled: configuredFastMode ?? state.fastModeEnabled === true,
+      });
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP draft fast-mode capability probe failed");
+      return fallbackFeatures;
+    } finally {
+      await runtimeSession?.close().catch(() => undefined);
+    }
   }
 
   async listImportableSessions(
@@ -3412,6 +3442,61 @@ export class OmpAgentClient implements AgentClient {
       await fs.rm(configPath, { force: true });
     }
     throw new Error(`OMP rejected models configuration: ${management.runtimeError}`);
+  }
+  async updateOmpModelContextWindowOverrides(
+    providerId: string,
+    overrides: Record<string, number | null>,
+  ): Promise<OmpProviderManagement> {
+    const normalizedProviderId = providerId.trim();
+    if (!normalizedProviderId) {
+      throw new Error("OMP model context-window provider id is required");
+    }
+    const normalizedOverrides: Array<[modelId: string, contextWindow: number | null]> = [];
+    for (const [modelId, contextWindow] of Object.entries(overrides)) {
+      const normalizedModelId = modelId.trim();
+      if (!normalizedModelId) {
+        throw new Error("OMP model context-window model id is required");
+      }
+      if (contextWindow !== null && (!Number.isSafeInteger(contextWindow) || contextWindow <= 0)) {
+        throw new Error(`Invalid OMP context window '${String(contextWindow)}'`);
+      }
+      normalizedOverrides.push([normalizedModelId, contextWindow]);
+    }
+    const management = await this.getOmpProviderManagement();
+    const document = parseDocument(management.configYaml);
+    let changed = false;
+    for (const [normalizedModelId, contextWindow] of normalizedOverrides) {
+      const modelPath = ["providers", normalizedProviderId, "modelOverrides", normalizedModelId];
+      const contextPath = [...modelPath, "contextWindow"];
+      const current = document.getIn(contextPath);
+      if (contextWindow !== null) {
+        if (current !== contextWindow) {
+          document.setIn(contextPath, contextWindow);
+          changed = true;
+        }
+        continue;
+      }
+      if (current === undefined) continue;
+      document.deleteIn(contextPath);
+      changed = true;
+      const modelNode = document.getIn(modelPath, true);
+      if (isMap(modelNode) && modelNode.items.length === 0) {
+        document.deleteIn(modelPath);
+      }
+    }
+    if (!changed) return management;
+
+    const overridesPath = ["providers", normalizedProviderId, "modelOverrides"];
+    const overridesNode = document.getIn(overridesPath, true);
+    if (isMap(overridesNode) && overridesNode.items.length === 0) {
+      document.deleteIn(overridesPath);
+    }
+    const providerPath = ["providers", normalizedProviderId];
+    const providerNode = document.getIn(providerPath, true);
+    if (isMap(providerNode) && providerNode.items.length === 0) {
+      document.deleteIn(providerPath);
+    }
+    return await this.saveOmpProviderConfig(document.toString());
   }
   async addOmpProvider(input: OmpCustomProviderInput): Promise<OmpProviderManagement> {
     const management = await this.getOmpProviderManagement();

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ProviderSelectorProvider } from "@/provider-selection/provider-selection";
 import {
   groupOmpModelsByProviderNamespace,
+  isModelBrowserRowSelected,
   resolveModelBrowserProviderId,
+  resolveModelBrowserProviderNamespaceId,
   resolveModelBrowserScrolling,
   resolveModelSheetOpening,
 } from "./model-sheet-flow";
@@ -119,6 +121,30 @@ describe("OMP model provider grouping", () => {
     expect(resolveModelBrowserProviderId("omp", "openai-codex/gpt-5.6-sol", providers)).toBe(
       "omp:openai-codex",
     );
+  });
+  it("resolves grouped OMP provider ids to their underlying namespace", () => {
+    expect(resolveModelBrowserProviderNamespaceId("omp:cursor")).toBe("cursor");
+    expect(resolveModelBrowserProviderNamespaceId("omp:openai-codex")).toBe("openai-codex");
+    expect(resolveModelBrowserProviderNamespaceId("cursor")).toBe("cursor");
+  });
+
+  it("marks a selected model inside its grouped virtual provider", () => {
+    expect(
+      isModelBrowserRowSelected(
+        "omp",
+        "openai-codex/gpt-5.6-sol",
+        "omp:openai-codex",
+        "openai-codex/gpt-5.6-sol",
+      ),
+    ).toBe(true);
+    expect(
+      isModelBrowserRowSelected(
+        "omp",
+        "openai-codex/gpt-5.4",
+        "omp:openai-codex",
+        "openai-codex/gpt-5.6-sol",
+      ),
+    ).toBe(false);
   });
 });
 

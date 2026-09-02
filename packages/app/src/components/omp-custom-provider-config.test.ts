@@ -4,7 +4,6 @@ import {
   configureDiscoveredProviderModels,
   parseCustomProviderDraft,
   updateCustomProviderConfigYaml,
-  updateOmpModelContextWindowOverrides,
 } from "./omp-custom-provider-config";
 
 const configYaml = `# Keep this comment
@@ -155,30 +154,5 @@ describe("OMP custom provider editing", () => {
         supportsImages: true,
       },
     ]);
-  });
-
-  it("adds and removes built-in model context-window overrides without replacing siblings", () => {
-    const added = updateOmpModelContextWindowOverrides(configYaml, "openai-codex", {
-      "gpt-5.4": undefined,
-      "gpt-5.6-sol": 1_000_000,
-    });
-    const parsedAdded = parse(added) as {
-      providers: Record<string, { modelOverrides?: Record<string, { contextWindow: number }> }>;
-    };
-
-    expect(added).toContain("# Keep this comment");
-    expect(parsedAdded.providers["openai-codex"]?.modelOverrides?.["gpt-5.6-sol"]).toEqual({
-      contextWindow: 1_000_000,
-    });
-    expect(parsedAdded.providers.mintcat).toBeDefined();
-
-    const removed = updateOmpModelContextWindowOverrides(added, "openai-codex", {
-      "gpt-5.6-sol": undefined,
-    });
-    const parsedRemoved = parse(removed) as {
-      providers: Record<string, unknown>;
-    };
-    expect(parsedRemoved.providers["openai-codex"]).toBeUndefined();
-    expect(parsedRemoved.providers.mintcat).toBeDefined();
   });
 });

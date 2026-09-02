@@ -48,6 +48,11 @@ import {
   resolveOmpRemainingQuotaPct,
   shouldShowOmpFiveHourQuota,
 } from "@/components/omp-provider-quota";
+import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
+import { providerUsageCopy } from "@/provider-usage/copy";
+import type { ProviderUsageView } from "@/provider-usage/types";
+import { useProviderUsage } from "@/provider-usage/use-provider-usage";
+import { ProviderUsageWindowBar } from "@/provider-usage/window-bar";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -56,6 +61,7 @@ import { useActiveAgentControls } from "@/command-center/provider";
 import {
   groupOmpModelsByProviderNamespace,
   resolveModelBrowserProviderId,
+  resolveModelBrowserProviderNamespaceId,
 } from "@/composer/agent-controls/model-sheet-flow";
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -519,13 +525,14 @@ function SidebarQuotaMeter({
   const { theme } = useUnistyles();
   const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
   const reached = limitReached === true || remainingPct === 0;
-  const color = reached
-    ? theme.colors.destructive
-    : remainingPct !== null && remainingPct <= 30
-      ? theme.colors.palette.amber[500]
-      : remainingPct !== null
-        ? theme.colors.palette.green[500]
-        : theme.colors.foregroundMuted;
+  let color = theme.colors.foregroundMuted;
+  if (reached) {
+    color = theme.colors.destructive;
+  } else if (remainingPct !== null && remainingPct <= 30) {
+    color = theme.colors.palette.amber[500];
+  } else if (remainingPct !== null) {
+    color = theme.colors.palette.green[500];
+  }
   const percentage = remainingPct === null ? "—" : `${Math.round(remainingPct)}%`;
 
   return (
@@ -553,6 +560,51 @@ function SidebarQuotaMeter({
         ) : null}
       </View>
     </View>
+  );
+}
+function SidebarProviderUsageDetails({
+  providerId,
+  view,
+  loadingLabel,
+}: {
+  providerId: string;
+  view: ProviderUsageView;
+  loadingLabel: string;
+}) {
+  if (view.kind === "loading") {
+    return <Text style={styles.sidebarQuotaLoading}>{loadingLabel}</Text>;
+  }
+  if (view.kind === "error") {
+    return <Text style={styles.sidebarQuotaLoading}>{view.message}</Text>;
+  }
+
+  const usage =
+    view.payload.providers.find(
+      (candidate) => candidate.providerId.toLowerCase() === providerId.toLowerCase(),
+    ) ?? null;
+  if (!usage) {
+    return <Text style={styles.sidebarQuotaLoading}>{providerUsageCopy.empty}</Text>;
+  }
+  if (usage.status !== "available") {
+    return (
+      <Text style={styles.sidebarQuotaLoading}>{usage.error ?? providerUsageCopy.errorTitle}</Text>
+    );
+  }
+
+  const balances = usage.balances ?? [];
+  if (usage.windows.length === 0 && balances.length === 0) {
+    return <Text style={styles.sidebarQuotaLoading}>{providerUsageCopy.empty}</Text>;
+  }
+
+  return (
+    <>
+      {usage.windows.map((window) => (
+        <ProviderUsageWindowBar key={window.id} window={window} />
+      ))}
+      {balances.map((balance) => (
+        <ProviderUsageBalanceBar key={balance.id} balance={balance} />
+      ))}
+    </>
   );
 }
 
@@ -590,6 +642,7 @@ function SidebarProviderAccountPanel() {
         : "",
     [controls, providers, selectedModelId],
   );
+  const selectedProviderUsageId = resolveModelBrowserProviderNamespaceId(selectedProviderId);
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
   const providerOptions = useMemo<ComboboxOption[]>(
     () => providers.map((provider) => ({ id: provider.id, label: provider.label })),
@@ -603,6 +656,11 @@ function SidebarProviderAccountPanel() {
     controls?.provider,
     selectedModelId,
   );
+  const { view: providerUsageView, canFetch: canFetchProviderUsage } = useProviderUsage(
+    controls?.serverId,
+    { enabled: selectedProviderUsageId === "cursor" },
+  );
+  const showProviderUsage = selectedProviderUsageId === "cursor" && canFetchProviderUsage;
   const selectableAccounts = useMemo(() => {
     if (!accountFeature || accountFeature.type !== "select") return accounts;
     const ids = new Set(accountFeature.options.map((option) => option.id));
@@ -717,14 +775,29 @@ function SidebarProviderAccountPanel() {
         desktopMinWidth={240}
       />
 
-      {loading && selectableAccounts.length === 0 ? (
+      {showProviderUsage ? (
+        <>
+          <View style={styles.sidebarProviderDivider} />
+          <View style={styles.sidebarQuota}>
+            <SidebarProviderUsageDetails
+              providerId={selectedProviderUsageId}
+              view={providerUsageView}
+              loadingLabel={t("agentControls.quota.loading")}
+            />
+          </View>
+        </>
+      ) : null}
+      {!showProviderUsage && loading && selectableAccounts.length === 0 ? (
         <View style={styles.sidebarAccountLoading}>
           <CircleUserRound size={16} color={theme.colors.foregroundMuted} />
           <Text style={styles.sidebarQuotaLoading} numberOfLines={1}>
             {t("agentControls.quota.loading")}
           </Text>
         </View>
-      ) : accountOptions.length > 0 ? (
+      ) : null}
+      {!showProviderUsage &&
+      !(loading && selectableAccounts.length === 0) &&
+      accountOptions.length > 0 ? (
         <>
           <View style={styles.sidebarProviderDivider} />
           <ComboboxTrigger

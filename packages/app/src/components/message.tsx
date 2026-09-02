@@ -194,7 +194,7 @@ let webToolCallShimmerRegistered = false;
 const SCROLL_EDGE_EPSILON = 0.5;
 
 // Font size for stream metadata (timestamps, durations, live elapsed timer).
-// Lives between theme.fontSize.sm (12) and theme.fontSize.base (14); no token.
+// Matches the authored base tier; kept separate because stream metadata has no theme token.
 export const STREAM_METADATA_FONT_SIZE = 13;
 type ScrollAxis = "x" | "y";
 

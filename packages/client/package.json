@@ -1,6 +1,6 @@
 {
   "name": "@omp-desktop/client",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "OMP Desktop client SDK",
   "files": [
     "dist",

@@ -62,7 +62,6 @@ import {
   OMP_PROVIDER_APIS,
   parseCustomProviderDraft,
   updateCustomProviderConfigYaml,
-  updateOmpModelContextWindowOverrides,
   type OmpProviderDraft,
   type OmpProviderModelDraft,
 } from "./omp-custom-provider-config";
@@ -667,18 +666,16 @@ function parseOptionalPositiveInteger(value: string, errorMessage: string): numb
 }
 
 function OmpModelContextWindowForm({
-  configYaml,
   providerId,
   models,
   saving,
   onSave,
   onCancel,
 }: {
-  configYaml: string;
   providerId: string;
   models: OmpManagedProviderModel[];
   saving: boolean;
-  onSave: (configYaml: string) => Promise<void>;
+  onSave: (providerId: string, overrides: Readonly<Record<string, number | null>>) => Promise<void>;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
@@ -702,15 +699,15 @@ function OmpModelContextWindowForm({
           parseOptionalPositiveInteger(
             drafts[model.id] ?? "",
             t("settings.providers.omp.contextWindow.positiveInteger"),
-          ),
+          ) ?? null,
         ]),
       );
       setError(null);
-      await onSave(updateOmpModelContextWindowOverrides(configYaml, providerId, overrides));
+      await onSave(providerId, overrides);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     }
-  }, [configYaml, drafts, models, onSave, providerId, t]);
+  }, [drafts, models, onSave, providerId, t]);
   return (
     <View style={sheetStyles.formGroup}>
       <Text style={sheetStyles.mutedText}>
@@ -1486,12 +1483,12 @@ function OmpManagementPanel({
     }
   }, [applyManagement, client, configYaml]);
   const saveContextWindowConfig = useCallback(
-    async (nextConfigYaml: string) => {
+    async (providerId: string, overrides: Readonly<Record<string, number | null>>) => {
       if (!client) return;
       setSaving(true);
       setError(null);
       try {
-        applyManagement(await client.saveOmpProviderConfig(nextConfigYaml));
+        applyManagement(await client.updateOmpModelContextWindowOverrides(providerId, overrides));
         setContextProviderId(null);
       } catch (saveError) {
         const message = saveError instanceof Error ? saveError.message : String(saveError);
@@ -1922,7 +1919,6 @@ function OmpManagementPanel({
         {contextProvider?.models ? (
           <OmpModelContextWindowForm
             key={`${contextProvider.id}:${management?.configYaml ?? ""}`}
-            configYaml={configYaml}
             providerId={contextProvider.id}
             models={contextProvider.models}
             saving={saving}
