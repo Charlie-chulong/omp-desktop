@@ -2231,9 +2231,6 @@ export async function getCheckoutStatus(
   };
 }
 
-// Workspace history stays complete; base history is bounded context until the
-// commits list supports paging older base commits.
-const CHECKOUT_BASE_COMMIT_LIMIT = 10;
 // Bytes git emits between fields/records. We split parsed output on these.
 const COMMIT_FIELD_SEPARATOR = "\x00";
 const COMMIT_RECORD_SEPARATOR = "\x1e";
@@ -2256,7 +2253,6 @@ interface ParsedCheckoutCommit {
 interface CheckoutCommitLogInput {
   cwd: string;
   revision: string;
-  maxCount?: number;
 }
 
 function mapNameStatusLetter(letter: string): CheckoutCommitFileStatus | undefined {
@@ -2399,7 +2395,6 @@ async function getUnpushedCommitShas(cwd: string, context?: CheckoutContext): Pr
 async function getCheckoutCommitRecords({
   cwd,
   revision,
-  maxCount,
 }: CheckoutCommitLogInput): Promise<ParsedCheckoutCommit[]> {
   const args = [
     "log",
@@ -2410,9 +2405,6 @@ async function getCheckoutCommitRecords({
     "--numstat",
     "-M",
   ];
-  if (maxCount !== undefined) {
-    args.splice(2, 0, `--max-count=${maxCount}`);
-  }
 
   const result = await runGitCommand(args, { cwd, envOverlay: READ_ONLY_GIT_ENV });
   if (result.truncated) {
@@ -2491,7 +2483,6 @@ export async function listCheckoutCommits({
     ? await getCheckoutCommitRecords({
         cwd,
         revision: baseRevision,
-        maxCount: CHECKOUT_BASE_COMMIT_LIMIT,
       })
     : [];
   const records = [...workspaceRecords, ...baseRecords];

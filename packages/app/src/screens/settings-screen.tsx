@@ -36,6 +36,7 @@ import {
   SquareTerminal,
   Code2,
   Sparkles,
+  Globe2,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
@@ -92,6 +93,7 @@ import {
   HostAgentsPage,
   HostSettingsPage,
   HostProvidersPage,
+  HostProxyPage,
   HostImageGenerationPage,
   HostUsagePage,
   HostTerminalsPage,
@@ -165,6 +167,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "projects", labelKey: "settings.hostSections.projects", icon: FolderGit2 },
   { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
+  { id: "proxy", labelKey: "settings.hostSections.proxy", icon: Globe2 },
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
   { id: "providers", labelKey: "settings.providers.title", icon: Boxes },
   { id: "image-generation", labelKey: "settings.imageGeneration.title", icon: Image },
@@ -183,6 +186,8 @@ function renderHostSettingsContent(
       return <HostConnectionsPage serverId={view.serverId} />;
     case "agents":
       return <HostAgentsPage serverId={view.serverId} />;
+    case "proxy":
+      return <HostProxyPage serverId={view.serverId} />;
     case "metadata":
       return <MetadataGenerationPage serverId={view.serverId} />;
     case "providers":

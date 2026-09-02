@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useCheckoutCommitsQuery, type CheckoutCommitsQueryResult } from "@/git/use-commits-query";
 import { ThemedChevron, chevronColorMapping } from "@/git/themed-chevron";
-import { normalizeBranchOptionName } from "@/utils/branch-suggestions";
-import { CommitRow } from "./commit-row";
+import { CommitRow, COMMIT_ROW_HEIGHT } from "./commit-row";
 
 interface CommitsSectionProps {
   serverId: string;
   cwd: string;
+  currentBranchName?: string | null;
   onCommitPress: (sha: string) => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
@@ -39,10 +39,12 @@ function CommitsSectionSkeleton() {
 function CommitsSectionContent({
   query,
   now,
+  currentBranchName,
   onCommitPress,
 }: {
   query: Exclude<CheckoutCommitsQueryResult, { status: "unsupported" }>;
   now: Date;
+  currentBranchName?: string | null;
   onCommitPress: (sha: string) => void;
 }) {
   const { t } = useTranslation();
@@ -56,36 +58,47 @@ function CommitsSectionContent({
   if (query.status !== "loaded") {
     return <CommitsSectionSkeleton />;
   }
-  const workspaceCommits = query.data.commits.filter((commit) => !commit.isOnBase);
-  const baseRef = normalizeBranchOptionName(query.data.baseRef) ?? t("workspace.git.diff.base");
-  if (workspaceCommits.length === 0) {
+  const commits = query.data.commits;
+  if (commits.length === 0) {
     return (
-      <View style={styles.noWorkspaceCommitsRow} testID="commits-section-no-workspace-commits">
-        <Text style={styles.noWorkspaceCommitsText}>
-          {t("workspace.git.diff.commits.noneAhead", { baseRef })}
-        </Text>
+      <View style={styles.emptyRow} testID="commits-section-empty">
+        <Text style={styles.emptyText}>{t("workspace.git.diff.commits.empty")}</Text>
       </View>
     );
   }
   return (
-    <View style={styles.list}>
-      {workspaceCommits.map((commit, index) => (
+    <FlatList
+      data={commits}
+      keyExtractor={(commit) => commit.sha}
+      getItemLayout={(_, index) => ({
+        length: COMMIT_ROW_HEIGHT,
+        offset: COMMIT_ROW_HEIGHT * index,
+        index,
+      })}
+      renderItem={({ item: commit, index }) => (
         <CommitRow
-          key={commit.sha}
           commit={commit}
           isFirst={index === 0}
-          isLast={index === workspaceCommits.length - 1}
+          isLast={index === commits.length - 1}
+          isContextCommit={Boolean(query.data.baseRef) && commit.isOnBase}
+          branchName={index === 0 ? currentBranchName : null}
           now={now}
           onCommitPress={onCommitPress}
         />
-      ))}
-    </View>
+      )}
+      extraData={`${now.getTime()}:${currentBranchName ?? ""}`}
+      style={styles.list}
+      contentContainerStyle={styles.listContent}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+    />
   );
 }
 
 export function CommitsSection({
   serverId,
   cwd,
+  currentBranchName,
   onCommitPress,
   collapsed = true,
   onCollapsedChange,
@@ -123,10 +136,7 @@ export function CommitsSection({
   if (query.status === "unsupported") {
     return null;
   }
-  const commitCount =
-    query.status === "loaded"
-      ? query.data.commits.filter((commit) => !commit.isOnBase).length
-      : null;
+  const commitCount = query.status === "loaded" ? query.data.commits.length : null;
 
   return (
     <View style={styles.container}>
@@ -154,7 +164,12 @@ export function CommitsSection({
         )}
       </Pressable>
       {collapsed ? null : (
-        <CommitsSectionContent query={query} now={displayNow} onCommitPress={onCommitPress} />
+        <CommitsSectionContent
+          query={query}
+          now={displayNow}
+          currentBranchName={currentBranchName}
+          onCommitPress={onCommitPress}
+        />
       )}
     </View>
   );
@@ -197,9 +212,13 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   list: {
+    maxHeight: 320,
+    flexGrow: 0,
+  },
+  listContent: {
     paddingBottom: theme.spacing[1],
   },
-  noWorkspaceCommitsRow: {
+  emptyRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: theme.spacing[2],
@@ -207,7 +226,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[1],
     paddingBottom: theme.spacing[2],
   },
-  noWorkspaceCommitsText: {
+  emptyText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },

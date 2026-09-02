@@ -122,6 +122,7 @@ import {
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
 import { fetchCodexAccountQuota, type CodexAccountQuotaCredential } from "./codex-account-quota.js";
+import { createQuotaProxyFetch } from "../../../../services/quota-fetcher/proxy-fetch.js";
 
 const OMP_PROVIDER = "omp";
 const QUESTION_RESPONSE_HEADER = "Response";
@@ -3048,7 +3049,11 @@ export class OmpAgentClient implements AgentClient {
     this.providerIdleScheduler = options.providerIdleScheduler;
     this.noTurnScheduler = options.noTurnScheduler;
     this.usagePollScheduler = options.usagePollScheduler;
-    this.quotaFetch = options.quotaFetch ?? fetch;
+    this.quotaFetch =
+      options.quotaFetch ??
+      createQuotaProxyFetch({
+        getProxyUrl: () => runtimeSettings?.env?.PI_PROXY,
+      });
     this.quotaNow = options.quotaNow ?? Date.now;
     this.runtime = options.runtime ?? createRuntime(options.logger, runtimeSettings);
     this.oauthAccountsOverride = options.oauthAccounts;

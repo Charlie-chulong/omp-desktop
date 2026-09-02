@@ -399,7 +399,6 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
       {isConnected ? (
         <SettingsSection title={t("settings.hostSections.agents")}>
           <OmpInstallationCard serverId={serverId} />
-          <OmpProxyCard serverId={serverId} />
           <InjectPaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
@@ -411,6 +410,30 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
       )}
       <AgentProfilesSection serverId={serverId} />
     </View>
+  );
+}
+
+export function HostProxyPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const host = useHostProfile(serverId);
+  const isConnected = useHostRuntimeIsConnected(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  if (!isConnected) {
+    return (
+      <View style={[settingsStyles.card, styles.emptyCard]}>
+        <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <SettingsSection title={t("settings.hostSections.proxy")}>
+      <OmpProxyCard serverId={serverId} />
+    </SettingsSection>
   );
 }
 export function HostProvidersPage({ serverId }: { serverId: string }) {

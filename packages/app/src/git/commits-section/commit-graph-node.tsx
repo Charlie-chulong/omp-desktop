@@ -1,3 +1,4 @@
+import React from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ClassifiedCheckoutCommit } from "@/git/use-commits-query";
@@ -6,12 +7,17 @@ interface CommitGraphNodeProps {
   commit: ClassifiedCheckoutCommit;
   isFirst: boolean;
   isLast: boolean;
+  isContextCommit: boolean;
 }
 
-export function CommitGraphNode({ commit, isFirst, isLast }: CommitGraphNodeProps) {
-  const isOnBase = commit.isOnBase;
-  const railColor = isOnBase ? styles.railBase : styles.railWorkspace;
-  const markerColor = isOnBase ? styles.markerBase : styles.markerWorkspace;
+export function CommitGraphNode({
+  commit,
+  isFirst,
+  isLast,
+  isContextCommit,
+}: CommitGraphNodeProps) {
+  const railColor = isContextCommit ? styles.railBase : styles.railWorkspace;
+  const markerColor = isContextCommit ? styles.markerBase : styles.markerWorkspace;
 
   return (
     <View style={styles.container}>

@@ -202,7 +202,7 @@ describe("listCheckoutCommits", () => {
     ]);
   });
 
-  it("shows every workspace commit followed by at most 10 base commits", async () => {
+  it("shows every workspace commit followed by the complete base history", async () => {
     const { repoDir } = initRepoOnMain();
     importLinearHistory({
       repoDir,
@@ -222,15 +222,16 @@ describe("listCheckoutCommits", () => {
 
     const { commits } = await listCheckoutCommits({ cwd: repoDir });
 
-    expect(commits).toHaveLength(34);
+    expect(commits).toHaveLength(39);
     expect(commits.every((entry) => entry.isOnRemote === false)).toBe(true);
     expect(commits.slice(0, 24).map((entry) => entry.subject)).toEqual(
       Array.from({ length: 24 }, (_, index) => `Workspace ${24 - index}`),
     );
     expect(commits.slice(0, 24).every((entry) => entry.isOnBase === false)).toBe(true);
-    expect(commits.slice(24).map((entry) => entry.subject)).toEqual(
-      Array.from({ length: 10 }, (_, index) => `Base ${14 - index}`),
-    );
+    expect(commits.slice(24).map((entry) => entry.subject)).toEqual([
+      ...Array.from({ length: 14 }, (_, index) => `Base ${14 - index}`),
+      "initial",
+    ]);
     expect(commits.slice(24).every((entry) => entry.isOnBase === true)).toBe(true);
   });
 
@@ -252,7 +253,7 @@ describe("listCheckoutCommits", () => {
     ]);
   });
 
-  it("limits base-branch history to 10 commits", async () => {
+  it("shows the complete history on the base branch", async () => {
     const { repoDir } = initRepoOnMain();
     importLinearHistory({
       repoDir,
@@ -264,9 +265,10 @@ describe("listCheckoutCommits", () => {
 
     const { commits } = await listCheckoutCommits({ cwd: repoDir });
 
-    expect(commits.map((entry) => entry.subject)).toEqual(
-      Array.from({ length: 10 }, (_, index) => `Commit ${14 - index}`),
-    );
+    expect(commits.map((entry) => entry.subject)).toEqual([
+      ...Array.from({ length: 14 }, (_, index) => `Commit ${14 - index}`),
+      "initial",
+    ]);
     expect(commits.every((entry) => entry.isOnBase === true)).toBe(true);
   });
 

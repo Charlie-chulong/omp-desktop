@@ -85,6 +85,7 @@ import {
   type WebSocketRuntimeDiagnosticSnapshot,
 } from "./websocket/runtime-metrics.js";
 import { ProviderUsageService } from "../services/quota-fetcher/service.js";
+import { createQuotaProxyFetch } from "../services/quota-fetcher/proxy-fetch.js";
 import { getProcessMemoryDiagnostics, getProcessUptimeSeconds } from "./process-diagnostics.js";
 import {
   CLIENT_SHUTDOWN_RPC_REASON,
@@ -739,6 +740,9 @@ export class VoiceAssistantWebSocketServer {
 
     this.providerUsageService = new ProviderUsageService({
       logger: this.logger,
+      fetch: createQuotaProxyFetch({
+        getProxyUrl: () => this.daemonConfigStore.get().providers.omp?.env?.PI_PROXY,
+      }),
     });
 
     this.wss = this.createWebSocketServer(server, wsConfig, auth);

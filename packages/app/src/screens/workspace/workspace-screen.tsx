@@ -38,8 +38,6 @@ import {
 } from "@/components/ui/floating-panel-portal";
 import { SplitContainer } from "@/components/split-container";
 import { RetainedPanel } from "@/components/retained-panel";
-import { WorkspaceActions } from "@/git/workspace-actions";
-import { WorkspaceOpenInEditorButton } from "@/screens/workspace/workspace-open-in-editor-button";
 import { WorkspaceScriptsButton } from "@/screens/workspace/workspace-scripts-button";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useToast } from "@/contexts/toast-context";
@@ -204,31 +202,6 @@ function getWorkspaceScripts(
   workspaceDescriptor: WorkspaceDescriptor | null | undefined,
 ): WorkspaceDescriptor["scripts"] {
   return workspaceDescriptor?.scripts ?? EMPTY_WORKSPACE_SCRIPTS;
-}
-
-interface WorkspaceFileLocationFields {
-  path: string | null;
-  lineStart?: number;
-  lineEnd?: number;
-}
-
-function getWorkspaceFileLocationFields(
-  tab: WorkspaceTabDescriptor | null,
-): WorkspaceFileLocationFields {
-  const target = tab?.target;
-  if (target?.kind !== "file") {
-    return { path: null };
-  }
-  return { path: target.path, lineStart: target.lineStart, lineEnd: target.lineEnd };
-}
-
-function buildWorkspaceFileLocation(
-  fields: WorkspaceFileLocationFields,
-): WorkspaceFileLocation | null {
-  if (fields.path === null) {
-    return null;
-  }
-  return { path: fields.path, lineStart: fields.lineStart, lineEnd: fields.lineEnd };
 }
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
@@ -3190,19 +3163,6 @@ function WorkspaceScreenContent({
   });
 
   const activeTabDescriptor = useMemo(() => activeTab?.descriptor ?? null, [activeTab]);
-  const activeFileFields = getWorkspaceFileLocationFields(activeTabDescriptor);
-  const activeFilePath = activeFileFields.path;
-  const activeFileLineStart = activeFileFields.lineStart;
-  const activeFileLineEnd = activeFileFields.lineEnd;
-  const activeFileLocation = useMemo<WorkspaceFileLocation | null>(
-    () =>
-      buildWorkspaceFileLocation({
-        path: activeFilePath,
-        lineStart: activeFileLineStart,
-        lineEnd: activeFileLineEnd,
-      }),
-    [activeFileLineEnd, activeFileLineStart, activeFilePath],
-  );
   const canRenderDesktopPaneSplits = supportsDesktopPaneSplits();
   const shouldRenderDesktopPaneFallback = useMemo(
     () => !isMobile && !canRenderDesktopPaneSplits,
@@ -3456,16 +3416,7 @@ function WorkspaceScreenContent({
           />
         ) : null}
         {!isMobile && workspaceDirectory ? (
-          <WorkspaceOpenInEditorButton
-            serverId={normalizedServerId}
-            cwd={workspaceDirectory}
-            activeFile={activeFileLocation}
-            hideLabels
-          />
-        ) : null}
-        {!isMobile && workspaceDirectory ? (
           <>
-            <WorkspaceActions serverId={normalizedServerId} cwd={workspaceDirectory} />
             <WorkspaceBottomPaneToggle
               isOpen={isHeaderBottomPaneOpen}
               onPress={handleToggleTerminalBelowFocusedPane}
@@ -3544,7 +3495,6 @@ function WorkspaceScreenContent({
       normalizedServerId,
       normalizedWorkspaceId,
       workspaceDirectory,
-      activeFileLocation,
       liveTerminalIds,
       handleScriptTerminalStarted,
       handleViewScriptTerminal,

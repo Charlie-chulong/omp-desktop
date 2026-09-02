@@ -1505,6 +1505,7 @@ export function ChangesSurface({
       <CommitsSection
         serverId={serverId}
         cwd={cwd}
+        currentBranchName={currentBranchName}
         onCommitPress={handleCommitPress}
         collapsed={instanceState.commitsCollapsed}
         onCollapsedChange={handleCommitsCollapsedChange}

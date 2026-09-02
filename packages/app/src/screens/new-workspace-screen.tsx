@@ -20,8 +20,6 @@ import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft, type AgentInputDraft } from "@/composer/draft/input-draft";
-import { WorkspaceActions } from "@/git/workspace-actions";
-import { WorkspaceOpenInEditorButton } from "@/screens/workspace/workspace-open-in-editor-button";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { resolveTerminalProfiles } from "@omp-desktop/protocol/terminal-profiles";
 import type { TerminalProfile } from "@omp-desktop/protocol/messages";
@@ -1054,45 +1052,29 @@ export function NewWorkspaceScreen({
   }, [headerWorkspaceKey, lastWorkspaceSelectionForHeader]);
   const screenHeaderRight = useMemo(
     () =>
-      !isCompact && selectedSourceDirectory ? (
+      !isCompact && lastWorkspaceSelectionForHeader ? (
         <View style={styles.headerRight}>
-          <WorkspaceOpenInEditorButton
-            serverId={selectedServerId}
-            cwd={selectedSourceDirectory}
-            activeFile={null}
-            hideLabels
-          />
-          <WorkspaceActions serverId={selectedServerId} cwd={selectedSourceDirectory} />
-          {lastWorkspaceSelectionForHeader ? (
-            <HeaderToggleButton
-              testID="new-workspace-explorer-toggle"
-              onPress={handleOpenHeaderExplorer}
-              tooltipLabel={t("workspace.tabs.sidePanel.open")}
-              tooltipKeys={["mod", "E"]}
-              tooltipSide="left"
-              style={styles.compactHeaderActionButton}
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel={t("workspace.tabs.sidePanel.open")}
-            >
-              {({ hovered }) => (
-                <ThemedPanelRight
-                  size={16}
-                  uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
-                />
-              )}
-            </HeaderToggleButton>
-          ) : null}
+          <HeaderToggleButton
+            testID="new-workspace-explorer-toggle"
+            onPress={handleOpenHeaderExplorer}
+            tooltipLabel={t("workspace.tabs.sidePanel.open")}
+            tooltipKeys={["mod", "E"]}
+            tooltipSide="left"
+            style={styles.compactHeaderActionButton}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={t("workspace.tabs.sidePanel.open")}
+          >
+            {({ hovered }) => (
+              <ThemedPanelRight
+                size={16}
+                uniProps={hovered ? foregroundColorMapping : foregroundMutedColorMapping}
+              />
+            )}
+          </HeaderToggleButton>
         </View>
       ) : null,
-    [
-      handleOpenHeaderExplorer,
-      isCompact,
-      lastWorkspaceSelectionForHeader,
-      selectedServerId,
-      selectedSourceDirectory,
-      t,
-    ],
+    [handleOpenHeaderExplorer, isCompact, lastWorkspaceSelectionForHeader, t],
   );
 
   return (

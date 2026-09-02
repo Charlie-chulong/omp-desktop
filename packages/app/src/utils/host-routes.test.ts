@@ -248,6 +248,7 @@ describe("host settings section slugs", () => {
     expect(normalizeHostSectionSlug("connections")).toBe("connections");
     expect(normalizeHostSectionSlug("pair-device")).toBe("pair-device");
     expect(normalizeHostSectionSlug("agents")).toBe("agents");
+    expect(normalizeHostSectionSlug("proxy")).toBe("proxy");
     expect(normalizeHostSectionSlug("metadata")).toBe("metadata");
     expect(normalizeHostSectionSlug("workspaces")).toBeNull();
     expect(normalizeHostSectionSlug("projects")).toBe("projects");
