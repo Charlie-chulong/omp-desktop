@@ -149,10 +149,7 @@ describe("OMP agent client and session", () => {
 
     await omp.setFeature("oauth_account_credential", "41");
 
-    expect(omp.recordedPrompts()).toEqual([
-      { message: "/session pin 1", imageCount: 0 },
-      { message: "/session pin 1", imageCount: 0 },
-    ]);
+    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -163,19 +160,35 @@ describe("OMP agent client and session", () => {
     );
   });
 
-  test("rotates automatic OAuth accounts across new sessions", async () => {
+  test("reports OMP automatic OAuth accounts without repinning them", async () => {
+    let selectedCredentialId = 40;
     const omp = new OmpHarness({
       oauthAccounts: [
         { credentialId: 41, provider: "openai-codex" },
         { credentialId: 42, provider: "openai-codex" },
       ],
+      sessionCredentialReader: (providerId, sessionId) => {
+        expect(providerId).toBe("openai-codex");
+        expect(sessionId).toBe("omp-session-1");
+        selectedCredentialId += 1;
+        return selectedCredentialId;
+      },
     });
 
     await omp.start({ model: "openai-codex/gpt-5.6" });
-    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
+    expect(omp.recordedPrompts()).toEqual([]);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "41",
+        }),
+      ]),
+    );
 
     await omp.start({ model: "openai-codex/gpt-5.6" });
-    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 2", imageCount: 0 }]);
+    expect(omp.recordedPrompts()).toEqual([]);
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
