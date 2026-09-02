@@ -1,8 +1,10 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { providerUsage } from "./provider-usage";
 
 export const ja: TranslationResources = {
+  providerUsage: providerUsage.ja,
   common: {
     back: "戻る",
     loading: "読み込み中...",

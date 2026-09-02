@@ -7,6 +7,10 @@ import { AdaptiveTextInput } from "@/components/adaptive-text-input";
 import { Button } from "@/components/ui/button";
 import { formatTokenCount } from "@/components/context-window-meter.utils";
 import { useOmpModelContextWindow } from "@/hooks/use-omp-model-context-window";
+import {
+  formatContextWindowInput,
+  parseContextWindowInput,
+} from "./model-context-window-control.utils";
 
 interface ModelContextWindowControlProps {
   serverId: string | null;
@@ -16,13 +20,6 @@ interface ModelContextWindowControlProps {
   enabled: boolean;
   disabled?: boolean;
   compact?: boolean;
-}
-
-function parseContextWindow(value: string): number | null {
-  const normalized = value.trim();
-  if (!/^[1-9]\d*$/.test(normalized)) return null;
-  const parsed = Number(normalized);
-  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 export function ModelContextWindowControl({
@@ -40,11 +37,11 @@ export function ModelContextWindowControl({
     contextWindow.contextWindowOverride ??
     contextWindow.reportedContextWindow ??
     catalogContextWindowMaxTokens;
-  const initialValue = contextWindow.contextWindowOverride?.toString() ?? "";
+  const initialValue = formatContextWindowInput(contextWindow.contextWindowOverride);
   const resetKey = `${provider}:${modelId}:${initialValue}`;
   const [draftValue, setDraftValue] = useState(initialValue);
   const [editing, setEditing] = useState(false);
-  const parsedDraft = useMemo(() => parseContextWindow(draftValue), [draftValue]);
+  const parsedDraft = useMemo(() => parseContextWindowInput(draftValue), [draftValue]);
   const normalizedDraft = draftValue.trim();
   const isInvalid = normalizedDraft.length > 0 && parsedDraft === null;
   const hasChanged = normalizedDraft !== initialValue;
@@ -105,17 +102,22 @@ export function ModelContextWindowControl({
       </View>
       {contextWindow.canEdit && editing ? (
         <View style={styles.editor}>
-          <AdaptiveTextInput
-            resetKey={resetKey}
-            initialValue={initialValue}
-            onChangeText={setDraftValue}
-            placeholder={t("modelSelector.contextWindowUseDefault")}
-            keyboardType="number-pad"
-            inputMode="numeric"
-            editable={!controlsDisabled}
-            accessibilityLabel={t("modelSelector.contextWindowInputAccessibility")}
-            style={styles.input}
-          />
+          <View style={styles.inputContainer}>
+            <AdaptiveTextInput
+              resetKey={resetKey}
+              initialValue={initialValue}
+              onChangeText={setDraftValue}
+              placeholder={t("modelSelector.contextWindowUseDefault")}
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              editable={!controlsDisabled}
+              accessibilityLabel={`${t("modelSelector.contextWindowInputAccessibility")} (k)`}
+              style={styles.input}
+            />
+            <Text style={styles.inputUnit}>
+              k
+            </Text>
+          </View>
           <Text style={[styles.hint, isInvalid && styles.error]}>
             {isInvalid
               ? t("modelSelector.contextWindowInvalid")
@@ -214,16 +216,30 @@ const styles = StyleSheet.create((theme) => ({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
+  inputContainer: {
+    position: "relative",
+  },
   input: {
     minWidth: 0,
     height: 30,
-    paddingHorizontal: theme.spacing[2],
+    paddingLeft: theme.spacing[2],
+    paddingRight: theme.spacing[6],
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
     backgroundColor: theme.colors.surface0,
     color: theme.colors.foreground,
     fontSize: 11,
+  },
+  inputUnit: {
+    position: "absolute",
+    top: 0,
+    right: theme.spacing[2],
+    height: 30,
+    color: theme.colors.foregroundMuted,
+    fontSize: 11,
+    lineHeight: 30,
+    pointerEvents: "none",
   },
   hint: {
     color: theme.colors.foregroundMuted,

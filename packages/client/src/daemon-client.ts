@@ -91,6 +91,7 @@ import type {
   OmpProviderManagementGetResponseMessage,
   OmpProviderManagementSaveResponseMessage,
   OmpProviderContextWindowOverridesUpdateResponseMessage,
+  OmpProviderAccountOrderUpdateResponseMessage,
   OmpProviderManagementAddResponseMessage,
   OmpProviderManagementRemoveResponseMessage,
   OmpCustomProviderInput,
@@ -480,6 +481,7 @@ type OmpProviderManagementGetPayload = OmpProviderManagementGetResponseMessage["
 type OmpProviderManagementSavePayload = OmpProviderManagementSaveResponseMessage["payload"];
 type OmpProviderContextWindowOverridesUpdatePayload =
   OmpProviderContextWindowOverridesUpdateResponseMessage["payload"];
+type OmpProviderAccountOrderUpdatePayload = OmpProviderAccountOrderUpdateResponseMessage["payload"];
 type OmpProviderManagementAddPayload = OmpProviderManagementAddResponseMessage["payload"];
 type OmpProviderManagementRemovePayload = OmpProviderManagementRemoveResponseMessage["payload"];
 type OmpProviderModelDiscoveryPayload = OmpProviderModelDiscoveryResponseMessage["payload"];
@@ -4978,6 +4980,22 @@ export class DaemonClient {
       timeout: 180000,
     });
   }
+  async reorderOmpProviderAccounts(
+    providerId: string,
+    credentialIds: number[],
+    options?: { requestId?: string },
+  ): Promise<OmpProviderAccountOrderUpdatePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "omp.provider.management.accounts.reorder.request",
+        providerId,
+        credentialIds,
+      },
+      responseType: "omp.provider.management.accounts.reorder.response",
+      timeout: 180000,
+    });
+  }
   async addOmpProvider(
     provider: OmpCustomProviderInput,
     options?: { requestId?: string },
@@ -5092,11 +5110,15 @@ export class DaemonClient {
     });
   }
 
-  async listProviderUsage(options?: { requestId?: string }): Promise<ProviderUsageListPayload> {
+  async listProviderUsage(options?: {
+    requestId?: string;
+    providerId?: string;
+  }): Promise<ProviderUsageListPayload> {
     return this.sendNamespacedCorrelatedSessionRequest({
       requestId: options?.requestId,
       message: {
         type: "provider.usage.list.request",
+        ...(options?.providerId ? { providerId: options.providerId } : {}),
       },
     });
   }

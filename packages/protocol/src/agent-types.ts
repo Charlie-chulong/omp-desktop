@@ -134,6 +134,11 @@ export interface AgentFeatureSelect {
   tooltip?: string;
   icon?: string;
   value: string | null;
+  /**
+   * Current runtime selection. Unlike value, this also reflects automatic
+   * provider selection and failover without changing the user's preference.
+   */
+  effectiveValue?: string | null;
   options: AgentSelectOption[];
 }
 
@@ -373,6 +378,7 @@ export type AgentStreamEvent =
   | { type: "turn_started"; provider: AgentProvider; turnId?: string }
   | { type: "turn_completed"; provider: AgentProvider; usage?: AgentUsage; turnId?: string }
   | { type: "usage_updated"; provider: AgentProvider; usage: AgentUsage; turnId?: string }
+  | { type: "features_changed"; provider: AgentProvider }
   | {
       type: "mode_changed";
       provider: AgentProvider;

@@ -3974,6 +3974,10 @@ export class AgentManager {
         agent.lastUsage = event.usage;
         this.emitState(agent);
         return undefined;
+      case "features_changed":
+        flags.shouldDispatchEvent = false;
+        this.emitState(agent);
+        return undefined;
       case "mode_changed":
         agent.currentModeId = event.currentModeId;
         agent.availableModes = event.availableModes;

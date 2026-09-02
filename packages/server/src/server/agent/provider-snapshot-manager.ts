@@ -568,6 +568,18 @@ export class ProviderSnapshotManager {
     if (!client.logoutOmpProvider) throw new Error("OMP logout is unavailable");
     return await client.logoutOmpProvider(providerId, credentialId);
   }
+  async reorderOmpProviderAccounts(
+    providerId: string,
+    credentialIds: readonly number[],
+  ): Promise<OmpProviderManagement> {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.reorderOmpProviderAccounts) {
+      throw new Error("OMP account ordering is unavailable");
+    }
+    return await client.reorderOmpProviderAccounts(providerId, credentialIds);
+  }
 
   applyMutableProviderConfig(
     mutableProviders: MutableDaemonConfig["providers"] | undefined,

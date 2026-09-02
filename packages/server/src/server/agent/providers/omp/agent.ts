@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { existsSync, promises as fs } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
@@ -286,6 +286,63 @@ export function readStoredOmpOAuthAccounts(agentDbPath: string): StoredOmpOAuthA
   }
 }
 
+const OMP_DESKTOP_ACCOUNT_ORDER_FILE = "omp-desktop-account-order.json";
+
+type OmpProviderAccountOrder = Record<string, number[]>;
+
+function resolveOmpAccountOrderPath(agentDbPath: string): string {
+  return join(dirname(agentDbPath), OMP_DESKTOP_ACCOUNT_ORDER_FILE);
+}
+
+function normalizeCredentialOrder(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<number>();
+  const order: number[] = [];
+  for (const candidate of value) {
+    if (!Number.isSafeInteger(candidate) || Number(candidate) <= 0 || seen.has(Number(candidate))) {
+      continue;
+    }
+    const credentialId = Number(candidate);
+    seen.add(credentialId);
+    order.push(credentialId);
+  }
+  return order;
+}
+
+async function readOmpProviderAccountOrder(agentDbPath: string): Promise<OmpProviderAccountOrder> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(resolveOmpAccountOrderPath(agentDbPath), "utf8"));
+    if (!isRecord(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).map(([providerId, value]) => [
+        providerId,
+        normalizeCredentialOrder(value),
+      ]),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    return {};
+  }
+}
+
+export function sortStoredOmpOAuthAccounts(
+  accounts: readonly StoredOmpOAuthAccount[],
+  credentialOrder: readonly number[],
+): StoredOmpOAuthAccount[] {
+  const rank = new Map(credentialOrder.map((credentialId, index) => [credentialId, index]));
+  return accounts
+    .map((account, index) => ({ account, index }))
+    .sort((left, right) => {
+      const leftRank = rank.get(left.account.credentialId);
+      const rightRank = rank.get(right.account.credentialId);
+      if (leftRank === undefined && rightRank === undefined) return left.index - right.index;
+      if (leftRank === undefined) return 1;
+      if (rightRank === undefined) return -1;
+      return leftRank - rightRank;
+    })
+    .map(({ account }) => account);
+}
+
 export function disableStoredOmpProviderCredentials(
   agentDbPath: string,
   providerId: string,
@@ -399,6 +456,7 @@ interface StartTurnResult {
 
 interface OmpAgentSessionOptions {
   oauthAccounts?: readonly StoredOmpOAuthAccount[];
+  automaticCredentialId?: number;
   runtimeSession: OmpRuntimeSession;
   config: AgentSessionConfig;
   initialState: OmpSessionState;
@@ -494,6 +552,7 @@ function createOmpFeatures(
   config: AgentSessionConfig,
   oauthAccounts: readonly StoredOmpOAuthAccount[] = [],
   fastMode?: { supported: boolean; eligible: boolean; enabled: boolean },
+  activeCredential?: OmpSessionState["activeCredential"],
 ): AgentFeature[] {
   const features: AgentFeature[] = [
     {
@@ -525,6 +584,10 @@ function createOmpFeatures(
     modelProvider === "openai-codex"
       ? oauthAccounts.filter((account) => account.provider === modelProvider)
       : [];
+  const activeCredentialId =
+    activeCredential && activeCredential.provider === modelProvider
+      ? activeCredential.credentialId
+      : null;
   if (providerAccounts.length > 1) {
     const configuredCredentialId = optionalString(
       config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
@@ -540,6 +603,11 @@ function createOmpFeatures(
         providerAccounts.some((account) => String(account.credentialId) === configuredCredentialId)
           ? configuredCredentialId
           : null,
+      effectiveValue:
+        activeCredentialId !== null &&
+        providerAccounts.some((account) => account.credentialId === activeCredentialId)
+          ? String(activeCredentialId)
+          : null,
       options: providerAccounts.map((account) => ({
         id: String(account.credentialId),
         label: formatStoredOmpOAuthAccountLabel(account),
@@ -547,6 +615,13 @@ function createOmpFeatures(
     });
   }
   return features;
+}
+
+function findOmpOAuthAccountFeature(
+  features: readonly AgentFeature[],
+): Extract<AgentFeature, { type: "select" }> | undefined {
+  const feature = features.find((candidate) => candidate.id === OMP_OAUTH_ACCOUNT_FEATURE_ID);
+  return feature?.type === "select" ? feature : undefined;
 }
 
 interface OmpProviderLoginFlow {
@@ -1268,6 +1343,7 @@ export class OmpAgentSession implements AgentSession {
   private readonly providerIdleScheduler: OmpProviderIdleScheduler;
   private readonly noTurnScheduler: OmpNoTurnScheduler;
   private readonly usagePoller: OmpUsagePoller;
+  private readonly automaticCredentialId?: number;
   private closed = false;
   private live: boolean;
   private initialUsageProbeStarted = false;
@@ -1280,6 +1356,7 @@ export class OmpAgentSession implements AgentSession {
     this.runtimeSession = options.runtimeSession;
     this.config = options.config;
     this.oauthAccounts = [...(options.oauthAccounts ?? [])];
+    this.automaticCredentialId = options.automaticCredentialId;
     this.state = options.initialState;
     const configuredModeId = options.currentModeId ?? null;
     const configuredWorkflowMode = normalizeOmpWorkflowSelection(
@@ -1291,11 +1368,16 @@ export class OmpAgentSession implements AgentSession {
       options.config.featureValues?.[OMP_FAST_MODE_FEATURE_ID],
     );
     this.fastModeEnabled = options.initialState.fastModeEnabled === true;
-    this.features = createOmpFeatures(options.config, this.oauthAccounts, {
-      supported: this.fastModeSupported,
-      eligible: isOmpFastModeEligibleModel(options.initialState.model, options.config.model),
-      enabled: configuredFastMode ?? this.fastModeEnabled,
-    });
+    this.features = createOmpFeatures(
+      options.config,
+      this.oauthAccounts,
+      {
+        supported: this.fastModeSupported,
+        eligible: isOmpFastModeEligibleModel(options.initialState.model, options.config.model),
+        enabled: configuredFastMode ?? this.fastModeEnabled,
+      },
+      options.initialState.activeCredential,
+    );
     this.activeWorkflowMode =
       options.live === false && configuredWorkflowMode !== "standard"
         ? configuredWorkflowMode
@@ -1359,11 +1441,16 @@ export class OmpAgentSession implements AgentSession {
   private fastModeEnabled: boolean;
 
   private refreshFeatures(): void {
-    const nextFeatures = createOmpFeatures(this.config, this.oauthAccounts, {
-      eligible: isOmpFastModeEligibleModel(this.state.model, this.config.model),
-      supported: this.fastModeSupported,
-      enabled: this.fastModeEnabled,
-    });
+    const nextFeatures = createOmpFeatures(
+      this.config,
+      this.oauthAccounts,
+      {
+        eligible: isOmpFastModeEligibleModel(this.state.model, this.config.model),
+        supported: this.fastModeSupported,
+        enabled: this.fastModeEnabled,
+      },
+      this.state.activeCredential,
+    );
     this.features.splice(0, this.features.length, ...nextFeatures);
   }
 
@@ -1578,6 +1665,11 @@ export class OmpAgentSession implements AgentSession {
       }
       await this.pinOAuthAccount(account);
       feature.value = value;
+      feature.effectiveValue = value;
+      this.state = {
+        ...this.state,
+        activeCredential: { provider: account.provider, credentialId: account.credentialId },
+      };
       this.config.featureValues = {
         ...this.config.featureValues,
         [OMP_OAUTH_ACCOUNT_FEATURE_ID]: value,
@@ -1651,26 +1743,33 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
-  private async pinConfiguredOAuthAccount(): Promise<void> {
+  private async pinInitialOAuthAccount(): Promise<void> {
     const configuredCredentialId = optionalString(
       this.config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
     );
-    if (!configuredCredentialId) return;
+    const credentialId = configuredCredentialId
+      ? Number(configuredCredentialId)
+      : this.automaticCredentialId;
+    if (!credentialId || !Number.isSafeInteger(credentialId)) return;
     if (!this.features.some((feature) => feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)) return;
     const modelProvider =
       this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
     const account = this.oauthAccounts.find(
       (candidate) =>
-        String(candidate.credentialId) === configuredCredentialId &&
-        candidate.provider === modelProvider,
+        candidate.credentialId === credentialId && candidate.provider === modelProvider,
     );
     if (!account) return;
     await this.pinOAuthAccount(account);
+    this.state = {
+      ...this.state,
+      activeCredential: { provider: account.provider, credentialId: account.credentialId },
+    };
+    this.refreshFeatures();
   }
 
   async initialize(): Promise<void> {
     await this.applyConfiguredFastMode();
-    await this.pinConfiguredOAuthAccount();
+    await this.pinInitialOAuthAccount();
   }
 
   async setGoalObjective(objective: string): Promise<void> {
@@ -1986,7 +2085,7 @@ export class OmpAgentSession implements AgentSession {
     this.config.model = `${model.provider}/${model.id}`;
     this.refreshFeatures();
     await this.applyConfiguredFastMode();
-    await this.pinConfiguredOAuthAccount();
+    await this.pinInitialOAuthAccount();
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
@@ -2507,7 +2606,30 @@ export class OmpAgentSession implements AgentSession {
     this.emit({ type: "timeline", provider: this.provider, turnId, item });
   }
 
+  private handleCredentialChanged(
+    event: Extract<OmpRuntimeEvent, { type: "credential_changed" }>,
+  ): void {
+    const previousEffectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
+    this.state = {
+      ...this.state,
+      activeCredential: {
+        provider: event.provider,
+        credentialId: event.credentialId,
+      },
+    };
+    this.refreshFeatures();
+    const effectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
+    if (effectiveValue !== previousEffectiveValue) {
+      this.emit({ type: "features_changed", provider: this.provider });
+    }
+  }
+
   private handleRuntimeEvent(event: OmpRuntimeEvent): void {
+    if (event.type === "credential_changed") {
+      this.handleCredentialChanged(event);
+      return;
+    }
+
     if (isExtensionUiRequestEvent(event)) {
       this.handleExtensionUiRequest(event);
       return;
@@ -2993,6 +3115,7 @@ export class OmpAgentSession implements AgentSession {
   }
 
   private async refreshState(): Promise<void> {
+    const previousEffectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
     this.state = await this.runtimeSession.getState();
     if (
       this.fastModeSupported &&
@@ -3000,7 +3123,11 @@ export class OmpAgentSession implements AgentSession {
       this.fastModeEnabled !== this.state.fastModeEnabled
     ) {
       this.fastModeEnabled = this.state.fastModeEnabled;
-      this.refreshFeatures();
+    }
+    this.refreshFeatures();
+    const effectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
+    if (effectiveValue !== previousEffectiveValue) {
+      this.emit({ type: "features_changed", provider: this.provider });
     }
   }
 
@@ -3026,6 +3153,7 @@ export class OmpAgentClient implements AgentClient {
   private readonly runtime: OmpRuntime;
   private readonly oauthAccountsOverride?: readonly StoredOmpOAuthAccount[];
   private readonly loginFlows = new Map<string, OmpProviderLoginFlow>();
+  private readonly automaticAccountCursor = new Map<string, number>();
 
   constructor(options: OmpAgentClientOptions) {
     ensureManagedOmpOnPath();
@@ -3086,6 +3214,25 @@ export class OmpAgentClient implements AgentClient {
     }
   }
 
+  private async selectAutomaticCredentialId(
+    config: AgentSessionConfig,
+    state: OmpSessionState,
+    accounts: readonly StoredOmpOAuthAccount[],
+    launchEnv?: Record<string, string>,
+  ): Promise<number | undefined> {
+    if (optionalString(config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID])) return undefined;
+    const provider = state.model?.provider ?? parseModelReference(config.model ?? null)?.provider;
+    if (!provider) return undefined;
+    const providerAccounts = accounts.filter((account) => account.provider === provider);
+    if (providerAccounts.length < 2) return undefined;
+    const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
+    const { agentDb } = resolveOmpDiagnosticPaths(env);
+    const order = await readOmpProviderAccountOrder(agentDb);
+    const orderedAccounts = sortStoredOmpOAuthAccounts(providerAccounts, order[provider] ?? []);
+    const cursor = this.automaticAccountCursor.get(provider) ?? 0;
+    this.automaticAccountCursor.set(provider, (cursor + 1) % orderedAccounts.length);
+    return orderedAccounts[cursor % orderedAccounts.length]?.credentialId;
+  }
   private async createInitializedSession(
     runtimeSession: OmpRuntimeSession,
     config: AgentSessionConfig,
@@ -3120,11 +3267,20 @@ export class OmpAgentClient implements AgentClient {
     });
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      const initialState = await runtimeSession.getState();
+      const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
+      const automaticCredentialId = await this.selectAutomaticCredentialId(
+        config,
+        initialState,
+        oauthAccounts,
+        launchContext?.env,
+      );
       return await this.createInitializedSession(
         runtimeSession,
         config,
         {
-          initialState: await runtimeSession.getState(),
+          initialState,
+          automaticCredentialId,
           currentModeId: launchMode.modeId,
           logger: this.logger,
           subagentCardScheduler: this.subagentCardScheduler,
@@ -3133,7 +3289,7 @@ export class OmpAgentClient implements AgentClient {
           usagePollScheduler: this.usagePollScheduler,
           paseoTools: launchContext?.paseoTools,
         },
-        this.readOAuthAccounts(launchContext?.env),
+        oauthAccounts,
       );
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
@@ -3334,20 +3490,7 @@ export class OmpAgentClient implements AgentClient {
     }
     const storedAccountsByProvider = new Map<string, StoredOmpOAuthAccount[]>();
     const storedAccountCredentialsById = new Map<number, StoredOmpOAuthAccountCredential>();
-    try {
-      const env = { ...process.env, ...this.runtimeSettings?.env };
-      const { agentDb } = resolveOmpDiagnosticPaths(env);
-      for (const account of readStoredOmpOAuthAccounts(agentDb)) {
-        const accounts = storedAccountsByProvider.get(account.provider) ?? [];
-        accounts.push(account);
-        storedAccountsByProvider.set(account.provider, accounts);
-      }
-      for (const account of readStoredOmpOAuthAccountCredentials(agentDb)) {
-        storedAccountCredentialsById.set(account.credentialId, account);
-      }
-    } catch (error) {
-      this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
-    }
+    let accountOrder: OmpProviderAccountOrder = {};
     let loginProviders: OmpProviderManagement["loginProviders"] = [];
     let runtimeError: string | undefined;
     let runtimeSession: OmpRuntimeSession | undefined;
@@ -3363,6 +3506,21 @@ export class OmpAgentClient implements AgentClient {
         runtimeSession.getAvailableModels(null),
         runtimeSession.getLoginProviders(),
       ]);
+      try {
+        const env = { ...process.env, ...this.runtimeSettings?.env };
+        const { agentDb } = resolveOmpDiagnosticPaths(env);
+        accountOrder = await readOmpProviderAccountOrder(agentDb);
+        for (const account of readStoredOmpOAuthAccounts(agentDb)) {
+          const accounts = storedAccountsByProvider.get(account.provider) ?? [];
+          accounts.push(account);
+          storedAccountsByProvider.set(account.provider, accounts);
+        }
+        for (const account of readStoredOmpOAuthAccountCredentials(agentDb)) {
+          storedAccountCredentialsById.set(account.credentialId, account);
+        }
+      } catch (error) {
+        this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
+      }
       for (const model of models) {
         const providerModelList = providerModels.get(model.provider) ?? [];
         const contextWindowOverride = contextWindowOverrides.get(model.provider)?.get(model.id);
@@ -3390,7 +3548,10 @@ export class OmpAgentClient implements AgentClient {
           }),
       );
       loginProviders = providers.map((provider) => {
-        const accounts = storedAccountsByProvider.get(provider.id);
+        const accounts = sortStoredOmpOAuthAccounts(
+          storedAccountsByProvider.get(provider.id) ?? [],
+          accountOrder[provider.id] ?? [],
+        );
         if (!accounts || accounts.length === 0) return provider;
         return {
           ...provider,
@@ -3503,6 +3664,41 @@ export class OmpAgentClient implements AgentClient {
     }
     return await this.saveOmpProviderConfig(document.toString());
   }
+  async reorderOmpProviderAccounts(
+    providerId: string,
+    credentialIds: readonly number[],
+  ): Promise<OmpProviderManagement> {
+    const normalizedProviderId = providerId.trim();
+    if (!normalizedProviderId) {
+      throw new Error("OMP account-order provider id is required");
+    }
+    const uniqueCredentialIds = normalizeCredentialOrder(credentialIds);
+    if (uniqueCredentialIds.length !== credentialIds.length) {
+      throw new Error("OMP account order contains invalid or duplicate credential ids");
+    }
+    const management = await this.getOmpProviderManagement();
+    const accounts =
+      management.loginProviders.find((provider) => provider.id === normalizedProviderId)
+        ?.accounts ?? [];
+    const availableIds = accounts.map((account) => account.credentialId).sort((a, b) => a - b);
+    const requestedIds = [...uniqueCredentialIds].sort((a, b) => a - b);
+    if (
+      availableIds.length !== requestedIds.length ||
+      availableIds.some((credentialId, index) => credentialId !== requestedIds[index])
+    ) {
+      throw new Error("OMP account order must contain every active account exactly once");
+    }
+    const env = { ...process.env, ...this.runtimeSettings?.env };
+    const { agentDb } = resolveOmpDiagnosticPaths(env);
+    const current = await readOmpProviderAccountOrder(agentDb);
+    await writeFileAtomic(
+      resolveOmpAccountOrderPath(agentDb),
+      `${JSON.stringify({ ...current, [normalizedProviderId]: uniqueCredentialIds }, null, 2)}\n`,
+    );
+    this.automaticAccountCursor.set(normalizedProviderId, 0);
+    return await this.getOmpProviderManagement();
+  }
+
   async addOmpProvider(input: OmpCustomProviderInput): Promise<OmpProviderManagement> {
     const management = await this.getOmpProviderManagement();
     const { document, providers } = parseOmpModelsDocument(management.configYaml);

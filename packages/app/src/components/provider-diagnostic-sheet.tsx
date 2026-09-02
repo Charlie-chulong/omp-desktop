@@ -3,6 +3,7 @@ import * as Clipboard from "expo-clipboard";
 import {
   AlertTriangle,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Copy,
   ExternalLink,
@@ -340,11 +341,16 @@ function OmpProviderAccountRow({
   saving,
   loggingOut,
   disabled,
+  canMoveUp,
+  canMoveDown,
+  moving,
   onEdit,
   onChangeNote,
   onSave,
   onCancel,
   onLogout,
+  onMoveUp,
+  onMoveDown,
 }: {
   account: OmpProviderAccount;
   showQuota: boolean;
@@ -355,11 +361,16 @@ function OmpProviderAccountRow({
   saving: boolean;
   loggingOut: boolean;
   disabled: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  moving: boolean;
   onEdit: () => void;
   onChangeNote: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
   onLogout: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const { t } = useTranslation();
   const identity = formatOmpAccountIdentity(account.identityKey);
@@ -424,6 +435,30 @@ function OmpProviderAccountRow({
             ) : null}
           </View>
           <View style={sheetStyles.accountActions}>
+            {canMoveUp || canMoveDown ? (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={ChevronUp}
+                  onPress={onMoveUp}
+                  disabled={disabled || moving || !canMoveUp}
+                  testID={`omp-provider-account-move-up-${account.credentialId}`}
+                >
+                  {t("settings.providers.omp.multiAccount.moveUp")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={ChevronDown}
+                  onPress={onMoveDown}
+                  disabled={disabled || moving || !canMoveDown}
+                  testID={`omp-provider-account-move-down-${account.credentialId}`}
+                >
+                  {t("settings.providers.omp.multiAccount.moveDown")}
+                </Button>
+              </>
+            ) : null}
             <Button
               variant="secondary"
               size="sm"
@@ -466,6 +501,7 @@ function OmpProviderSummaryRow({
   loggingOutCredentialId,
   loginFlowActive,
   removingProviderId,
+  reorderingProviderId,
   accountNotes = {},
   editingAccountId = null,
   accountNoteDraft = "",
@@ -477,6 +513,7 @@ function OmpProviderSummaryRow({
   onLogout,
   onLogoutAccount,
   onEditAccountNote,
+  onReorderAccounts,
   onChangeAccountNote,
   onSaveAccountNote,
   onCancelAccountNote,
@@ -487,6 +524,7 @@ function OmpProviderSummaryRow({
   loggingOutCredentialId: number | null;
   loginFlowActive: boolean;
   removingProviderId?: string | null;
+  reorderingProviderId?: string | null;
   accountNotes?: Record<string, string>;
   editingAccountId?: number | null;
   accountNoteDraft?: string;
@@ -496,6 +534,7 @@ function OmpProviderSummaryRow({
   onLogin: (providerId: string) => void;
   onLogout?: (providerId: string) => void;
   onLogoutAccount?: (providerId: string, credentialId: number) => void;
+  onReorderAccounts?: (providerId: string, credentialIds: number[]) => void;
   onRemove?: (providerId: string) => void;
   onEditAccountNote?: (credentialId: number) => void;
   onChangeAccountNote?: (value: string) => void;
@@ -629,6 +668,11 @@ function OmpProviderSummaryRow({
       </View>
       {accounts.length > 0 ? (
         <View style={sheetStyles.accountList}>
+          {accounts.length > 1 ? (
+            <Text style={sheetStyles.mutedText}>
+              {t("settings.providers.omp.multiAccount.orderHint")}
+            </Text>
+          ) : null}
           {accounts.map((account, index) => (
             <OmpProviderAccountRow
               key={account.credentialId}
@@ -640,11 +684,28 @@ function OmpProviderSummaryRow({
               noteDraft={accountNoteDraft}
               saving={savingAccountNoteId === account.credentialId}
               loggingOut={loggingOutCredentialId === account.credentialId}
-              disabled={Boolean(loggingInProviderId || loggingOutProviderId)}
+              disabled={Boolean(
+                loggingInProviderId || loggingOutProviderId || reorderingProviderId,
+              )}
+              canMoveUp={index > 0}
+              canMoveDown={index < accounts.length - 1}
+              moving={reorderingProviderId === summary.id}
               onEdit={() => onEditAccountNote?.(account.credentialId)}
               onChangeNote={(value) => onChangeAccountNote?.(value)}
               onSave={() => onSaveAccountNote?.()}
               onCancel={() => onCancelAccountNote?.()}
+              onMoveUp={() => {
+                if (!login || index === 0) return;
+                const next = accounts.map((candidate) => candidate.credentialId);
+                [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                onReorderAccounts?.(login.id, next);
+              }}
+              onMoveDown={() => {
+                if (!login || index >= accounts.length - 1) return;
+                const next = accounts.map((candidate) => candidate.credentialId);
+                [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                onReorderAccounts?.(login.id, next);
+              }}
               onLogout={() => {
                 if (login) onLogoutAccount?.(login.id, account.credentialId);
               }}
@@ -1357,6 +1418,7 @@ function OmpManagementPanel({
   const [saving, setSaving] = useState(false);
   const [loginProviderId, setLoginProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
+  const [reorderingProviderId, setReorderingProviderId] = useState<string | null>(null);
   const [logoutProviderId, setLogoutProviderId] = useState<string | null>(null);
   const [logoutCredentialId, setLogoutCredentialId] = useState<number | null>(null);
   const [loginFlow, setLoginFlow] = useState<OmpProviderLoginFlowState | null>(null);
@@ -1579,6 +1641,21 @@ function OmpManagementPanel({
   const handleAccountLogout = useCallback(
     (providerId: string, credentialId: number) => void logout(providerId, credentialId),
     [logout],
+  );
+  const reorderAccounts = useCallback(
+    async (providerId: string, credentialIds: number[]) => {
+      if (!client) return;
+      setReorderingProviderId(providerId);
+      setError(null);
+      try {
+        applyManagement(await client.reorderOmpProviderAccounts(providerId, credentialIds));
+      } catch (reorderError) {
+        setError(reorderError instanceof Error ? reorderError.message : String(reorderError));
+      } finally {
+        setReorderingProviderId(null);
+      }
+    },
+    [applyManagement, client],
   );
   const editAccountNote = useCallback(
     (credentialId: number) => {
@@ -1808,12 +1885,14 @@ function OmpManagementPanel({
                       savingAccountNoteId={savingAccountNoteId}
                       onConfigureModels={handleOpenContextWindow}
                       onEditAccountNote={editAccountNote}
+                      reorderingProviderId={reorderingProviderId}
                       onChangeAccountNote={setAccountNoteDraft}
                       onSaveAccountNote={saveAccountNote}
                       onCancelAccountNote={cancelAccountNote}
                       onLogin={startLogin}
                       onLogout={handleLogout}
                       onLogoutAccount={handleAccountLogout}
+                      onReorderAccounts={reorderAccounts}
                     />
                   ))}
                 </View>

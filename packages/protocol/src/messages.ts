@@ -349,6 +349,7 @@ export const AgentFeatureSelectSchema = z.object({
   tooltip: z.string().optional(),
   icon: z.string().optional(),
   value: z.string().nullable(),
+  effectiveValue: z.string().nullable().optional(),
   options: z.array(AgentSelectOptionSchema),
 });
 
@@ -772,6 +773,10 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     provider: AgentProviderSchema,
     turnId: z.string().optional(),
     usage: AgentUsageSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("features_changed"),
+    provider: AgentProviderSchema,
   }),
   z.object({
     type: z.literal("turn_failed"),
@@ -1703,6 +1708,12 @@ export const OmpProviderContextWindowOverridesUpdateRequestMessageSchema = z.obj
   overrides: z.record(z.string().trim().min(1), z.number().int().positive().nullable()),
   requestId: z.string(),
 });
+export const OmpProviderAccountOrderUpdateRequestMessageSchema = z.object({
+  type: z.literal("omp.provider.management.accounts.reorder.request"),
+  providerId: z.string().trim().min(1),
+  credentialIds: z.array(z.number().int().positive()).min(1),
+  requestId: z.string(),
+});
 
 export const OmpProviderApiSchema = z.enum([
   "openai-completions",
@@ -1790,6 +1801,7 @@ export const OmpProviderLogoutRequestMessageSchema = z.object({
 export const ProviderUsageListRequestMessageSchema = z.object({
   type: z.literal("provider.usage.list.request"),
   requestId: z.string(),
+  providerId: z.string().min(1).optional(),
 });
 
 export const ResumeAgentRequestMessageSchema = z.object({
@@ -3212,6 +3224,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OmpProviderManagementGetRequestMessageSchema,
   OmpProviderManagementSaveRequestMessageSchema,
   OmpProviderContextWindowOverridesUpdateRequestMessageSchema,
+  OmpProviderAccountOrderUpdateRequestMessageSchema,
   OmpProviderManagementAddRequestMessageSchema,
   OmpProviderManagementRemoveRequestMessageSchema,
   OmpProviderModelDiscoveryRequestMessageSchema,
@@ -6070,6 +6083,10 @@ export const OmpProviderContextWindowOverridesUpdateResponseMessageSchema = z.ob
   type: z.literal("omp.provider.management.context_windows.update.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
 });
+export const OmpProviderAccountOrderUpdateResponseMessageSchema = z.object({
+  type: z.literal("omp.provider.management.accounts.reorder.response"),
+  payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
+});
 export const OmpProviderManagementAddResponseMessageSchema = z.object({
   type: z.literal("omp.provider.management.add.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
@@ -6767,6 +6784,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   OmpProviderManagementGetResponseMessageSchema,
   OmpProviderManagementSaveResponseMessageSchema,
   OmpProviderContextWindowOverridesUpdateResponseMessageSchema,
+  OmpProviderAccountOrderUpdateResponseMessageSchema,
   OmpProviderManagementAddResponseMessageSchema,
   OmpProviderManagementRemoveResponseMessageSchema,
   OmpProviderModelDiscoveryResponseMessageSchema,
@@ -6967,6 +6985,9 @@ export type OmpProviderManagementSaveResponseMessage = z.infer<
 export type OmpProviderContextWindowOverridesUpdateResponseMessage = z.infer<
   typeof OmpProviderContextWindowOverridesUpdateResponseMessageSchema
 >;
+export type OmpProviderAccountOrderUpdateResponseMessage = z.infer<
+  typeof OmpProviderAccountOrderUpdateResponseMessageSchema
+>;
 export type OmpProviderApi = z.infer<typeof OmpProviderApiSchema>;
 export type OmpCustomProviderInput = z.infer<typeof OmpCustomProviderInputSchema>;
 export type OmpProviderManagementAddResponseMessage = z.infer<
@@ -7078,6 +7099,9 @@ export type OmpProviderManagementSaveRequestMessage = z.infer<
 >;
 export type OmpProviderContextWindowOverridesUpdateRequestMessage = z.infer<
   typeof OmpProviderContextWindowOverridesUpdateRequestMessageSchema
+>;
+export type OmpProviderAccountOrderUpdateRequestMessage = z.infer<
+  typeof OmpProviderAccountOrderUpdateRequestMessageSchema
 >;
 export type OmpProviderManagementAddRequestMessage = z.infer<
   typeof OmpProviderManagementAddRequestMessageSchema

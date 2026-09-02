@@ -1,11 +1,13 @@
 import { useMemo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { getProviderIcon } from "@/components/provider-icons";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Theme } from "@/styles/theme";
 import { ProviderUsageBalanceBar } from "./balance-bar";
-import { formatAgo } from "./format";
+import { formatAgo, formatProviderUsageLabel } from "./format";
 import type { ProviderUsage } from "./types";
 import { ProviderUsageWindowBar } from "./window-bar";
 
@@ -24,16 +26,19 @@ const ThemedProviderUsageIcon = withUnistyles(ProviderUsageIcon);
 
 const mutedIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
-function statusText(usage: ProviderUsage): string | null {
+function statusText(usage: ProviderUsage, t: TFunction): string | null {
   if (usage.status === "available") return null;
-  return usage.status === "error" ? "Error" : "Unavailable";
+  return usage.status === "error"
+    ? t("providerUsage.status.error")
+    : t("providerUsage.status.unavailable");
 }
 
-function footerText(usage: ProviderUsage): string | null {
-  const updated = formatAgo(usage.fetchedAt);
-  const parts = [usage.sourceLabel, updated ? `Updated ${updated}` : null].filter(
-    (part): part is string => typeof part === "string" && part.length > 0,
-  );
+function footerText(usage: ProviderUsage, t: TFunction): string | null {
+  const updated = formatAgo(usage.fetchedAt, t);
+  const parts = [
+    usage.sourceLabel,
+    updated ? t("providerUsage.updated", { time: updated }) : null,
+  ].filter((part): part is string => typeof part === "string" && part.length > 0);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
@@ -44,8 +49,9 @@ export function ProviderUsageCard({
   usage: ProviderUsage;
   compact?: boolean;
 }) {
-  const status = statusText(usage);
-  const footer = footerText(usage);
+  const { t } = useTranslation();
+  const status = statusText(usage, t);
+  const footer = footerText(usage, t);
   const balances = usage.balances ?? [];
   const details = usage.details ?? [];
 
@@ -101,7 +107,7 @@ export function ProviderUsageCard({
           {details.map((detail) => (
             <View key={detail.id} style={styles.detailRow}>
               <Text style={styles.detailLabel} numberOfLines={1}>
-                {detail.label}
+                {formatProviderUsageLabel(detail.id, detail.label, t)}
               </Text>
               <Text style={styles.detailValue} numberOfLines={1}>
                 {detail.value}

@@ -1,25 +1,19 @@
 import { useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { DaemonClient } from "@omp-desktop/client/internal/daemon-client";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
-import { providerUsageCopy } from "./copy";
-import type { ProviderUsageListPayload, ProviderUsageView } from "./types";
+import type { ProviderUsageView } from "./types";
 
 export const PROVIDER_USAGE_STALE_TIME_MS = 5 * 60 * 1000;
 
-type ProviderUsageClient = Pick<DaemonClient, "listProviderUsage">;
-
-export function providerUsageQueryKey(serverId: string | null | undefined) {
-  return ["providerUsage", serverId ?? ""] as const;
-}
-
-async function fetchProviderUsage(client: ProviderUsageClient): Promise<ProviderUsageListPayload> {
-  return client.listProviderUsage();
+export function providerUsageQueryKey(serverId: string | null | undefined, providerId?: string) {
+  return ["providerUsage", serverId ?? "", providerId ?? ""] as const;
 }
 
 interface UseProviderUsageOptions {
   enabled?: boolean;
+  providerId?: string;
 }
 
 export function useProviderUsage(
@@ -30,22 +24,28 @@ export function useProviderUsage(
   refresh: () => Promise<void>;
   canFetch: boolean;
 } {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
   const supportsProviderUsage = useSessionStore(
     (state) => state.sessions[serverId ?? ""]?.serverInfo?.features?.providerUsageList === true,
   );
-  const queryKey = useMemo(() => providerUsageQueryKey(serverId), [serverId]);
+  const queryKey = useMemo(
+    () => providerUsageQueryKey(serverId, options.providerId),
+    [options.providerId, serverId],
+  );
   const canFetch = Boolean(serverId && client && isConnected && supportsProviderUsage);
   const enabled = Boolean((options.enabled ?? true) && canFetch);
 
   const queryFn = useCallback(async () => {
     if (!client) {
-      throw new Error(providerUsageCopy.clientUnavailable);
+      throw new Error(t("providerUsage.clientUnavailable"));
     }
-    return fetchProviderUsage(client);
-  }, [client]);
+    return client.listProviderUsage(
+      options.providerId ? { providerId: options.providerId } : undefined,
+    );
+  }, [client, options.providerId, t]);
 
   const query = useQuery({
     queryKey,
@@ -69,10 +69,10 @@ export function useProviderUsage(
 
   const view = useMemo<ProviderUsageView>(() => {
     if (!serverId || !client || !isConnected) {
-      return { kind: "error", message: providerUsageCopy.hostUnavailable };
+      return { kind: "error", message: t("providerUsage.hostUnavailable") };
     }
     if (!supportsProviderUsage) {
-      return { kind: "error", message: providerUsageCopy.hostUpgradeRequired };
+      return { kind: "error", message: t("providerUsage.hostUpgradeRequired") };
     }
     if (query.data) {
       return {
@@ -97,6 +97,7 @@ export function useProviderUsage(
     query.isFetching,
     serverId,
     supportsProviderUsage,
+    t,
   ]);
 
   return { view, refresh, canFetch };

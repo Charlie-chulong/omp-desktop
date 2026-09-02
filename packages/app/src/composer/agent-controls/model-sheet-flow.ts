@@ -52,8 +52,13 @@ export function resolveModelBrowserProviderId(
   }
   return provider;
 }
-export function resolveModelBrowserProviderNamespaceId(providerId: string): string {
-  return providerId.startsWith("omp:") ? providerId.slice("omp:".length) : providerId;
+export function resolveModelBrowserProviderNamespaceId(
+  providerId: string,
+  modelId?: string,
+): string {
+  if (providerId.startsWith("omp:")) return providerId.slice("omp:".length);
+  if (providerId === "omp" && modelId) return resolveOmpModelProviderNamespace(modelId);
+  return providerId;
 }
 
 export function isModelBrowserRowSelected(

@@ -49,7 +49,6 @@ import {
   shouldShowOmpFiveHourQuota,
 } from "@/components/omp-provider-quota";
 import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
-import { providerUsageCopy } from "@/provider-usage/copy";
 import type { ProviderUsageView } from "@/provider-usage/types";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { ProviderUsageWindowBar } from "@/provider-usage/window-bar";
@@ -571,6 +570,7 @@ function SidebarProviderUsageDetails({
   view: ProviderUsageView;
   loadingLabel: string;
 }) {
+  const { t } = useTranslation();
   if (view.kind === "loading") {
     return <Text style={styles.sidebarQuotaLoading}>{loadingLabel}</Text>;
   }
@@ -583,17 +583,17 @@ function SidebarProviderUsageDetails({
       (candidate) => candidate.providerId.toLowerCase() === providerId.toLowerCase(),
     ) ?? null;
   if (!usage) {
-    return <Text style={styles.sidebarQuotaLoading}>{providerUsageCopy.empty}</Text>;
+    return <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>;
   }
   if (usage.status !== "available") {
     return (
-      <Text style={styles.sidebarQuotaLoading}>{usage.error ?? providerUsageCopy.errorTitle}</Text>
+      <Text style={styles.sidebarQuotaLoading}>{usage.error ?? t("providerUsage.errorTitle")}</Text>
     );
   }
 
   const balances = usage.balances ?? [];
   if (usage.windows.length === 0 && balances.length === 0) {
-    return <Text style={styles.sidebarQuotaLoading}>{providerUsageCopy.empty}</Text>;
+    return <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>;
   }
 
   return (
@@ -642,7 +642,12 @@ function SidebarProviderAccountPanel() {
         : "",
     [controls, providers, selectedModelId],
   );
-  const selectedProviderUsageId = resolveModelBrowserProviderNamespaceId(selectedProviderId);
+  const selectedProviderUsageId = resolveModelBrowserProviderNamespaceId(
+    selectedProviderId,
+    selectedModelId,
+  );
+  const isOmpProviderSelected =
+    selectedProviderId.startsWith("omp:") || controls?.provider === "omp";
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
   const providerOptions = useMemo<ComboboxOption[]>(
     () => providers.map((provider) => ({ id: provider.id, label: provider.label })),
@@ -658,48 +663,86 @@ function SidebarProviderAccountPanel() {
   );
   const { view: providerUsageView, canFetch: canFetchProviderUsage } = useProviderUsage(
     controls?.serverId,
-    { enabled: selectedProviderUsageId === "cursor" },
+    {
+      enabled: selectedProviderUsageId === "cursor" || isOmpProviderSelected,
+      providerId: isOmpProviderSelected ? selectedProviderUsageId : undefined,
+    },
   );
-  const showProviderUsage = selectedProviderUsageId === "cursor" && canFetchProviderUsage;
+  const hasSelectedProviderUsage =
+    providerUsageView.kind === "ready" &&
+    providerUsageView.payload.providers.some(
+      (provider) => provider.providerId.toLowerCase() === selectedProviderUsageId.toLowerCase(),
+    );
   const selectableAccounts = useMemo(() => {
     if (!accountFeature || accountFeature.type !== "select") return accounts;
     const ids = new Set(accountFeature.options.map((option) => option.id));
     return accounts.filter((account) => ids.has(String(account.credentialId)));
   }, [accountFeature, accounts]);
+  const showProviderUsage =
+    selectableAccounts.length === 0 &&
+    canFetchProviderUsage &&
+    (selectedProviderUsageId === "cursor" || (isOmpProviderSelected && hasSelectedProviderUsage));
   const selectedAccountId =
-    accountFeature?.type === "select" && accountFeature.value !== undefined
-      ? String(accountFeature.value)
-      : String(selectableAccounts[0]?.credentialId ?? "");
+    accountFeature?.type === "select"
+      ? (accountFeature.effectiveValue ?? accountFeature.value ?? "")
+      : "";
   const selectedAccount =
     selectableAccounts.find((account) => String(account.credentialId) === selectedAccountId) ??
     (selectableAccounts.length === 1 ? selectableAccounts[0] : null);
   const accountOptions = useMemo<ComboboxOption[]>(
     () =>
-      selectableAccounts.map((account, index) => ({
-        id: String(account.credentialId),
-        label: formatOmpAccountSelectionLabel({
+      selectableAccounts.map((account, index) => {
+        const identity = formatOmpAccountSelectionLabel({
           note: account.note,
           identityKey: account.identityKey,
           fallback: t("agentControls.quota.account", { number: index + 1 }),
-        }),
-      })),
+        });
+        const weeklyRemaining = resolveOmpRemainingQuotaPct(account.quota?.weeklyUsedPct);
+        const fiveHourRemaining = resolveOmpRemainingQuotaPct(account.quota?.fiveHourUsedPct);
+        const quotaParts = [
+          account.quota?.planLabel?.trim(),
+          weeklyRemaining === null
+            ? null
+            : `${t("agentControls.quota.weekly")} ${Math.round(weeklyRemaining)}%`,
+          shouldShowOmpFiveHourQuota(account.quota?.planLabel) && fiveHourRemaining !== null
+            ? `${t("agentControls.quota.fiveHour")} ${Math.round(fiveHourRemaining)}%`
+            : null,
+        ].filter((part): part is string => Boolean(part));
+        return {
+          id: String(account.credentialId),
+          label: [identity, ...quotaParts].join(" · "),
+        };
+      }),
     [selectableAccounts, t],
   );
+  const isAutomaticAccount = accountFeature?.type === "select" && accountFeature.value === null;
   const accountIdentity = formatOmpAccountIdentity(selectedAccount?.identityKey);
   const accountNote = selectedAccount?.note?.trim();
-  const selectedAccountOption = accountOptions.find((option) => option.id === selectedAccountId);
-  const accountPrimary =
+  const accountSelectionLabel =
     accountNote ||
     accountIdentity.primary ||
-    selectedAccountOption?.label ||
+    accountOptions.find((option) => option.id === selectedAccountId)?.label ||
     t("agentControls.features.oauthAccount.title");
-  const accountSecondary = accountNote ? null : accountIdentity.secondary;
+  const accountPlan = selectedAccount?.quota?.planLabel?.trim();
+  let accountPrimary = accountSelectionLabel;
+  let accountSecondary = [accountNote ? null : accountIdentity.secondary, accountPlan]
+    .filter(Boolean)
+    .join(" · ");
+  if (isAutomaticAccount) {
+    accountPrimary = selectedAccount
+      ? [t("agentControls.quota.automatic"), accountPlan].filter(Boolean).join(" · ")
+      : t("agentControls.quota.automaticSelecting");
+    accountSecondary = selectedAccount
+      ? [accountSelectionLabel, accountIdentity.secondary].filter(Boolean).join(" · ")
+      : "";
+  }
   const canSwitchProvider = selectedProvider
     ? providerOptions.length > 1
     : providerOptions.length > 0;
-  const canSwitchAccount =
+  const hasAccountSwitcher =
     Boolean(controls?.features.set && accountFeature?.type === "select") &&
     accountOptions.length > 1;
+  const canSwitchAccount = hasAccountSwitcher && controls?.isRunning !== true;
 
   const providerTriggerStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
@@ -727,12 +770,17 @@ function SidebarProviderAccountPanel() {
   );
   const handleAccountSelect = useCallback(
     (credentialId: string) => {
-      if (!controls?.features.set || accountFeature?.type !== "select") return;
+      if (controls?.isRunning || !controls?.features.set || accountFeature?.type !== "select") {
+        return;
+      }
       void controls.features.set(accountFeature.id, credentialId);
       setAccountOpen(false);
     },
     [accountFeature, controls],
   );
+  useEffect(() => {
+    if (controls?.isRunning) setAccountOpen(false);
+  }, [controls?.isRunning]);
 
   if (!controls || providers.length === 0) return null;
 
@@ -826,6 +874,11 @@ function SidebarProviderAccountPanel() {
               <ChevronDown size={14} color={theme.colors.foregroundMuted} />
             ) : null}
           </ComboboxTrigger>
+          {hasAccountSwitcher && controls.isRunning ? (
+            <Text style={styles.sidebarQuotaLoading}>
+              {t("agentControls.quota.switchAfterTurn")}
+            </Text>
+          ) : null}
           <Combobox
             options={accountOptions}
             value={selectedAccountId}

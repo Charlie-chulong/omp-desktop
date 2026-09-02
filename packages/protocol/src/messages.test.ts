@@ -211,11 +211,13 @@ describe("provider usage list message contract", () => {
     const parsed = SessionInboundMessageSchema.parse({
       type: "provider.usage.list.request",
       requestId: "usage-1",
+      providerId: "mintcat",
     });
 
     expect(parsed).toEqual({
       type: "provider.usage.list.request",
       requestId: "usage-1",
+      providerId: "mintcat",
     });
   });
 

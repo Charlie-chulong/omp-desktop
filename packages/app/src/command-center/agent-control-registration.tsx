@@ -28,6 +28,7 @@ export interface AgentControlCommandCenterSource {
   ownerKey: string;
   provider: string | null | undefined;
   providerDefinitions: AgentProviderDefinition[];
+  isRunning?: boolean;
   models: {
     providers: readonly ProviderSelectorProvider[];
     selectedProvider: string | null | undefined;

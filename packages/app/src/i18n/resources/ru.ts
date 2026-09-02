@@ -1,8 +1,10 @@
 import type { TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { providerUsage } from "./provider-usage";
 
 export const ru: TranslationResources = {
+  providerUsage: providerUsage.ru,
   common: {
     back: "Назад",
     loading: "Загрузка...",
@@ -244,6 +246,9 @@ export const ru: TranslationResources = {
     quota: {
       loading: "Загрузка квоты…",
       account: "Аккаунт {{number}}",
+      automatic: "Автоматически",
+      automaticSelecting: "Автоматический выбор аккаунта",
+      switchAfterTurn: "Сменить аккаунт можно после текущего ответа",
       noNote: "Без заметки",
       weekly: "Недельная квота",
       fiveHour: "Квота на 5 часов",

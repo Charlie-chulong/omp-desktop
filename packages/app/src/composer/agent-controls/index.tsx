@@ -113,6 +113,8 @@ import {
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 
+const OMP_OAUTH_ACCOUNT_FEATURE_ID = "oauth_account_credential";
+
 interface AgentControlOption {
   id: string;
   label: string;
@@ -123,7 +125,7 @@ function formatFeatureOptionLabel(
   option: AgentControlOption,
   oauthAccounts: readonly OmpWorkflowQuotaDisplayAccount[] = [],
 ): string {
-  if (featureId === "oauth_account_credential") {
+  if (featureId === OMP_OAUTH_ACCOUNT_FEATURE_ID) {
     const account = oauthAccounts.find((candidate) => String(candidate.credentialId) === option.id);
     if (account) {
       return formatOmpAccountSelectionLabel({
@@ -153,6 +155,7 @@ interface ControlledAgentControlsProps {
   selectedThinkingOptionId?: string;
   onSelectThinkingOption?: (thinkingOptionId: string) => void;
   disabled?: boolean;
+  accountSelectionDisabled?: boolean;
   isModelLoading?: boolean;
   modelSelectorProviders?: ProviderSelectorProvider[];
   agentProfiles?: AgentProfilePicker | null;
@@ -437,6 +440,7 @@ type AgentControlsSlice = {
   model: string | null | undefined;
   features: AgentFeature[] | undefined;
   thinkingOptionId: string | null | undefined;
+  status: string;
   lastUsage: unknown;
 } | null;
 
@@ -456,6 +460,7 @@ function selectAgentControlsSlice(
     model: currentAgent.model,
     features: currentAgent.features,
     thinkingOptionId: currentAgent.thinkingOptionId,
+    status: currentAgent.status,
     lastUsage: currentAgent.lastUsage,
   };
 }
@@ -526,6 +531,7 @@ function ControlledAgentControls({
   selectedThinkingOptionId,
   onSelectThinkingOption,
   disabled = false,
+  accountSelectionDisabled = false,
   isModelLoading = false,
   modelSelectorProviders,
   agentProfiles = null,
@@ -556,6 +562,12 @@ function ControlledAgentControls({
   const [density, setDensity] = useState<ComposerControlDensity>(initialDensity);
   const densityRef = useRef<ComposerControlDensity>(initialDensity);
   const availableWidthRef = useRef(0);
+
+  useEffect(() => {
+    if (accountSelectionDisabled && openSelector === `feature-${OMP_OAUTH_ACCOUNT_FEATURE_ID}`) {
+      setOpenSelector(null);
+    }
+  }, [accountSelectionDisabled, openSelector]);
 
   const providerAnchorRef = useRef<View>(null);
 
@@ -836,6 +848,7 @@ function ControlledAgentControls({
             isRetryingModelProvider={isRetryingModelProvider}
             agentProfiles={agentProfiles}
             disabled={disabled}
+            accountSelectionDisabled={accountSelectionDisabled}
             isModelLoading={isModelLoading}
             canSelectProvider={canSelectProvider}
             canSelectModel={canSelectModel}
@@ -882,6 +895,7 @@ function ControlledAgentControls({
             isRetryingModelProvider={isRetryingModelProvider}
             agentProfiles={agentProfiles}
             disabled={disabled}
+            accountSelectionDisabled={accountSelectionDisabled}
             isModelLoading={isModelLoading}
             canSelectModel={canSelectModel}
             modelSelectorProviders={effectiveModelSelectorProviders}
@@ -920,6 +934,7 @@ interface DesktopAgentControlsContentProps {
   isRetryingModelProvider: boolean;
   agentProfiles: AgentProfilePicker | null;
   disabled: boolean;
+  accountSelectionDisabled: boolean;
   isModelLoading: boolean;
   canSelectProvider: boolean;
   canSelectModel: boolean;
@@ -972,6 +987,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     isRetryingModelProvider,
     agentProfiles,
     disabled,
+    accountSelectionDisabled,
     isModelLoading,
     canSelectProvider,
     canSelectModel,
@@ -1112,7 +1128,10 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 key={`feature-${feature.id}`}
                 feature={feature}
                 oauthAccounts={workflowQuotaAccounts}
-                disabled={disabled}
+                disabled={
+                  disabled ||
+                  (accountSelectionDisabled && feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)
+                }
                 openSelector={openSelector}
                 handleOpenChange={handleNestedOpenChange}
                 onSetFeature={onSetFeature}
@@ -1126,7 +1145,9 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
             key={`feature-${feature.id}`}
             feature={feature}
             oauthAccounts={workflowQuotaAccounts}
-            disabled={disabled}
+            disabled={
+              disabled || (accountSelectionDisabled && feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)
+            }
             openSelector={openSelector}
             handleOpenChange={handleOpenChange}
             onSetFeature={onSetFeature}
@@ -1154,6 +1175,7 @@ interface SheetAgentControlsContentProps {
   isRetryingModelProvider: boolean;
   agentProfiles: AgentProfilePicker | null;
   disabled: boolean;
+  accountSelectionDisabled: boolean;
   isModelLoading: boolean;
   canSelectModel: boolean;
   modelSelectorProviders: ProviderSelectorProvider[];
@@ -1187,6 +1209,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     isRetryingModelProvider,
     agentProfiles,
     disabled,
+    accountSelectionDisabled,
     isModelLoading,
     canSelectModel,
     modelSelectorProviders,
@@ -1212,7 +1235,9 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
           key={`feature-${feature.id}`}
           feature={feature}
           oauthAccounts={oauthAccounts}
-          disabled={disabled}
+          disabled={
+            disabled || (accountSelectionDisabled && feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID)
+          }
           openSelector={openSelector}
           handleOpenChange={handleOpenChange}
           onSetFeature={onSetFeature}
@@ -1398,7 +1423,7 @@ function DesktopFeatureItem({
       : null;
     const selectedOptionLabel = selectedOptionValueLabel ?? featureLabel;
     const accountControlLabels =
-      feature.id === "oauth_account_credential"
+      feature.id === OMP_OAUTH_ACCOUNT_FEATURE_ID
         ? resolveOmpAccountControlLabels({
             featureLabel,
             accountLabel: selectedOptionValueLabel,
@@ -1597,6 +1622,7 @@ export const AgentControls = memo(function AgentControls({
   onDropdownClose,
   isCompactLayout,
 }: AgentControlsProps) {
+  const { t } = useTranslation();
   const { updatePreferences } = useFormPreferences();
   const agent = useSessionStore(
     useShallow((state) => selectAgentControlsSlice(state, serverId, agentId)),
@@ -1751,27 +1777,36 @@ export const AgentControls = memo(function AgentControls({
       if (!client || !agentProvider) {
         return;
       }
-      if (shouldPersistAgentFeatureValue(featureId)) {
-        void updatePreferences((current) =>
-          mergeProviderPreferences({
-            preferences: current,
-            provider: agentProvider,
-            updates: {
-              featureValues: {
-                [featureId]: value,
-              },
-            },
-          }),
-        ).catch((error) => {
-          console.warn("[AgentControls] persist feature preference failed", error);
-        });
+      if (featureId === OMP_OAUTH_ACCOUNT_FEATURE_ID && agent?.status === "running") {
+        toast.error(t("agentControls.quota.switchAfterTurn"));
+        return;
       }
-      void client.setAgentFeature(agentId, featureId, value).catch((error) => {
-        console.warn("[AgentControls] setAgentFeature failed", error);
-        toast.error(toErrorMessage(error));
-      });
+      void client
+        .setAgentFeature(agentId, featureId, value)
+        .then(() => {
+          if (!shouldPersistAgentFeatureValue(featureId)) {
+            return;
+          }
+          void updatePreferences((current) =>
+            mergeProviderPreferences({
+              preferences: current,
+              provider: agentProvider,
+              updates: {
+                featureValues: {
+                  [featureId]: value,
+                },
+              },
+            }),
+          ).catch((error) => {
+            console.warn("[AgentControls] persist feature preference failed", error);
+          });
+        })
+        .catch((error) => {
+          console.warn("[AgentControls] setAgentFeature failed", error);
+          toast.error(toErrorMessage(error));
+        });
     },
-    [agentId, agentProvider, client, toast, updatePreferences],
+    [agent?.status, agentId, agentProvider, client, t, toast, updatePreferences],
   );
 
   const commandCenterControls = useMemo<AgentControlCommandCenterSource>(
@@ -1780,6 +1815,7 @@ export const AgentControls = memo(function AgentControls({
       ownerKey: agentId,
       provider: agentProvider,
       providerDefinitions: modeProviderDefinitions,
+      isRunning: agent?.status === "running",
       models: {
         providers: agentModelSelectorProviders,
         selectedProvider: agentProvider,
@@ -1801,6 +1837,7 @@ export const AgentControls = memo(function AgentControls({
       activeModelId,
       agent?.features,
       agentId,
+      agent?.status,
       agentModelSelectorProviders,
       agentProvider,
       commandCenterModes,
@@ -1863,6 +1900,7 @@ export const AgentControls = memo(function AgentControls({
         isRetryingModelProvider={snapshotIsRefreshing}
         onDropdownClose={onDropdownClose}
         disabled={!client}
+        accountSelectionDisabled={agent.status === "running"}
         modeControl={modeControl}
         modelSelectorServerId={serverId}
         workflowQuotaAccounts={workflowQuotaAccounts}

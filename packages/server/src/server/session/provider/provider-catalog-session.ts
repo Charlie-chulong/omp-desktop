@@ -1,5 +1,6 @@
 import type pino from "pino";
 import { createHash } from "node:crypto";
+import { parse } from "yaml";
 import { getErrorMessage } from "@omp-desktop/protocol/error-utils";
 import {
   compactProviderSnapshot,
@@ -19,7 +20,10 @@ import {
   type ProviderSnapshotEntry,
 } from "../../agent/agent-sdk-types.js";
 import type { ProviderAvailability } from "../../agent/agent-manager.js";
-import type { ProviderUsageService } from "../../../services/quota-fetcher/service.js";
+import type {
+  ProviderUsageListResult,
+  ProviderUsageService,
+} from "../../../services/quota-fetcher/service.js";
 import { expandTilde } from "../../../utils/path.js";
 import { discoverOmpProviderModels } from "./omp-model-discovery.js";
 
@@ -70,6 +74,38 @@ function encodeProviderSnapshot(entries: ProviderSnapshotEntry[]): EncodedProvid
     .update(JSON.stringify(compactSnapshot))
     .digest("base64url");
   return { compactSnapshot, snapshotHash };
+}
+
+interface CustomProviderUsageConfig {
+  providerId: string;
+  displayName: string;
+  baseUrl: string;
+  apiKey: string;
+}
+
+export function resolveCustomProviderUsageConfig(
+  configYaml: string,
+  providerId: string,
+): CustomProviderUsageConfig | null {
+  const config = parse(configYaml) as {
+    providers?: Record<string, { baseUrl?: unknown; apiKey?: unknown }>;
+  } | null;
+  const provider = config?.providers?.[providerId];
+  if (
+    !provider ||
+    typeof provider.baseUrl !== "string" ||
+    provider.baseUrl.trim().length === 0 ||
+    typeof provider.apiKey !== "string" ||
+    provider.apiKey.trim().length === 0
+  ) {
+    return null;
+  }
+  return {
+    providerId,
+    displayName: providerId,
+    baseUrl: provider.baseUrl.trim(),
+    apiKey: provider.apiKey.trim(),
+  };
 }
 
 /**
@@ -558,6 +594,37 @@ export class ProviderCatalogSession {
       });
     }
   }
+  async handleOmpProviderAccountOrderUpdateRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      { type: "omp.provider.management.accounts.reorder.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const management = await this.providerSnapshotManager.reorderOmpProviderAccounts(
+        msg.providerId,
+        msg.credentialIds,
+      );
+      await this.providerSnapshotManager.refreshSettingsSnapshot({ providers: ["omp"] });
+      this.host.emit({
+        type: "omp.provider.management.accounts.reorder.response",
+        payload: { ...management, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to reorder OMP provider accounts");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to reorder OMP provider accounts: ${err.message}`,
+          code: "omp_provider_accounts_reorder_failed",
+        },
+      });
+    }
+  }
+
   async handleOmpProviderManagementAddRequest(
     msg: Extract<SessionInboundMessage, { type: "omp.provider.management.add.request" }>,
   ): Promise<void> {
@@ -786,7 +853,22 @@ export class ProviderCatalogSession {
     msg: Extract<SessionInboundMessage, { type: "provider.usage.list.request" }>,
   ): Promise<void> {
     try {
-      const usage = await this.providerUsageService.listUsage();
+      let usage: ProviderUsageListResult | undefined;
+      if (msg.providerId && msg.providerId !== "cursor") {
+        const management = await this.providerSnapshotManager.getOmpProviderManagement();
+        const customProvider = resolveCustomProviderUsageConfig(
+          management.configYaml,
+          msg.providerId,
+        );
+        if (customProvider) {
+          const provider = await this.providerUsageService.fetchCustomUsage(customProvider);
+          usage = {
+            fetchedAt: provider.fetchedAt ?? new Date().toISOString(),
+            providers: [provider],
+          };
+        }
+      }
+      usage ??= await this.providerUsageService.listUsage();
       this.host.emit({
         type: "provider.usage.list.response",
         payload: {

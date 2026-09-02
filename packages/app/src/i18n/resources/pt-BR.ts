@@ -1,8 +1,10 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { providerUsage } from "./provider-usage";
 
 export const ptBR: TranslationResources = {
+  providerUsage: providerUsage["pt-BR"],
   common: {
     back: "Voltar",
     loading: "Carregando...",

@@ -1,8 +1,10 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { providerUsage } from "./provider-usage";
 
 export const zhCN: TranslationResources = {
+  providerUsage: providerUsage["zh-CN"],
   common: {
     back: "返回",
     loading: "加载中...",
@@ -244,6 +246,9 @@ export const zhCN: TranslationResources = {
     quota: {
       loading: "正在加载额度…",
       account: "账户 {{number}}",
+      automatic: "自动",
+      automaticSelecting: "自动选择中",
+      switchAfterTurn: "当前回复结束后可切换账号",
       noNote: "未备注",
       weekly: "周额度",
       fiveHour: "5 小时额度",
@@ -1553,12 +1558,12 @@ export const zhCN: TranslationResources = {
     modelSettings: "模型设置",
     contextWindowEffective: "{{count}} tokens",
     contextWindowUnknown: "上下文窗口不可用",
-    contextWindowUseDefault: "使用模型默认值",
+    contextWindowUseDefault: "输入数值，如 128；留空使用模型默认值",
     contextWindowInputAccessibility: "上下文窗口覆盖值（tokens）",
     contextWindowSave: "保存",
     contextWindowEdit: "编辑",
     contextWindowReset: "重置",
-    contextWindowInvalid: "请输入正整数 token 数。",
+    contextWindowInvalid: "请输入大于 0 的数值，单位 k。",
     contextWindowHint: "覆盖值会应用到该模型的新会话。",
   },
   providerCatalog: {

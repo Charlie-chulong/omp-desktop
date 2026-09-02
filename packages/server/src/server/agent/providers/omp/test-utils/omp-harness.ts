@@ -524,6 +524,10 @@ export class OmpHarness {
     await this.requireSession().setFeature(featureId, value);
   }
 
+  emitCredentialChanged(provider: string, credentialId: number): void {
+    this.omp.latestSession().emit({ type: "credential_changed", provider, credentialId });
+  }
+
   async updateGoalObjective(objective: string): Promise<void> {
     await this.requireSession().setGoalObjective(objective);
   }

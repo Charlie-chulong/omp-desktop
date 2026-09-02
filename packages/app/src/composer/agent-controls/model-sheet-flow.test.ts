@@ -126,6 +126,7 @@ describe("OMP model provider grouping", () => {
     expect(resolveModelBrowserProviderNamespaceId("omp:cursor")).toBe("cursor");
     expect(resolveModelBrowserProviderNamespaceId("omp:openai-codex")).toBe("openai-codex");
     expect(resolveModelBrowserProviderNamespaceId("cursor")).toBe("cursor");
+    expect(resolveModelBrowserProviderNamespaceId("omp", "mintcat/gpt-5")).toBe("mintcat");
   });
 
   it("marks a selected model inside its grouped virtual provider", () => {

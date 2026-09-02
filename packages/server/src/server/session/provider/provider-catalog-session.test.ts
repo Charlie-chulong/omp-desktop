@@ -305,6 +305,52 @@ describe("ProviderCatalogSession", () => {
     });
   });
 
+  it("queries the selected custom provider with its models.yml credentials", async () => {
+    const fetchCustomUsage = vi.fn(async () => ({
+      providerId: "mintcat",
+      displayName: "mintcat",
+      status: "available" as const,
+      planLabel: "Wallet",
+      windows: [],
+      balances: [
+        {
+          id: "balance",
+          label: "Balance",
+          remaining: 12.5,
+          unit: "usd" as const,
+        },
+      ],
+    }));
+    const { subsystem, emitted } = makeSubsystem({
+      snapshot: {
+        getOmpProviderManagement: async () => ({
+          configPath: "/tmp/models.yml",
+          configYaml:
+            "providers:\n  mintcat:\n    baseUrl: https://codex.mintcat.work\n    apiKey: secret\n",
+          providerModels: [],
+          loginProviders: [],
+        }),
+      },
+      usage: { fetchCustomUsage },
+    });
+
+    await subsystem.handleProviderUsageListRequest({
+      type: "provider.usage.list.request",
+      requestId: "custom-usage",
+      providerId: "mintcat",
+    });
+
+    expect(fetchCustomUsage).toHaveBeenCalledWith({
+      providerId: "mintcat",
+      displayName: "mintcat",
+      baseUrl: "https://codex.mintcat.work",
+      apiKey: "secret",
+    });
+    expect(findByType(emitted, "provider.usage.list.response")?.payload.providers).toEqual([
+      expect.objectContaining({ providerId: "mintcat", status: "available" }),
+    ]);
+  });
+
   it("surfaces a usage-list failure as an rpc_error envelope", async () => {
     const { subsystem, emitted } = makeSubsystem({
       usage: {

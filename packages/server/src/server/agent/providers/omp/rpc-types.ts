@@ -129,6 +129,11 @@ const OmpContextUsageSchema = z
   })
   .passthrough();
 
+export const OmpActiveCredentialSchema = z.object({
+  provider: z.string(),
+  credentialId: z.number().int().positive(),
+});
+
 export const OmpSessionStateSchema = z
   .object({
     model: OmpModelSchema.nullable().optional(),
@@ -144,6 +149,7 @@ export const OmpSessionStateSchema = z
     messageCount: z.number().int().nonnegative(),
     queuedMessageCount: z.number().int().nonnegative(),
     contextUsage: OmpContextUsageSchema.optional(),
+    activeCredential: OmpActiveCredentialSchema.nullable().optional(),
     todoPhases: z.unknown().optional(),
   })
   .passthrough();
@@ -452,6 +458,13 @@ export const OmpAvailableCommandsUpdateEventSchema = z
     commands: z.array(OmpAvailableCommandSchema),
   })
   .passthrough();
+export const OmpCredentialChangedEventSchema = z
+  .object({
+    type: z.literal("credential_changed"),
+    provider: z.string(),
+    credentialId: z.number().int().positive(),
+  })
+  .passthrough();
 
 const OmpExtensionUiRequestSchema = z
   .object({
@@ -508,6 +521,7 @@ export const OmpRuntimeEventSchema = z.discriminatedUnion("type", [
   OmpAutoCompactionStartEventSchema,
   OmpAutoCompactionEndEventSchema,
   OmpAvailableCommandsUpdateEventSchema,
+  OmpCredentialChangedEventSchema,
   OmpRpcHostToolCallRequestSchema,
   OmpRpcHostToolCancelRequestSchema,
   OmpRpcHostToolUpdateSchema,

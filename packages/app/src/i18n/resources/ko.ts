@@ -1,8 +1,10 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { providerUsage } from "./provider-usage";
 
 export const ko: TranslationResources = {
+  providerUsage: providerUsage.ko,
   common: {
     back: "뒤로",
     loading: "불러오는 중...",

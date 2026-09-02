@@ -1,6 +1,8 @@
 import { ompProviderSettings } from "./omp-provider-settings";
+import { providerUsage } from "./provider-usage";
 
 export const en = {
+  providerUsage: providerUsage.en,
   common: {
     back: "Back",
     loading: "Loading...",
@@ -242,6 +244,9 @@ export const en = {
     quota: {
       loading: "Loading quota…",
       account: "Account {{number}}",
+      automatic: "Automatic",
+      automaticSelecting: "Selecting an account automatically",
+      switchAfterTurn: "You can switch accounts after the current response",
       noNote: "No note",
       weekly: "Weekly quota",
       fiveHour: "5-hour quota",

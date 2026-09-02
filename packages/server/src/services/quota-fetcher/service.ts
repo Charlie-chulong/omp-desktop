@@ -2,6 +2,7 @@ import type { Logger } from "pino";
 import type { ProviderUsage } from "../../server/messages.js";
 import { createProviderUsageFetchers } from "./manifest.js";
 import type { ProviderApiFetch, ProviderUsageFetcher } from "./provider.js";
+import { CustomQuotaProvider, type CustomQuotaProviderOptions } from "./providers/custom.js";
 import { unavailableUsage } from "./usage.js";
 
 export interface ProviderUsageServiceOptions {
@@ -22,6 +23,7 @@ const DEFAULT_PROVIDER_USAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 export class ProviderUsageService {
   private readonly logger: Logger;
   private readonly fetchers: ProviderUsageFetcher[];
+  private readonly fetchApi: ProviderApiFetch | undefined;
   private readonly cacheTtlMs: number;
   private readonly now: () => number;
   private cached: { fetchedAtMs: number; result: ProviderUsageListResult } | null = null;
@@ -35,6 +37,7 @@ export class ProviderUsageService {
         logger: this.logger,
         fetch: options.fetch,
       });
+    this.fetchApi = options.fetch;
     this.cacheTtlMs = options.cacheTtlMs ?? DEFAULT_PROVIDER_USAGE_CACHE_TTL_MS;
     this.now = options.now ?? Date.now;
   }
@@ -61,6 +64,29 @@ export class ProviderUsageService {
       if (this.inFlight === request) {
         this.inFlight = null;
       }
+    }
+  }
+
+  async fetchCustomUsage(
+    options: Omit<CustomQuotaProviderOptions, "logger" | "fetch">,
+  ): Promise<ProviderUsage> {
+    const fetcher = new CustomQuotaProvider({
+      ...options,
+      logger: this.logger,
+      fetch: this.fetchApi,
+    });
+    try {
+      return await fetcher.fetchUsage();
+    } catch (error) {
+      this.logger.debug(
+        { err: error, providerId: fetcher.providerId },
+        "Custom provider usage fetch failed",
+      );
+      return unavailableUsage({
+        providerId: fetcher.providerId,
+        displayName: fetcher.displayName,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

@@ -4,6 +4,7 @@ import {
   AgentSnapshotPayloadSchema,
   AgentTimelineItemPayloadSchema,
   OmpProviderManagementSchema,
+  OmpProviderAccountOrderUpdateRequestMessageSchema,
   ServerInfoStatusPayloadSchema,
   WSHelloMessageSchema,
 } from "./messages.js";
@@ -319,5 +320,15 @@ describe("wire schema compatibility", () => {
       fiveHourUsedPct: 100,
       fiveHourLimitReached: true,
     });
+  });
+  test("OMP account ordering request preserves credential priority", () => {
+    expect(
+      OmpProviderAccountOrderUpdateRequestMessageSchema.parse({
+        type: "omp.provider.management.accounts.reorder.request",
+        providerId: "openai-codex",
+        credentialIds: [9, 4],
+        requestId: "reorder-1",
+      }).credentialIds,
+    ).toEqual([9, 4]);
   });
 });

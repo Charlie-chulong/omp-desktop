@@ -2531,6 +2531,8 @@ export class Session {
         return this.providerCatalogSession.handleOmpProviderContextWindowOverridesUpdateRequest(
           msg,
         );
+      case "omp.provider.management.accounts.reorder.request":
+        return this.providerCatalogSession.handleOmpProviderAccountOrderUpdateRequest(msg);
       case "omp.provider.management.add.request":
         return this.providerCatalogSession.handleOmpProviderManagementAddRequest(msg);
       case "omp.provider.models.discover.request":

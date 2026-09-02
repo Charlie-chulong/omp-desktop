@@ -149,12 +149,74 @@ describe("OMP agent client and session", () => {
 
     await omp.setFeature("oauth_account_credential", "41");
 
-    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
+    expect(omp.recordedPrompts()).toEqual([
+      { message: "/session pin 1", imageCount: 0 },
+      { message: "/session pin 1", imageCount: 0 },
+    ]);
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
           value: "41",
+        }),
+      ]),
+    );
+  });
+
+  test("rotates automatic OAuth accounts across new sessions", async () => {
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+    });
+
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
+
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+    expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 2", imageCount: 0 }]);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+  });
+
+  test("reports the effective OAuth account selected by the runtime", async () => {
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+    });
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+
+    omp.emitCredentialChanged("openai-codex", 42);
+
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+    expect(omp.eventTypes()).toContain("features_changed");
+
+    omp.emitCredentialChanged("openai-codex", 41);
+
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "41",
         }),
       ]),
     );

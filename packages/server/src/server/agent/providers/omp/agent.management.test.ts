@@ -189,6 +189,107 @@ describe("OMP provider management", () => {
         .sort(),
     ).toEqual(["acct-a", "acct-b"]);
   });
+  test("reads refreshed OAuth credentials before the first quota request", async () => {
+    const quotaFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const authorization = new Headers(init?.headers).get("Authorization");
+      if (authorization !== "Bearer refreshed-token") {
+        return new Response(null, { status: 401 });
+      }
+      return new Response(
+        JSON.stringify({
+          plan_type: "plus",
+          rate_limit: {
+            primary_window: { used_percent: 25, reset_at: 1_798_122_000 },
+            secondary_window: { used_percent: 10, reset_at: 1_798_640_000 },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    const { agentDir, client, runtime } = await createClient({ quotaFetch });
+    const databasePath = path.join(agentDir, "agent.db");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        credential_type TEXT NOT NULL,
+        data TEXT NOT NULL,
+        disabled_cause TEXT,
+        identity_key TEXT
+      );
+      INSERT INTO auth_credentials
+        (id, provider, credential_type, data, identity_key, disabled_cause)
+      VALUES
+        (1, 'openai-codex', 'oauth', '{"access":"stale-token","accountId":"acct-a"}', 'email:alice@example.com', NULL);
+    `);
+    database.close();
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([
+      { id: "openai-codex", name: "OpenAI Codex", available: true, authenticated: true },
+    ]);
+    const startSession = runtime.startSession.bind(runtime);
+    runtime.startSession = async (input) => {
+      const refreshedDatabase = new DatabaseSync(databasePath);
+      refreshedDatabase.exec(
+        `UPDATE auth_credentials SET data = '{"access":"refreshed-token","accountId":"acct-a"}' WHERE id = 1`,
+      );
+      refreshedDatabase.close();
+      return startSession(input);
+    };
+
+    const management = await client.getOmpProviderManagement();
+
+    expect(management.loginProviders[0]?.accounts?.[0]?.quota).toMatchObject({
+      status: "available",
+      fiveHourUsedPct: 25,
+      weeklyUsedPct: 10,
+    });
+    expect(quotaFetch).toHaveBeenCalledTimes(1);
+  });
+  test("persists and returns a custom OAuth account order", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    const database = new DatabaseSync(path.join(agentDir, "agent.db"));
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        credential_type TEXT NOT NULL,
+        data TEXT NOT NULL,
+        disabled_cause TEXT,
+        identity_key TEXT
+      );
+      INSERT INTO auth_credentials
+        (id, provider, credential_type, data, identity_key, disabled_cause)
+      VALUES
+        (1, 'openai-codex', 'oauth', '{"access":"secret-a"}', 'email:alice@example.com', NULL),
+        (2, 'openai-codex', 'oauth', '{"access":"secret-b"}', 'email:bob@example.com', NULL);
+    `);
+    database.close();
+    const providers = [
+      { id: "openai-codex", name: "OpenAI Codex", available: true, authenticated: true },
+    ];
+    runtime.queueModels([]);
+    runtime.queueLoginProviders(providers);
+    runtime.queueModels([]);
+    runtime.queueLoginProviders(providers);
+
+    const management = await client.reorderOmpProviderAccounts("openai-codex", [2, 1]);
+
+    expect(management.loginProviders[0]?.accounts?.map((account) => account.credentialId)).toEqual([
+      2, 1,
+    ]);
+    await expect(
+      readFile(path.join(agentDir, "omp-desktop-account-order.json"), "utf8"),
+    ).resolves.toContain('"openai-codex": [\n    2,\n    1\n  ]');
+    runtime.setInitialModel({ provider: "openai-codex", id: "gpt-5.6" });
+    await client.createSession({
+      provider: "omp",
+      cwd: agentDir,
+      model: "openai-codex/gpt-5.6",
+    });
+    expect(runtime.latestSession().prompts).toEqual([{ message: "/session pin 2", imageCount: 0 }]);
+  });
   test("cancels an active provider login and closes its runtime session", async () => {
     const { client, runtime } = await createClient();
     runtime.queueLoginFlow({

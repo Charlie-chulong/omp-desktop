@@ -35,6 +35,7 @@ describe("agent feature schemas", () => {
       tooltip: "Select service tier",
       icon: "gauge",
       value: "flex",
+      effectiveValue: "default",
       options: [
         { id: "default", label: "Default", isDefault: true },
         { id: "flex", label: "Flex" },
@@ -47,6 +48,7 @@ describe("agent feature schemas", () => {
     }
     expect(parsed.options).toHaveLength(2);
     expect(parsed.value).toBe("flex");
+    expect(parsed.effectiveValue).toBe("default");
   });
 
   it("rejects invalid features", () => {

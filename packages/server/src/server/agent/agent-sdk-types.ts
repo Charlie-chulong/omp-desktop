@@ -177,6 +177,7 @@ export interface AgentFeatureSelect {
   tooltip?: string;
   icon?: string;
   value: string | null;
+  effectiveValue?: string | null;
   options: AgentSelectOption[];
 }
 
@@ -415,6 +416,7 @@ export type AgentStreamEvent =
   | { type: "turn_started"; provider: AgentProvider; turnId?: string }
   | { type: "turn_completed"; provider: AgentProvider; usage?: AgentUsage; turnId?: string }
   | { type: "usage_updated"; provider: AgentProvider; usage: AgentUsage; turnId?: string }
+  | { type: "features_changed"; provider: AgentProvider }
   | {
       type: "mode_changed";
       provider: AgentProvider;
@@ -819,6 +821,10 @@ export interface AgentClient {
   finishOmpProviderLogin?(flowId: string, input?: string): Promise<OmpProviderManagement>;
   cancelOmpProviderLogin?(flowId: string): Promise<boolean>;
   logoutOmpProvider?(providerId: string, credentialId?: number): Promise<OmpProviderManagement>;
+  reorderOmpProviderAccounts?(
+    providerId: string,
+    credentialIds: readonly number[],
+  ): Promise<OmpProviderManagement>;
   /**
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().
    * Called when Paseo archives an agent so the provider's own UI reflects the same state.
