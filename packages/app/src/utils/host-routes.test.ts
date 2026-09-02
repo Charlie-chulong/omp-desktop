@@ -252,6 +252,7 @@ describe("host settings section slugs", () => {
     expect(normalizeHostSectionSlug("workspaces")).toBeNull();
     expect(normalizeHostSectionSlug("projects")).toBe("projects");
     expect(normalizeHostSectionSlug("providers")).toBe("providers");
+    expect(normalizeHostSectionSlug("image-generation")).toBe("image-generation");
     expect(normalizeHostSectionSlug("usage")).toBe("usage");
     expect(normalizeHostSectionSlug("host")).toBe("host");
   });

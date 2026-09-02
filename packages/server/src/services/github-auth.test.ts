@@ -75,6 +75,77 @@ describe("GitHubAuthManager", () => {
     expect(requests.some((request) => request.url.endsWith("/user"))).toBe(true);
   });
 
+  it("refreshes an expiring GitHub App token before returning it", async () => {
+    const store = new MemoryGitHubCredentialStore();
+    let now = Date.parse("2026-08-27T00:00:00.000Z");
+    const requests: Request[] = [];
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      if (request.url.endsWith("/login/device/code")) {
+        return jsonResponse({
+          device_code: "device-code",
+          user_code: "ABCD-EFGH",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 0,
+        });
+      }
+      if (request.url.endsWith("/login/oauth/access_token")) {
+        const body = await request.text();
+        if (body.includes("grant_type=refresh_token")) {
+          expect(body).toContain("client_id=Iv23liUcLI6z5fu6BNnr");
+          expect(body).toContain("refresh_token=refresh-token");
+          return jsonResponse(
+            {
+              access_token: "refreshed-token",
+              token_type: "bearer",
+              scope: "",
+              expires_in: 28_800,
+              refresh_token: "rotated-refresh-token",
+              refresh_token_expires_in: 15_897_600,
+            },
+            200,
+            { date: new Date(now).toUTCString() },
+          );
+        }
+        return jsonResponse(
+          {
+            access_token: "expiring-token",
+            token_type: "bearer",
+            scope: "",
+            expires_in: 28_800,
+            refresh_token: "refresh-token",
+            refresh_token_expires_in: 15_897_600,
+          },
+          200,
+          { date: new Date(now).toUTCString() },
+        );
+      }
+      if (request.url.endsWith("/user")) {
+        return jsonResponse({ id: 42, login: "octocat" });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const auth = new GitHubAuthManager({
+      credentialStore: store,
+      env: {},
+      now: () => now,
+    });
+
+    const start = await auth.beginLogin("github.com");
+    await auth.finishLogin(start.flowId);
+    now += 8 * 60 * 60 * 1_000;
+
+    await expect(auth.getCredential("github.com")).resolves.toMatchObject({
+      token: "refreshed-token",
+      refreshToken: "rotated-refresh-token",
+    });
+    expect(
+      requests.filter((request) => request.url.endsWith("/login/oauth/access_token")),
+    ).toHaveLength(2);
+  });
+
   it("reports when Device Flow is disabled for the configured GitHub App", async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse(
@@ -204,10 +275,13 @@ describe("GitHubAuthManager", () => {
     });
   });
 });
-
-function jsonResponse(value: unknown, status = 200): Response {
+function jsonResponse(
+  value: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(value), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 }

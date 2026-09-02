@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
-import {
-  streamOmpCoreHistory,
-  type OmpCapturedUserMessageEntry,
-} from "./message-history.js";
+import { streamOmpCoreHistory, type OmpCapturedUserMessageEntry } from "./message-history.js";
 import type { OmpAgentMessage } from "./rpc-types.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
 import { OMP_HISTORY_MAPPER_HOOKS } from "./history-hooks.js";
@@ -93,9 +90,7 @@ describe("OMP history mapper", () => {
     ]);
 
     expect(
-      events.map((event) =>
-        event.item.type === "tool_call" ? event.item.callId : null,
-      ),
+      events.map((event) => (event.item.type === "tool_call" ? event.item.callId : null)),
     ).toEqual([
       "omp-poll:job-a",
       "omp-poll:job-a",
@@ -407,8 +402,7 @@ describe("OMP history mapper", () => {
             name: "write",
             arguments: {
               path: "xd://browser",
-              content:
-                '{"action":"open","name":"docs","url":"https://example.com"}',
+              content: '{"action":"open","name":"docs","url":"https://example.com"}',
             },
           },
         ],
@@ -536,9 +530,15 @@ describe("OMP history mapper", () => {
           content: "<system-reminder>must stay hidden</system-reminder>",
         },
         {
+          type: "service_tier_change",
+          id: "service-tier-control",
+          parentId: "custom-message-control",
+          serviceTier: "priority",
+        },
+        {
           type: "future_control",
           id: "unknown-active",
-          parentId: "custom-message-control",
+          parentId: "service-tier-control",
           secret: "must not stringify",
         },
         {
@@ -582,9 +582,7 @@ describe("OMP history mapper", () => {
       selectedEvents.push(event);
     }
     expect(
-      selectedEvents.flatMap((event) =>
-        event.type === "timeline" ? [event.item] : [],
-      ),
+      selectedEvents.flatMap((event) => (event.type === "timeline" ? [event.item] : [])),
     ).toEqual([
       { type: "user_message", text: "old branch", messageId: "user-old" },
       {
@@ -607,10 +605,7 @@ describe("OMP history mapper", () => {
     mkdirSync(join(parentStem, echoId), { recursive: true });
 
     const writeEntries = (file: string, entries: object[]): void => {
-      writeFileSync(
-        file,
-        entries.map((entry) => JSON.stringify(entry)).join("\n"),
-      );
+      writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
     };
     writeEntries(nestedFile, [
       {

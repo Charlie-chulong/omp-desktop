@@ -25,6 +25,7 @@ import {
   Bot,
   Boxes,
   Gauge,
+  Image,
   Keyboard,
   Stethoscope,
   Info,
@@ -91,6 +92,7 @@ import {
   HostAgentsPage,
   HostSettingsPage,
   HostProvidersPage,
+  HostImageGenerationPage,
   HostUsagePage,
   HostTerminalsPage,
 } from "@/screens/settings/host-page";
@@ -164,7 +166,8 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
-  { id: "providers", labelKey: "settings.hostSections.providers", icon: Boxes },
+  { id: "providers", labelKey: "settings.providers.title", icon: Boxes },
+  { id: "image-generation", labelKey: "settings.imageGeneration.title", icon: Image },
   { id: "usage", labelKey: "settings.hostSections.usage", icon: Gauge },
   { id: "terminals", labelKey: "settings.hostSections.terminals", icon: SquareTerminal },
 ];
@@ -184,6 +187,8 @@ function renderHostSettingsContent(
       return <MetadataGenerationPage serverId={view.serverId} />;
     case "providers":
       return <HostProvidersPage serverId={view.serverId} />;
+    case "image-generation":
+      return <HostImageGenerationPage serverId={view.serverId} />;
     case "usage":
       return <HostUsagePage serverId={view.serverId} />;
     case "terminals":

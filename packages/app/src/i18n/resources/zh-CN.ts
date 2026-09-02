@@ -1453,10 +1453,6 @@ export const zhCN: TranslationResources = {
         title: "导入会话",
         description: "导入最近的外部 CLI 会话",
       },
-      setupProviders: {
-        title: "设置 OMP",
-        description: "配置本地 Oh My Pi 运行时",
-      },
       pairDevice: {
         title: "配对设备",
         description: "将手机连接到此 daemon",
@@ -1555,7 +1551,6 @@ export const zhCN: TranslationResources = {
     noMatchesForQuery: "没有与“{{query}}”匹配的模型",
     searchAllPlaceholder: "搜索所有模型...",
     searchPlaceholder: "搜索模型...",
-    openProviderSettings: "打开 {{provider}} 设置",
     modelSettings: "模型设置",
     contextWindowEffective: "{{count}} tokens",
     contextWindowUnknown: "上下文窗口不可用",
@@ -1944,7 +1939,6 @@ export const zhCN: TranslationResources = {
       connections: "连接",
       agents: "智能体",
       metadata: "元数据",
-      providers: "模型服务商",
       usage: "使用情况",
       terminals: "终端",
       plugins: "插件",

@@ -1494,10 +1494,6 @@ export const ru: TranslationResources = {
         title: "Импортировать сессию",
         description: "Импортируйте недавние сессии из внешних CLI",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "Подключить устройство",
         description: "Подключите свой телефон к этому демону",
@@ -1598,7 +1594,6 @@ export const ru: TranslationResources = {
     noMatchesForQuery: "Нет моделей, соответствующих «{{query}}»",
     searchAllPlaceholder: "Поиск по всем моделям...",
     searchPlaceholder: "Поиск моделей...",
-    openProviderSettings: "Открыть настройки {{provider}}",
     modelSettings: "Настройки модели",
     contextWindowEffective: "{{count}} токенов",
     contextWindowUnknown: "Контекстное окно недоступно",
@@ -1995,7 +1990,6 @@ export const ru: TranslationResources = {
       connections: "Подключения",
       agents: "Агенты",
       metadata: "Метаданные",
-      providers: "Провайдеры",
       usage: "Использование",
       terminals: "Терминалы",
       plugins: "Плагины",

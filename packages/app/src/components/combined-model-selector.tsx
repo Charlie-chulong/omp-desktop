@@ -46,7 +46,6 @@ interface CombinedModelSelectorProps {
   onRetryProvider?: (provider: AgentProvider) => void;
   isRetryingProvider?: boolean;
   disabled?: boolean;
-  serverId?: string | null;
   /** Open the active provider's models directly; provider switching is owned by another surface. */
   browseProviders?: boolean;
   desktopPlacement?: ComboboxProps["desktopPlacement"];
@@ -87,7 +86,6 @@ export function CombinedModelSelector({
   onRetryProvider,
   isRetryingProvider = false,
   disabled = false,
-  serverId = null,
   browseProviders = true,
   desktopPlacement,
   desktopMinWidth,
@@ -115,7 +113,6 @@ export function CombinedModelSelector({
     selectedModel,
     isLoading,
     profiles,
-    serverId,
     browseProviders,
   });
   const { prepareToOpen, reset, showAll } = browser;

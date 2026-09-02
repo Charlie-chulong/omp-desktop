@@ -1492,10 +1492,6 @@ export const ptBR: TranslationResources = {
         title: "Importar sessão",
         description: "Importe sessões externas recentes da CLI",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "Parear dispositivo",
         description: "Conecte seu celular a este daemon",
@@ -1595,7 +1591,6 @@ export const ptBR: TranslationResources = {
     noMatchesForQuery: "Nenhum modelo corresponde a «{{query}}»",
     searchAllPlaceholder: "Buscar em todos os modelos...",
     searchPlaceholder: "Buscar modelos...",
-    openProviderSettings: "Abrir configurações de {{provider}}",
     modelSettings: "Configurações do modelo",
     contextWindowEffective: "{{count}} tokens",
     contextWindowUnknown: "Janela de contexto indisponível",
@@ -1990,7 +1985,6 @@ export const ptBR: TranslationResources = {
       connections: "Conexões",
       agents: "Agentes",
       metadata: "Metadados",
-      providers: "Provedores",
       usage: "Uso",
       terminals: "Terminais",
       plugins: "Plugins",

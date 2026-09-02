@@ -1476,10 +1476,6 @@ export const ja: TranslationResources = {
         title: "セッションをインポート",
         description: "最近の外部CLIセッションを取り込む",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "デバイスをペアリング",
         description: "このデーモンにスマートフォンを接続",
@@ -1579,7 +1575,6 @@ export const ja: TranslationResources = {
     noMatchesForQuery: "「{{query}}」に一致するモデルがありません",
     searchAllPlaceholder: "すべてのモデルを検索...",
     searchPlaceholder: "モデルを検索...",
-    openProviderSettings: "{{provider}}の設定を開く",
     modelSettings: "モデル設定",
     contextWindowEffective: "{{count}} トークン",
     contextWindowUnknown: "コンテキストウィンドウを取得できません",
@@ -1975,7 +1970,6 @@ export const ja: TranslationResources = {
       connections: "接続",
       agents: "エージェント",
       metadata: "メタデータ",
-      providers: "プロバイダー",
       usage: "使用状況",
       terminals: "ターミナル",
       plugins: "プラグイン",

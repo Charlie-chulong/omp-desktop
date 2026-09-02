@@ -1461,10 +1461,6 @@ export const ar: TranslationResources = {
         title: "جلسة الاستيراد",
         description: "أحضر جلسات CLI الخارجية الأخيرة",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "إقران الجهاز",
         description: "قم بتوصيل هاتفك بهذا البرنامج الخفي",
@@ -1563,7 +1559,6 @@ export const ar: TranslationResources = {
     noMatchesForQuery: 'لا توجد نماذج تطابق "{{query}}"',
     searchAllPlaceholder: "ابحث في كل النماذج...",
     searchPlaceholder: "نماذج البحث...",
-    openProviderSettings: "افتح إعدادات{{provider}}",
     modelSettings: "إعدادات النموذج",
     contextWindowEffective: "{{count}} رمز",
     contextWindowUnknown: "نافذة السياق غير متاحة",
@@ -1956,7 +1951,6 @@ export const ar: TranslationResources = {
       connections: "اتصالات",
       agents: "Agents",
       metadata: "البيانات الوصفية",
-      providers: "مقدمي الخدمات",
       usage: "الاستخدام",
       terminals: "Terminals",
       plugins: "Plugins",

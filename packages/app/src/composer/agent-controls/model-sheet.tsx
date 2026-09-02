@@ -46,7 +46,6 @@ interface CompactModelSheetProps {
   onRetryProvider?: (provider: AgentProvider) => void;
   isRetryingProvider?: boolean;
   disabled?: boolean;
-  serverId?: string | null;
   glyphSize: number;
   canSwitchProvider: boolean;
   children: ReactNode;
@@ -147,7 +146,6 @@ export function CompactModelSheet({
   onRetryProvider,
   isRetryingProvider = false,
   disabled = false,
-  serverId = null,
   glyphSize,
   canSwitchProvider,
   children,
@@ -171,7 +169,6 @@ export function CompactModelSheet({
     isLoading,
     autoFocusSearch: isWeb && !usesBottomSheet && !canBrowseProviders,
     profiles,
-    serverId,
     browseProviders: usesBottomSheet,
   });
   const modelBrowser = useModelBrowser({
@@ -181,7 +178,6 @@ export function CompactModelSheet({
     isLoading,
     autoFocusSearch: isWeb && !usesBottomSheet,
     profiles,
-    serverId,
     browseProviders: false,
   });
   const ProviderIcon =

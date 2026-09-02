@@ -1479,10 +1479,6 @@ export const en = {
         title: "Import session",
         description: "Bring in recent external CLI sessions",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "Pair device",
         description: "Connect your phone to this daemon",
@@ -1582,7 +1578,6 @@ export const en = {
     noMatchesForQuery: 'No models match "{{query}}"',
     searchAllPlaceholder: "Search all models...",
     searchPlaceholder: "Search models...",
-    openProviderSettings: "Open {{provider}} settings",
     modelSettings: "Model settings",
     contextWindowEffective: "{{count}} tokens",
     contextWindowUnknown: "Context window unavailable",
@@ -1975,7 +1970,6 @@ export const en = {
       connections: "Connections",
       agents: "Agents",
       metadata: "Metadata",
-      providers: "Providers",
       usage: "Usage",
       terminals: "Terminals",
       plugins: "Plugins",

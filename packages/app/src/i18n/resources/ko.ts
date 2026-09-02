@@ -1472,10 +1472,6 @@ export const ko: TranslationResources = {
         title: "세션 가져오기",
         description: "최근 외부 CLI 세션을 가져옵니다",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "기기 페어링",
         description: "휴대폰을 이 데몬에 연결합니다",
@@ -1575,7 +1571,6 @@ export const ko: TranslationResources = {
     noMatchesForQuery: '"{{query}}"과(와) 일치하는 모델이 없습니다',
     searchAllPlaceholder: "모든 모델 검색...",
     searchPlaceholder: "모델 검색...",
-    openProviderSettings: "{{provider}} 설정 열기",
     modelSettings: "모델 설정",
     contextWindowEffective: "{{count}} 토큰",
     contextWindowUnknown: "컨텍스트 창을 사용할 수 없음",
@@ -1968,7 +1963,6 @@ export const ko: TranslationResources = {
       connections: "연결",
       agents: "에이전트",
       metadata: "메타데이터",
-      providers: "프로바이더",
       usage: "사용량",
       terminals: "터미널",
       plugins: "플러그인",

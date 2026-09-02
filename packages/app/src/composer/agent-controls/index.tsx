@@ -1069,7 +1069,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
                 onClose={onDropdownClose}
                 onRetryProvider={onRetryModelProvider}
                 isRetryingProvider={isRetryingModelProvider}
-                serverId={modelSelectorServerId}
                 desktopPlacement="top-start"
                 desktopMinWidth={400}
                 toolbar={modelToolbar}
@@ -1241,7 +1240,6 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
       onClose={onDropdownClose}
       onRetryProvider={onRetryModelProvider}
       isRetryingProvider={isRetryingModelProvider}
-      serverId={modelSelectorServerId}
       glyphSize={glyphSize}
       canSwitchProvider={canSwitchProvider}
     >

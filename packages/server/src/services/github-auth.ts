@@ -9,6 +9,7 @@ import { z } from "zod";
 const GITHUB_CREDENTIAL_SERVICE = "omp-desktop.github";
 const GITHUB_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
 const GITHUB_REQUEST_TIMEOUT_MS = 30_000;
+const GITHUB_TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1_000;
 const GITHUB_OAUTH_SCOPES = ["repo"] as const;
 export const DEFAULT_GITHUB_OAUTH_CLIENT_ID = "Iv23liUcLI6z5fu6BNnr";
 
@@ -22,13 +23,33 @@ interface GitHubDeviceVerification {
   interval: number;
 }
 
-const StoredCredentialSchema = z.object({
-  version: z.literal(1),
+const StoredCredentialFields = {
   host: z.string().min(1),
   token: z.string().min(1),
   userId: z.number().int().positive().nullable(),
   login: z.string().min(1).nullable(),
   scopes: z.array(z.string()),
+};
+
+const StoredCredentialSchema = z.discriminatedUnion("version", [
+  z.object({
+    version: z.literal(1),
+    ...StoredCredentialFields,
+  }),
+  z.object({
+    version: z.literal(2),
+    ...StoredCredentialFields,
+    tokenExpiresAt: z.string().datetime(),
+    refreshToken: z.string().min(1),
+    refreshTokenExpiresAt: z.string().datetime(),
+  }),
+]);
+
+const RefreshedTokenResponseSchema = z.object({
+  access_token: z.string().min(1),
+  expires_in: z.number().int().positive(),
+  refresh_token: z.string().min(1),
+  refresh_token_expires_in: z.number().int().positive(),
 });
 
 export type GitHubCredential = z.infer<typeof StoredCredentialSchema>;
@@ -187,6 +208,7 @@ export class GitHubAuthManager {
   readonly #env: NodeJS.ProcessEnv;
   readonly #now: () => number;
   readonly #flows = new Map<string, LoginFlow>();
+  readonly #refreshes = new Map<string, Promise<GitHubCredential | null>>();
 
   constructor(options: GitHubAuthManagerOptions = {}) {
     this.#config = options.config ?? {};
@@ -259,7 +281,29 @@ export class GitHubAuthManager {
         scopes: [],
       };
     }
-    return this.#credentialStore.get(config.host);
+
+    const credential = await this.#credentialStore.get(config.host);
+    if (
+      !credential ||
+      credential.version === 1 ||
+      Date.parse(credential.tokenExpiresAt) > this.#now() + GITHUB_TOKEN_REFRESH_WINDOW_MS
+    ) {
+      return credential;
+    }
+    if (Date.parse(credential.refreshTokenExpiresAt) <= this.#now()) {
+      await this.#credentialStore.delete(config.host);
+      return null;
+    }
+
+    const activeRefresh = this.#refreshes.get(config.host);
+    if (activeRefresh) return activeRefresh;
+    const refresh = this.#refreshCredential(this.#requireLoginConfig(config.host), credential);
+    this.#refreshes.set(config.host, refresh);
+    try {
+      return await refresh;
+    } finally {
+      if (this.#refreshes.get(config.host) === refresh) this.#refreshes.delete(config.host);
+    }
   }
 
   async beginLogin(host: string): Promise<GitHubLoginStart> {
@@ -308,14 +352,27 @@ export class GitHubAuthManager {
       .then(async (authentication) => {
         const user = await this.#validateToken(hostConfig, authentication.token, controller.signal);
         const scopes = "scopes" in authentication ? [...authentication.scopes] : [];
-        const credential: GitHubCredential = {
-          version: 1,
-          host: hostConfig.host,
-          token: authentication.token,
-          userId: user.id,
-          login: user.login,
-          scopes,
-        };
+        const credential: GitHubCredential =
+          "refreshToken" in authentication
+            ? {
+                version: 2,
+                host: hostConfig.host,
+                token: authentication.token,
+                tokenExpiresAt: authentication.expiresAt,
+                refreshToken: authentication.refreshToken,
+                refreshTokenExpiresAt: authentication.refreshTokenExpiresAt,
+                userId: user.id,
+                login: user.login,
+                scopes,
+              }
+            : {
+                version: 1,
+                host: hostConfig.host,
+                token: authentication.token,
+                userId: user.id,
+                login: user.login,
+                scopes,
+              };
         await this.#credentialStore.set(credential);
         return {
           host: hostConfig.host,
@@ -428,6 +485,58 @@ export class GitHubAuthManager {
     });
     const response = await octokit.rest.users.getAuthenticated();
     return { id: response.data.id, login: response.data.login };
+  }
+
+  async #refreshCredential(
+    hostConfig: GitHubHostAuthConfig & { clientId: string },
+    credential: Extract<GitHubCredential, { version: 2 }>,
+  ): Promise<GitHubCredential | null> {
+    const response = await createTimeoutFetch()(
+      new URL("/login/oauth/access_token", hostConfig.webBaseUrl),
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: hostConfig.clientId,
+          grant_type: "refresh_token",
+          refresh_token: credential.refreshToken,
+        }),
+      },
+    );
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      const code =
+        typeof payload === "object" &&
+        payload !== null &&
+        "error" in payload &&
+        typeof payload.error === "string"
+          ? payload.error
+          : `HTTP ${response.status}`;
+      if (code === "bad_refresh_token") {
+        await this.#credentialStore.delete(hostConfig.host);
+        return null;
+      }
+      throw new GitHubLoginFlowError(
+        `Unable to refresh GitHub authentication for ${hostConfig.host}: ${code}`,
+      );
+    }
+
+    const refreshed = RefreshedTokenResponseSchema.parse(payload);
+    const now = this.#now();
+    const updated: GitHubCredential = {
+      ...credential,
+      token: refreshed.access_token,
+      tokenExpiresAt: new Date(now + refreshed.expires_in * 1_000).toISOString(),
+      refreshToken: refreshed.refresh_token,
+      refreshTokenExpiresAt: new Date(
+        now + refreshed.refresh_token_expires_in * 1_000,
+      ).toISOString(),
+    };
+    await this.#credentialStore.set(updated);
+    return updated;
   }
 
   #environmentToken(host: string): string | null {

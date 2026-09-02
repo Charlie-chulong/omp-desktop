@@ -1930,6 +1930,14 @@ function OmpManagementPanel({
     </>
   );
 }
+export function OmpProviderConfigurationPanel({ serverId }: { serverId: string }) {
+  const { refresh } = useProvidersSnapshot(serverId);
+  const handleSaved = useCallback(() => {
+    void refresh(["omp"]);
+  }, [refresh]);
+
+  return <OmpManagementPanel serverId={serverId} visible onSaved={handleSaved} />;
+}
 
 function DiagnosticSubSheet({
   provider,

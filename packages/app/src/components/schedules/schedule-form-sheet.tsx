@@ -749,7 +749,6 @@ function ScheduleTargetFields({
             isLoading={providerSnapshot.isLoading || providerSnapshot.isFetching}
             renderTrigger={renderModelTrigger}
             triggerFill
-            serverId={mutationServerId}
             disabled={!state.selectedServerId}
             onOpen={handleModelOpen}
             onRetryProvider={handleRetryProvider}

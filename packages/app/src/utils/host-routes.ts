@@ -514,6 +514,7 @@ export const HOST_SECTION_SLUGS = [
   "agents",
   "metadata",
   "providers",
+  "image-generation",
   "usage",
   "terminals",
   "plugins",

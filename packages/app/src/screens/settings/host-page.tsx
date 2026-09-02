@@ -54,11 +54,12 @@ import {
   useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
-import { ProvidersSection } from "@/screens/settings/providers-section";
 import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/screens/settings/settings-section";
+import { ImageGenerationSettingsSection } from "@/screens/settings/image-generation-card";
+import { OmpProviderConfigurationPanel } from "@/components/provider-diagnostic-sheet";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
 import type { HostConnection, HostProfile } from "@/types/host-connection";
@@ -412,8 +413,8 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
     </View>
   );
 }
-
 export function HostProvidersPage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const host = useHostProfile(serverId);
 
   if (!host) {
@@ -421,10 +422,20 @@ export function HostProvidersPage({ serverId }: { serverId: string }) {
   }
 
   return (
-    <View>
-      <ProvidersSection serverId={serverId} />
-    </View>
+    <SettingsSection title={t("settings.providers.title")}>
+      <OmpProviderConfigurationPanel serverId={serverId} />
+    </SettingsSection>
   );
+}
+
+export function HostImageGenerationPage({ serverId }: { serverId: string }) {
+  const host = useHostProfile(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  return <ImageGenerationSettingsSection serverId={serverId} />;
 }
 
 export function HostUsagePage({ serverId }: { serverId: string }) {

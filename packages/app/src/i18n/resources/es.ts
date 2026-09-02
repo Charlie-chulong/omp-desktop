@@ -1506,10 +1506,6 @@ export const es: TranslationResources = {
         title: "Importar sesión",
         description: "Incorporar sesionesCLIexternas recientes",
       },
-      setupProviders: {
-        title: "Set up OMP",
-        description: "Configure the local Oh My Pi runtime",
-      },
       pairDevice: {
         title: "Emparejar dispositivo",
         description: "Conecta tu teléfono a este demonio",
@@ -1609,7 +1605,6 @@ export const es: TranslationResources = {
     noMatchesForQuery: "Ningún modelo coincide con «{{query}}»",
     searchAllPlaceholder: "Buscar en todos los modelos...",
     searchPlaceholder: "Buscar modelos...",
-    openProviderSettings: "Abrir configuración de{{provider}}",
     modelSettings: "Configuración del modelo",
     contextWindowEffective: "{{count}} tokens",
     contextWindowUnknown: "Ventana de contexto no disponible",
@@ -2004,7 +1999,6 @@ export const es: TranslationResources = {
       connections: "Conexiones",
       agents: "Agents",
       metadata: "Metadatos",
-      providers: "Proveedores",
       usage: "Uso",
       terminals: "Terminals",
       plugins: "Plugins",

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Platform, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useRouter } from "expo-router";
-import { ArrowRight, FolderOpen, Inbox, Plug } from "lucide-react-native";
+import { ArrowRight, FolderOpen, Inbox } from "lucide-react-native";
 import { OmpIcon } from "@/components/icons/omp-icon";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
@@ -16,7 +16,7 @@ import {
 } from "@/constants/layout";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
-import { buildHostAgentDetailRoute, buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { buildHostAgentDetailRoute } from "@/utils/host-routes";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useOpenProject } from "@/hooks/use-open-project";
@@ -60,6 +60,7 @@ interface PosterStencil {
 }
 
 interface PosterModule {
+  enabled: boolean;
   init: () => Promise<unknown>;
   createStencil: (
     canvas: HTMLCanvasElement,
@@ -207,6 +208,10 @@ function OmpDotCloud() {
     const initializeFrame = window.requestAnimationFrame(() => {
       void (async () => {
         const posterModule = await loadPosterModule();
+        if (!posterModule.enabled) {
+          canvas.remove();
+          return;
+        }
         await posterModule.init();
         if (disposed) return;
 
@@ -297,11 +302,6 @@ export function OpenProjectScreen() {
     [importServerId, openImportedProject, router],
   );
 
-  const handleOpenProviders = useCallback(() => {
-    if (!localServerId) return;
-    router.push(buildSettingsHostSectionRoute(localServerId, "providers"));
-  }, [localServerId, router]);
-
   const backgroundStyle = useMemo(
     () =>
       Platform.OS === "web"
@@ -351,15 +351,6 @@ export function OpenProjectScreen() {
             description={t("openProject.tiles.importSession.description")}
             onPress={handleOpenImportSession}
             testID="open-project-import-session"
-          />
-          <HomeTile
-            index="03"
-            accent="cyan"
-            icon={Plug}
-            title={t("openProject.tiles.setupProviders.title")}
-            description={t("openProject.tiles.setupProviders.description")}
-            onPress={handleOpenProviders}
-            testID="open-project-setup-providers"
           />
         </View>
       </View>

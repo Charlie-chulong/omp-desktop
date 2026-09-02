@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { router } from "expo-router";
 import {
   FlatList,
   Platform,
@@ -17,15 +16,7 @@ import {
 import { BottomSheetFlatList, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import {
-  AlertTriangle,
-  Check,
-  ChevronRight,
-  Pencil,
-  Plus,
-  Search,
-  Settings,
-} from "lucide-react-native";
+import { AlertTriangle, Check, ChevronRight, Pencil, Plus, Search } from "lucide-react-native";
 import type { AgentProvider } from "@omp-desktop/protocol/agent-types";
 import {
   AgentProfileGlyph,
@@ -59,7 +50,6 @@ import {
   type ModelBrowserView,
 } from "@/components/model-browser-view";
 import { isModelBrowserRowSelected } from "@/composer/agent-controls/model-sheet-flow";
-import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 
 const DESKTOP_PROVIDER_VIEW_MIN_HEIGHT = 220;
 const DESKTOP_PROVIDER_VIEW_MAX_HEIGHT = 560;
@@ -73,37 +63,7 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedSearch = withUnistyles(Search);
-const ThemedSettings = withUnistyles(Settings);
 const accentMapping = (theme: Theme) => ({ color: theme.colors.accent });
-
-function ProviderSettingsAction({
-  accessibilityLabel,
-  provider,
-  serverId,
-}: {
-  accessibilityLabel: string;
-  provider: string;
-  serverId: string | null;
-}) {
-  const handlePress = useCallback(() => {
-    if (!serverId) return;
-    router.push(buildSettingsHostSectionRoute(serverId, "providers"));
-  }, [serverId]);
-
-  return (
-    <Pressable
-      onPress={handlePress}
-      disabled={!serverId}
-      hitSlop={8}
-      style={iconButtonStyle}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      testID={`selector-header-settings-${provider}`}
-    >
-      <HeaderSettingsIcon disabled={!serverId} />
-    </Pressable>
-  );
-}
 
 function AgentProfilesEditAction({ onPress }: { onPress: () => void }) {
   const { t } = useTranslation();
@@ -140,10 +100,6 @@ const foregroundExtraMutedMapping = (theme: Theme) => ({
   color: theme.colors.foregroundExtraMuted,
 });
 
-const headerSettingsMapping = (disabled: boolean) => (theme: Theme) => ({
-  color: disabled ? theme.colors.border : theme.colors.foregroundMuted,
-});
-
 interface ModelBrowserInput {
   providers: ProviderSelectorProvider[];
   selectedProvider: string;
@@ -152,7 +108,6 @@ interface ModelBrowserInput {
   autoFocusSearch?: boolean;
   /** Pinned above the provider list on the root view. `null` hides the section. */
   profiles?: AgentProfilePicker | null;
-  serverId?: string | null;
   /** Keep provider navigation outside this browser and open the selected provider directly. */
   browseProviders?: boolean;
 }
@@ -226,11 +181,6 @@ export function ModelProviderGlyph({
   return <Icon size={size} color={color} />;
 }
 
-function HeaderSettingsIcon({ disabled }: { disabled: boolean }) {
-  const uniProps = useMemo(() => headerSettingsMapping(disabled), [disabled]);
-  return <ThemedSettings size={ICON_SIZE.sm} uniProps={uniProps} />;
-}
-
 function iconButtonStyle({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) {
   return [
     styles.rowIconButton,
@@ -268,7 +218,6 @@ export function useModelBrowser({
   isLoading,
   autoFocusSearch = isWeb,
   profiles = null,
-  serverId = null,
   browseProviders = true,
 }: ModelBrowserInput): ModelBrowserState {
   const { t } = useTranslation();
@@ -346,17 +295,6 @@ export function useModelBrowser({
         <ModelProviderGlyph provider={view.providerId} size={ICON_SIZE.md} tone="foreground" />
       ),
       back: browseProviders && !singleProviderView ? { onPress: showAll } : undefined,
-      actions: (
-        <View style={styles.headerActionRow}>
-          <ProviderSettingsAction
-            serverId={serverId}
-            provider={view.providerId}
-            accessibilityLabel={t("modelSelector.openProviderSettings", {
-              provider: view.providerLabel,
-            })}
-          />
-        </View>
-      ),
       search: {
         onChange: handleSearchQueryChange,
         onFocus: () => setIsSearchFocused(true),
@@ -372,7 +310,6 @@ export function useModelBrowser({
     browseProviders,
     handleSearchQueryChange,
     searchResetKey,
-    serverId,
     singleProviderView,
     showAll,
     t,
@@ -1585,11 +1522,6 @@ export function ModelBrowser({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  headerActionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-  },
   profilesContainer: {
     backgroundColor: theme.colors.surface1,
     borderBottomWidth: 1,

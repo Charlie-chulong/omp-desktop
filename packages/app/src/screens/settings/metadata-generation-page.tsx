@@ -140,7 +140,6 @@ export function MetadataGenerationPage({ serverId }: { serverId: string }) {
               onRetryProvider={handleRetryProvider}
               isRetryingProvider={snapshot.isRefreshing}
               disabled={isSaving}
-              serverId={serverId}
               desktopPlacement="bottom-start"
               desktopMinWidth={360}
             />
