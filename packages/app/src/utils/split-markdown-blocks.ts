@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
+import { markdownMathPlugin } from "@/components/markdown/math/plugin";
 
-const markdownBlockParser = new MarkdownIt();
+const markdownBlockParser = new MarkdownIt().use(markdownMathPlugin);
 
 export function splitMarkdownBlocks(text: string): string[] {
   if (text.length === 0) {

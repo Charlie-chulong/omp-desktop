@@ -1,0 +1,17 @@
+.omp-math-inline {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+
+.omp-math-block {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.omp-math-block > .katex-display {
+  margin: 0.5em 0;
+}

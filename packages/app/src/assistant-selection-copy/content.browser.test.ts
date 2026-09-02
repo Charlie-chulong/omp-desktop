@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createAssistantSelectionClipboardContent } from "./content.web";
+import { MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE, MARKDOWN_COPY_TAG_ATTRIBUTE } from "./markup";
 
 const fixture = `
   <div data-testid="assistant-message">
@@ -550,6 +551,37 @@ describe("assistant selection copy inside highlighted code", () => {
 
     expect(content?.plainText).toBe(
       "```typescript\nconst answer = 1;\n  if (answer) {\n    doThing();\n```\n\nAfter the block.",
+    );
+  });
+});
+
+describe("assistant selection copy with math", () => {
+  it("copies rendered formulas as their original LaTeX source", () => {
+    const message = document.createElement("div");
+    message.setAttribute("data-testid", "assistant-message");
+
+    const paragraph = document.createElement("div");
+    paragraph.setAttribute(MARKDOWN_COPY_TAG_ATTRIBUTE, "p");
+    paragraph.append("Inline: ");
+    const inline = document.createElement("span");
+    inline.setAttribute(MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE, String.raw`\(x \le 8\)`);
+    inline.textContent = String.raw`x≤8x\le8`;
+    paragraph.append(inline, ".");
+
+    const block = document.createElement("div");
+    const blockSource = String.raw`\[
+\begin{aligned}
+A &= 1 \\
+B &= 2
+\end{aligned}
+\]`;
+    block.setAttribute(MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE, blockSource);
+    block.textContent = String.raw`A=1B=2\begin{aligned}...\end{aligned}`;
+    message.append(paragraph, block);
+    document.body.append(message);
+
+    expect(copiedMarkdown(selectNodeContents(message))).toBe(
+      `Inline: \\(x \\le 8\\).\n\n${blockSource}`,
     );
   });
 });

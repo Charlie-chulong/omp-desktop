@@ -56,6 +56,9 @@ export default defineConfig({
       },
     ],
   },
+  optimizeDeps: {
+    include: ["katex"],
+  },
   test: {
     // Fake-timer suites freeze p-throttle's clock, so a real per-second cap deadlocks them.
     env: {

@@ -50,6 +50,21 @@ describe("splitMarkdownBlocks", () => {
     ]);
   });
 
+  it("keeps display math with internal blank lines in one block", () => {
+    const formula = String.raw`\[
+\begin{aligned}
+A &= 1 \\
+
+B &= 2
+\end{aligned}
+\]`;
+    expect(splitMarkdownBlocks(`Before\n\n${formula}\n\nAfter`)).toEqual([
+      "Before",
+      formula,
+      "After",
+    ]);
+  });
+
   it("returns an empty array for empty input", () => {
     expect(splitMarkdownBlocks("")).toEqual([]);
   });

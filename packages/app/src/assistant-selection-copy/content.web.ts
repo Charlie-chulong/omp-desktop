@@ -9,6 +9,7 @@ import {
   MARKDOWN_COPY_ALIGN_ATTRIBUTE,
   MARKDOWN_COPY_IGNORE_ATTRIBUTE,
   MARKDOWN_COPY_LANGUAGE_ATTRIBUTE,
+  MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE,
   MARKDOWN_COPY_LIST_MARKER_ATTRIBUTE,
   MARKDOWN_COPY_LIST_START_ATTRIBUTE,
   MARKDOWN_COPY_TAG_ATTRIBUTE,
@@ -27,6 +28,13 @@ const turndown = new TurndownService({
   strongDelimiter: "**",
 });
 turndown.use(gfm);
+turndown.addRule("mathSource", {
+  filter: (node) => node.hasAttribute(MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE),
+  replacement: (_content, node) => {
+    const source = node.getAttribute(MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE) ?? "";
+    return source.startsWith("\\[\n") ? `\n\n${source}\n\n` : source;
+  },
+});
 turndown.addRule("escapedGfmTableCell", {
   filter: ["th", "td"],
   replacement: (content, node) => {
@@ -455,6 +463,9 @@ function restoreMarkdownElements(container: HTMLElement): void {
 
   const presentational = Array.from(container.querySelectorAll("div, span"));
   for (const element of presentational.toReversed()) {
+    if (element.hasAttribute(MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE)) {
+      continue;
+    }
     element.replaceWith(...element.childNodes);
   }
 }

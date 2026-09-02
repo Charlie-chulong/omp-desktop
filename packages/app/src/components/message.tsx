@@ -73,6 +73,7 @@ import { markdownNodeContainsType } from "@/utils/markdown-ast";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
 import { MarkdownFenceBlock } from "@/components/markdown/fence";
+import { createMarkdownMathRules } from "@/components/markdown/math/rules";
 import type { MarkdownPhase } from "@/components/markdown/fence/types";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
 import { colorMarkdownLinkChildren } from "@/components/markdown/link-children";
@@ -1470,6 +1471,7 @@ export const AssistantMessage = memo(function AssistantMessage({
 
   const markdownRules = useMemo<RenderRules>(() => {
     return {
+      ...createMarkdownMathRules(),
       heading1: (
         node: ASTNode,
         children: ReactNode[],
