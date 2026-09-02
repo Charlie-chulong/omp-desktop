@@ -16,6 +16,7 @@ function runtimeConfig(
   return {
     enabled: true,
     provider: "openai",
+    backend: "openai-api",
     model: "gpt-image-2",
     apiKey: "test-key",
     apiKeyConfigured: true,
@@ -81,6 +82,144 @@ describe("OpenAIImageGenerationService", () => {
     expect(await readFile(result.filePath)).toEqual(PNG_BYTES);
     expect(result.filePath.startsWith(path.join(paseoHome, "generated-images"))).toBe(true);
     expect(result.filePath).not.toContain("unsafe");
+  });
+  it("uses the selected ChatGPT subscription without an API key", async () => {
+    const paseoHome = await createRoot();
+    const resolve = vi.fn(async () => ({
+      accessToken: "oauth-token",
+      accountId: "account-123",
+      planType: "plus",
+    }));
+    const fetchApi = vi.fn(async () =>
+      Response.json({
+        created: 1,
+        data: [{ b64_json: PNG_BYTES.toString("base64") }],
+      }),
+    );
+    const service = new OpenAIImageGenerationService({
+      paseoHome,
+      getConfig: () =>
+        runtimeConfig({
+          backend: "chatgpt-subscription",
+          apiKey: undefined,
+          apiKeyConfigured: false,
+          apiKeySource: null,
+          subscriptionCredentialId: 7,
+        }),
+      logger: pino({ level: "silent" }),
+      subscriptionCredentialResolver: { resolve },
+      fetch: fetchApi,
+    });
+
+    const result = await service.generate(
+      {
+        prompt: "  a lighthouse  ",
+        size: "1024x1536",
+        quality: "medium",
+        background: "opaque",
+        outputFormat: "png",
+      },
+      { agentId: "agent" },
+    );
+
+    expect(resolve).toHaveBeenCalledWith(7, {
+      forceRefresh: false,
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchApi).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchApi.mock.calls[0]!;
+    expect(url).toBe("https://chatgpt.com/backend-api/codex/images/generations");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer oauth-token",
+        "ChatGPT-Account-ID": "account-123",
+        "Content-Type": "application/json",
+        "x-codex-image-turn-id": expect.any(String),
+      },
+      signal: expect.any(AbortSignal),
+    });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      prompt: "a lighthouse",
+      background: "opaque",
+      model: "gpt-image-2",
+      quality: "medium",
+      size: "1024x1536",
+    });
+    expect(result).toMatchObject({
+      model: "gpt-image-2",
+      mimeType: "image/png",
+      outputFormat: "png",
+    });
+    expect(await readFile(result.filePath)).toEqual(PNG_BYTES);
+  });
+
+  it("refreshes a ChatGPT subscription token once after an unauthorized response", async () => {
+    const paseoHome = await createRoot();
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce({
+        accessToken: "stale-token",
+        accountId: "account-123",
+        planType: "plus",
+      })
+      .mockResolvedValueOnce({
+        accessToken: "fresh-token",
+        accountId: "account-123",
+        planType: "plus",
+      });
+    const fetchApi = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ data: [{ b64_json: PNG_BYTES.toString("base64") }] }));
+    const service = new OpenAIImageGenerationService({
+      paseoHome,
+      getConfig: () =>
+        runtimeConfig({
+          backend: "chatgpt-subscription",
+          apiKey: undefined,
+          subscriptionCredentialId: 7,
+        }),
+      logger: pino({ level: "silent" }),
+      subscriptionCredentialResolver: { resolve },
+      fetch: fetchApi,
+    });
+
+    await service.generate({ prompt: "fox" }, { agentId: "agent" });
+
+    expect(resolve).toHaveBeenNthCalledWith(2, 7, {
+      forceRefresh: true,
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchApi).toHaveBeenCalledTimes(2);
+    expect(fetchApi.mock.calls[1]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer fresh-token",
+    });
+  });
+
+  it("rejects unsupported subscription output before resolving credentials", async () => {
+    const paseoHome = await createRoot();
+    const resolve = vi.fn();
+    const fetchApi = vi.fn();
+    const service = new OpenAIImageGenerationService({
+      paseoHome,
+      getConfig: () =>
+        runtimeConfig({
+          backend: "chatgpt-subscription",
+          apiKey: undefined,
+          subscriptionCredentialId: 7,
+        }),
+      logger: pino({ level: "silent" }),
+      subscriptionCredentialResolver: { resolve },
+      fetch: fetchApi,
+    });
+
+    await expect(
+      service.generate({ prompt: "fox", outputFormat: "jpeg" }, { agentId: "agent" }),
+    ).rejects.toThrow("PNG output only");
+    expect(resolve).not.toHaveBeenCalled();
+    expect(fetchApi).not.toHaveBeenCalled();
   });
 
   it("fails before networking when disabled or missing credentials", async () => {

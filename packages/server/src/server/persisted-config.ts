@@ -62,9 +62,11 @@ const OpenAiSpeechEndpointSchema = z
 const OpenAiImageEndpointSchema = z
   .object({
     enabled: z.boolean().optional(),
+    backend: z.enum(["openai-api", "chatgpt-subscription"]).optional(),
     apiKey: z.string().trim().min(1).optional(),
     baseUrl: z.string().trim().min(1).optional(),
     model: z.string().trim().min(1).optional(),
+    subscriptionCredentialId: z.number().int().positive().optional(),
   })
   .strict();
 

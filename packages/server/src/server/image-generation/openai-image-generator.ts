@@ -6,6 +6,7 @@ import { OpenAI } from "openai";
 import type { ImageGenerateParamsNonStreaming, ImagesResponse } from "openai/resources/images";
 
 import type { ImageGenerationRuntimeConfig } from "../daemon-config-store.js";
+import type { OmpSubscriptionCredentialResolver } from "./omp-subscription-credential.js";
 import type {
   GeneratedImage,
   ImageGenerationBackground,
@@ -19,6 +20,8 @@ import type {
 
 const MAX_GENERATED_IMAGE_BYTES = 32 * 1024 * 1024;
 export const DEFAULT_IMAGE_GENERATION_TIMEOUT_MS = 10 * 60 * 1000;
+const CODEX_IMAGE_GENERATION_ENDPOINT = "https://chatgpt.com/backend-api/codex/images/generations";
+const CODEX_IMAGE_GENERATION_MODEL = "gpt-image-2";
 
 const MIME_TYPE_BY_OUTPUT_FORMAT: Record<ImageGenerationOutputFormat, string> = {
   png: "image/png",
@@ -38,6 +41,8 @@ interface OpenAIImageGenerationDependencies {
   getConfig: () => ImageGenerationRuntimeConfig | null;
   logger: pino.Logger;
   createClient?: (config: ImageGenerationRuntimeConfig) => ImageApiClient;
+  subscriptionCredentialResolver?: OmpSubscriptionCredentialResolver;
+  fetch?: typeof fetch;
   requestTimeoutMs?: number;
 }
 
@@ -79,11 +84,16 @@ function createRequestSignal(
   };
 }
 
-function validateRequest(model: string, input: ImageGenerationInput): void {
+function validateRequest(
+  backend: ImageGenerationRuntimeConfig["backend"],
+  model: string,
+  input: ImageGenerationInput,
+): void {
   if (!input.prompt.trim()) {
     throw new Error("Image generation prompt must not be empty.");
   }
   if (
+    backend === "openai-api" &&
     (model === "gpt-image-2" || model.startsWith("gpt-image-2-")) &&
     input.background === "transparent"
   ) {
@@ -91,6 +101,9 @@ function validateRequest(model: string, input: ImageGenerationInput): void {
   }
   if (input.background === "transparent" && input.outputFormat === "jpeg") {
     throw new Error("Transparent image generation requires png or webp output.");
+  }
+  if (backend === "chatgpt-subscription" && input.outputFormat !== "png") {
+    throw new Error("ChatGPT subscription image generation currently supports PNG output only.");
   }
 }
 
@@ -131,12 +144,60 @@ function outputDirectory(paseoHome: string, agentId: string): string {
   const agentKey = createHash("sha256").update(agentId).digest("hex").slice(0, 20);
   return path.join(paseoHome, "generated-images", agentKey);
 }
+function subscriptionErrorMessage(status: number, body: string): string {
+  let providerMessage = "";
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      const error = (parsed as Record<string, unknown>).error;
+      if (typeof error === "object" && error !== null && !Array.isArray(error)) {
+        const message = (error as Record<string, unknown>).message;
+        if (typeof message === "string") providerMessage = message.trim();
+      } else if (typeof error === "string") {
+        providerMessage = error.trim();
+      }
+    }
+  } catch {
+    providerMessage = "";
+  }
+  if (status === 429) {
+    return providerMessage
+      ? `ChatGPT subscription image generation limit reached: ${providerMessage}`
+      : "ChatGPT subscription image generation limit reached.";
+  }
+  const suffix = providerMessage ? `: ${providerMessage}` : "";
+  return `ChatGPT subscription image generation failed (HTTP ${status})${suffix}`;
+}
+
+function parseSubscriptionResponse(value: unknown): ImagesResponse {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("ChatGPT subscription image generation returned an invalid response.");
+  }
+  const data = (value as Record<string, unknown>).data;
+  if (!Array.isArray(data)) {
+    throw new Error("ChatGPT subscription image generation returned an invalid response.");
+  }
+  const images = data.flatMap((item) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return [];
+    const encoded = (item as Record<string, unknown>).b64_json;
+    return typeof encoded === "string" ? [{ b64_json: encoded }] : [];
+  });
+  return {
+    created:
+      typeof (value as Record<string, unknown>).created === "number"
+        ? (value as Record<string, number>).created
+        : 0,
+    data: images,
+  };
+}
 
 export class OpenAIImageGenerationService implements ImageGenerationService {
   private readonly paseoHome: string;
   private readonly getConfig: () => ImageGenerationRuntimeConfig | null;
   private readonly logger: pino.Logger;
   private readonly createClient: (config: ImageGenerationRuntimeConfig) => ImageApiClient;
+  private readonly subscriptionCredentialResolver?: OmpSubscriptionCredentialResolver;
+  private readonly fetchApi: typeof fetch;
   private readonly requestTimeoutMs: number;
 
   public constructor(dependencies: OpenAIImageGenerationDependencies) {
@@ -144,7 +205,65 @@ export class OpenAIImageGenerationService implements ImageGenerationService {
     this.getConfig = dependencies.getConfig;
     this.logger = dependencies.logger.child({ component: "image-generation", provider: "openai" });
     this.createClient = dependencies.createClient ?? createOpenAIImageClient;
+    this.subscriptionCredentialResolver = dependencies.subscriptionCredentialResolver;
+    this.fetchApi = dependencies.fetch ?? fetch;
     this.requestTimeoutMs = dependencies.requestTimeoutMs ?? DEFAULT_IMAGE_GENERATION_TIMEOUT_MS;
+  }
+  private async generateWithSubscription(
+    config: ImageGenerationRuntimeConfig,
+    input: {
+      prompt: string;
+      size: ImageGenerationSize;
+      quality: ImageGenerationQuality;
+      background: ImageGenerationBackground;
+    },
+    signal: AbortSignal,
+  ): Promise<ImagesResponse> {
+    const credentialId = config.subscriptionCredentialId;
+    if (!credentialId) {
+      throw new Error("Image generation requires an OpenAI Codex subscription account.");
+    }
+    if (!this.subscriptionCredentialResolver) {
+      throw new Error("OpenAI Codex subscription credentials are unavailable on this host.");
+    }
+
+    const request = async (forceRefresh: boolean): Promise<Response> => {
+      const credential = await this.subscriptionCredentialResolver?.resolve(credentialId, {
+        forceRefresh,
+        signal,
+      });
+      if (!credential) {
+        throw new Error("OpenAI Codex subscription credentials are unavailable on this host.");
+      }
+      if (credential.planType === "free") {
+        throw new Error("Image generation is unavailable for the selected free ChatGPT plan.");
+      }
+      return await this.fetchApi(CODEX_IMAGE_GENERATION_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${credential.accessToken}`,
+          "ChatGPT-Account-ID": credential.accountId,
+          "Content-Type": "application/json",
+          "x-codex-image-turn-id": randomUUID(),
+        },
+        body: JSON.stringify({
+          prompt: input.prompt,
+          background: input.background,
+          model: CODEX_IMAGE_GENERATION_MODEL,
+          quality: input.quality,
+          size: input.size,
+        }),
+        signal,
+      });
+    };
+
+    let response = await request(false);
+    if (response.status === 401) response = await request(true);
+    if (!response.ok) {
+      throw new Error(subscriptionErrorMessage(response.status, await response.text()));
+    }
+    return parseSubscriptionResponse(await response.json());
   }
 
   public async generate(
@@ -155,21 +274,32 @@ export class OpenAIImageGenerationService implements ImageGenerationService {
     if (!config?.enabled) {
       throw new Error("Image generation is disabled in Host settings.");
     }
-    if (!config.apiKey) {
-      throw new Error("Image generation requires an OpenAI API key in Host settings.");
-    }
-
-    validateRequest(config.model, input);
-    context.signal?.throwIfAborted();
 
     const prompt = input.prompt.trim();
     const size: ImageGenerationSize = input.size ?? "auto";
     const quality: ImageGenerationQuality = input.quality ?? "auto";
     const background: ImageGenerationBackground = input.background ?? "auto";
-    const outputFormat: ImageGenerationOutputFormat = input.outputFormat ?? "png";
-    const client = this.createClient(config);
+    const requestedOutputFormat: ImageGenerationOutputFormat = input.outputFormat ?? "png";
+    validateRequest(config.backend, config.model, {
+      ...input,
+      outputFormat: requestedOutputFormat,
+    });
+    const outputFormat: ImageGenerationOutputFormat =
+      config.backend === "chatgpt-subscription" ? "png" : requestedOutputFormat;
+    context.signal?.throwIfAborted();
+
+    if (config.backend === "openai-api" && !config.apiKey) {
+      throw new Error("Image generation requires an OpenAI API key in Host settings.");
+    }
+
+    const client = config.backend === "openai-api" ? this.createClient(config) : null;
     const requestStartedAt = Date.now();
-    const endpoint = config.baseUrl ? new URL(config.baseUrl).origin : "https://api.openai.com";
+    const endpoint =
+      config.backend === "chatgpt-subscription"
+        ? new URL(CODEX_IMAGE_GENERATION_ENDPOINT).origin
+        : config.baseUrl
+          ? new URL(config.baseUrl).origin
+          : "https://api.openai.com";
     const requestSignal = createRequestSignal(context.signal, this.requestTimeoutMs);
     this.logger.info(
       {
@@ -184,19 +314,26 @@ export class OpenAIImageGenerationService implements ImageGenerationService {
     );
     let response: ImagesResponse;
     try {
-      response = await client.generate(
-        {
-          prompt,
-          model: config.model,
-          n: 1,
-          size,
-          quality,
-          background,
-          output_format: outputFormat,
-          stream: false,
-        },
-        { signal: requestSignal.signal },
-      );
+      response =
+        config.backend === "chatgpt-subscription"
+          ? await this.generateWithSubscription(
+              config,
+              { prompt, size, quality, background },
+              requestSignal.signal,
+            )
+          : await client!.generate(
+              {
+                prompt,
+                model: config.model,
+                n: 1,
+                size,
+                quality,
+                background,
+                output_format: outputFormat,
+                stream: false,
+              },
+              { signal: requestSignal.signal },
+            );
     } catch (error) {
       const durationMs = Date.now() - requestStartedAt;
       if (requestSignal.didTimeout()) {
@@ -255,7 +392,8 @@ export class OpenAIImageGenerationService implements ImageGenerationService {
     );
     return {
       prompt,
-      model: config.model,
+      model:
+        config.backend === "chatgpt-subscription" ? CODEX_IMAGE_GENERATION_MODEL : config.model,
       filePath: finalPath,
       mimeType: MIME_TYPE_BY_OUTPUT_FORMAT[outputFormat],
       size,

@@ -153,6 +153,7 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { OpenAIImageGenerationService } from "./image-generation/openai-image-generator.js";
+import { DefaultOmpSubscriptionCredentialResolver } from "./image-generation/omp-subscription-credential.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
@@ -434,11 +435,13 @@ export interface PaseoDaemonConfig {
   imageGeneration?: {
     enabled: boolean;
     provider: "openai";
+    backend: "openai-api" | "chatgpt-subscription";
     model: string;
     baseUrl?: string;
     apiKey?: string;
     apiKeyConfigured: boolean;
     apiKeySource: "environment" | "config" | null;
+    subscriptionCredentialId?: number;
   };
   speech?: PaseoSpeechConfig;
   voiceLlmProvider?: AgentProvider | null;
@@ -561,10 +564,14 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
           imageGeneration: {
             enabled: config.imageGeneration.enabled,
             provider: config.imageGeneration.provider,
+            backend: config.imageGeneration.backend,
             model: config.imageGeneration.model,
             ...(config.imageGeneration.baseUrl ? { baseUrl: config.imageGeneration.baseUrl } : {}),
             apiKeyConfigured: config.imageGeneration.apiKeyConfigured,
             apiKeySource: config.imageGeneration.apiKeySource,
+            ...(config.imageGeneration.subscriptionCredentialId
+              ? { subscriptionCredentialId: config.imageGeneration.subscriptionCredentialId }
+              : {}),
           },
         }
       : {}),
@@ -627,6 +634,7 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     getConfig: () => daemonConfigStore.getImageGenerationRuntimeConfig(),
     logger,
+    subscriptionCredentialResolver: new DefaultOmpSubscriptionCredentialResolver(),
   });
   const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
   void orchestrationSkills.autoUpdate().catch((error) => {

@@ -180,19 +180,23 @@ const MutableImageGenerationConfigSchema = z
   .object({
     enabled: z.boolean(),
     provider: z.literal("openai"),
+    backend: z.enum(["openai-api", "chatgpt-subscription"]).default("openai-api"),
     model: z.string().min(1),
     baseUrl: z.string().min(1).optional(),
     apiKeyConfigured: z.boolean(),
     apiKeySource: z.enum(["environment", "config"]).nullable(),
+    subscriptionCredentialId: z.number().int().positive().optional(),
   })
   .passthrough();
 
 const MutableImageGenerationConfigPatchSchema = z
   .object({
     enabled: z.boolean().optional(),
+    backend: z.enum(["openai-api", "chatgpt-subscription"]).optional(),
     model: z.string().trim().min(1).optional(),
     baseUrl: z.string().trim().min(1).nullable().optional(),
     apiKey: z.string().trim().min(1).nullable().optional(),
+    subscriptionCredentialId: z.number().int().positive().nullable().optional(),
   })
   .passthrough();
 export const PluginIdSchema = z.string().regex(/^[a-z][a-z0-9-]*$/);
@@ -3537,6 +3541,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonConfigReload: z.boolean().optional(),
         // COMPAT(imageGenerationConfig): added 2026-08-26, remove gate after 2027-02-26.
         imageGenerationConfig: z.boolean().optional(),
+        // COMPAT(imageGenerationSubscription): added 2026-09-02, remove gate after 2027-03-02.
+        imageGenerationSubscription: z.boolean().optional(),
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         relayConfig: z.boolean().optional(),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.

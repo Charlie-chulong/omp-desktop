@@ -1674,6 +1674,8 @@ export class VoiceAssistantWebSocketServer {
         daemonConfigReload: true,
         // COMPAT(imageGenerationConfig): added 2026-08-26, remove gate after 2027-02-26.
         imageGenerationConfig: true,
+        // COMPAT(imageGenerationSubscription): added 2026-09-02, remove gate after 2027-03-02.
+        imageGenerationSubscription: true,
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         ...(this.advertiseRelayConfig ? { relayConfig: true } : {}),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.

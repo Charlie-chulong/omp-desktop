@@ -515,6 +515,7 @@ function resolveImageGenerationConfig(
 ): NonNullable<PaseoDaemonConfig["imageGeneration"]> {
   const openai = persisted.providers?.openai;
   const image = openai?.image;
+  const backend = image?.backend ?? "openai-api";
   const environmentApiKey = nonEmptyEnv(env.OPENAI_API_KEY);
   const configuredApiKey = image?.apiKey ?? openai?.apiKey;
   const apiKey = environmentApiKey ?? configuredApiKey;
@@ -525,16 +526,22 @@ function resolveImageGenerationConfig(
   const model =
     nonEmptyEnv(env.PASEO_IMAGE_GENERATION_MODEL) ?? image?.model ?? DEFAULT_IMAGE_GENERATION_MODEL;
   const enabled =
-    parseBooleanEnv(env.PASEO_IMAGE_GENERATION_ENABLED) ?? image?.enabled ?? Boolean(apiKey);
+    parseBooleanEnv(env.PASEO_IMAGE_GENERATION_ENABLED) ??
+    image?.enabled ??
+    (backend === "openai-api" && Boolean(apiKey));
 
   return {
     enabled,
     provider: "openai",
+    backend,
     model,
     ...(baseUrl ? { baseUrl } : {}),
     ...(apiKey ? { apiKey } : {}),
     apiKeyConfigured: Boolean(apiKey),
     apiKeySource: environmentApiKey ? "environment" : configuredApiKey ? "config" : null,
+    ...(image?.subscriptionCredentialId
+      ? { subscriptionCredentialId: image.subscriptionCredentialId }
+      : {}),
   };
 }
 

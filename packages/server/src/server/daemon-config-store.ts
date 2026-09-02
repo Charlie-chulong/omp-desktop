@@ -202,12 +202,17 @@ function applyImageGenerationPatchToPublicConfig(
   const next = {
     enabled: current?.enabled ?? false,
     provider: "openai" as const,
+    backend: current?.backend ?? ("openai-api" as const),
     model: current?.model ?? "gpt-image-2",
     ...(current?.baseUrl ? { baseUrl: current.baseUrl } : {}),
     apiKeyConfigured: current?.apiKeyConfigured ?? false,
     apiKeySource: current?.apiKeySource ?? null,
+    ...(current?.subscriptionCredentialId
+      ? { subscriptionCredentialId: current.subscriptionCredentialId }
+      : {}),
   };
   if (patch.enabled !== undefined) next.enabled = patch.enabled;
+  if (patch.backend !== undefined) next.backend = patch.backend;
   if (patch.model !== undefined) next.model = patch.model;
   if (patch.baseUrl !== undefined) {
     if (patch.baseUrl === null) delete next.baseUrl;
@@ -216,6 +221,10 @@ function applyImageGenerationPatchToPublicConfig(
   if (patch.apiKey !== undefined) {
     next.apiKeyConfigured = patch.apiKey !== null;
     next.apiKeySource = patch.apiKey === null ? null : "config";
+  }
+  if (patch.subscriptionCredentialId !== undefined) {
+    if (patch.subscriptionCredentialId === null) delete next.subscriptionCredentialId;
+    else next.subscriptionCredentialId = patch.subscriptionCredentialId;
   }
   return next;
 }
@@ -672,6 +681,7 @@ function mergeMutableImageGenerationPatch(
 
   const image = { ...persistedProviders?.openai?.image };
   if (patch.enabled !== undefined) image.enabled = patch.enabled;
+  if (patch.backend !== undefined) image.backend = patch.backend;
   if (patch.model !== undefined) image.model = patch.model;
   if (patch.baseUrl !== undefined) {
     if (patch.baseUrl === null) delete image.baseUrl;
@@ -680,6 +690,10 @@ function mergeMutableImageGenerationPatch(
   if (patch.apiKey !== undefined) {
     if (patch.apiKey === null) delete image.apiKey;
     else image.apiKey = patch.apiKey;
+  }
+  if (patch.subscriptionCredentialId !== undefined) {
+    if (patch.subscriptionCredentialId === null) delete image.subscriptionCredentialId;
+    else image.subscriptionCredentialId = patch.subscriptionCredentialId;
   }
 
   return {

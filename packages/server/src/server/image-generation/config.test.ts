@@ -60,6 +60,7 @@ describe("image generation configuration", () => {
     expect(resolved.imageGeneration).toEqual({
       enabled: true,
       provider: "openai",
+      backend: "openai-api",
       model: "gpt-image-custom",
       baseUrl: "https://images.example/v1",
       apiKey: "config-key",
@@ -102,6 +103,7 @@ describe("image generation configuration", () => {
       mutableConfig({
         enabled: false,
         provider: "openai",
+        backend: "openai-api",
         model: "gpt-image-2",
         apiKeyConfigured: false,
         apiKeySource: null,
@@ -120,6 +122,7 @@ describe("image generation configuration", () => {
     expect(publicConfig.imageGeneration).toEqual({
       enabled: true,
       provider: "openai",
+      backend: "openai-api",
       model: "gpt-image-2",
       baseUrl: "https://images.example/v1",
       apiKeyConfigured: true,
@@ -133,6 +136,42 @@ describe("image generation configuration", () => {
     expect(store.getImageGenerationRuntimeConfig()).not.toHaveProperty("apiKey");
     expect(loadPersistedConfig(paseoHome).providers?.openai?.image?.apiKey).toBeUndefined();
   });
+  it("persists the selected ChatGPT subscription account", async () => {
+    const paseoHome = await createRoot();
+    savePersistedConfig(paseoHome, PersistedConfigSchema.parse({ version: 1 }));
+    const store = new DaemonConfigStore(
+      paseoHome,
+      mutableConfig({
+        enabled: false,
+        provider: "openai",
+        backend: "openai-api",
+        model: "gpt-image-2",
+        apiKeyConfigured: false,
+        apiKeySource: null,
+      }),
+      undefined,
+      { env: {} },
+    );
+
+    const publicConfig = store.patch({
+      imageGeneration: {
+        enabled: true,
+        backend: "chatgpt-subscription",
+        subscriptionCredentialId: 9,
+      },
+    });
+
+    expect(publicConfig.imageGeneration).toMatchObject({
+      enabled: true,
+      backend: "chatgpt-subscription",
+      subscriptionCredentialId: 9,
+    });
+    expect(loadPersistedConfig(paseoHome).providers?.openai?.image).toMatchObject({
+      enabled: true,
+      backend: "chatgpt-subscription",
+      subscriptionCredentialId: 9,
+    });
+  });
 
   it("rejects writes to environment-controlled fields", async () => {
     const paseoHome = await createRoot();
@@ -142,6 +181,7 @@ describe("image generation configuration", () => {
       mutableConfig({
         enabled: true,
         provider: "openai",
+        backend: "openai-api",
         model: "gpt-image-2",
         apiKeyConfigured: true,
         apiKeySource: "environment",

@@ -2581,11 +2581,28 @@ export const es: TranslationResources = {
         notConfigured: "Clave de API de OpenAI no configurada",
         environment: "Clave de API proporcionada por OPENAI_API_KEY",
         configured: "Clave de API configurada",
+        noSubscriptionAccount:
+          "No se ha iniciado sesión en una cuenta de suscripción de OpenAI Codex",
+        selectSubscriptionAccount: "Selecciona una cuenta de suscripción de OpenAI Codex",
+        subscriptionConfigured: "{{account}} · {{plan}}",
       },
       toolsDisabled:
         "La inyección de herramientas Paseo está desactivada. Actívala en la configuración de orquestación del host.",
+      source: {
+        label: "Fuente de imágenes",
+        hint: "La facturación de API y las suscripciones de ChatGPT son independientes. No hay cambio automático entre ellas.",
+        api: "API de OpenAI",
+        subscription: "Suscripción de ChatGPT",
+      },
       model: "Modelo de imagen",
       baseUrl: "URL base (opcional)",
+      subscriptionAccount: "Cuenta de OpenAI Codex",
+      subscriptionAccountPlaceholder: "Selecciona una cuenta de suscripción",
+      subscriptionAccountEmpty: "No hay cuentas de OpenAI Codex con sesión iniciada",
+      subscriptionHint:
+        "Usa la suscripción de ChatGPT de la cuenta seleccionada y el modelo fijo gpt-image-2.",
+      accountFallback: "Cuenta de OpenAI Codex {{number}}",
+      unknownPlan: "Suscripción",
       apiKey: "Clave de API de OpenAI",
       apiKeyConfiguredPlaceholder: "Configurada; introduce una clave nueva para reemplazarla",
       apiKeyPlaceholder: "sk-...",
