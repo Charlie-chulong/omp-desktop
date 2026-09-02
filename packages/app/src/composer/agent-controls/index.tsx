@@ -74,6 +74,7 @@ import {
   getFeatureHighlightColor,
   getFeatureTooltip,
   getAgentControlHintKey,
+  isComposerFeatureVisible,
   resolveAgentModelSelection,
 } from "@/composer/agent-controls/utils";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -1017,6 +1018,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     modelSelectorServerId,
     workflowQuotaAccounts,
   } = props;
+  const visibleFeatures = useMemo(() => features?.filter(isComposerFeatureVisible), [features]);
   const modelToolbar = useMemo(
     () => ({ glyphSize, showCaret: presentation.showCarets }),
     [glyphSize, presentation.showCarets],
@@ -1103,7 +1105,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
 
       {modeControl ? <AgentModeControl {...modeControl} onClose={onDropdownClose} /> : null}
 
-      {presentation.aggregateFeatures && features?.length ? (
+      {presentation.aggregateFeatures && visibleFeatures?.length ? (
         <>
           <Pressable
             onPress={handleOpenFeatures}
@@ -1123,7 +1125,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
             onClose={handleCloseSheet}
             testID="agent-features-sheet"
           >
-            {features.map((feature) => (
+            {visibleFeatures.map((feature) => (
               <SheetFeatureItem
                 key={`feature-${feature.id}`}
                 feature={feature}
@@ -1140,7 +1142,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           </AdaptiveModalSheet>
         </>
       ) : (
-        features?.map((feature) => (
+        visibleFeatures?.map((feature) => (
           <DesktopFeatureItem
             key={`feature-${feature.id}`}
             feature={feature}
@@ -1225,12 +1227,13 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     modelSelectorServerId,
     canSwitchProvider,
   } = props;
+  const visibleFeatures = useMemo(() => features?.filter(isComposerFeatureVisible), [features]);
 
   const sheetControls = (
     <View style={styles.combinedSheetControls} testID="agent-controls-combined-sheet-controls">
       {modelSettings}
       {modeControl ? <AgentModeControl {...modeControl} surface="sheet" /> : null}
-      {(features ?? []).map((feature) => (
+      {(visibleFeatures ?? []).map((feature) => (
         <SheetFeatureItem
           key={`feature-${feature.id}`}
           feature={feature}
