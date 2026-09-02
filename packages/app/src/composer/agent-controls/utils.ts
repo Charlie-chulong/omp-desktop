@@ -69,6 +69,10 @@ export function getFeatureTooltip(
   return feature.tooltip ?? feature.label;
 }
 
+export function isComposerFeatureVisible(feature: Pick<AgentFeature, "id">): boolean {
+  return feature.id !== "oauth_account_credential";
+}
+
 export function getFeatureHighlightColor(featureId: string): FeatureHighlightColor {
   switch (featureId) {
     case FAST_MODE_FEATURE_ID:

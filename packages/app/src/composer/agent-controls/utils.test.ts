@@ -4,6 +4,7 @@ import {
   getFeatureTooltip,
   getAgentControlHintKey,
   normalizeModelId,
+  isComposerFeatureVisible,
   resolveAgentModelSelection,
 } from "./utils";
 
@@ -52,6 +53,12 @@ describe("feature metadata helpers", () => {
         value: false,
       }),
     ).toBe("Fast: Off");
+  });
+
+  it("hides OAuth account selection from composer feature controls", () => {
+    expect(isComposerFeatureVisible({ id: "oauth_account_credential" })).toBe(false);
+    expect(isComposerFeatureVisible({ id: "workflow_mode" })).toBe(true);
+    expect(isComposerFeatureVisible({ id: "fast_mode" })).toBe(true);
   });
 
   it("maps feature highlight colors by feature id", () => {
