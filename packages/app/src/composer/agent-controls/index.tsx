@@ -1383,10 +1383,14 @@ function DesktopFeatureItem({
         onPress={args.onPress}
         featureId={feature.id}
         featureIcon={feature.icon}
-        iconColor={theme.colors.foreground}
+        iconColor={
+          feature.id === "workflow_mode" && args.selected && args.option.id === "plan"
+            ? theme.colors.accent
+            : theme.colors.foreground
+        }
       />
     ),
-    [feature.icon, feature.id, theme.colors.foreground],
+    [feature.icon, feature.id, theme.colors.accent, theme.colors.foreground],
   );
 
   if (feature.type === "toggle") {
@@ -1442,6 +1446,11 @@ function DesktopFeatureItem({
             <AgentControlTrigger
               ref={featureAnchorRef}
               icon={FeatureIcon}
+              iconColor={
+                feature.id === "workflow_mode" && feature.value === "plan"
+                  ? theme.colors.accent
+                  : undefined
+              }
               surface="toolbar"
               label={featureLabel}
               value={toolbarValueLabel}
@@ -1537,10 +1546,14 @@ function SheetFeatureItem({
         onPress={args.onPress}
         featureId={feature.id}
         featureIcon={feature.icon}
-        iconColor={theme.colors.foreground}
+        iconColor={
+          feature.id === "workflow_mode" && args.selected && args.option.id === "plan"
+            ? theme.colors.accent
+            : theme.colors.foreground
+        }
       />
     ),
-    [feature.icon, feature.id, theme.colors.foreground],
+    [feature.icon, feature.id, theme.colors.accent, theme.colors.foreground],
   );
 
   if (feature.type === "toggle") {
@@ -1591,6 +1604,11 @@ function SheetFeatureItem({
         <AgentControlTrigger
           ref={featureAnchorRef}
           icon={FeatureIcon}
+          iconColor={
+            feature.id === "workflow_mode" && feature.value === "plan"
+              ? theme.colors.accent
+              : undefined
+          }
           surface="sheet"
           label={featureLabel}
           value={selectedOptionLabel}

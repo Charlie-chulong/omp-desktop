@@ -5,7 +5,9 @@ import {
   resolveOmpModelProviderNamespace,
 } from "@/provider-selection/omp-model-provider";
 
-export function resolveModelBrowserScrolling(usesBottomSheet: boolean): "sheet" | "independent" {
+export function resolveModelBrowserScrolling(
+  usesBottomSheet: boolean,
+): "sheet" | "independent" {
   return usesBottomSheet ? "sheet" : "independent";
 }
 
@@ -13,7 +15,8 @@ export function groupOmpModelsByProviderNamespace(
   providers: ProviderSelectorProvider[],
 ): ProviderSelectorProvider[] {
   return providers.flatMap((provider) => {
-    if (provider.id !== "omp" || provider.modelSelection.kind !== "models") return [provider];
+    if (provider.id !== "omp" || provider.modelSelection.kind !== "models")
+      return [provider];
     const grouped = new Map<string, typeof provider.modelSelection.rows>();
     for (const row of provider.modelSelection.rows) {
       const namespace = resolveOmpModelProviderNamespace(row.modelId);
@@ -33,6 +36,21 @@ export function groupOmpModelsByProviderNamespace(
       }))
       .sort((left, right) => left.label.localeCompare(right.label));
   });
+}
+
+export function resolveProviderSwitchModel(
+  provider: ProviderSelectorProvider,
+  rememberedModelId?: string,
+) {
+  if (provider.modelSelection.kind !== "models") return null;
+  return (
+    provider.modelSelection.rows.find(
+      (row) => row.modelId === rememberedModelId,
+    ) ??
+    provider.modelSelection.rows.find((row) => row.isDefault) ??
+    provider.modelSelection.rows[0] ??
+    null
+  );
 }
 
 export function resolveModelBrowserProviderId(
@@ -57,7 +75,8 @@ export function resolveModelBrowserProviderNamespaceId(
   modelId?: string,
 ): string {
   if (providerId.startsWith("omp:")) return providerId.slice("omp:".length);
-  if (providerId === "omp" && modelId) return resolveOmpModelProviderNamespace(modelId);
+  if (providerId === "omp" && modelId)
+    return resolveOmpModelProviderNamespace(modelId);
   return providerId;
 }
 
@@ -68,7 +87,10 @@ export function isModelBrowserRowSelected(
   selectedModel: string,
 ): boolean {
   if (rowModelId !== selectedModel) return false;
-  return rowProvider === selectedProvider || selectedProvider.startsWith(`${rowProvider}:`);
+  return (
+    rowProvider === selectedProvider ||
+    selectedProvider.startsWith(`${rowProvider}:`)
+  );
 }
 
 export function resolveModelSheetOpening({
@@ -82,8 +104,15 @@ export function resolveModelSheetOpening({
 }): ModelBrowserView {
   if (canSwitchProvider && providers.length > 1) return { kind: "all" };
 
-  const provider = providers.find((entry) => entry.id === selectedProvider) ?? providers[0] ?? null;
+  const provider =
+    providers.find((entry) => entry.id === selectedProvider) ??
+    providers[0] ??
+    null;
   return provider
-    ? { kind: "provider", providerId: provider.id, providerLabel: provider.label }
+    ? {
+        kind: "provider",
+        providerId: provider.id,
+        providerLabel: provider.label,
+      }
     : { kind: "all" };
 }

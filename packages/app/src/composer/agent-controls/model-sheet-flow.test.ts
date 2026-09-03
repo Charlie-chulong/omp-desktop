@@ -4,6 +4,7 @@ import {
   groupOmpModelsByProviderNamespace,
   isModelBrowserRowSelected,
   resolveModelBrowserProviderId,
+  resolveProviderSwitchModel,
   resolveModelBrowserProviderNamespaceId,
   resolveModelBrowserScrolling,
   resolveModelSheetOpening,
@@ -32,7 +33,11 @@ describe("model sheet opening", () => {
         providers: [omp],
         selectedProvider: "omp",
       }),
-    ).toEqual({ kind: "provider", providerId: "omp", providerLabel: "Oh My Pi" });
+    ).toEqual({
+      kind: "provider",
+      providerId: "omp",
+      providerLabel: "Oh My Pi",
+    });
   });
 
   it("opens a running OMP agent directly at its fixed provider", () => {
@@ -42,7 +47,11 @@ describe("model sheet opening", () => {
         providers: [omp],
         selectedProvider: "omp",
       }),
-    ).toEqual({ kind: "provider", providerId: "omp", providerLabel: "Oh My Pi" });
+    ).toEqual({
+      kind: "provider",
+      providerId: "omp",
+      providerLabel: "Oh My Pi",
+    });
   });
 
   it("falls back to OMP while live state catches up", () => {
@@ -52,7 +61,11 @@ describe("model sheet opening", () => {
         providers: [omp],
         selectedProvider: "",
       }),
-    ).toEqual({ kind: "provider", providerId: "omp", providerLabel: "Oh My Pi" });
+    ).toEqual({
+      kind: "provider",
+      providerId: "omp",
+      providerLabel: "Oh My Pi",
+    });
   });
 });
 
@@ -118,15 +131,23 @@ describe("OMP model provider grouping", () => {
       },
     ]);
 
-    expect(resolveModelBrowserProviderId("omp", "openai-codex/gpt-5.6-sol", providers)).toBe(
-      "omp:openai-codex",
-    );
+    expect(
+      resolveModelBrowserProviderId(
+        "omp",
+        "openai-codex/gpt-5.6-sol",
+        providers,
+      ),
+    ).toBe("omp:openai-codex");
   });
   it("resolves grouped OMP provider ids to their underlying namespace", () => {
     expect(resolveModelBrowserProviderNamespaceId("omp:cursor")).toBe("cursor");
-    expect(resolveModelBrowserProviderNamespaceId("omp:openai-codex")).toBe("openai-codex");
+    expect(resolveModelBrowserProviderNamespaceId("omp:openai-codex")).toBe(
+      "openai-codex",
+    );
     expect(resolveModelBrowserProviderNamespaceId("cursor")).toBe("cursor");
-    expect(resolveModelBrowserProviderNamespaceId("omp", "mintcat/gpt-5")).toBe("mintcat");
+    expect(resolveModelBrowserProviderNamespaceId("omp", "mintcat/gpt-5")).toBe(
+      "mintcat",
+    );
   });
 
   it("marks a selected model inside its grouped virtual provider", () => {
@@ -146,6 +167,63 @@ describe("OMP model provider grouping", () => {
         "openai-codex/gpt-5.6-sol",
       ),
     ).toBe(false);
+  });
+
+  it("restores the last selected model when returning to a provider", () => {
+    const [provider] = groupOmpModelsByProviderNamespace([
+      {
+        id: "omp",
+        label: "Oh My Pi",
+        modelSelection: {
+          kind: "models",
+          rows: [
+            {
+              favoriteKey: "omp:cursor/gpt-5",
+              provider: "omp",
+              providerLabel: "Oh My Pi",
+              modelId: "cursor/gpt-5",
+              modelLabel: "GPT-5",
+              isDefault: true,
+            },
+            {
+              favoriteKey: "omp:cursor/claude-sonnet",
+              provider: "omp",
+              providerLabel: "Oh My Pi",
+              modelId: "cursor/claude-sonnet",
+              modelLabel: "Claude Sonnet",
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(
+      resolveProviderSwitchModel(provider!, "cursor/claude-sonnet")?.modelId,
+    ).toBe("cursor/claude-sonnet");
+  });
+
+  it("falls back to the provider default when the remembered model is unavailable", () => {
+    const provider: ProviderSelectorProvider = {
+      id: "codex",
+      label: "Codex",
+      modelSelection: {
+        kind: "models",
+        rows: [
+          {
+            favoriteKey: "codex:gpt-5.6",
+            provider: "codex",
+            providerLabel: "Codex",
+            modelId: "gpt-5.6",
+            modelLabel: "GPT-5.6",
+            isDefault: true,
+          },
+        ],
+      },
+    };
+
+    expect(resolveProviderSwitchModel(provider, "retired-model")?.modelId).toBe(
+      "gpt-5.6",
+    );
   });
 });
 

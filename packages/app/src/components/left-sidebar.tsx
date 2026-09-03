@@ -15,7 +15,15 @@ import {
   X,
 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
@@ -25,7 +33,11 @@ import {
   type PressableStateCallbackType,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -55,14 +67,22 @@ import { ProviderUsageWindowBar } from "@/provider-usage/window-bar";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Shortcut } from "@/components/ui/shortcut";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useActiveAgentControls } from "@/command-center/provider";
 import {
   groupOmpModelsByProviderNamespace,
+  resolveProviderSwitchModel,
   resolveModelBrowserProviderId,
   resolveModelBrowserProviderNamespaceId,
 } from "@/composer/agent-controls/model-sheet-flow";
-import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
+import {
+  HEADER_INNER_HEIGHT,
+  useIsCompactFormFactor,
+} from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -74,13 +94,19 @@ import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
-import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-view-store";
+import {
+  type SidebarGroupMode,
+  useSidebarViewStore,
+} from "@/stores/sidebar-view-store";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useOmpAccountQuota } from "@/hooks/use-omp-account-quota";
 import { usePanelStore } from "@/stores/panel-store";
-import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
+import {
+  useOwnsWindowChromeCorner,
+  WindowChromeSafeArea,
+} from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { useIsMobilePanelPresented } from "@/mobile-panels/provider";
@@ -102,7 +128,8 @@ import { SidebarWorkspaceList } from "./sidebar-workspace-list";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
-const DEV_BUILD_LABEL = process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() || null;
+const DEV_BUILD_LABEL =
+  process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() || null;
 
 interface SidebarSharedProps {
   theme: SidebarTheme;
@@ -156,7 +183,11 @@ interface DesktopSidebarProps extends SidebarSharedProps {
   handleViewSchedules: () => void;
 }
 
-export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boolean }) {
+export const LeftSidebar = memo(function LeftSidebar({
+  active,
+}: {
+  active: boolean;
+}) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -210,7 +241,10 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     setIsImportSheetOpen(true);
   }, [localServerId, showMobileAgent]);
 
-  const handleCloseImportSession = useCallback(() => setIsImportSheetOpen(false), []);
+  const handleCloseImportSession = useCallback(
+    () => setIsImportSheetOpen(false),
+    [],
+  );
 
   const handleImported = useCallback(
     (agent: { id: string; cwd: string }) => {
@@ -218,7 +252,9 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
       void (async () => {
         const result = await openImportedProject(agent.cwd);
         if (result.ok) {
-          router.push(buildHostAgentDetailRoute(localServerId, agent.id) as Href);
+          router.push(
+            buildHostAgentDetailRoute(localServerId, agent.id) as Href,
+          );
         }
       })();
     },
@@ -405,7 +441,9 @@ function FooterIconButton({
           {({ hovered }) => (
             <Icon
               size={iconSize ?? theme.iconSize.md}
-              color={hovered ? theme.colors.foreground : theme.colors.foregroundMuted}
+              color={
+                hovered ? theme.colors.foreground : theme.colors.foregroundMuted
+              }
             />
           )}
         </Pressable>
@@ -487,30 +525,32 @@ function IconTooltipContent({
   );
 }
 
-const SidebarNewWorkspaceHeaderRow = memo(function SidebarNewWorkspaceHeaderRow({
-  label,
-  testID,
-  variant,
-  shortcutKeys,
-  onPress,
-}: {
-  label: string;
-  testID: string;
-  variant: "header" | "compact";
-  shortcutKeys: ShortcutKey[][] | null;
-  onPress: () => void;
-}) {
-  return (
-    <SidebarHeaderRow
-      icon={Plus}
-      label={label}
-      onPress={onPress}
-      testID={testID}
-      variant={variant}
-      shortcutKeys={shortcutKeys}
-    />
-  );
-});
+const SidebarNewWorkspaceHeaderRow = memo(
+  function SidebarNewWorkspaceHeaderRow({
+    label,
+    testID,
+    variant,
+    shortcutKeys,
+    onPress,
+  }: {
+    label: string;
+    testID: string;
+    variant: "header" | "compact";
+    shortcutKeys: ShortcutKey[][] | null;
+    onPress: () => void;
+  }) {
+    return (
+      <SidebarHeaderRow
+        icon={Plus}
+        label={label}
+        onPress={onPress}
+        testID={testID}
+        variant={variant}
+        shortcutKeys={shortcutKeys}
+      />
+    );
+  },
+);
 
 function SidebarQuotaMeter({
   label,
@@ -532,7 +572,8 @@ function SidebarQuotaMeter({
   } else if (remainingPct !== null) {
     color = theme.colors.palette.green[500];
   }
-  const percentage = remainingPct === null ? "—" : `${Math.round(remainingPct)}%`;
+  const percentage =
+    remainingPct === null ? "—" : `${Math.round(remainingPct)}%`;
 
   return (
     <View style={styles.sidebarQuotaMeter}>
@@ -540,7 +581,10 @@ function SidebarQuotaMeter({
         <Text style={styles.sidebarQuotaLabel} numberOfLines={1}>
           {label}
         </Text>
-        <Text style={[styles.sidebarQuotaPercentage, { color }]} numberOfLines={1}>
+        <Text
+          style={[styles.sidebarQuotaPercentage, { color }]}
+          numberOfLines={1}
+        >
           {percentage}
         </Text>
       </View>
@@ -548,13 +592,18 @@ function SidebarQuotaMeter({
         accessibilityRole="progressbar"
         accessibilityLabel={label}
         accessibilityValue={
-          remainingPct === null ? undefined : { min: 0, max: 100, now: Math.round(remainingPct) }
+          remainingPct === null
+            ? undefined
+            : { min: 0, max: 100, now: Math.round(remainingPct) }
         }
         style={styles.sidebarQuotaTrack}
       >
         {remainingPct !== null ? (
           <View
-            style={[styles.sidebarQuotaFill, { width: `${remainingPct}%`, backgroundColor: color }]}
+            style={[
+              styles.sidebarQuotaFill,
+              { width: `${remainingPct}%`, backgroundColor: color },
+            ]}
           />
         ) : null}
       </View>
@@ -580,20 +629,27 @@ function SidebarProviderUsageDetails({
 
   const usage =
     view.payload.providers.find(
-      (candidate) => candidate.providerId.toLowerCase() === providerId.toLowerCase(),
+      (candidate) =>
+        candidate.providerId.toLowerCase() === providerId.toLowerCase(),
     ) ?? null;
   if (!usage) {
-    return <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>;
+    return (
+      <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>
+    );
   }
   if (usage.status !== "available") {
     return (
-      <Text style={styles.sidebarQuotaLoading}>{usage.error ?? t("providerUsage.errorTitle")}</Text>
+      <Text style={styles.sidebarQuotaLoading}>
+        {usage.error ?? t("providerUsage.errorTitle")}
+      </Text>
     );
   }
 
   const balances = usage.balances ?? [];
   if (usage.windows.length === 0 && balances.length === 0) {
-    return <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>;
+    return (
+      <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>
+    );
   }
 
   return (
@@ -608,15 +664,6 @@ function SidebarProviderUsageDetails({
   );
 }
 
-function resolveProviderSwitchModel(provider: ProviderSelectorProvider) {
-  if (provider.modelSelection.kind !== "models") return null;
-  return (
-    provider.modelSelection.rows.find((row) => row.isDefault) ??
-    provider.modelSelection.rows[0] ??
-    null
-  );
-}
-
 function SidebarProviderAccountPanel() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
@@ -628,7 +675,10 @@ function SidebarProviderAccountPanel() {
   const [accountOpen, setAccountOpen] = useState(false);
   const selectedModelId = controls?.models.selectedModelId ?? "";
   const providers = useMemo(
-    () => groupOmpModelsByProviderNamespace([...(controls?.models.providers ?? [])]),
+    () =>
+      groupOmpModelsByProviderNamespace([
+        ...(controls?.models.providers ?? []),
+      ]),
     [controls?.models.providers],
   );
   const selectedProviderId = useMemo(
@@ -648,30 +698,48 @@ function SidebarProviderAccountPanel() {
   );
   const isOmpProviderSelected =
     selectedProviderId.startsWith("omp:") || controls?.provider === "omp";
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
+  const selectedProvider =
+    providers.find((provider) => provider.id === selectedProviderId) ?? null;
+  const rememberedModelByProviderRef = useRef(new Map<string, string>());
   const providerOptions = useMemo<ComboboxOption[]>(
-    () => providers.map((provider) => ({ id: provider.id, label: provider.label })),
+    () =>
+      providers.map((provider) => ({ id: provider.id, label: provider.label })),
     [providers],
   );
+  useEffect(() => {
+    if (!selectedProvider || !selectedModelId) return;
+    if (
+      selectedProvider.modelSelection.kind === "models" &&
+      selectedProvider.modelSelection.rows.some(
+        (row) => row.modelId === selectedModelId,
+      )
+    ) {
+      rememberedModelByProviderRef.current.set(
+        selectedProvider.id,
+        selectedModelId,
+      );
+    }
+  }, [selectedModelId, selectedProvider]);
   const accountFeature = controls?.features.list?.find(
-    (feature) => feature.id === "oauth_account_credential" && feature.type === "select",
+    (feature) =>
+      feature.id === "oauth_account_credential" && feature.type === "select",
   );
   const { accounts, loading } = useOmpAccountQuota(
     controls?.serverId,
     controls?.provider,
     selectedModelId,
   );
-  const { view: providerUsageView, canFetch: canFetchProviderUsage } = useProviderUsage(
-    controls?.serverId,
-    {
+  const { view: providerUsageView, canFetch: canFetchProviderUsage } =
+    useProviderUsage(controls?.serverId, {
       enabled: selectedProviderUsageId === "cursor" || isOmpProviderSelected,
       providerId: isOmpProviderSelected ? selectedProviderUsageId : undefined,
-    },
-  );
+    });
   const hasSelectedProviderUsage =
     providerUsageView.kind === "ready" &&
     providerUsageView.payload.providers.some(
-      (provider) => provider.providerId.toLowerCase() === selectedProviderUsageId.toLowerCase(),
+      (provider) =>
+        provider.providerId.toLowerCase() ===
+        selectedProviderUsageId.toLowerCase(),
     );
   const selectableAccounts = useMemo(() => {
     if (!accountFeature || accountFeature.type !== "select") return accounts;
@@ -681,14 +749,16 @@ function SidebarProviderAccountPanel() {
   const showProviderUsage =
     selectableAccounts.length === 0 &&
     canFetchProviderUsage &&
-    (selectedProviderUsageId === "cursor" || (isOmpProviderSelected && hasSelectedProviderUsage));
+    (selectedProviderUsageId === "cursor" ||
+      (isOmpProviderSelected && hasSelectedProviderUsage));
   const selectedAccountId =
     accountFeature?.type === "select"
       ? (accountFeature.effectiveValue ?? accountFeature.value ?? "")
       : "";
   const selectedAccount =
-    selectableAccounts.find((account) => String(account.credentialId) === selectedAccountId) ??
-    (selectableAccounts.length === 1 ? selectableAccounts[0] : null);
+    selectableAccounts.find(
+      (account) => String(account.credentialId) === selectedAccountId,
+    ) ?? (selectableAccounts.length === 1 ? selectableAccounts[0] : null);
   const accountOptions = useMemo<ComboboxOption[]>(
     () =>
       selectableAccounts.map((account, index) => {
@@ -697,14 +767,19 @@ function SidebarProviderAccountPanel() {
           identityKey: account.identityKey,
           fallback: t("agentControls.quota.account", { number: index + 1 }),
         });
-        const weeklyRemaining = resolveOmpRemainingQuotaPct(account.quota?.weeklyUsedPct);
-        const fiveHourRemaining = resolveOmpRemainingQuotaPct(account.quota?.fiveHourUsedPct);
+        const weeklyRemaining = resolveOmpRemainingQuotaPct(
+          account.quota?.weeklyUsedPct,
+        );
+        const fiveHourRemaining = resolveOmpRemainingQuotaPct(
+          account.quota?.fiveHourUsedPct,
+        );
         const quotaParts = [
           account.quota?.planLabel?.trim(),
           weeklyRemaining === null
             ? null
             : `${t("agentControls.quota.weekly")} ${Math.round(weeklyRemaining)}%`,
-          shouldShowOmpFiveHourQuota(account.quota?.planLabel) && fiveHourRemaining !== null
+          shouldShowOmpFiveHourQuota(account.quota?.planLabel) &&
+          fiveHourRemaining !== null
             ? `${t("agentControls.quota.fiveHour")} ${Math.round(fiveHourRemaining)}%`
             : null,
         ].filter((part): part is string => Boolean(part));
@@ -715,8 +790,11 @@ function SidebarProviderAccountPanel() {
       }),
     [selectableAccounts, t],
   );
-  const isAutomaticAccount = accountFeature?.type === "select" && accountFeature.value === null;
-  const accountIdentity = formatOmpAccountIdentity(selectedAccount?.identityKey);
+  const isAutomaticAccount =
+    accountFeature?.type === "select" && accountFeature.value === null;
+  const accountIdentity = formatOmpAccountIdentity(
+    selectedAccount?.identityKey,
+  );
   const accountNote = selectedAccount?.note?.trim();
   const accountSelectionLabel =
     accountNote ||
@@ -725,15 +803,22 @@ function SidebarProviderAccountPanel() {
     t("agentControls.features.oauthAccount.title");
   const accountPlan = selectedAccount?.quota?.planLabel?.trim();
   let accountPrimary = accountSelectionLabel;
-  let accountSecondary = [accountNote ? null : accountIdentity.secondary, accountPlan]
+  let accountSecondary = [
+    accountNote ? null : accountIdentity.secondary,
+    accountPlan,
+  ]
     .filter(Boolean)
     .join(" · ");
   if (isAutomaticAccount) {
     accountPrimary = selectedAccount
-      ? [t("agentControls.quota.automatic"), accountPlan].filter(Boolean).join(" · ")
+      ? [t("agentControls.quota.automatic"), accountPlan]
+          .filter(Boolean)
+          .join(" · ")
       : t("agentControls.quota.automaticSelecting");
     accountSecondary = selectedAccount
-      ? [accountSelectionLabel, accountIdentity.secondary].filter(Boolean).join(" · ")
+      ? [accountSelectionLabel, accountIdentity.secondary]
+          .filter(Boolean)
+          .join(" · ")
       : "";
   }
   const canSwitchProvider = selectedProvider
@@ -745,23 +830,36 @@ function SidebarProviderAccountPanel() {
   const canSwitchAccount = hasAccountSwitcher && controls?.isRunning !== true;
 
   const providerTriggerStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+    ({
+      hovered,
+      pressed,
+    }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.sidebarProviderTrigger,
-      (hovered || pressed || providerOpen) && styles.sidebarProviderTriggerActive,
+      (hovered || pressed || providerOpen) &&
+        styles.sidebarProviderTriggerActive,
     ],
     [providerOpen],
   );
   const accountTriggerStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+    ({
+      hovered,
+      pressed,
+    }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.sidebarAccountTrigger,
-      (hovered || pressed || accountOpen) && styles.sidebarProviderTriggerActive,
+      (hovered || pressed || accountOpen) &&
+        styles.sidebarProviderTriggerActive,
     ],
     [accountOpen],
   );
   const handleProviderSelect = useCallback(
     (providerId: string) => {
       const target = providers.find((provider) => provider.id === providerId);
-      const model = target ? resolveProviderSwitchModel(target) : null;
+      const model = target
+        ? resolveProviderSwitchModel(
+            target,
+            rememberedModelByProviderRef.current.get(providerId),
+          )
+        : null;
       if (!controls || !model) return;
       void controls.models.select(model.provider, model.modelId);
       setProviderOpen(false);
@@ -770,7 +868,11 @@ function SidebarProviderAccountPanel() {
   );
   const handleAccountSelect = useCallback(
     (credentialId: string) => {
-      if (controls?.isRunning || !controls?.features.set || accountFeature?.type !== "select") {
+      if (
+        controls?.isRunning ||
+        !controls?.features.set ||
+        accountFeature?.type !== "select"
+      ) {
         return;
       }
       void controls.features.set(accountFeature.id, credentialId);
@@ -785,7 +887,10 @@ function SidebarProviderAccountPanel() {
   if (!controls || providers.length === 0) return null;
 
   return (
-    <View style={styles.sidebarProviderCard} testID="sidebar-provider-account-panel">
+    <View
+      style={styles.sidebarProviderCard}
+      testID="sidebar-provider-account-panel"
+    >
       <ComboboxTrigger
         ref={providerAnchorRef}
         collapsable={false}
@@ -799,7 +904,11 @@ function SidebarProviderAccountPanel() {
       >
         <View style={styles.sidebarProviderIcon}>
           {selectedProvider ? (
-            <ModelProviderGlyph provider={selectedProvider.id} size={18} tone="foreground" />
+            <ModelProviderGlyph
+              provider={selectedProvider.id}
+              size={18}
+              tone="foreground"
+            />
           ) : (
             <Bot size={18} color={theme.colors.foreground} />
           )}
@@ -809,7 +918,9 @@ function SidebarProviderAccountPanel() {
             {selectedProvider?.label ?? t("agentControls.provider.fallback")}
           </Text>
         </View>
-        {canSwitchProvider ? <ChevronDown size={14} color={theme.colors.foregroundMuted} /> : null}
+        {canSwitchProvider ? (
+          <ChevronDown size={14} color={theme.colors.foregroundMuted} />
+        ) : null}
       </ComboboxTrigger>
       <Combobox
         options={providerOptions}
@@ -993,10 +1104,13 @@ function MobileSidebar({
   handleViewSchedulesNavigate,
 }: MobileSidebarProps) {
   const pathname = usePathname();
-  const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
+  const hasActiveHostFilter = useSidebarViewStore(
+    (state) => state.hostFilters.length > 0,
+  );
   const isSessionsActive = pathname.includes("/sessions");
   const isSchedulesActive = pathname.includes("/schedules");
-  const { gesture: closeGesture, gestureRef: closeGestureRef } = useCloseAgentListGesture();
+  const { gesture: closeGesture, gestureRef: closeGestureRef } =
+    useCloseAgentListGesture();
   const dragGestureHostPresented = useIsMobilePanelPresented("agent-list");
 
   const handleViewMore = useCallback(() => {
@@ -1062,7 +1176,10 @@ function MobileSidebar({
             variant="compact"
           />
         </View>
-        <WindowChromeSafeArea placement="inline" style={styles.mobileCloseButtonRow}>
+        <WindowChromeSafeArea
+          placement="inline"
+          style={styles.mobileCloseButtonRow}
+        >
           <Pressable
             style={styles.mobileCloseButton}
             onPress={closeSidebar}
@@ -1076,7 +1193,11 @@ function MobileSidebar({
             {({ hovered, pressed }) => (
               <X
                 size={theme.iconSize.md}
-                color={hovered || pressed ? theme.colors.foreground : theme.colors.foregroundMuted}
+                color={
+                  hovered || pressed
+                    ? theme.colors.foreground
+                    : theme.colors.foregroundMuted
+                }
               />
             )}
           </Pressable>
@@ -1149,7 +1270,9 @@ function DesktopSidebar({
 }: DesktopSidebarProps) {
   const ownsTopLeft = useOwnsWindowChromeCorner("top-left");
   const pathname = usePathname();
-  const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
+  const hasActiveHostFilter = useSidebarViewStore(
+    (state) => state.hostFilters.length > 0,
+  );
   const isSessionsActive = pathname.includes("/sessions");
   const isSchedulesActive = pathname.includes("/schedules");
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
@@ -1180,7 +1303,10 @@ function DesktopSidebar({
         // Horizontal intent only, so a finger dragging down the touch grip scrolls
         // the workspace list instead of resizing. Anchoring the start width to the
         // activation translation keeps the extra threshold from jumping the edge.
-        .activeOffsetX([-SIDEBAR_RESIZE_ACTIVATION_OFFSET, SIDEBAR_RESIZE_ACTIVATION_OFFSET])
+        .activeOffsetX([
+          -SIDEBAR_RESIZE_ACTIVATION_OFFSET,
+          SIDEBAR_RESIZE_ACTIVATION_OFFSET,
+        ])
         .failOffsetY([-SIDEBAR_RESIZE_FAIL_OFFSET, SIDEBAR_RESIZE_FAIL_OFFSET])
         .onStart((event) => {
           startWidthRef.current = visibleSidebarWidth - event.translationX;
@@ -1227,7 +1353,10 @@ function DesktopSidebar({
     [insetsTop],
   );
   const sidebarHeaderGroupStyle = useMemo(
-    () => [styles.sidebarHeaderGroup, ownsTopLeft && styles.sidebarHeaderGroupBelowChrome],
+    () => [
+      styles.sidebarHeaderGroup,
+      ownsTopLeft && styles.sidebarHeaderGroupBelowChrome,
+    ],
     [ownsTopLeft],
   );
   return (
@@ -1250,7 +1379,11 @@ function DesktopSidebar({
                   accessibilityLabel={`Development build: ${DEV_BUILD_LABEL}`}
                 >
                   <GitBranch size={12} color={theme.colors.accentForeground} />
-                  <Text numberOfLines={1} ellipsizeMode="tail" style={styles.devBuildBadgeText}>
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    style={styles.devBuildBadgeText}
+                  >
                     {DEV_BUILD_LABEL}
                   </Text>
                 </View>
@@ -1338,11 +1471,19 @@ function DesktopSidebar({
 function WorkspacesSectionHeader() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
-  const setCommandCenterOpen = useKeyboardShortcutsStore((state) => state.setCommandCenterOpen);
+  const setCommandCenterOpen = useKeyboardShortcutsStore(
+    (state) => state.setCommandCenterOpen,
+  );
   const commandCenterKeys = useShortcutKeys("toggle-command-center");
-  const handleSearchPress = useCallback(() => setCommandCenterOpen(true), [setCommandCenterOpen]);
+  const handleSearchPress = useCallback(
+    () => setCommandCenterOpen(true),
+    [setCommandCenterOpen],
+  );
   const searchButtonStyle = useCallback(
-    ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+    ({
+      hovered = false,
+      pressed,
+    }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.workspacesHeaderIconButton,
       (hovered || pressed) && styles.workspacesHeaderIconButtonHovered,
     ],
@@ -1351,7 +1492,9 @@ function WorkspacesSectionHeader() {
 
   return (
     <View style={styles.workspacesSectionHeader}>
-      <Text style={styles.workspacesSectionTitle}>{t("sidebar.sections.workspaces")}</Text>
+      <Text style={styles.workspacesSectionTitle}>
+        {t("sidebar.sections.workspaces")}
+      </Text>
       <View style={styles.workspacesSectionActions}>
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
@@ -1366,14 +1509,19 @@ function WorkspacesSectionHeader() {
                 <Search
                   size={14}
                   color={
-                    hovered || pressed ? theme.colors.foreground : theme.colors.foregroundMuted
+                    hovered || pressed
+                      ? theme.colors.foreground
+                      : theme.colors.foregroundMuted
                   }
                 />
               )}
             </Pressable>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="center" offset={8}>
-            <IconTooltipContent label="Search" shortcutKeys={commandCenterKeys} />
+            <IconTooltipContent
+              label="Search"
+              shortcutKeys={commandCenterKeys}
+            />
           </TooltipContent>
         </Tooltip>
         <Tooltip delayDuration={300}>
