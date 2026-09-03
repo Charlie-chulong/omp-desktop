@@ -143,6 +143,46 @@ export interface StoredOmpOAuthAccount {
   provider: string;
   identityKey?: string;
 }
+
+function parseStoredOmpSessionCredentialId(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+  const record = parsed as Record<string, unknown>;
+  const credentialId = Number(record.credentialId);
+  return record.type === "oauth" && Number.isSafeInteger(credentialId) && credentialId > 0
+    ? credentialId
+    : undefined;
+}
+
+// COMPAT(ompSessionStickyCredential): OMP 18.0.10 records the credential chosen
+// by its usage-aware selector here before exposing activeCredential over RPC.
+// Remove this local read once the supported OMP floor always returns that field.
+export function readStoredOmpSessionCredentialId(
+  agentDbPath: string,
+  providerId: string,
+  sessionId: string,
+): number | undefined {
+  if (!existsSync(agentDbPath) || !providerId || !sessionId) return undefined;
+  const database = openOmpCredentialDatabase(agentDbPath);
+  try {
+    const row = database
+      .prepare(
+        "SELECT value FROM cache WHERE key = ? AND expires_at > CAST(strftime('%s','now') AS INTEGER)",
+      )
+      .all(`session:sticky:${providerId}:${sessionId}`)[0];
+    return parseStoredOmpSessionCredentialId(row?.value);
+  } catch {
+    return undefined;
+  } finally {
+    database.close();
+  }
+}
 interface StoredOmpOAuthAccountCredential
   extends StoredOmpOAuthAccount, CodexAccountQuotaCredential {}
 
@@ -416,6 +456,7 @@ export interface OmpAgentClientOptions {
   usagePollScheduler?: OmpUsagePollScheduler;
   quotaFetch?: typeof fetch;
   quotaNow?: () => number;
+  sessionCredentialReader?: (providerId: string, sessionId: string) => number | undefined;
 }
 
 export interface OmpProviderIdleScheduler {
@@ -1759,7 +1800,9 @@ export class OmpAgentSession implements AgentSession {
         candidate.credentialId === credentialId && candidate.provider === modelProvider,
     );
     if (!account) return;
-    await this.pinOAuthAccount(account);
+    if (configuredCredentialId) {
+      await this.pinOAuthAccount(account);
+    }
     this.state = {
       ...this.state,
       activeCredential: { provider: account.provider, credentialId: account.credentialId },
@@ -3152,8 +3195,11 @@ export class OmpAgentClient implements AgentClient {
   private readonly quotaNow: () => number;
   private readonly runtime: OmpRuntime;
   private readonly oauthAccountsOverride?: readonly StoredOmpOAuthAccount[];
+  private readonly sessionCredentialReader?: (
+    providerId: string,
+    sessionId: string,
+  ) => number | undefined;
   private readonly loginFlows = new Map<string, OmpProviderLoginFlow>();
-  private readonly automaticAccountCursor = new Map<string, number>();
 
   constructor(options: OmpAgentClientOptions) {
     ensureManagedOmpOnPath();
@@ -3184,6 +3230,7 @@ export class OmpAgentClient implements AgentClient {
       });
     this.quotaNow = options.quotaNow ?? Date.now;
     this.runtime = options.runtime ?? createRuntime(options.logger, runtimeSettings);
+    this.sessionCredentialReader = options.sessionCredentialReader;
     this.oauthAccountsOverride = options.oauthAccounts;
   }
 
@@ -3213,25 +3260,34 @@ export class OmpAgentClient implements AgentClient {
       return [];
     }
   }
-
-  private async selectAutomaticCredentialId(
+  private resolveAutomaticCredentialId(
     config: AgentSessionConfig,
     state: OmpSessionState,
     accounts: readonly StoredOmpOAuthAccount[],
     launchEnv?: Record<string, string>,
-  ): Promise<number | undefined> {
+  ): number | undefined {
     if (optionalString(config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID])) return undefined;
     const provider = state.model?.provider ?? parseModelReference(config.model ?? null)?.provider;
-    if (!provider) return undefined;
+    const sessionId = state.sessionId;
+    if (!provider || !sessionId) return undefined;
     const providerAccounts = accounts.filter((account) => account.provider === provider);
     if (providerAccounts.length < 2) return undefined;
-    const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
-    const { agentDb } = resolveOmpDiagnosticPaths(env);
-    const order = await readOmpProviderAccountOrder(agentDb);
-    const orderedAccounts = sortStoredOmpOAuthAccounts(providerAccounts, order[provider] ?? []);
-    const cursor = this.automaticAccountCursor.get(provider) ?? 0;
-    this.automaticAccountCursor.set(provider, (cursor + 1) % orderedAccounts.length);
-    return orderedAccounts[cursor % orderedAccounts.length]?.credentialId;
+    let credentialId: number | undefined;
+    try {
+      if (this.sessionCredentialReader) {
+        credentialId = this.sessionCredentialReader(provider, sessionId);
+      } else {
+        const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
+        const { agentDb } = resolveOmpDiagnosticPaths(env);
+        credentialId = readStoredOmpSessionCredentialId(agentDb, provider, sessionId);
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP session credential lookup failed");
+      return undefined;
+    }
+    return providerAccounts.some((account) => account.credentialId === credentialId)
+      ? credentialId
+      : undefined;
   }
   private async createInitializedSession(
     runtimeSession: OmpRuntimeSession,
@@ -3269,7 +3325,7 @@ export class OmpAgentClient implements AgentClient {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const initialState = await runtimeSession.getState();
       const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
-      const automaticCredentialId = await this.selectAutomaticCredentialId(
+      const automaticCredentialId = this.resolveAutomaticCredentialId(
         config,
         initialState,
         oauthAccounts,
@@ -3695,7 +3751,6 @@ export class OmpAgentClient implements AgentClient {
       resolveOmpAccountOrderPath(agentDb),
       `${JSON.stringify({ ...current, [normalizedProviderId]: uniqueCredentialIds }, null, 2)}\n`,
     );
-    this.automaticAccountCursor.set(normalizedProviderId, 0);
     return await this.getOmpProviderManagement();
   }
 

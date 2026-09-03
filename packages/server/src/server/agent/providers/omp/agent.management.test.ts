@@ -12,6 +12,7 @@ import {
   disableStoredOmpProviderCredentials,
   formatOmpModelsYaml,
   readStoredOmpOAuthAccounts,
+  readStoredOmpSessionCredentialId,
   OmpAgentClient,
 } from "./agent.js";
 import { FakeOmp } from "./test-utils/fake-omp.js";
@@ -189,6 +190,38 @@ describe("OMP provider management", () => {
         .sort(),
     ).toEqual(["acct-a", "acct-b"]);
   });
+  test("reads the unexpired OAuth credential selected for an OMP session", async () => {
+    const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-session-credential-"));
+    tempDirs.push(agentDir);
+    const databasePath = path.join(agentDir, "agent.db");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE cache (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      INSERT INTO cache (key, value, expires_at) VALUES
+        (
+          'session:sticky:openai-codex:active-session',
+          '{"type":"oauth","credentialId":42}',
+          4102444800
+        ),
+        (
+          'session:sticky:openai-codex:expired-session',
+          '{"type":"oauth","credentialId":41}',
+          1
+        );
+    `);
+    database.close();
+
+    expect(readStoredOmpSessionCredentialId(databasePath, "openai-codex", "active-session")).toBe(
+      42,
+    );
+    expect(
+      readStoredOmpSessionCredentialId(databasePath, "openai-codex", "expired-session"),
+    ).toBeUndefined();
+  });
   test("reads refreshed OAuth credentials before the first quota request", async () => {
     const quotaFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const authorization = new Headers(init?.headers).get("Authorization");
@@ -247,7 +280,7 @@ describe("OMP provider management", () => {
     });
     expect(quotaFetch).toHaveBeenCalledTimes(1);
   });
-  test("persists and returns a custom OAuth account order", async () => {
+  test("persists account order without overriding OMP automatic selection", async () => {
     const { agentDir, client, runtime } = await createClient();
     const database = new DatabaseSync(path.join(agentDir, "agent.db"));
     database.exec(`
@@ -264,6 +297,17 @@ describe("OMP provider management", () => {
       VALUES
         (1, 'openai-codex', 'oauth', '{"access":"secret-a"}', 'email:alice@example.com', NULL),
         (2, 'openai-codex', 'oauth', '{"access":"secret-b"}', 'email:bob@example.com', NULL);
+      CREATE TABLE cache (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      INSERT INTO cache (key, value, expires_at) VALUES
+        (
+          'session:sticky:openai-codex:omp-session-1',
+          '{"type":"oauth","credentialId":1}',
+          4102444800
+        );
     `);
     database.close();
     const providers = [
@@ -283,12 +327,21 @@ describe("OMP provider management", () => {
       readFile(path.join(agentDir, "omp-desktop-account-order.json"), "utf8"),
     ).resolves.toContain('"openai-codex": [\n    2,\n    1\n  ]');
     runtime.setInitialModel({ provider: "openai-codex", id: "gpt-5.6" });
-    await client.createSession({
+    const session = await client.createSession({
       provider: "omp",
       cwd: agentDir,
       model: "openai-codex/gpt-5.6",
     });
-    expect(runtime.latestSession().prompts).toEqual([{ message: "/session pin 2", imageCount: 0 }]);
+    expect(runtime.latestSession().prompts).toEqual([]);
+    expect(session.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "1",
+        }),
+      ]),
+    );
   });
   test("cancels an active provider login and closes its runtime session", async () => {
     const { client, runtime } = await createClient();

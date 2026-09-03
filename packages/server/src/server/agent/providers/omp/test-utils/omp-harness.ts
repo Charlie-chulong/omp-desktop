@@ -78,6 +78,7 @@ export class OmpHarness {
     options: {
       oauthAccounts?: readonly StoredOmpOAuthAccount[];
       fastModeSupported?: boolean;
+      sessionCredentialReader?: (providerId: string, sessionId: string) => number | undefined;
       initialModel?: OmpModel;
       providerIdleScheduler?: OmpProviderIdleScheduler;
       noTurnScheduler?: OmpNoTurnScheduler;
@@ -94,6 +95,7 @@ export class OmpHarness {
       logger: pino({ level: "silent" }),
       runtime: this.omp,
       oauthAccounts: options.oauthAccounts ?? [],
+      sessionCredentialReader: options.sessionCredentialReader,
       providerIdleScheduler: options.providerIdleScheduler,
       noTurnScheduler: options.noTurnScheduler,
       usagePollScheduler: options.usagePollScheduler,
