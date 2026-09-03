@@ -45,6 +45,7 @@ import { useDaemonStatus } from "@/desktop/hooks/use-daemon-status";
 import { loadDesktopSettings, useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { useOmpCodexAccountQuota } from "@/hooks/use-omp-account-quota";
 import {
   getHostRuntimeStore,
   isHostRuntimeConnected,
@@ -54,6 +55,7 @@ import {
   useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
+import { buildCodexProviderUsage, mergeCodexProviderUsage } from "@/provider-usage/codex";
 import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
@@ -462,11 +464,42 @@ export function HostImageGenerationPage({ serverId }: { serverId: string }) {
 }
 
 export function HostUsagePage({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
   const host = useHostProfile(serverId);
-  const { view: providerUsageView, refresh: refreshProviderUsage } = useProviderUsage(serverId);
+  const { view: baseUsageView, refresh: refreshProviderUsage } = useProviderUsage(serverId);
+  const {
+    accounts: codexAccounts,
+    provider: codexProvider,
+    loading: codexLoading,
+    error: codexError,
+    updatedAt: codexUpdatedAt,
+    refresh: refreshCodexUsage,
+  } = useOmpCodexAccountQuota(serverId);
+  const codexUsage = useMemo(
+    () =>
+      buildCodexProviderUsage(
+        {
+          provider: codexProvider,
+          accounts: codexAccounts,
+          error: codexError,
+          updatedAt: codexUpdatedAt,
+        },
+        {
+          providerName: "OpenAI Codex",
+          accountFallback: (number) => t("agentControls.quota.account", { number }),
+          fiveHour: t("agentControls.quota.fiveHour"),
+          weekly: t("agentControls.quota.weekly"),
+        },
+      ),
+    [codexAccounts, codexError, codexProvider, codexUpdatedAt, t],
+  );
+  const usageView = useMemo(
+    () => mergeCodexProviderUsage(baseUsageView, codexUsage, codexLoading, codexUpdatedAt),
+    [baseUsageView, codexLoading, codexUpdatedAt, codexUsage],
+  );
   const handleRefresh = useCallback(() => {
-    void refreshProviderUsage();
-  }, [refreshProviderUsage]);
+    void Promise.all([refreshProviderUsage(), refreshCodexUsage()]);
+  }, [refreshCodexUsage, refreshProviderUsage]);
 
   if (!host) {
     return <HostNotFound />;
@@ -474,7 +507,7 @@ export function HostUsagePage({ serverId }: { serverId: string }) {
 
   return (
     <View>
-      <ProviderUsageSettingsSection view={providerUsageView} onRefresh={handleRefresh} />
+      <ProviderUsageSettingsSection view={usageView} onRefresh={handleRefresh} />
     </View>
   );
 }

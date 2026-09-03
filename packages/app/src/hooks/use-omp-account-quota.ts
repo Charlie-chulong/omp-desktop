@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useFetchQuery } from "@/data/query";
 import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
 import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
 import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
@@ -32,6 +33,10 @@ function waitForInitialQuotaRetry(): Promise<void> {
   setTimeout(resolve, 750);
   return promise;
 }
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 export async function fetchOmpAccountQuotaManagement(
   client: OmpProviderManagementClient,
   waitForRetry: () => Promise<void> = waitForInitialQuotaRetry,
@@ -42,45 +47,82 @@ export async function fetchOmpAccountQuotaManagement(
   return client.getOmpProviderManagement().catch(() => first);
 }
 
-export function useOmpAccountQuota(
+export interface OmpCodexAccountQuotaResult {
+  accounts: OmpAccountQuotaDisplayAccount[];
+  provider: OmpProviderManagement["loginProviders"][number] | null;
+  loading: boolean;
+  error: string | null;
+  updatedAt: string | null;
+  refresh: () => Promise<void>;
+}
+
+export function useOmpCodexAccountQuota(
   serverId: string | null | undefined,
-  provider: string | null | undefined,
-  modelId: string | null | undefined,
-): { accounts: OmpAccountQuotaDisplayAccount[]; loading: boolean } {
+  enabled = true,
+): OmpCodexAccountQuotaResult {
   const client = useSessionStore((state) => state.sessions[serverId ?? ""]?.client ?? null);
   const supportsOmpProviderManagement = useSessionStore(
     (state) => state.sessions[serverId ?? ""]?.serverInfo?.features?.ompProviderManagement === true,
   );
-  const shouldFetch = isCodexProvider(provider ?? undefined, modelId ?? null);
-  const query = useQuery({
+  const canFetch = Boolean(client && supportsOmpProviderManagement);
+  const active = enabled && canFetch;
+  const query = useFetchQuery({
     queryKey: ["ompWorkflowQuota", serverId ?? ""],
     queryFn: async () => {
       if (!client) throw new Error("OMP provider management is unavailable");
       return fetchOmpAccountQuotaManagement(client);
     },
-    enabled: Boolean(client && supportsOmpProviderManagement && shouldFetch),
-    staleTime: 0,
+    enabled: active,
+    dataShape: "value",
+    staleTimeMs: 0,
     refetchInterval: 300_000,
-    refetchOnMount: true,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
   });
-  const notesQuery = useQuery({
+  const notesQuery = useFetchQuery({
     queryKey: ["ompProviderAccountNotes", serverId ?? ""],
     queryFn: () => loadOmpProviderAccountNotes(AsyncStorage, serverId ?? undefined),
-    enabled: Boolean(serverId && shouldFetch),
-    staleTime: 0,
-    refetchOnMount: true,
+    enabled: Boolean(serverId && active),
+    dataShape: "value",
+    staleTimeMs: 0,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   });
-  const accounts = shouldFetch
-    ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex")?.accounts ?? []).map(
-        (account) => ({
-          ...account,
-          note: notesQuery.data?.[String(account.credentialId)],
-        }),
-      )
-    : [];
-  return { accounts, loading: query.isFetching || notesQuery.isFetching };
+  const refetchQuota = query.refetch;
+  const refetchNotes = notesQuery.refetch;
+  const refresh = useCallback(async () => {
+    if (!active) return;
+    await Promise.all([refetchQuota(), refetchNotes()]);
+  }, [active, refetchNotes, refetchQuota]);
+  const provider = active
+    ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex") ?? null)
+    : null;
+  const accounts = (provider?.accounts ?? []).map((account) =>
+    Object.assign({}, account, {
+      note: notesQuery.data?.[String(account.credentialId)],
+    }),
+  );
+  const updatedAtMs = query.dataUpdatedAt || query.errorUpdatedAt;
+
+  return {
+    accounts,
+    provider,
+    loading: active && (query.isFetching || notesQuery.isFetching),
+    error: active && query.isError ? errorMessage(query.error) : null,
+    updatedAt: updatedAtMs > 0 ? new Date(updatedAtMs).toISOString() : null,
+    refresh,
+  };
+}
+
+export function useOmpAccountQuota(
+  serverId: string | null | undefined,
+  provider: string | null | undefined,
+  modelId: string | null | undefined,
+): { accounts: OmpAccountQuotaDisplayAccount[]; loading: boolean } {
+  const shouldFetch = isCodexProvider(provider ?? undefined, modelId ?? null);
+  const query = useOmpCodexAccountQuota(serverId, shouldFetch);
+  return {
+    accounts: shouldFetch ? query.accounts : [],
+    loading: shouldFetch && query.loading,
+  };
 }
