@@ -114,8 +114,14 @@ export class GitHubClientFactory {
         "status" in error &&
         error.status === 401
       ) {
-        this.#clients.delete(config.host);
-        await this.#auth.logout(config.host).catch(() => undefined);
+        if (this.#clients.get(config.host)?.octokit === octokit) {
+          this.#clients.delete(config.host);
+        }
+        try {
+          await this.#auth.invalidateCredential(config.host, credential.token);
+        } catch {
+          // Preserve the original 401 when the credential store is unavailable.
+        }
       }
       throw error;
     });

@@ -16,6 +16,32 @@ function isCodexProvider(provider: string | undefined, modelId: string | null): 
   return provider === "omp" && resolveOmpModelProviderNamespace(modelId ?? "") === "openai-codex";
 }
 
+interface OmpProviderManagementClient {
+  getOmpProviderManagement(): Promise<OmpProviderManagement>;
+}
+
+function needsInitialQuotaRetry(management: OmpProviderManagement): boolean {
+  const codex = management.loginProviders.find((provider) => provider.id === "openai-codex");
+  if (!codex?.authenticated) return false;
+  if (!codex.accounts || codex.accounts.length === 0) return true;
+  return codex.accounts.some((account) => account.quota?.status !== "available");
+}
+
+function waitForInitialQuotaRetry(): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, 750);
+  return promise;
+}
+export async function fetchOmpAccountQuotaManagement(
+  client: OmpProviderManagementClient,
+  waitForRetry: () => Promise<void> = waitForInitialQuotaRetry,
+): Promise<OmpProviderManagement> {
+  const first = await client.getOmpProviderManagement();
+  if (!needsInitialQuotaRetry(first)) return first;
+  await waitForRetry();
+  return client.getOmpProviderManagement().catch(() => first);
+}
+
 export function useOmpAccountQuota(
   serverId: string | null | undefined,
   provider: string | null | undefined,
@@ -30,7 +56,7 @@ export function useOmpAccountQuota(
     queryKey: ["ompWorkflowQuota", serverId ?? ""],
     queryFn: async () => {
       if (!client) throw new Error("OMP provider management is unavailable");
-      return client.getOmpProviderManagement();
+      return fetchOmpAccountQuotaManagement(client);
     },
     enabled: Boolean(client && supportsOmpProviderManagement && shouldFetch),
     staleTime: 0,

@@ -209,6 +209,7 @@ export class GitHubAuthManager {
   readonly #now: () => number;
   readonly #flows = new Map<string, LoginFlow>();
   readonly #refreshes = new Map<string, Promise<GitHubCredential | null>>();
+  readonly #credentialMutations = new Map<string, Promise<void>>();
 
   constructor(options: GitHubAuthManagerOptions = {}) {
     this.#config = options.config ?? {};
@@ -291,8 +292,8 @@ export class GitHubAuthManager {
       return credential;
     }
     if (Date.parse(credential.refreshTokenExpiresAt) <= this.#now()) {
-      await this.#credentialStore.delete(config.host);
-      return null;
+      const deleted = await this.#deleteCredentialIfTokenMatches(config.host, credential.token);
+      return deleted ? null : this.getCredential(config.host);
     }
 
     const activeRefresh = this.#refreshes.get(config.host);
@@ -373,7 +374,9 @@ export class GitHubAuthManager {
                 login: user.login,
                 scopes,
               };
-        await this.#credentialStore.set(credential);
+        await this.#withCredentialMutation(credential.host, () =>
+          this.#credentialStore.set(credential),
+        );
         return {
           host: hostConfig.host,
           userId: user.id,
@@ -419,6 +422,14 @@ export class GitHubAuthManager {
     this.#deleteFlow(flowId, true);
   }
 
+  // Refresh rotation invalidates the old access token while requests may still be in flight.
+  // A stale request must never delete the newer credential already stored for the host.
+  async invalidateCredential(host: string, rejectedToken: string): Promise<void> {
+    const config = this.resolveHostConfig(host);
+    if (!config || this.#environmentToken(config.host)) return;
+    await this.#deleteCredentialIfTokenMatches(config.host, rejectedToken);
+  }
+
   async logout(host: string): Promise<void> {
     const config = this.resolveHostConfig(host);
     if (!config) return;
@@ -427,7 +438,9 @@ export class GitHubAuthManager {
         `Remove the environment token to sign out from ${config.host}`,
       );
     }
-    await this.#credentialStore.delete(config.host);
+    await this.#withCredentialMutation(config.host, () =>
+      this.#credentialStore.delete(config.host),
+    );
   }
 
   dispose(): void {
@@ -516,8 +529,11 @@ export class GitHubAuthManager {
           ? payload.error
           : `HTTP ${response.status}`;
       if (code === "bad_refresh_token") {
-        await this.#credentialStore.delete(hostConfig.host);
-        return null;
+        const deleted = await this.#deleteCredentialIfTokenMatches(
+          hostConfig.host,
+          credential.token,
+        );
+        return deleted ? null : this.#credentialStore.get(hostConfig.host);
       }
       throw new GitHubLoginFlowError(
         `Unable to refresh GitHub authentication for ${hostConfig.host}: ${code}`,
@@ -535,8 +551,46 @@ export class GitHubAuthManager {
         now + refreshed.refresh_token_expires_in * 1_000,
       ).toISOString(),
     };
-    await this.#credentialStore.set(updated);
-    return updated;
+    return this.#replaceCredentialIfTokenMatches(credential.token, updated);
+  }
+
+  async #replaceCredentialIfTokenMatches(
+    expectedToken: string,
+    replacement: GitHubCredential,
+  ): Promise<GitHubCredential | null> {
+    return this.#withCredentialMutation(replacement.host, async () => {
+      const current = await this.#credentialStore.get(replacement.host);
+      if (current?.token !== expectedToken) return current;
+      await this.#credentialStore.set(replacement);
+      return replacement;
+    });
+  }
+
+  async #deleteCredentialIfTokenMatches(host: string, expectedToken: string): Promise<boolean> {
+    return this.#withCredentialMutation(host, async () => {
+      const current = await this.#credentialStore.get(host);
+      if (current?.token !== expectedToken) return false;
+      await this.#credentialStore.delete(host);
+      return true;
+    });
+  }
+
+  async #withCredentialMutation<T>(host: string, mutate: () => Promise<T>): Promise<T> {
+    const normalizedHost = normalizeGitHubHost(host);
+    const previous = this.#credentialMutations.get(normalizedHost) ?? Promise.resolve();
+    const operation = previous.then(mutate, mutate);
+    const barrier = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#credentialMutations.set(normalizedHost, barrier);
+    try {
+      return await operation;
+    } finally {
+      if (this.#credentialMutations.get(normalizedHost) === barrier) {
+        this.#credentialMutations.delete(normalizedHost);
+      }
+    }
   }
 
   #environmentToken(host: string): string | null {
