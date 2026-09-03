@@ -119,12 +119,12 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.foregroundMuted,
   },
   fillOk: {
-    backgroundColor: theme.colors.statusSuccess,
+    backgroundColor: theme.colors.palette.green[500],
   },
   fillWarning: {
-    backgroundColor: theme.colors.statusWarning,
+    backgroundColor: theme.colors.palette.amber[500],
   },
   fillDanger: {
-    backgroundColor: theme.colors.statusDanger,
+    backgroundColor: theme.colors.destructive,
   },
 }));
