@@ -66,6 +66,7 @@ export class FakeOmp implements OmpRuntime {
   private fastModeSupported = true;
   private initialModel: OmpModel | null = null;
   private initialStats: OmpSessionStats | null = null;
+  private initialActiveCredential: OmpSessionState["activeCredential"];
   private readonly queuedStartErrors: Error[] = [];
   private readonly queuedSubagentSubscriptionErrors = new Map<
     FakeOmpSubagentSubscriptionLevel,
@@ -85,7 +86,11 @@ export class FakeOmp implements OmpRuntime {
     });
     this.recordedLaunches.push(launch);
     const session = new FakeOmpSession(launch);
-    session.state = { ...session.state, model: this.initialModel };
+    session.state = {
+      ...session.state,
+      model: this.initialModel,
+      activeCredential: this.initialActiveCredential,
+    };
     if (!this.fastModeSupported) {
       session.state = { ...session.state, fastModeEnabled: undefined, fastModeActive: undefined };
     }
@@ -119,6 +124,11 @@ export class FakeOmp implements OmpRuntime {
   }
   setInitialModel(model: OmpModel | null): void {
     this.initialModel = model;
+  }
+  setInitialActiveCredential(
+    activeCredential: OmpSessionState["activeCredential"],
+  ): void {
+    this.initialActiveCredential = activeCredential;
   }
   setInitialStats(stats: OmpSessionStats): void {
     this.initialStats = stats;

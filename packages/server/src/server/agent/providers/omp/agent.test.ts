@@ -294,6 +294,7 @@ describe("OMP agent client and session", () => {
         { credentialId: 41, provider: "openai-codex" },
         { credentialId: 42, provider: "openai-codex" },
       ],
+      initialActiveCredential: { provider: "openai-codex", credentialId: 42 },
       sessionCredentialReader: (providerId, sessionId) => {
         expect(providerId).toBe("openai-codex");
         expect(sessionId).toBe("omp-session-1");

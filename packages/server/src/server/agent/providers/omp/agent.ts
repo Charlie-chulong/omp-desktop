@@ -2787,21 +2787,26 @@ export class OmpAgentSession implements AgentSession {
     this.automaticCredentialRetryIndex += 1;
     const controller = new AbortController();
     this.automaticCredentialRetryAbort = controller;
-    void this.automaticCredentialScheduler
-      .wait(retryDelayMs, controller.signal)
-      .then(() => {
-        if (this.automaticCredentialRetryAbort !== controller) return;
+    void this.waitForAutomaticCredentialRetry(retryDelayMs, controller);
+  }
+
+  private async waitForAutomaticCredentialRetry(
+    retryDelayMs: number,
+    controller: AbortController,
+  ): Promise<void> {
+    try {
+      await this.automaticCredentialScheduler.wait(retryDelayMs, controller.signal);
+      if (this.automaticCredentialRetryAbort !== controller) return;
+      this.automaticCredentialRetryAbort = null;
+      this.requestAutomaticCredentialRefresh();
+    } catch (error) {
+      if (this.automaticCredentialRetryAbort === controller) {
         this.automaticCredentialRetryAbort = null;
-        this.requestAutomaticCredentialRefresh();
-      })
-      .catch((error: unknown) => {
-        if (this.automaticCredentialRetryAbort === controller) {
-          this.automaticCredentialRetryAbort = null;
-        }
-        if (!controller.signal.aborted) {
-          this.logger.debug({ err: error }, "OMP automatic credential retry wait failed");
-        }
-      });
+      }
+      if (!controller.signal.aborted) {
+        this.logger.debug({ err: error }, "OMP automatic credential retry wait failed");
+      }
+    }
   }
 
   private async resolveAndApplyAutomaticCredential(generation: number): Promise<void> {
@@ -3708,11 +3713,15 @@ export class OmpAgentClient implements AgentClient {
       );
       const modelProvider =
         state.model?.provider ?? parseModelReference(config.model ?? null)?.provider;
-      const activeCredential =
-        state.activeCredential ??
-        (automaticCredentialId && modelProvider
-          ? { provider: modelProvider, credentialId: automaticCredentialId }
-          : undefined);
+      const configuredCredentialId = configuredOmpOAuthCredentialId(
+        config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID],
+      );
+      const activeCredential = configuredCredentialId
+        ? undefined
+        : (state.activeCredential ??
+          (automaticCredentialId && modelProvider
+            ? { provider: modelProvider, credentialId: automaticCredentialId }
+            : undefined));
       return createOmpFeatures(
         config,
         oauthAccounts,
