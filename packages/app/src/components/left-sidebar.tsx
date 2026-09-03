@@ -899,10 +899,11 @@ function SidebarProviderAccountPanel() {
       pressed,
     }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.sidebarAccountTrigger,
+      accountLocked && styles.sidebarAccountTriggerLocked,
       (hovered || pressed || accountOpen) &&
         styles.sidebarProviderTriggerActive,
     ],
-    [accountOpen],
+    [accountLocked, accountOpen],
   );
   const handleProviderSelect = useCallback(
     (providerId: string) => {
@@ -1792,11 +1793,15 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[1],
     borderRadius: theme.borderRadius.md,
   },
+  sidebarAccountTriggerLocked: {
+    width: "100%",
+  },
   sidebarAccountTriggerContainer: {
     alignSelf: "stretch",
   },
   sidebarAccountLock: {
     width: 14,
+    marginLeft: "auto",
     height: 20,
     flexShrink: 0,
     alignItems: "center",
