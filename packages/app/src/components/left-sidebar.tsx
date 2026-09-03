@@ -8,6 +8,7 @@ import {
   History,
   Home,
   Import as ImportIcon,
+  LockKeyhole,
   Plus,
   Search,
   Server,
@@ -23,6 +24,7 @@ import {
   useRef,
   useState,
   type RefObject,
+  type ReactNode,
 } from "react";
 import {
   Pressable,
@@ -664,6 +666,52 @@ function SidebarProviderUsageDetails({
   );
 }
 
+function SidebarAccountTriggerContent({
+  primary,
+  secondary,
+  locked,
+  canSwitch,
+  theme,
+}: {
+  primary: string;
+  secondary: string;
+  locked: boolean;
+  canSwitch: boolean;
+  theme: SidebarTheme;
+}) {
+  let trailing: ReactNode = null;
+  if (locked) {
+    trailing = (
+      <View
+        style={styles.sidebarAccountLock}
+        testID="sidebar-account-reply-lock"
+        accessible={false}
+      >
+        <LockKeyhole size={13} color={theme.colors.foregroundMuted} />
+      </View>
+    );
+  } else if (canSwitch) {
+    trailing = <ChevronDown size={14} color={theme.colors.foregroundMuted} />;
+  }
+
+  return (
+    <>
+      <CircleUserRound size={16} color={theme.colors.foregroundMuted} />
+      <View style={styles.sidebarAccountCopy}>
+        <Text style={styles.sidebarAccountName} numberOfLines={1}>
+          {primary}
+        </Text>
+        {secondary ? (
+          <Text style={styles.sidebarAccountSecondary} numberOfLines={1}>
+            {secondary}
+          </Text>
+        ) : null}
+      </View>
+      {trailing}
+    </>
+  );
+}
+
 function SidebarProviderAccountPanel() {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
@@ -828,6 +876,11 @@ function SidebarProviderAccountPanel() {
     Boolean(controls?.features.set && accountFeature?.type === "select") &&
     accountOptions.length > 1;
   const canSwitchAccount = hasAccountSwitcher && controls?.isRunning !== true;
+  const accountLocked = hasAccountSwitcher && controls?.isRunning === true;
+  const accountAccessibilityState = useMemo(
+    () => ({ disabled: accountLocked }),
+    [accountLocked],
+  );
 
   const providerTriggerStyle = useCallback(
     ({
@@ -880,11 +933,19 @@ function SidebarProviderAccountPanel() {
     },
     [accountFeature, controls],
   );
+  const handleProviderToggle = useCallback(() => {
+    setProviderOpen((open) => !open);
+  }, []);
+  const handleAccountToggle = useCallback(() => {
+    if (controls?.isRunning) return;
+    setAccountOpen((open) => !open);
+  }, [controls?.isRunning]);
   useEffect(() => {
     if (controls?.isRunning) setAccountOpen(false);
   }, [controls?.isRunning]);
 
   if (!controls || providers.length === 0) return null;
+  const accountSwitchHint = t("agentControls.quota.switchAfterTurn");
 
   return (
     <View
@@ -895,7 +956,7 @@ function SidebarProviderAccountPanel() {
         ref={providerAnchorRef}
         collapsable={false}
         disabled={!canSwitchProvider}
-        onPress={() => setProviderOpen(!providerOpen)}
+        onPress={handleProviderToggle}
         style={providerTriggerStyle}
         accessibilityRole="button"
         accessibilityLabel={t("agentControls.provider.select")}
@@ -959,37 +1020,43 @@ function SidebarProviderAccountPanel() {
       accountOptions.length > 0 ? (
         <>
           <View style={styles.sidebarProviderDivider} />
-          <ComboboxTrigger
-            ref={accountAnchorRef}
-            collapsable={false}
-            disabled={!canSwitchAccount}
-            onPress={() => setAccountOpen(!accountOpen)}
-            style={accountTriggerStyle}
-            accessibilityRole="button"
-            accessibilityLabel={t("agentControls.features.oauthAccount.title")}
-            testID="sidebar-account-selector"
-            chevron={null}
-          >
-            <CircleUserRound size={16} color={theme.colors.foregroundMuted} />
-            <View style={styles.sidebarAccountCopy}>
-              <Text style={styles.sidebarAccountName} numberOfLines={1}>
-                {accountPrimary}
-              </Text>
-              {accountSecondary ? (
-                <Text style={styles.sidebarAccountSecondary} numberOfLines={1}>
-                  {accountSecondary}
-                </Text>
-              ) : null}
-            </View>
-            {canSwitchAccount ? (
-              <ChevronDown size={14} color={theme.colors.foregroundMuted} />
-            ) : null}
-          </ComboboxTrigger>
-          {hasAccountSwitcher && controls.isRunning ? (
-            <Text style={styles.sidebarQuotaLoading}>
-              {t("agentControls.quota.switchAfterTurn")}
-            </Text>
-          ) : null}
+          <Tooltip delayDuration={300} enabledOnDesktop={accountLocked}>
+            <TooltipTrigger asChild>
+              <View
+                style={styles.sidebarAccountTriggerContainer}
+                collapsable={false}
+                testID="sidebar-account-tooltip-trigger"
+              >
+                <ComboboxTrigger
+                  ref={accountAnchorRef}
+                  collapsable={false}
+                  disabled={!hasAccountSwitcher}
+                  onPress={handleAccountToggle}
+                  accessibilityState={accountAccessibilityState}
+                  style={accountTriggerStyle}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    accountLocked
+                      ? `${t("agentControls.features.oauthAccount.title")}. ${accountSwitchHint}`
+                      : t("agentControls.features.oauthAccount.title")
+                  }
+                  testID="sidebar-account-selector"
+                  chevron={null}
+                >
+                  <SidebarAccountTriggerContent
+                    primary={accountPrimary}
+                    secondary={accountSecondary}
+                    locked={accountLocked}
+                    canSwitch={canSwitchAccount}
+                    theme={theme}
+                  />
+                </ComboboxTrigger>
+              </View>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="end" offset={8}>
+              <IconTooltipContent label={accountSwitchHint} />
+            </TooltipContent>
+          </Tooltip>
           <Combobox
             options={accountOptions}
             value={selectedAccountId}
@@ -1724,6 +1791,16 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[1],
     borderRadius: theme.borderRadius.md,
+  },
+  sidebarAccountTriggerContainer: {
+    alignSelf: "stretch",
+  },
+  sidebarAccountLock: {
+    width: 14,
+    height: 20,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sidebarAccountCopy: {
     minWidth: 0,

@@ -473,6 +473,7 @@ export interface OmpNoTurnScheduler {
 // guarantees prompt_result waits for queued extension work.
 const OMP_NO_TURN_SETTLE_MS = 5_000;
 
+const OMP_SESSION_CREDENTIAL_READ_DELAYS_MS = [0, 20, 40, 80, 160] as const;
 interface OmpPromptPayload {
   text: string;
   images?: OmpImageContent[];
@@ -498,6 +499,7 @@ interface StartTurnResult {
 interface OmpAgentSessionOptions {
   oauthAccounts?: readonly StoredOmpOAuthAccount[];
   automaticCredentialId?: number;
+  automaticCredentialResolver?: () => Promise<number | undefined>;
   runtimeSession: OmpRuntimeSession;
   config: AgentSessionConfig;
   initialState: OmpSessionState;
@@ -1385,6 +1387,8 @@ export class OmpAgentSession implements AgentSession {
   private readonly noTurnScheduler: OmpNoTurnScheduler;
   private readonly usagePoller: OmpUsagePoller;
   private readonly automaticCredentialId?: number;
+  private readonly automaticCredentialResolver?: () => Promise<number | undefined>;
+  private automaticCredentialRefresh: Promise<void> | null = null;
   private closed = false;
   private live: boolean;
   private initialUsageProbeStarted = false;
@@ -1398,6 +1402,7 @@ export class OmpAgentSession implements AgentSession {
     this.config = options.config;
     this.oauthAccounts = [...(options.oauthAccounts ?? [])];
     this.automaticCredentialId = options.automaticCredentialId;
+    this.automaticCredentialResolver = options.automaticCredentialResolver;
     this.state = options.initialState;
     const configuredModeId = options.currentModeId ?? null;
     const configuredWorkflowMode = normalizeOmpWorkflowSelection(
@@ -2667,6 +2672,52 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
+  private refreshAutomaticCredential(): void {
+    const accountFeature = findOmpOAuthAccountFeature(this.features);
+    if (
+      !this.automaticCredentialResolver ||
+      this.automaticCredentialRefresh ||
+      accountFeature?.value !== null ||
+      accountFeature.effectiveValue
+    ) {
+      return;
+    }
+
+    const refresh = this.resolveAndApplyAutomaticCredential();
+    this.automaticCredentialRefresh = refresh;
+    void refresh.finally(() => {
+      if (this.automaticCredentialRefresh === refresh) {
+        this.automaticCredentialRefresh = null;
+      }
+    });
+  }
+
+  private async resolveAndApplyAutomaticCredential(): Promise<void> {
+    try {
+      const credentialId = await this.automaticCredentialResolver?.();
+      if (!credentialId || this.closed) return;
+      const modelProvider =
+        this.state.model?.provider ?? parseModelReference(this.config.model ?? null)?.provider;
+      const account = this.oauthAccounts.find(
+        (candidate) =>
+          candidate.credentialId === credentialId && candidate.provider === modelProvider,
+      );
+      if (!account) return;
+      const previousEffectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
+      this.state = {
+        ...this.state,
+        activeCredential: { provider: account.provider, credentialId: account.credentialId },
+      };
+      this.refreshFeatures();
+      const effectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
+      if (effectiveValue !== previousEffectiveValue) {
+        this.emit({ type: "features_changed", provider: this.provider });
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP automatic credential refresh failed");
+    }
+  }
+
   private handleRuntimeEvent(event: OmpRuntimeEvent): void {
     if (event.type === "credential_changed") {
       this.handleCredentialChanged(event);
@@ -2746,6 +2797,7 @@ export class OmpAgentSession implements AgentSession {
   }
 
   private handleSessionEvent(event: OmpAgentSessionEvent): void {
+    this.refreshAutomaticCredential();
     const turnId = this.currentTurnIdForEvent();
 
     switch (event.type) {
@@ -3145,7 +3197,10 @@ export class OmpAgentSession implements AgentSession {
     while (!this.closed && this.activeTurnStarted && this.currentTurnIdForEvent() === turnId) {
       try {
         const state = await this.runtimeSession.getState();
-        this.state = state;
+        this.state = {
+          ...state,
+          activeCredential: state.activeCredential ?? this.state.activeCredential,
+        };
         if (!state.isStreaming && !state.isCompacting) {
           this.completeTurn(turnId, messages);
           return;
@@ -3159,7 +3214,11 @@ export class OmpAgentSession implements AgentSession {
 
   private async refreshState(): Promise<void> {
     const previousEffectiveValue = findOmpOAuthAccountFeature(this.features)?.effectiveValue;
-    this.state = await this.runtimeSession.getState();
+    const state = await this.runtimeSession.getState();
+    this.state = {
+      ...state,
+      activeCredential: state.activeCredential ?? this.state.activeCredential,
+    };
     if (
       this.fastModeSupported &&
       typeof this.state.fastModeEnabled === "boolean" &&
@@ -3260,34 +3319,39 @@ export class OmpAgentClient implements AgentClient {
       return [];
     }
   }
-  private resolveAutomaticCredentialId(
+  private async resolveAutomaticCredentialId(
     config: AgentSessionConfig,
     state: OmpSessionState,
     accounts: readonly StoredOmpOAuthAccount[],
     launchEnv?: Record<string, string>,
-  ): number | undefined {
+  ): Promise<number | undefined> {
     if (optionalString(config.featureValues?.[OMP_OAUTH_ACCOUNT_FEATURE_ID])) return undefined;
     const provider = state.model?.provider ?? parseModelReference(config.model ?? null)?.provider;
     const sessionId = state.sessionId;
     if (!provider || !sessionId) return undefined;
     const providerAccounts = accounts.filter((account) => account.provider === provider);
     if (providerAccounts.length < 2) return undefined;
-    let credentialId: number | undefined;
-    try {
+    const readCredentialId = () => {
       if (this.sessionCredentialReader) {
-        credentialId = this.sessionCredentialReader(provider, sessionId);
-      } else {
-        const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
-        const { agentDb } = resolveOmpDiagnosticPaths(env);
-        credentialId = readStoredOmpSessionCredentialId(agentDb, provider, sessionId);
+        return this.sessionCredentialReader(provider, sessionId);
       }
-    } catch (error) {
-      this.logger.debug({ err: error }, "OMP session credential lookup failed");
-      return undefined;
+      const env = { ...process.env, ...this.runtimeSettings?.env, ...launchEnv };
+      const { agentDb } = resolveOmpDiagnosticPaths(env);
+      return readStoredOmpSessionCredentialId(agentDb, provider, sessionId);
+    };
+
+    for (const retryDelayMs of OMP_SESSION_CREDENTIAL_READ_DELAYS_MS) {
+      if (retryDelayMs > 0) await delay(retryDelayMs);
+      try {
+        const credentialId = readCredentialId();
+        if (providerAccounts.some((account) => account.credentialId === credentialId)) {
+          return credentialId;
+        }
+      } catch (error) {
+        this.logger.debug({ err: error }, "OMP session credential lookup failed");
+      }
     }
-    return providerAccounts.some((account) => account.credentialId === credentialId)
-      ? credentialId
-      : undefined;
+    return undefined;
   }
   private async createInitializedSession(
     runtimeSession: OmpRuntimeSession,
@@ -3345,18 +3409,21 @@ export class OmpAgentClient implements AgentClient {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const initialState = await runtimeSession.getState();
       const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
-      const automaticCredentialId = this.resolveAutomaticCredentialId(
+      const automaticCredentialId = await this.resolveAutomaticCredentialId(
         config,
         initialState,
         oauthAccounts,
         launchContext?.env,
       );
+      const automaticCredentialResolver = () =>
+        this.resolveAutomaticCredentialId(config, initialState, oauthAccounts, launchContext?.env);
       return await this.createInitializedSession(
         runtimeSession,
         config,
         {
           initialState,
           automaticCredentialId,
+          automaticCredentialResolver,
           currentModeId: launchMode.modeId,
           logger: this.logger,
           subagentCardScheduler: this.subagentCardScheduler,
@@ -3397,11 +3464,23 @@ export class OmpAgentClient implements AgentClient {
     );
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      const initialState = await runtimeSession.getState();
+      const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
+      const automaticCredentialResolver = () =>
+        this.resolveAutomaticCredentialId(
+          resumeConfig.config,
+          initialState,
+          oauthAccounts,
+          launchContext?.env,
+        );
+      const automaticCredentialId = await automaticCredentialResolver();
       return await this.createInitializedSession(
         runtimeSession,
         resumeConfig.config,
         {
-          initialState: await runtimeSession.getState(),
+          initialState,
+          automaticCredentialId,
+          automaticCredentialResolver,
           currentModeId: launchMode.modeId,
           logger: this.logger,
           subagentCardScheduler: this.subagentCardScheduler,
@@ -3411,7 +3490,7 @@ export class OmpAgentClient implements AgentClient {
           paseoTools: launchContext?.paseoTools,
           live: false,
         },
-        this.readOAuthAccounts(launchContext?.env),
+        oauthAccounts,
       );
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
@@ -3477,7 +3556,11 @@ export class OmpAgentClient implements AgentClient {
       });
       const state = await runtimeSession.getState();
       const configuredFastMode = optionalBoolean(config.featureValues?.[OMP_FAST_MODE_FEATURE_ID]);
-      const automaticCredentialId = this.resolveAutomaticCredentialId(config, state, oauthAccounts);
+      const automaticCredentialId = await this.resolveAutomaticCredentialId(
+        config,
+        state,
+        oauthAccounts,
+      );
       const modelProvider =
         state.model?.provider ?? parseModelReference(config.model ?? null)?.provider;
       const activeCredential =

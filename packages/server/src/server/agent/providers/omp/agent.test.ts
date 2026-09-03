@@ -220,6 +220,73 @@ describe("OMP agent client and session", () => {
     );
   });
 
+  test("retries a delayed automatic OAuth account selection during session startup", async () => {
+    let credentialReadCount = 0;
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+      sessionCredentialReader: () => {
+        credentialReadCount += 1;
+        return credentialReadCount < 3 ? undefined : 42;
+      },
+    });
+
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+
+    expect(credentialReadCount).toBe(3);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+  });
+
+  test("publishes a credential selected after an automatic turn starts", async () => {
+    let credentialReadCount = 0;
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+      sessionCredentialReader: () => {
+        credentialReadCount += 1;
+        return credentialReadCount <= 5 ? undefined : 42;
+      },
+    });
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: null,
+        }),
+      ]),
+    );
+
+    await omp.runPrompt("hello", "world");
+    await waitForImmediate();
+
+    expect(credentialReadCount).toBeGreaterThan(5);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: null,
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+    expect(omp.eventTypes()).toContain("features_changed");
+  });
+
   test("reports the OMP-selected OAuth account during the draft feature probe", async () => {
     let credentialReadCount = 0;
     const omp = new OmpHarness({
