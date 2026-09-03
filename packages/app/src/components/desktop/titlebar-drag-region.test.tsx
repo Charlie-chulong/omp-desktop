@@ -44,7 +44,7 @@ describe("TITLEBAR_DRAG_REGION_DATASET", () => {
       throw new Error("Titlebar scroll surface did not render");
     }
 
-    expect(surface.hasAttribute("data-window-drag-region")).toBe(true);
+    expect(surface.getAttribute("data-window-drag-region")).toBe("native");
     expect(surface.hasAttribute("data-windowdragregion")).toBe(false);
   });
 });

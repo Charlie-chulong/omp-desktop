@@ -310,6 +310,11 @@ export function registerWindowManager(): void {
     }
   });
 
+  ipcMain.handle("paseo:window:isMaximized", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win?.isMaximized() ?? false;
+  });
+
   ipcMain.handle("paseo:window:isFullscreen", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     return win?.isFullScreen() ?? false;

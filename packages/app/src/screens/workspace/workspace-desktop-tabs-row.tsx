@@ -43,10 +43,7 @@ import type {
   DraggableListDragHandleProps,
   DraggableRenderItemInfo,
 } from "@/components/draggable-list.types";
-import {
-  TITLEBAR_DRAG_REGION_DATASET,
-  useTitlebarWindowDragHandlers,
-} from "@/components/desktop/titlebar-drag-region";
+import { useTitlebarWindowDragSurface } from "@/components/desktop/titlebar-drag-region";
 import { isNative, isWeb } from "@/constants/platform";
 import {
   ContextMenu,
@@ -993,7 +990,7 @@ function ResolvedWorkspaceDesktopTabsRow({
     () => new Map<string, WorkspaceTabLabelMeasurement>(),
   );
   const [trackSnapshot, setTrackSnapshot] = useState<WorkspaceTabTrackSnapshot | null>(null);
-  const titlebarWindowDragHandlers = useTitlebarWindowDragHandlers();
+  const titlebarWindowDragSurface = useTitlebarWindowDragSurface();
 
   const handleTabsContainerLayout = useCallback((event: LayoutChangeEvent) => {
     updateMeasuredWidth(setTabsContainerWidth, event);
@@ -1346,8 +1343,7 @@ function ResolvedWorkspaceDesktopTabsRow({
           scrollEnabled={layout.requiresHorizontalScrollFallback}
           testID="workspace-tabs-scroll"
           style={tabsScrollStyle}
-          dataSet={TITLEBAR_DRAG_REGION_DATASET}
-          {...titlebarWindowDragHandlers}
+          {...titlebarWindowDragSurface}
           contentContainerStyle={styles.tabsContent}
           showsHorizontalScrollIndicator={false}
           onLayout={handleTabScrollLayout}

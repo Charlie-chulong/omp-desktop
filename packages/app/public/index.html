@@ -69,9 +69,12 @@
       [contenteditable="true"] {
         -webkit-app-region: no-drag !important;
       }
-      /* The topmost titlebar scroll surface receives pointer events and moves
-         the BrowserWindow through IPC, including while maximized. */
-      [data-window-drag-region] {
+      /* Normal windows stay on Chromium's native drag path. Maximized frameless
+         windows temporarily switch to the manual restore path. */
+      [data-window-drag-region="native"] {
+        -webkit-app-region: drag !important;
+      }
+      [data-window-drag-region="manual"] {
         -webkit-app-region: no-drag !important;
       }
 

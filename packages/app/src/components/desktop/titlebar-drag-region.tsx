@@ -1,31 +1,28 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as NativePointerEvent } from "react-native";
 import { getDesktopWindow } from "@/desktop/electron/window";
 import type { DesktopWindowBridge } from "@/desktop/host";
+import {
+  beginWindowDragActivity,
+  endWindowDragActivity,
+  type WindowDragActivityToken,
+} from "@/desktop/window-drag-activity";
 import { getIsElectronRuntime } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
+import { useIsDesktopWindowMaximized } from "@/utils/desktop-window";
 
 /**
- * VS Code-style titlebar drag region for Electron.
- *
- * Copied from VS Code at commit daa0a70:
- *   - titlebarPart.ts:463-464  → prepend(container, $('div.titlebar-drag-region'))
- *   - titlebarpart.css:57-64   → position: absolute, full size, -webkit-app-region: drag
- *   - titlebarpart.css:249-260 → top-edge resizer, no-drag, 4px
- *
- * VS Code's drag region is a static DOM element — no z-index, no pointer-events,
- * no state, no event listeners. Interactive elements get no-drag from their own
- * CSS (global backstop in index.html). The drag region never re-renders.
- *
- * The resizer is Windows/Linux only (titlebarpart.css:249 scopes to .windows/.linux).
- * On macOS, Electron handles edge resize natively.
+ * Normal windows use Chromium's native app region so the operating system owns
+ * every move. Maximized frameless Windows windows cannot restore from that
+ * region, so only that first restore drag uses the manual IPC fallback.
  */
 
-/**
- * React Native Web uses dataSet keys verbatim after the `data-` prefix.
- * Keep the hyphens in the key so the DOM attribute matches index.html.
- */
-export const TITLEBAR_DRAG_REGION_DATASET = { "window-drag-region": "" } as const;
+export const TITLEBAR_DRAG_REGION_DATASET = {
+  "window-drag-region": "native",
+} as const;
+const TITLEBAR_MANUAL_DRAG_REGION_DATASET = {
+  "window-drag-region": "manual",
+} as const;
 
 const TITLEBAR_INTERACTIVE_SELECTOR = [
   "button",
@@ -33,91 +30,167 @@ const TITLEBAR_INTERACTIVE_SELECTOR = [
   "input",
   "textarea",
   "select",
-  "[role]",
+  '[role="button"]',
+  '[role="link"]',
+  '[role="textbox"]',
+  '[role="combobox"]',
+  '[role="tab"]',
+  '[role="switch"]',
+  '[role="checkbox"]',
+  '[role="slider"]',
+  '[role="menuitem"]',
   "[tabindex]",
   '[contenteditable="true"]',
 ].join(",");
 
-export function useTitlebarWindowDragHandlers() {
+interface WindowDragPoint {
+  screenX: number;
+  screenY: number;
+}
+
+function releasePointerCapture(target: HTMLElement | null, pointerId: number): void {
+  if (target?.hasPointerCapture?.(pointerId)) {
+    target.releasePointerCapture(pointerId);
+  }
+}
+
+export function useTitlebarWindowDragSurface() {
+  const isMaximized = useIsDesktopWindowMaximized();
+  const [manualDragActive, setManualDragActive] = useState(false);
   const activePointerRef = useRef<number | null>(null);
+  const activeTargetRef = useRef<HTMLElement | null>(null);
   const activeBridgeRef = useRef<DesktopWindowBridge | null>(null);
+  const activeActivityRef = useRef<WindowDragActivityToken | null>(null);
+  const pendingMoveRef = useRef<WindowDragPoint | null>(null);
+  const moveFrameRef = useRef<number | null>(null);
+  const manualMode = isMaximized || manualDragActive;
 
-  const finishWindowDrag = useCallback((event: NativePointerEvent) => {
-    if (activePointerRef.current !== event.nativeEvent.pointerId) {
-      return;
+  const resetActiveDrag = useCallback((pointerId: number, flushLastMove: boolean) => {
+    if (activePointerRef.current !== pointerId) return;
+    if (moveFrameRef.current !== null) {
+      cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = null;
     }
-    activeBridgeRef.current?.endWindowDrag?.();
-    activeBridgeRef.current = null;
+    const bridge = activeBridgeRef.current;
+    const pendingMove = pendingMoveRef.current;
+    pendingMoveRef.current = null;
+    if (flushLastMove && pendingMove) {
+      bridge?.moveWindowDrag?.(pendingMove);
+    }
+    bridge?.endWindowDrag?.();
+    releasePointerCapture(activeTargetRef.current, pointerId);
     activePointerRef.current = null;
-    const currentTarget = event.currentTarget as unknown as HTMLElement;
-    if (currentTarget.hasPointerCapture?.(event.nativeEvent.pointerId)) {
-      currentTarget.releasePointerCapture(event.nativeEvent.pointerId);
-    }
+    activeTargetRef.current = null;
+    activeBridgeRef.current = null;
+    endWindowDragActivity(activeActivityRef.current);
+    activeActivityRef.current = null;
+    setManualDragActive(false);
   }, []);
 
-  const handleWindowDragPointerDown = useCallback((event: NativePointerEvent) => {
-    const target = event.target as unknown;
-    if (
-      !isWeb ||
-      event.nativeEvent.button !== 0 ||
-      activePointerRef.current !== null ||
-      (target instanceof Element && target.closest(TITLEBAR_INTERACTIVE_SELECTOR) !== null)
-    ) {
-      return;
-    }
-    const bridge = getDesktopWindow();
-    if (!bridge?.beginWindowDrag || !bridge.moveWindowDrag || !bridge.endWindowDrag) {
-      return;
-    }
+  useEffect(
+    () => () => {
+      const pointerId = activePointerRef.current;
+      if (pointerId !== null) resetActiveDrag(pointerId, false);
+    },
+    [resetActiveDrag],
+  );
 
-    const pointerId = event.nativeEvent.pointerId;
-    const currentTarget = event.currentTarget as unknown as HTMLElement;
-    activePointerRef.current = pointerId;
-    activeBridgeRef.current = bridge;
-    currentTarget.setPointerCapture?.(pointerId);
-    event.preventDefault();
-    void bridge
-      .beginWindowDrag({
-        screenX: event.nativeEvent.screenX,
-        screenY: event.nativeEvent.screenY,
-      })
-      .catch(() => {
-        if (activePointerRef.current !== pointerId) {
-          return;
-        }
-        activeBridgeRef.current = null;
-        activePointerRef.current = null;
-        if (currentTarget.hasPointerCapture?.(pointerId)) {
-          currentTarget.releasePointerCapture(pointerId);
-        }
-      });
-  }, []);
+  useEffect(() => {
+    if (!isWeb || typeof window === "undefined") return;
+    const handlePointerEnd = (event: PointerEvent) => {
+      resetActiveDrag(event.pointerId, true);
+    };
+    const handleWindowBlur = () => {
+      const pointerId = activePointerRef.current;
+      if (pointerId !== null) resetActiveDrag(pointerId, false);
+    };
+    window.addEventListener("pointerup", handlePointerEnd, true);
+    window.addEventListener("pointercancel", handlePointerEnd, true);
+    window.addEventListener("blur", handleWindowBlur);
+    return () => {
+      window.removeEventListener("pointerup", handlePointerEnd, true);
+      window.removeEventListener("pointercancel", handlePointerEnd, true);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [resetActiveDrag]);
+
+  const finishWindowDrag = useCallback(
+    (event: NativePointerEvent) => {
+      resetActiveDrag(event.nativeEvent.pointerId, true);
+    },
+    [resetActiveDrag],
+  );
+
+  const handleWindowDragPointerDown = useCallback(
+    (event: NativePointerEvent) => {
+      const target = event.target as unknown;
+      if (
+        !manualMode ||
+        !isWeb ||
+        event.nativeEvent.button !== 0 ||
+        activePointerRef.current !== null ||
+        (target instanceof Element && target.closest(TITLEBAR_INTERACTIVE_SELECTOR) !== null)
+      ) {
+        return;
+      }
+      const bridge = getDesktopWindow();
+      if (!bridge?.beginWindowDrag || !bridge.moveWindowDrag || !bridge.endWindowDrag) {
+        return;
+      }
+
+      const pointerId = event.nativeEvent.pointerId;
+      const currentTarget = event.currentTarget as unknown as HTMLElement;
+      activePointerRef.current = pointerId;
+      activeTargetRef.current = currentTarget;
+      activeBridgeRef.current = bridge;
+      activeActivityRef.current = beginWindowDragActivity();
+      setManualDragActive(true);
+      currentTarget.setPointerCapture?.(pointerId);
+      event.preventDefault();
+      void bridge
+        .beginWindowDrag({
+          screenX: event.nativeEvent.screenX,
+          screenY: event.nativeEvent.screenY,
+        })
+        .catch(() => resetActiveDrag(pointerId, false));
+    },
+    [manualMode, resetActiveDrag],
+  );
 
   const handleWindowDragPointerMove = useCallback(
     (event: NativePointerEvent) => {
-      if (activePointerRef.current !== event.nativeEvent.pointerId) {
-        return;
-      }
+      if (activePointerRef.current !== event.nativeEvent.pointerId) return;
       if ((event.nativeEvent.buttons & 1) === 0) {
         finishWindowDrag(event);
         return;
       }
-      activeBridgeRef.current?.moveWindowDrag?.({
+      pendingMoveRef.current = {
         screenX: event.nativeEvent.screenX,
         screenY: event.nativeEvent.screenY,
+      };
+      if (moveFrameRef.current !== null) return;
+      moveFrameRef.current = requestAnimationFrame(() => {
+        moveFrameRef.current = null;
+        const point = pendingMoveRef.current;
+        pendingMoveRef.current = null;
+        if (point) activeBridgeRef.current?.moveWindowDrag?.(point);
       });
     },
     [finishWindowDrag],
   );
 
   return useMemo(
-    () => ({
-      onPointerDown: handleWindowDragPointerDown,
-      onPointerMove: handleWindowDragPointerMove,
-      onPointerUp: finishWindowDrag,
-      onPointerCancel: finishWindowDrag,
-    }),
-    [finishWindowDrag, handleWindowDragPointerDown, handleWindowDragPointerMove],
+    () =>
+      manualMode
+        ? {
+            dataSet: TITLEBAR_MANUAL_DRAG_REGION_DATASET,
+            onPointerDown: handleWindowDragPointerDown,
+            onPointerMove: handleWindowDragPointerMove,
+            onPointerUp: finishWindowDrag,
+            onPointerCancel: finishWindowDrag,
+          }
+        : { dataSet: TITLEBAR_DRAG_REGION_DATASET },
+    [finishWindowDrag, handleWindowDragPointerDown, handleWindowDragPointerMove, manualMode],
   );
 }
 

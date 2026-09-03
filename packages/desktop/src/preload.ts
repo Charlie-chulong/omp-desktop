@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       setFullscreen: (fullscreen: boolean) =>
         ipcRenderer.invoke("paseo:window:setFullscreen", fullscreen),
       isFullscreen: () => ipcRenderer.invoke("paseo:window:isFullscreen"),
+      isMaximized: () => ipcRenderer.invoke("paseo:window:isMaximized"),
       beginWindowDrag: (point: { screenX: number; screenY: number }) =>
         ipcRenderer.invoke("paseo:window:beginDrag", point),
       moveWindowDrag: (point: { screenX: number; screenY: number }) =>
