@@ -3477,11 +3477,24 @@ export class OmpAgentClient implements AgentClient {
       });
       const state = await runtimeSession.getState();
       const configuredFastMode = optionalBoolean(config.featureValues?.[OMP_FAST_MODE_FEATURE_ID]);
-      return createOmpFeatures(config, oauthAccounts, {
-        supported: typeof state.fastModeEnabled === "boolean",
-        eligible: isOmpFastModeEligibleModel(state.model, config.model),
-        enabled: configuredFastMode ?? state.fastModeEnabled === true,
-      });
+      const automaticCredentialId = this.resolveAutomaticCredentialId(config, state, oauthAccounts);
+      const modelProvider =
+        state.model?.provider ?? parseModelReference(config.model ?? null)?.provider;
+      const activeCredential =
+        state.activeCredential ??
+        (automaticCredentialId && modelProvider
+          ? { provider: modelProvider, credentialId: automaticCredentialId }
+          : undefined);
+      return createOmpFeatures(
+        config,
+        oauthAccounts,
+        {
+          supported: typeof state.fastModeEnabled === "boolean",
+          eligible: isOmpFastModeEligibleModel(state.model, config.model),
+          enabled: configuredFastMode ?? state.fastModeEnabled === true,
+        },
+        activeCredential,
+      );
     } catch (error) {
       this.logger.debug({ err: error }, "OMP draft fast-mode capability probe failed");
       return fallbackFeatures;
