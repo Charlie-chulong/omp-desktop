@@ -57,6 +57,9 @@ import { ModelProviderGlyph } from "@/components/model-browser";
 import {
   formatOmpAccountIdentity,
   formatOmpAccountSelectionLabel,
+  isOmpAutomaticAccountOption,
+  orderOmpAccountFeatureOptions,
+  resolveOmpAccountFeatureSelection,
 } from "@/components/omp-provider-accounts";
 import {
   resolveOmpRemainingQuotaPct,
@@ -66,7 +69,11 @@ import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
 import type { ProviderUsageView } from "@/provider-usage/types";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { ProviderUsageWindowBar } from "@/provider-usage/window-bar";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import {
+  Combobox,
+  ComboboxItem,
+  type ComboboxOption,
+} from "@/components/ui/combobox";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { Shortcut } from "@/components/ui/shortcut";
 import {
@@ -799,47 +806,74 @@ function SidebarProviderAccountPanel() {
     canFetchProviderUsage &&
     (selectedProviderUsageId === "cursor" ||
       (isOmpProviderSelected && hasSelectedProviderUsage));
-  const selectedAccountId =
+  const accountSelection =
     accountFeature?.type === "select"
-      ? (accountFeature.effectiveValue ?? accountFeature.value ?? "")
-      : "";
+      ? resolveOmpAccountFeatureSelection(accountFeature)
+      : null;
+  const selectedAccountId = accountSelection?.effectiveValue ?? "";
   const selectedAccount =
     selectableAccounts.find(
       (account) => String(account.credentialId) === selectedAccountId,
-    ) ?? (selectableAccounts.length === 1 ? selectableAccounts[0] : null);
-  const accountOptions = useMemo<ComboboxOption[]>(
+    ) ??
+    (!accountFeature && selectableAccounts.length === 1
+      ? selectableAccounts[0]
+      : null);
+  const orderedAccountFeatureOptions = useMemo(
     () =>
-      selectableAccounts.map((account, index) => {
-        const identity = formatOmpAccountSelectionLabel({
-          note: account.note,
-          identityKey: account.identityKey,
-          fallback: t("agentControls.quota.account", { number: index + 1 }),
-        });
-        const weeklyRemaining = resolveOmpRemainingQuotaPct(
-          account.quota?.weeklyUsedPct,
-        );
-        const fiveHourRemaining = resolveOmpRemainingQuotaPct(
-          account.quota?.fiveHourUsedPct,
-        );
-        const quotaParts = [
-          account.quota?.planLabel?.trim(),
-          weeklyRemaining === null
-            ? null
-            : `${t("agentControls.quota.weekly")} ${Math.round(weeklyRemaining)}%`,
-          shouldShowOmpFiveHourQuota(account.quota?.planLabel) &&
-          fiveHourRemaining !== null
-            ? `${t("agentControls.quota.fiveHour")} ${Math.round(fiveHourRemaining)}%`
-            : null,
-        ].filter((part): part is string => Boolean(part));
-        return {
-          id: String(account.credentialId),
-          label: [identity, ...quotaParts].join(" · "),
-        };
-      }),
-    [selectableAccounts, t],
+      accountFeature?.type === "select"
+        ? orderOmpAccountFeatureOptions(accountFeature.options)
+        : [],
+    [accountFeature],
   );
-  const isAutomaticAccount =
-    accountFeature?.type === "select" && accountFeature.value === null;
+  const accountOptions = useMemo<ComboboxOption[]>(() => {
+    let accountNumber = 0;
+    return orderedAccountFeatureOptions.map((option) => {
+      if (isOmpAutomaticAccountOption(option)) {
+        return {
+          id: option.id,
+          label: t("agentControls.quota.automatic"),
+          description: option.description,
+        };
+      }
+      accountNumber += 1;
+      const account = selectableAccounts.find(
+        (candidate) => String(candidate.credentialId) === option.id,
+      );
+      if (!account) {
+        return {
+          id: option.id,
+          label: option.label,
+          description: option.description,
+        };
+      }
+      const identity = formatOmpAccountSelectionLabel({
+        note: account.note,
+        identityKey: account.identityKey,
+        fallback: t("agentControls.quota.account", { number: accountNumber }),
+      });
+      const weeklyRemaining = resolveOmpRemainingQuotaPct(
+        account.quota?.weeklyUsedPct,
+      );
+      const fiveHourRemaining = resolveOmpRemainingQuotaPct(
+        account.quota?.fiveHourUsedPct,
+      );
+      const quotaParts = [
+        account.quota?.planLabel?.trim(),
+        weeklyRemaining === null
+          ? null
+          : `${t("agentControls.quota.weekly")} ${Math.round(weeklyRemaining)}%`,
+        shouldShowOmpFiveHourQuota(account.quota?.planLabel) &&
+        fiveHourRemaining !== null
+          ? `${t("agentControls.quota.fiveHour")} ${Math.round(fiveHourRemaining)}%`
+          : null,
+      ].filter((part): part is string => Boolean(part));
+      return {
+        id: option.id,
+        label: [identity, ...quotaParts].join(" · "),
+      };
+    });
+  }, [orderedAccountFeatureOptions, selectableAccounts, t]);
+  const isAutomaticAccount = accountSelection?.isAutomatic === true;
   const accountIdentity = formatOmpAccountIdentity(
     selectedAccount?.identityKey,
   );
@@ -858,16 +892,14 @@ function SidebarProviderAccountPanel() {
     .filter(Boolean)
     .join(" · ");
   if (isAutomaticAccount) {
-    accountPrimary = selectedAccount
-      ? [t("agentControls.quota.automatic"), accountPlan]
-          .filter(Boolean)
-          .join(" · ")
-      : t("agentControls.quota.automaticSelecting");
+    accountPrimary = [t("agentControls.quota.automatic"), accountPlan]
+      .filter(Boolean)
+      .join(" · ");
     accountSecondary = selectedAccount
       ? [accountSelectionLabel, accountIdentity.secondary]
           .filter(Boolean)
           .join(" · ")
-      : "";
+      : t("agentControls.quota.automaticSelecting");
   }
   const canSwitchProvider = selectedProvider
     ? providerOptions.length > 1
@@ -933,6 +965,37 @@ function SidebarProviderAccountPanel() {
       setAccountOpen(false);
     },
     [accountFeature, controls],
+  );
+  const renderAccountOption = useCallback(
+    ({
+      option,
+      selected,
+      active: optionActive,
+      onPress,
+    }: {
+      option: ComboboxOption;
+      selected: boolean;
+      active: boolean;
+      onPress: () => void;
+    }) => (
+      <View>
+        <ComboboxItem
+          label={option.label}
+          description={option.description}
+          selected={selected}
+          active={optionActive}
+          onPress={onPress}
+          testID={`sidebar-account-option-${option.id}`}
+        />
+        {option.id === accountSelection?.automaticOptionId ? (
+          <View
+            style={styles.sidebarAccountOptionDivider}
+            testID="sidebar-account-option-divider"
+          />
+        ) : null}
+      </View>
+    ),
+    [accountSelection?.automaticOptionId],
   );
   const handleProviderToggle = useCallback(() => {
     setProviderOpen((open) => !open);
@@ -1060,8 +1123,9 @@ function SidebarProviderAccountPanel() {
           </Tooltip>
           <Combobox
             options={accountOptions}
-            value={selectedAccountId}
+            value={accountSelection?.configuredValue ?? ""}
             onSelect={handleAccountSelect}
+            renderOption={renderAccountOption}
             searchable={false}
             open={accountOpen}
             onOpenChange={setAccountOpen}
@@ -1820,6 +1884,12 @@ const styles = StyleSheet.create((theme) => ({
   sidebarAccountSecondary: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  sidebarAccountOptionDivider: {
+    height: 1,
+    marginHorizontal: theme.spacing[2],
+    marginVertical: theme.spacing[1],
+    backgroundColor: theme.colors.borderAccent,
   },
   sidebarAccountLoading: {
     minHeight: 40,

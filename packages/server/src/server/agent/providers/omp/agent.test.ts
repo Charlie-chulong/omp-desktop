@@ -159,14 +159,15 @@ describe("OMP agent client and session", () => {
       expect.objectContaining({
         id: "oauth_account_credential",
         type: "select",
-        value: null,
+        value: "automatic",
+        effectiveValue: null,
         options: [
+          expect.objectContaining({ id: "automatic" }),
           { id: "41", label: "alice@example.com · org:personal" },
           { id: "42", label: "bob@example.com · org:team" },
         ],
       }),
     ]);
-
     await omp.setFeature("oauth_account_credential", "41");
 
     expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
@@ -201,7 +202,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "41",
         }),
       ]),
@@ -212,8 +213,7 @@ describe("OMP agent client and session", () => {
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
@@ -240,7 +240,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
@@ -265,7 +265,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: null,
         }),
       ]),
@@ -279,7 +279,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
@@ -310,7 +310,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
@@ -349,7 +349,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
@@ -361,8 +361,7 @@ describe("OMP agent client and session", () => {
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "41",
         }),
       ]),
@@ -394,8 +393,14 @@ describe("OMP agent client and session", () => {
       }),
       expect.objectContaining({
         id: "oauth_account_credential",
+        type: "select",
         value: "42",
-        options: [expect.objectContaining({ id: "41" }), expect.objectContaining({ id: "42" })],
+        effectiveValue: "42",
+        options: [
+          expect.objectContaining({ id: "automatic" }),
+          expect.objectContaining({ id: "41" }),
+          expect.objectContaining({ id: "42" }),
+        ],
       }),
     ]);
     expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 2", imageCount: 0 }]);

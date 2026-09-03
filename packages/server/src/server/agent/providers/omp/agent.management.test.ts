@@ -337,7 +337,7 @@ describe("OMP provider management", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "1",
         }),
       ]),
