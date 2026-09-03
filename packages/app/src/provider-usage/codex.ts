@@ -1,6 +1,9 @@
 import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
 import { formatOmpAccountSelectionLabel } from "@/components/omp-provider-accounts";
-import { shouldShowOmpFiveHourQuota } from "@/components/omp-provider-quota";
+import {
+  resolveOmpRemainingQuotaPct,
+  shouldShowOmpFiveHourQuota,
+} from "@/components/omp-provider-quota";
 import type { OmpAccountQuotaDisplayAccount } from "@/hooks/use-omp-account-quota";
 import type { ProviderUsage, ProviderUsageView, ProviderUsageWindow } from "./types";
 
@@ -26,12 +29,15 @@ function quotaWindow(input: {
   usedPct: number | null | undefined;
   resetsAt: string | null | undefined;
 }): ProviderUsageWindow | null {
-  if (input.usedPct == null && input.resetsAt == null) return null;
+  const remainingPct = resolveOmpRemainingQuotaPct(input.usedPct);
+  if (remainingPct === null && input.resetsAt == null) return null;
   return {
     id: input.id,
     label: input.label,
     usedPct: input.usedPct,
+    remainingPct,
     resetsAt: input.resetsAt,
+    percentageDisplay: "remaining",
   };
 }
 

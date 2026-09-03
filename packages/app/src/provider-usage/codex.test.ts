@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
 import { buildCodexProviderUsage, mergeCodexProviderUsage } from "./codex";
+import { deriveRemainingTone } from "./tone";
 import type { ProviderUsageView } from "./types";
 
 type OmpLoginProvider = OmpProviderManagement["loginProviders"][number];
@@ -94,8 +95,18 @@ describe("buildCodexProviderUsage", () => {
         status: "available",
         planLabel: "plus",
         windows: [
-          expect.objectContaining({ id: "codex_five_hour", usedPct: 25 }),
-          expect.objectContaining({ id: "codex_weekly", usedPct: 40 }),
+          expect.objectContaining({
+            id: "codex_five_hour",
+            usedPct: 25,
+            remainingPct: 75,
+            percentageDisplay: "remaining",
+          }),
+          expect.objectContaining({
+            id: "codex_weekly",
+            usedPct: 40,
+            remainingPct: 60,
+            percentageDisplay: "remaining",
+          }),
         ],
       }),
       expect.objectContaining({
@@ -103,7 +114,14 @@ describe("buildCodexProviderUsage", () => {
         displayName: "OpenAI Codex · bob@example.com",
         status: "available",
         planLabel: "pro",
-        windows: [expect.objectContaining({ id: "codex_weekly", usedPct: 15 })],
+        windows: [
+          expect.objectContaining({
+            id: "codex_weekly",
+            usedPct: 15,
+            remainingPct: 85,
+            percentageDisplay: "remaining",
+          }),
+        ],
       }),
     ]);
   });
@@ -127,6 +145,12 @@ describe("buildCodexProviderUsage", () => {
         windows: [],
       }),
     ]);
+  });
+
+  test("uses remaining-capacity tones for Codex quota bars", () => {
+    expect(deriveRemainingTone(39)).toBe("ok");
+    expect(deriveRemainingTone(30)).toBe("warning");
+    expect(deriveRemainingTone(0)).toBe("danger");
   });
 });
 
