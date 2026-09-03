@@ -208,6 +208,44 @@ function SectionHeader({ title, count, hint }: { title: string; count?: number; 
     </View>
   );
 }
+function CollapsibleSectionHeader({
+  title,
+  count,
+  expanded,
+  disabled = false,
+  onPress,
+  testID,
+}: {
+  title: string;
+  count: number;
+  expanded: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
+  const { theme } = useUnistyles();
+  const accessibilityState = useMemo(() => ({ disabled, expanded }), [disabled, expanded]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
+      disabled={disabled}
+      onPress={onPress}
+      style={sheetStyles.collapsibleSectionHeader}
+      testID={testID}
+    >
+      <View style={sheetStyles.collapsibleSectionTitle}>
+        {expanded ? (
+          <ChevronDown size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+        ) : (
+          <ChevronRight size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+        )}
+        <Text style={settingsStyles.sectionHeaderTitle}>{title}</Text>
+      </View>
+      <Text style={settingsStyles.sectionHeaderTitle}>{count}</Text>
+    </Pressable>
+  );
+}
 interface OmpProviderSummary {
   id: string;
   modelCount: number;
@@ -1408,6 +1446,9 @@ function OmpManagementPanel({
   const [management, setManagement] = useState<OmpProviderManagement | null>(null);
   const [configYaml, setConfigYaml] = useState("");
   const [activeTab, setActiveTab] = useState<OmpManagementTab>("sign-in");
+  const [providerSearchQuery, setProviderSearchQuery] = useState("");
+  const [signedInProvidersExpanded, setSignedInProvidersExpanded] = useState(false);
+  const [notSignedInProvidersExpanded, setNotSignedInProvidersExpanded] = useState(false);
   const [editingProvider, setEditingProvider] = useState<{
     id: string;
     draft: OmpProviderDraft;
@@ -1505,7 +1546,10 @@ function OmpManagementPanel({
     if (loginFlow) void cancelLoginFlow(loginFlow);
     setManagement(null);
     setActiveTab("sign-in");
+    setProviderSearchQuery("");
     setAddProviderOpen(false);
+    setSignedInProvidersExpanded(false);
+    setNotSignedInProvidersExpanded(false);
     setContextProviderId(null);
     setEditingProvider(null);
     setError(null);
@@ -1706,6 +1750,28 @@ function OmpManagementPanel({
         (left.login?.name ?? left.id).localeCompare(right.login?.name ?? right.id),
       );
   }, [management]);
+  const signedInProviders = useMemo(
+    () => signInProviders.filter((provider) => provider.login?.authenticated),
+    [signInProviders],
+  );
+  const availableSignInProviders = useMemo(
+    () =>
+      signInProviders.filter(
+        (provider) => provider.login?.available && !provider.login.authenticated,
+      ),
+    [signInProviders],
+  );
+  const providerSearch = providerSearchQuery.trim();
+  const displayedNotSignedInProviders = useMemo(
+    () =>
+      providerSearch
+        ? rankModels(availableSignInProviders, providerSearch, (provider) => [
+            provider.login?.name ?? "",
+            provider.id,
+          ])
+        : availableSignInProviders,
+    [availableSignInProviders, providerSearch],
+  );
   const contextProvider = useMemo(
     () => signInProviders.find((provider) => provider.id === contextProviderId) ?? null,
     [contextProviderId, signInProviders],
@@ -1732,6 +1798,14 @@ function OmpManagementPanel({
       },
     ],
     [t],
+  );
+  const toggleSignedInProviders = useCallback(
+    () => setSignedInProvidersExpanded((expanded) => !expanded),
+    [],
+  );
+  const toggleNotSignedInProviders = useCallback(
+    () => setNotSignedInProvidersExpanded((expanded) => !expanded),
+    [],
   );
   const handleRefreshPress = useCallback(() => void load(), [load]);
   const handleSavePress = useCallback(() => void save(), [save]);
@@ -1869,40 +1943,98 @@ function OmpManagementPanel({
           />
           {activeTab === "sign-in" ? (
             <View style={sheetStyles.tabContent}>
-              {signInProviders.length > 0 ? (
-                <View style={settingsStyles.card}>
-                  {signInProviders.map((summary) => (
-                    <OmpProviderSummaryRow
-                      key={summary.id}
-                      summary={summary}
-                      loggingInProviderId={loginProviderId}
-                      loginFlowActive={loginFlow !== null}
-                      loggingOutProviderId={logoutProviderId}
-                      loggingOutCredentialId={logoutCredentialId}
-                      accountNotes={accountNotes}
-                      editingAccountId={editingAccountId}
-                      accountNoteDraft={accountNoteDraft}
-                      savingAccountNoteId={savingAccountNoteId}
-                      onConfigureModels={handleOpenContextWindow}
-                      onEditAccountNote={editAccountNote}
-                      reorderingProviderId={reorderingProviderId}
-                      onChangeAccountNote={setAccountNoteDraft}
-                      onSaveAccountNote={saveAccountNote}
-                      onCancelAccountNote={cancelAccountNote}
-                      onLogin={startLogin}
-                      onLogout={handleLogout}
-                      onLogoutAccount={handleAccountLogout}
-                      onReorderAccounts={reorderAccounts}
+              <View style={sheetStyles.providerDirectorySection}>
+                <CollapsibleSectionHeader
+                  title={t("settings.providers.omp.signInDirectory.signedInTitle")}
+                  count={signedInProviders.length}
+                  expanded={signedInProvidersExpanded}
+                  disabled={signedInProviders.length === 0}
+                  onPress={toggleSignedInProviders}
+                  testID="omp-signed-in-providers-toggle"
+                />
+                {signedInProviders.length > 0 && signedInProvidersExpanded ? (
+                  <View style={settingsStyles.card}>
+                    {signedInProviders.map((summary) => (
+                      <OmpProviderSummaryRow
+                        key={summary.id}
+                        summary={summary}
+                        loggingInProviderId={loginProviderId}
+                        loginFlowActive={loginFlow !== null}
+                        loggingOutProviderId={logoutProviderId}
+                        loggingOutCredentialId={logoutCredentialId}
+                        accountNotes={accountNotes}
+                        editingAccountId={editingAccountId}
+                        accountNoteDraft={accountNoteDraft}
+                        savingAccountNoteId={savingAccountNoteId}
+                        onConfigureModels={handleOpenContextWindow}
+                        onEditAccountNote={editAccountNote}
+                        reorderingProviderId={reorderingProviderId}
+                        onChangeAccountNote={setAccountNoteDraft}
+                        onSaveAccountNote={saveAccountNote}
+                        onCancelAccountNote={cancelAccountNote}
+                        onLogin={startLogin}
+                        onLogout={handleLogout}
+                        onLogoutAccount={handleAccountLogout}
+                        onReorderAccounts={reorderAccounts}
+                      />
+                    ))}
+                  </View>
+                ) : signedInProviders.length === 0 ? (
+                  <SurfaceCard>
+                    <Text style={sheetStyles.emptyCardText}>
+                      {t("settings.providers.omp.signInDirectory.noSignedIn")}
+                    </Text>
+                  </SurfaceCard>
+                ) : null}
+              </View>
+              <View style={sheetStyles.providerDirectorySection}>
+                <CollapsibleSectionHeader
+                  title={t("settings.providers.omp.signInDirectory.notSignedInTitle")}
+                  count={availableSignInProviders.length}
+                  expanded={notSignedInProvidersExpanded}
+                  disabled={availableSignInProviders.length === 0}
+                  onPress={toggleNotSignedInProviders}
+                  testID="omp-not-signed-in-providers-toggle"
+                />
+                {notSignedInProvidersExpanded ? (
+                  <View style={sheetStyles.providerDirectorySearch}>
+                    <AdaptiveTextInput
+                      initialValue={providerSearchQuery}
+                      resetKey={`${serverId}:${visible}`}
+                      onChangeText={setProviderSearchQuery}
+                      placeholder={t("settings.providers.omp.signInDirectory.searchPlaceholder")}
+                      accessibilityLabel={t(
+                        "settings.providers.omp.signInDirectory.searchPlaceholder",
+                      )}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      testID="omp-provider-search"
+                      style={sheetStyles.formInput}
                     />
-                  ))}
-                </View>
-              ) : (
-                <SurfaceCard>
-                  <Text style={sheetStyles.emptyCardText}>
-                    {t("settings.providers.omp.empty.signIn")}
-                  </Text>
-                </SurfaceCard>
-              )}
+                    {displayedNotSignedInProviders.length > 0 ? (
+                      <View style={settingsStyles.card}>
+                        {displayedNotSignedInProviders.map((summary) => (
+                          <OmpProviderSummaryRow
+                            key={summary.id}
+                            summary={summary}
+                            loggingInProviderId={loginProviderId}
+                            loginFlowActive={loginFlow !== null}
+                            loggingOutProviderId={logoutProviderId}
+                            loggingOutCredentialId={logoutCredentialId}
+                            onLogin={startLogin}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <SurfaceCard>
+                        <Text style={sheetStyles.emptyCardText}>
+                          {t("settings.providers.omp.signInDirectory.noMatches")}
+                        </Text>
+                      </SurfaceCard>
+                    )}
+                  </View>
+                ) : null}
+              </View>
               {loginFlow ? (
                 <View style={sheetStyles.section}>
                   <SectionHeader
@@ -2610,6 +2742,25 @@ const sheetStyles = StyleSheet.create((theme) => ({
   tabContent: {
     gap: theme.spacing[4],
     marginTop: theme.spacing[3],
+  },
+  providerDirectorySection: {
+    gap: theme.spacing[2],
+  },
+  providerDirectorySearch: {
+    gap: theme.spacing[2],
+  },
+  collapsibleSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[2],
+    minHeight: 32,
+    paddingHorizontal: theme.spacing[1],
+  },
+  collapsibleSectionTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
   },
   customProviderHeader: {
     flexDirection: "row",

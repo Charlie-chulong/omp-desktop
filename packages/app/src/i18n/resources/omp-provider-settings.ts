@@ -9,6 +9,13 @@ const en = {
     signIn: "No sign-in providers are available.",
     custom: "No custom providers are configured.",
   },
+  signInDirectory: {
+    signedInTitle: "Signed-in providers",
+    noSignedIn: "No providers are signed in yet.",
+    notSignedInTitle: "Not signed-in providers",
+    searchPlaceholder: "Search available providers",
+    noMatches: "No available providers match your search.",
+  },
   provider: {
     signedIn: "Signed in",
     notSignedIn: "Not signed in",
@@ -139,6 +146,13 @@ export const ompProviderSettings = {
     refreshing: "جارٍ التحديث…",
     tabs: { signIn: "موفرو تسجيل الدخول", custom: "الموفرون المخصصون" },
     empty: { signIn: "لا يتوفر موفرو تسجيل دخول.", custom: "لم يتم إعداد موفرين مخصصين." },
+    signInDirectory: {
+      signedInTitle: "الموفرون المسجل دخولهم",
+      noSignedIn: "لم يتم تسجيل الدخول إلى أي موفر بعد.",
+      notSignedInTitle: "الموفرون غير المسجل دخولهم",
+      searchPlaceholder: "البحث في الموفرين المتاحين",
+      noMatches: "لا توجد موفرات متاحة تطابق بحثك.",
+    },
     provider: {
       signedIn: "تم تسجيل الدخول",
       notSignedIn: "لم يتم تسجيل الدخول",
@@ -224,6 +238,13 @@ export const ompProviderSettings = {
       signIn: "No hay proveedores con inicio de sesión disponibles.",
       custom: "No hay proveedores personalizados configurados.",
     },
+    signInDirectory: {
+      signedInTitle: "Proveedores conectados",
+      noSignedIn: "Aún no has iniciado sesión en ningún proveedor.",
+      notSignedInTitle: "Proveedores sin iniciar sesión",
+      searchPlaceholder: "Buscar proveedores disponibles",
+      noMatches: "Ningún proveedor disponible coincide con tu búsqueda.",
+    },
     provider: {
       signedIn: "Sesión iniciada",
       notSignedIn: "Sesión no iniciada",
@@ -308,6 +329,13 @@ export const ompProviderSettings = {
     empty: {
       signIn: "Aucun fournisseur avec connexion n'est disponible.",
       custom: "Aucun fournisseur personnalisé n'est configuré.",
+    },
+    signInDirectory: {
+      signedInTitle: "Fournisseurs connectés",
+      noSignedIn: "Aucun fournisseur n'est encore connecté.",
+      notSignedInTitle: "Fournisseurs non connectés",
+      searchPlaceholder: "Rechercher des fournisseurs disponibles",
+      noMatches: "Aucun fournisseur disponible ne correspond à votre recherche.",
     },
     provider: {
       signedIn: "Connecté",
@@ -395,6 +423,13 @@ export const ompProviderSettings = {
       signIn: "利用可能なログインプロバイダーはありません。",
       custom: "カスタムプロバイダーは設定されていません。",
     },
+    signInDirectory: {
+      signedInTitle: "ログイン済みプロバイダー",
+      noSignedIn: "ログイン済みのプロバイダーはまだありません。",
+      notSignedInTitle: "未ログインのプロバイダー",
+      searchPlaceholder: "利用可能なプロバイダーを検索",
+      noMatches: "検索に一致する利用可能なプロバイダーはありません。",
+    },
     provider: {
       signedIn: "ログイン済み",
       notSignedIn: "未ログイン",
@@ -479,6 +514,13 @@ export const ompProviderSettings = {
     empty: {
       signIn: "사용 가능한 로그인 제공자가 없습니다.",
       custom: "설정된 사용자 지정 제공자가 없습니다.",
+    },
+    signInDirectory: {
+      signedInTitle: "로그인된 제공자",
+      noSignedIn: "아직 로그인된 제공자가 없습니다.",
+      notSignedInTitle: "로그인되지 않은 제공자",
+      searchPlaceholder: "사용 가능한 제공자 검색",
+      noMatches: "검색과 일치하는 사용 가능한 제공자가 없습니다.",
     },
     provider: {
       signedIn: "로그인됨",
@@ -565,6 +607,13 @@ export const ompProviderSettings = {
       signIn: "Nenhum provedor com login está disponível.",
       custom: "Nenhum provedor personalizado está configurado.",
     },
+    signInDirectory: {
+      signedInTitle: "Provedores conectados",
+      noSignedIn: "Ainda não há provedores conectados.",
+      notSignedInTitle: "Provedores não conectados",
+      searchPlaceholder: "Buscar provedores disponíveis",
+      noMatches: "Nenhum provedor disponível corresponde à busca.",
+    },
     provider: {
       signedIn: "Conectado",
       notSignedIn: "Não conectado",
@@ -650,6 +699,13 @@ export const ompProviderSettings = {
       signIn: "Нет доступных провайдеров со входом.",
       custom: "Пользовательские провайдеры не настроены.",
     },
+    signInDirectory: {
+      signedInTitle: "Подключённые провайдеры",
+      noSignedIn: "Ни один провайдер ещё не подключён.",
+      notSignedInTitle: "Провайдеры без входа",
+      searchPlaceholder: "Поиск доступных провайдеров",
+      noMatches: "Нет доступных провайдеров, соответствующих поиску.",
+    },
     provider: {
       signedIn: "Вход выполнен",
       notSignedIn: "Вход не выполнен",
@@ -732,6 +788,13 @@ export const ompProviderSettings = {
     refreshing: "正在刷新…",
     tabs: { signIn: "登录服务商", custom: "自定义服务商" },
     empty: { signIn: "没有可用的登录服务商。", custom: "尚未配置自定义服务商。" },
+    signInDirectory: {
+      signedInTitle: "已登录服务商",
+      noSignedIn: "暂未登录任何服务商。",
+      notSignedInTitle: "未登录服务商",
+      searchPlaceholder: "搜索可用服务商",
+      noMatches: "没有匹配的可用服务商。",
+    },
     provider: {
       signedIn: "已登录",
       notSignedIn: "未登录",
