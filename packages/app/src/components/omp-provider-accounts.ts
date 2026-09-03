@@ -3,6 +3,50 @@ export interface OmpAccountIdentity {
   secondary: string | null;
 }
 
+interface OmpAccountFeatureOption {
+  id: string;
+  label: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface OmpAccountFeatureSelection {
+  value: string | null;
+  effectiveValue?: string | null;
+  options: readonly OmpAccountFeatureOption[];
+}
+
+export function isOmpAutomaticAccountOption(option: OmpAccountFeatureOption): boolean {
+  return option.metadata?.selectionMode === "automatic";
+}
+
+export function orderOmpAccountFeatureOptions<T extends OmpAccountFeatureOption>(
+  options: readonly T[],
+): T[] {
+  const automatic = options.find(isOmpAutomaticAccountOption);
+  return automatic
+    ? [automatic, ...options.filter((option) => option !== automatic)]
+    : [...options];
+}
+
+export function resolveOmpAccountFeatureSelection(feature: OmpAccountFeatureSelection): {
+  automaticOptionId: string | null;
+  configuredValue: string;
+  effectiveValue: string;
+  isAutomatic: boolean;
+} {
+  const automaticOption =
+    orderOmpAccountFeatureOptions(feature.options).find(isOmpAutomaticAccountOption) ?? null;
+  const isAutomatic =
+    feature.value === null || (automaticOption !== null && feature.value === automaticOption.id);
+  return {
+    automaticOptionId: automaticOption?.id ?? null,
+    configuredValue: isAutomatic ? (automaticOption?.id ?? "") : (feature.value ?? ""),
+    effectiveValue:
+      feature.effectiveValue ?? (isAutomatic ? "" : (feature.value ?? "")),
+    isAutomatic,
+  };
+}
+
 export function resolveOmpLoginAction(input: {
   available: boolean;
   authenticated: boolean;

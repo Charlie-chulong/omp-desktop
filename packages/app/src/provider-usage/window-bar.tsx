@@ -9,12 +9,18 @@ import {
   formatResetLabel,
   formatRunsOutLabel,
 } from "./format";
-import { deriveTone } from "./tone";
+import { deriveRemainingTone, deriveTone } from "./tone";
 import type { ProviderUsageTone, ProviderUsageWindow } from "./types";
 
 function resolveUsedPct(window: ProviderUsageWindow): number | null {
   if (window.usedPct != null) return window.usedPct;
   if (window.remainingPct != null) return 100 - window.remainingPct;
+  return null;
+}
+
+function resolveRemainingPct(window: ProviderUsageWindow): number | null {
+  if (window.remainingPct != null) return window.remainingPct;
+  if (window.usedPct != null) return 100 - window.usedPct;
   return null;
 }
 
@@ -34,9 +40,13 @@ function fillToneStyle(tone: ProviderUsageTone) {
 export function ProviderUsageWindowBar({ window }: { window: ProviderUsageWindow }) {
   const { t } = useTranslation();
   const usedPct = resolveUsedPct(window);
-  const tone = window.tone ?? deriveTone(usedPct);
+  const remainingPct = resolveRemainingPct(window);
+  const showRemaining = window.percentageDisplay === "remaining";
+  const displayedPct = showRemaining ? remainingPct : usedPct;
+  const tone =
+    window.tone ?? (showRemaining ? deriveRemainingTone(remainingPct) : deriveTone(usedPct));
 
-  const fillWidth = clampPct(usedPct ?? 0);
+  const fillWidth = clampPct(displayedPct ?? 0);
   const fillStyle = useMemo<StyleProp<ViewStyle>>(
     () => [styles.fill, fillToneStyle(tone), { width: `${fillWidth}%` }],
     [fillWidth, tone],
@@ -54,7 +64,7 @@ export function ProviderUsageWindowBar({ window }: { window: ProviderUsageWindow
           {formatProviderUsageLabel(window.id, window.label, t)}
         </Text>
         <Text style={styles.value}>
-          {usedPct != null ? formatPct(usedPct) : "—"}
+          {displayedPct != null ? formatPct(displayedPct) : "—"}
           {trailing ? (
             <Text style={isAtRisk ? styles.atRisk : styles.reset}>{` · ${trailing}`}</Text>
           ) : null}
@@ -109,12 +119,12 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.foregroundMuted,
   },
   fillOk: {
-    backgroundColor: theme.colors.statusSuccess,
+    backgroundColor: theme.colors.palette.green[500],
   },
   fillWarning: {
-    backgroundColor: theme.colors.statusWarning,
+    backgroundColor: theme.colors.palette.amber[500],
   },
   fillDanger: {
-    backgroundColor: theme.colors.statusDanger,
+    backgroundColor: theme.colors.destructive,
   },
 }));

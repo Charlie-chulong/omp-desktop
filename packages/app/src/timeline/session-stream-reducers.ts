@@ -12,8 +12,12 @@ import {
   reduceStreamUpdate,
   upsertUserMessageAcrossStream,
 } from "@/types/stream";
+import { isWindowDragActive } from "@/desktop/window-drag-activity";
 
 const AGENT_STREAM_REDUCER_FLUSH_DELAY_MS = 16 * 3;
+const WINDOW_DRAG_FLUSH_RETRY_MS = 16;
+const scheduledAgentStreamFlushes = new Map<number, ReturnType<typeof setTimeout>>();
+let nextAgentStreamFlushId = 1;
 
 // ---------------------------------------------------------------------------
 // Shared cursor type
@@ -1836,12 +1840,26 @@ export interface CreateSessionAgentStreamReducerQueueInput {
   recoverTimelineGap: (agentId: string, cursor: { epoch: string; endSeq: number }) => void;
 }
 
-function scheduleAgentStreamReducerFlush(callback: () => void): number {
-  return setTimeout(callback, AGENT_STREAM_REDUCER_FLUSH_DELAY_MS) as unknown as number;
+export function scheduleAgentStreamReducerFlush(callback: () => void): number {
+  const id = nextAgentStreamFlushId;
+  nextAgentStreamFlushId += 1;
+  const run = () => {
+    if (isWindowDragActive()) {
+      scheduledAgentStreamFlushes.set(id, setTimeout(run, WINDOW_DRAG_FLUSH_RETRY_MS));
+      return;
+    }
+    scheduledAgentStreamFlushes.delete(id);
+    callback();
+  };
+  scheduledAgentStreamFlushes.set(id, setTimeout(run, AGENT_STREAM_REDUCER_FLUSH_DELAY_MS));
+  return id;
 }
 
-function cancelAgentStreamReducerFlush(id: number) {
-  clearTimeout(id);
+export function cancelAgentStreamReducerFlush(id: number) {
+  const timeout = scheduledAgentStreamFlushes.get(id);
+  if (timeout === undefined) return;
+  clearTimeout(timeout);
+  scheduledAgentStreamFlushes.delete(id);
 }
 
 export function createSessionAgentStreamReducerQueue(

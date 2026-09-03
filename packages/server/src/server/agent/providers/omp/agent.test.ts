@@ -159,14 +159,15 @@ describe("OMP agent client and session", () => {
       expect.objectContaining({
         id: "oauth_account_credential",
         type: "select",
-        value: null,
+        value: "automatic",
+        effectiveValue: null,
         options: [
+          expect.objectContaining({ id: "automatic" }),
           { id: "41", label: "alice@example.com · org:personal" },
           { id: "42", label: "bob@example.com · org:team" },
         ],
       }),
     ]);
-
     await omp.setFeature("oauth_account_credential", "41");
 
     expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 1", imageCount: 0 }]);
@@ -201,7 +202,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "41",
         }),
       ]),
@@ -212,12 +213,125 @@ describe("OMP agent client and session", () => {
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
     );
+  });
+
+  test("retries a delayed automatic OAuth account selection during session startup", async () => {
+    let credentialReadCount = 0;
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+      sessionCredentialReader: () => {
+        credentialReadCount += 1;
+        return credentialReadCount < 3 ? undefined : 42;
+      },
+    });
+
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+
+    expect(credentialReadCount).toBe(3);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: "automatic",
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+  });
+
+  test("publishes a credential selected after an automatic turn starts", async () => {
+    let credentialReadCount = 0;
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+      sessionCredentialReader: () => {
+        credentialReadCount += 1;
+        return credentialReadCount <= 5 ? undefined : 42;
+      },
+    });
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: "automatic",
+          effectiveValue: null,
+        }),
+      ]),
+    );
+
+    await omp.runPrompt("hello", "world");
+    await waitForImmediate();
+
+    expect(credentialReadCount).toBeGreaterThan(5);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: "automatic",
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+    expect(omp.eventTypes()).toContain("features_changed");
+  });
+
+  test("reports the OMP-selected OAuth account during the draft feature probe", async () => {
+    let credentialReadCount = 0;
+    const omp = new OmpHarness({
+      oauthAccounts: [
+        { credentialId: 41, provider: "openai-codex" },
+        { credentialId: 42, provider: "openai-codex" },
+      ],
+      sessionCredentialReader: (providerId, sessionId) => {
+        expect(providerId).toBe("openai-codex");
+        expect(sessionId).toBe("omp-session-1");
+        credentialReadCount += 1;
+        return 42;
+      },
+    });
+
+    const automaticFeatures = await omp.listFeatures({
+      model: "openai-codex/gpt-5.6",
+    });
+
+    expect(automaticFeatures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: "automatic",
+          effectiveValue: "42",
+        }),
+      ]),
+    );
+    expect(credentialReadCount).toBe(1);
+
+    const pinnedFeatures = await omp.listFeatures({
+      model: "openai-codex/gpt-5.6",
+      featureValues: { oauth_account_credential: "41" },
+    });
+
+    expect(pinnedFeatures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "oauth_account_credential",
+          value: "41",
+          effectiveValue: null,
+        }),
+      ]),
+    );
+    expect(credentialReadCount).toBe(1);
   });
 
   test("reports the effective OAuth account selected by the runtime", async () => {
@@ -235,7 +349,7 @@ describe("OMP agent client and session", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "42",
         }),
       ]),
@@ -247,8 +361,7 @@ describe("OMP agent client and session", () => {
     expect(omp.features()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "oauth_account_credential",
-          value: null,
+          value: "automatic",
           effectiveValue: "41",
         }),
       ]),
@@ -280,8 +393,14 @@ describe("OMP agent client and session", () => {
       }),
       expect.objectContaining({
         id: "oauth_account_credential",
+        type: "select",
         value: "42",
-        options: [expect.objectContaining({ id: "41" }), expect.objectContaining({ id: "42" })],
+        effectiveValue: "42",
+        options: [
+          expect.objectContaining({ id: "automatic" }),
+          expect.objectContaining({ id: "41" }),
+          expect.objectContaining({ id: "42" }),
+        ],
       }),
     ]);
     expect(omp.recordedPrompts()).toEqual([{ message: "/session pin 2", imageCount: 0 }]);

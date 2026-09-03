@@ -1,27 +1,30 @@
 import type {
-  ProviderUsage,
+  ProviderUsage as ProtocolProviderUsage,
   ProviderUsageBalance,
   ProviderUsageDetail,
   ProviderUsageListResponseMessage,
   ProviderUsageStatus,
   ProviderUsageTone,
-  ProviderUsageWindow,
+  ProviderUsageWindow as ProtocolProviderUsageWindow,
 } from "@omp-desktop/protocol/messages";
 
-export type {
-  ProviderUsage,
-  ProviderUsageBalance,
-  ProviderUsageDetail,
-  ProviderUsageStatus,
-  ProviderUsageTone,
-  ProviderUsageWindow,
+export type { ProviderUsageBalance, ProviderUsageDetail, ProviderUsageStatus, ProviderUsageTone };
+
+export type ProviderUsageWindow = ProtocolProviderUsageWindow & {
+  percentageDisplay?: "used" | "remaining";
+};
+
+export type ProviderUsage = Omit<ProtocolProviderUsage, "windows"> & {
+  windows: ProviderUsageWindow[];
 };
 
 export type ProviderUsageBalanceUnit = ProviderUsageBalance["unit"];
 export type ProviderUsageListPayload = Omit<
   ProviderUsageListResponseMessage["payload"],
-  "requestId"
->;
+  "providers" | "requestId"
+> & {
+  providers: ProviderUsage[];
+};
 
 export type ProviderUsageView =
   | { kind: "loading" }

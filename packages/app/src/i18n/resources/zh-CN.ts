@@ -246,8 +246,8 @@ export const zhCN: TranslationResources = {
     quota: {
       loading: "正在加载额度…",
       account: "账户 {{number}}",
-      automatic: "自动",
-      automaticSelecting: "自动选择中",
+      automatic: "自动选择",
+      automaticSelecting: "正在确定本次使用的账号…",
       switchAfterTurn: "当前回复结束后可切换账号",
       noNote: "未备注",
       weekly: "周额度",

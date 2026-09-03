@@ -244,8 +244,8 @@ export const en = {
     quota: {
       loading: "Loading quota…",
       account: "Account {{number}}",
-      automatic: "Automatic",
-      automaticSelecting: "Selecting an account automatically",
+      automatic: "Automatic selection",
+      automaticSelecting: "Determining the account for this response…",
       switchAfterTurn: "You can switch accounts after the current response",
       noNote: "No note",
       weekly: "Weekly quota",

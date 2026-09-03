@@ -31,6 +31,7 @@ type WindowChromeSafeAreaStyle = { height: number } | { paddingLeft: number; pad
 const EMPTY_OBSTRUCTION: WindowChromeObstruction = { topLeft: null, topRight: null };
 const WindowChromeContext = createContext<WindowChromeObstruction>(EMPTY_OBSTRUCTION);
 const WindowChromeCornersContext = createContext<WindowChromeCorners>("none");
+const WindowMaximizedContext = createContext(false);
 
 function windowChromeCornersFromFlags(topLeft: boolean, topRight: boolean): WindowChromeCorners {
   if (topLeft && topRight) return "both";
@@ -112,6 +113,7 @@ export function resolveWindowChromeSafeArea(input: {
 export function WindowChromeProvider({ children }: { children: ReactNode }) {
   const [isElectronReady, setIsElectronReady] = useState(getIsElectronRuntime);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -142,27 +144,32 @@ export function WindowChromeProvider({ children }: { children: ReactNode }) {
       if (
         !desktopWindow ||
         typeof desktopWindow.isFullscreen !== "function" ||
+        typeof desktopWindow.isMaximized !== "function" ||
         typeof desktopWindow.onResized !== "function"
       )
         return scheduleRetry(true);
       const readFullscreen = desktopWindow.isFullscreen;
+      const readMaximized = desktopWindow.isMaximized;
       const subscribeToResized = desktopWindow.onResized;
       connecting = true;
       void (async () => {
-        async function syncFullscreen() {
+        async function syncWindowState() {
           try {
-            const fullscreen = await readFullscreen();
-            if (active) setIsFullscreen(fullscreen);
+            const [fullscreen, maximized] = await Promise.all([readFullscreen(), readMaximized()]);
+            if (active) {
+              setIsFullscreen(fullscreen);
+              setIsMaximized(maximized);
+            }
           } catch (error) {
-            if (active) console.warn("[DesktopWindow] Failed to read fullscreen state", error);
+            if (active) console.warn("[DesktopWindow] Failed to read window state", error);
           }
         }
         try {
-          const nextDispose = await subscribeToResized(syncFullscreen);
+          const nextDispose = await subscribeToResized(syncWindowState);
           if (!active) return nextDispose();
           dispose = nextDispose;
           setIsElectronReady(true);
-          await syncFullscreen();
+          await syncWindowState();
         } catch (error) {
           if (active) console.warn("[DesktopWindow] Failed to subscribe to resize", error);
         } finally {
@@ -191,11 +198,13 @@ export function WindowChromeProvider({ children }: { children: ReactNode }) {
     [isElectronReady, isFullscreen],
   );
   return (
-    <WindowChromeContext.Provider value={obstruction}>
-      <WindowChromeCornersContext.Provider value="both">
-        {children}
-      </WindowChromeCornersContext.Provider>
-    </WindowChromeContext.Provider>
+    <WindowMaximizedContext.Provider value={isMaximized}>
+      <WindowChromeContext.Provider value={obstruction}>
+        <WindowChromeCornersContext.Provider value="both">
+          {children}
+        </WindowChromeCornersContext.Provider>
+      </WindowChromeContext.Provider>
+    </WindowMaximizedContext.Provider>
   );
 }
 
@@ -233,6 +242,10 @@ export function WindowChromeRootRegion({
 
 export function useWindowChromeCorners(): WindowChromeCorners {
   return useContext(WindowChromeCornersContext);
+}
+
+export function useIsDesktopWindowMaximized(): boolean {
+  return useContext(WindowMaximizedContext);
 }
 
 export function useOwnsWindowChromeCorner(corner: WindowChromeCorner): boolean {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentStreamEventPayload } from "@omp-desktop/protocol/messages";
 import {
   createUserMessage,
@@ -6,12 +6,15 @@ import {
   type AgentToolCallItem,
   type StreamItem,
 } from "@/types/stream";
+import { beginWindowDragActivity, endWindowDragActivity } from "@/desktop/window-drag-activity";
 import {
   createAgentStreamReducerQueue,
+  cancelAgentStreamReducerFlush,
   deriveAgentStreamTurnLiveness,
   processTimelineResponse,
   processAgentStreamEvent,
   processAgentStreamEvents,
+  scheduleAgentStreamReducerFlush,
   type ProcessTimelineResponseInput,
   type ProcessAgentStreamEventInput,
   type AgentStreamReducerEvent,
@@ -4405,5 +4408,26 @@ describe("createAgentStreamReducerQueue", () => {
 
     expect(commits).toEqual(["agent-1:queued"]);
     expect(scheduler.size).toBe(0);
+  });
+});
+
+describe("window-drag-aware stream scheduling", () => {
+  it("holds render commits until a manual window drag ends", () => {
+    vi.useFakeTimers();
+    const callback = vi.fn();
+    const token = beginWindowDragActivity();
+    const id = scheduleAgentStreamReducerFlush(callback);
+    try {
+      vi.advanceTimersByTime(48);
+      expect(callback).not.toHaveBeenCalled();
+
+      endWindowDragActivity(token);
+      vi.advanceTimersByTime(16);
+      expect(callback).toHaveBeenCalledOnce();
+    } finally {
+      cancelAgentStreamReducerFlush(id);
+      endWindowDragActivity(token);
+      vi.useRealTimers();
+    }
   });
 });
