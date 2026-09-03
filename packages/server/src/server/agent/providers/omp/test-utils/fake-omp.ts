@@ -66,7 +66,7 @@ export class FakeOmp implements OmpRuntime {
   private fastModeSupported = true;
   private initialModel: OmpModel | null = null;
   private initialStats: OmpSessionStats | null = null;
-  private nextStartError: Error | undefined;
+  private readonly queuedStartErrors: Error[] = [];
   private readonly queuedSubagentSubscriptionErrors = new Map<
     FakeOmpSubagentSubscriptionLevel,
     Error
@@ -77,11 +77,8 @@ export class FakeOmp implements OmpRuntime {
   }
 
   async startSession(input: OmpStartSessionInput): Promise<FakeOmpSession> {
-    if (this.nextStartError) {
-      const error = this.nextStartError;
-      this.nextStartError = undefined;
-      throw error;
-    }
+    const startError = this.queuedStartErrors.shift();
+    if (startError) throw startError;
     const launch = buildOmpLaunch({
       command: this.command,
       session: input,
@@ -131,7 +128,7 @@ export class FakeOmp implements OmpRuntime {
   }
 
   failNextStart(error: Error): void {
-    this.nextStartError = error;
+    this.queuedStartErrors.push(error);
   }
 
   failNextSubagentSubscription(level: FakeOmpSubagentSubscriptionLevel, error: Error): void {

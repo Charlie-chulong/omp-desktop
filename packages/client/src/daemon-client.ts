@@ -2587,6 +2587,8 @@ export class DaemonClient {
     const status = await this.sendRequest({
       requestId,
       message,
+      // OMP conversation startup may make one bounded 30-second retry.
+      timeout: 75_000,
       options: { skipQueue: true },
       select: (msg) => {
         if (msg.type !== "status") {

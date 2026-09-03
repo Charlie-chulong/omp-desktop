@@ -84,7 +84,7 @@ import { getUserMessageText } from "./message-history.js";
 import { mapOmpSystemNoticeToToolCall } from "./system-notice.js";
 import { materializeProviderImage } from "../provider-image-output.js";
 import { ensureManagedOmpOnPath, getOmpInstallationStatus, installOmp } from "./installer.js";
-import { OmpCliRuntime } from "./cli-runtime.js";
+import { OmpCliRuntime, OmpReadyTimeoutError } from "./cli-runtime.js";
 import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
 import type { OmpRuntime, OmpRuntimeSession, OmpStartSessionInput } from "./runtime.js";
 import type {
@@ -3305,12 +3305,32 @@ export class OmpAgentClient implements AgentClient {
     return session;
   }
 
+  private async startConversationRuntimeSession(
+    input: OmpStartSessionInput,
+  ): Promise<OmpRuntimeSession> {
+    try {
+      return await this.runtime.startSession(input);
+    } catch (error) {
+      if (!(error instanceof OmpReadyTimeoutError)) throw error;
+      this.logger.warn({ err: error }, "OMP conversation startup timed out; retrying once");
+    }
+    try {
+      return await this.runtime.startSession(input);
+    } catch (error) {
+      if (!(error instanceof OmpReadyTimeoutError)) throw error;
+      throw new Error(
+        "OMP could not start the conversation after two attempts. Restart OMP and try again.",
+        { cause: error },
+      );
+    }
+  }
+
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     const launchMode = this.resolveLaunchMode(config.modeId);
-    const runtimeSession = await this.runtime.startSession({
+    const runtimeSession = await this.startConversationRuntimeSession({
       cwd: config.cwd,
       protocolMode: "rpc-ui",
       model: config.model,
@@ -3367,7 +3387,7 @@ export class OmpAgentClient implements AgentClient {
     const resumeConfig = buildResumeConfig(persistenceMetadata, overrides, this.provider);
 
     const launchMode = this.resolveLaunchMode(resumeConfig.modeId);
-    const runtimeSession = await this.runtime.startSession(
+    const runtimeSession = await this.startConversationRuntimeSession(
       buildResumeStartInput({
         resumeConfig,
         sessionFile,
@@ -3663,7 +3683,9 @@ export class OmpAgentClient implements AgentClient {
     } else {
       await fs.rm(configPath, { force: true });
     }
-    throw new Error(`OMP rejected models configuration: ${management.runtimeError}`);
+    throw new Error(
+      `OMP could not validate the models configuration; the previous configuration was restored. ${management.runtimeError}`,
+    );
   }
   async updateOmpModelContextWindowOverrides(
     providerId: string,

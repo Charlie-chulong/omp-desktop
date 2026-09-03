@@ -50,8 +50,17 @@ import {
 
 const DEFAULT_OMP_COMMAND: [string, ...string[]] = [process.env.OMP_COMMAND ?? "omp"];
 const DEFAULT_COMMANDS_RPC_NAME = "get_available_commands";
-/** How long to wait for OMP's startup `ready` frame before failing startup. */
-const OMP_READY_TIMEOUT_MS = 10_000;
+/** Allow cold OMP starts the same 30-second budget as other control-plane RPCs. */
+const OMP_READY_TIMEOUT_MS = JSONL_RPC_DEFAULT_TIMEOUT_MS;
+
+export class OmpReadyTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(
+      `OMP did not become ready within ${timeoutMs / 1_000} seconds. Retry the operation; if it keeps failing, restart OMP.`,
+    );
+    this.name = "OmpReadyTimeoutError";
+  }
+}
 
 export interface OmpCliRuntimeOptions {
   logger: Logger;
@@ -157,7 +166,7 @@ function waitForOmpReadyFrame(process: JsonlRpcProcess): Promise<Record<string, 
     });
     unsubscribeExit = process.onExit(({ error }) => finish(error));
     timer = setTimeout(
-      () => finish(new Error("Timed out waiting for OMP to become ready")),
+      () => finish(new OmpReadyTimeoutError(OMP_READY_TIMEOUT_MS)),
       OMP_READY_TIMEOUT_MS,
     );
   });

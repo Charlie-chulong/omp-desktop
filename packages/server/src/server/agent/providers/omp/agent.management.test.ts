@@ -652,7 +652,7 @@ providers:
     runtime.failNextStart(new Error("invalid models.yml"));
 
     await expect(client.saveOmpProviderConfig("providers: broken\n")).rejects.toThrow(
-      "OMP rejected models configuration: invalid models.yml",
+      "OMP could not validate the models configuration; the previous configuration was restored. invalid models.yml",
     );
     await expect(readFile(configPath, "utf8")).resolves.toBe(previous);
   });

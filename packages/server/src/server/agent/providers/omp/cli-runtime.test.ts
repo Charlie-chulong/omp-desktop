@@ -361,6 +361,26 @@ describe("OMP CLI runtime", () => {
     await expect(startup).rejects.toThrow("startup exploded");
   });
 
+  test("allows cold startup for 30 seconds and reports an actionable timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createOmpChild({ emitReady: false });
+      const startup = createRuntime(child).startSession({ cwd: "/workspace/project" });
+      const rejection = expect(startup).rejects.toThrow(
+        "OMP did not become ready within 30 seconds. Retry the operation; if it keeps failing, restart OMP.",
+      );
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(child.killedSignals).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await rejection;
+      expect(child.killedSignals).toEqual(["SIGTERM"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("rejects startup when OMP exits during protocol negotiation", async () => {
     const child = createOmpChild({ supportedProtocolVersions: [1, 2] });
     child.stdin.on("data", () => {

@@ -5,6 +5,7 @@ import type { PaseoToolCatalog } from "../../tools/types.js";
 import type { OmpNoTurnScheduler, OmpProviderIdleScheduler } from "./agent.js";
 import type { OmpUsagePollScheduler } from "./usage-poller.js";
 import { OmpHarness } from "./test-utils/omp-harness.js";
+import { OmpReadyTimeoutError } from "./cli-runtime.js";
 
 class ManualIdleScheduler implements OmpProviderIdleScheduler {
   private readonly retries: Array<() => void> = [];
@@ -107,6 +108,25 @@ function createToolCatalog(): PaseoToolCatalog {
 }
 
 describe("OMP agent client and session", () => {
+  test("retries conversation startup once after OMP readiness times out", async () => {
+    const omp = new OmpHarness();
+    omp.failNextStart(new OmpReadyTimeoutError(30_000));
+
+    await expect(omp.start()).resolves.toBeUndefined();
+    expect(omp.launchCount()).toBe(1);
+  });
+
+  test("reports an actionable error after two conversation startup timeouts", async () => {
+    const omp = new OmpHarness();
+    omp.failNextStart(new OmpReadyTimeoutError(30_000));
+    omp.failNextStart(new OmpReadyTimeoutError(30_000));
+
+    await expect(omp.start()).rejects.toThrow(
+      "OMP could not start the conversation after two attempts. Restart OMP and try again.",
+    );
+    expect(omp.launchCount()).toBe(0);
+  });
+
   test("exposes and pins a selected stored OAuth account when multiple accounts exist", async () => {
     const omp = new OmpHarness({
       oauthAccounts: [

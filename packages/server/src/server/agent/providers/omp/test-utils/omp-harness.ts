@@ -106,6 +106,10 @@ export class OmpHarness {
     this.omp.queueCommands(commands);
   }
 
+  failNextStart(error: Error): void {
+    this.omp.failNextStart(error);
+  }
+
   failEventSubscription(error: Error): void {
     this.omp.failNextSubagentSubscription("events", error);
   }
