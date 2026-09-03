@@ -1093,6 +1093,7 @@ function SidebarProviderAccountPanel() {
               >
                 <ComboboxTrigger
                   ref={accountAnchorRef}
+                  block={accountLocked}
                   collapsable={false}
                   disabled={!hasAccountSwitcher}
                   onPress={handleAccountToggle}

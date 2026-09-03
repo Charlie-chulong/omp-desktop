@@ -27,6 +27,7 @@ import type {
   OmpModel,
   OmpRpcSlashCommand,
   OmpSessionStats,
+  OmpSessionState,
 } from "../rpc-types.js";
 import { FakeOmp } from "./fake-omp.js";
 
@@ -80,6 +81,7 @@ export class OmpHarness {
       fastModeSupported?: boolean;
       sessionCredentialReader?: (providerId: string, sessionId: string) => number | undefined;
       initialModel?: OmpModel;
+      initialActiveCredential?: OmpSessionState["activeCredential"];
       providerIdleScheduler?: OmpProviderIdleScheduler;
       noTurnScheduler?: OmpNoTurnScheduler;
       usagePollScheduler?: OmpUsagePollScheduler;
@@ -88,6 +90,7 @@ export class OmpHarness {
   ) {
     this.omp.setFastModeSupported(options.fastModeSupported ?? true);
     this.omp.setInitialModel(options.initialModel ?? null);
+    this.omp.setInitialActiveCredential(options.initialActiveCredential);
     if (options.initialStats) {
       this.omp.setInitialStats(options.initialStats);
     }

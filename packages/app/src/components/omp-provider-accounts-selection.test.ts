@@ -1,11 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
-  formatOmpAccountIdentity,
-  formatOmpAccountSelectionLabel,
   isOmpAutomaticAccountOption,
   orderOmpAccountFeatureOptions,
   resolveOmpAccountFeatureSelection,
-  type OmpAccountIdentity,
 } from "./omp-provider-accounts";
 
 describe("OMP account feature selection", () => {

@@ -50,9 +50,13 @@ export function applyFeatureValues(
       return feature;
     }
 
+    const value = featureValues[feature.id];
     return {
       ...feature,
-      value: featureValues[feature.id],
+      value,
+      ...(feature.type === "select" && !Object.is(feature.value, value)
+        ? { effectiveValue: null }
+        : {}),
     } as AgentFeature;
   });
 }

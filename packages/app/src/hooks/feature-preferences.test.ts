@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyFeatureValues,
   pruneFeatureValues,
   resolveFeatureValues,
   retainDraftWorkflowValues,
@@ -53,6 +54,38 @@ describe("feature-preferences", () => {
       fast_mode: false,
       plan_mode: false,
     });
+  });
+
+  it("clears a stale effective selection when a draft select value changes", () => {
+    const accountFeature = {
+      type: "select" as const,
+      id: "oauth_account_credential",
+      label: "OAuth account",
+      value: "automatic",
+      effectiveValue: "1",
+      options: [
+        { id: "automatic", label: "Automatic" },
+        { id: "1", label: "Account 1" },
+        { id: "2", label: "Account 2" },
+      ],
+    };
+
+    expect(
+      applyFeatureValues([accountFeature], {
+        oauth_account_credential: "2",
+      }),
+    ).toEqual([
+      {
+        ...accountFeature,
+        value: "2",
+        effectiveValue: null,
+      },
+    ]);
+    expect(
+      applyFeatureValues([accountFeature], {
+        oauth_account_credential: "automatic",
+      }),
+    ).toEqual([accountFeature]);
   });
 
   it("keeps transient goal draft values alongside the workflow feature", () => {
