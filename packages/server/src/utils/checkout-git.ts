@@ -2025,6 +2025,7 @@ export async function getCheckoutSnapshotFacts(
 
 const PER_FILE_DIFF_MAX_BYTES = 1024 * 1024; // 1MB
 const TOTAL_DIFF_MAX_BYTES = 2 * 1024 * 1024; // 2MB
+const CHECKOUT_DIFF_MAX_FILES = 500;
 const WEBSOCKET_MAX_FRAME_BYTES = 32 * 1024 * 1024;
 const CHECKOUT_DIFF_FRAME_HEADROOM_BYTES = 1024 * 1024;
 // Keep the existing conservative structured-diff budget while using direct
@@ -2651,76 +2652,42 @@ async function getCheckoutShortstatUncached(
     }
   }
 
-  const facts = context?.facts;
-  const localBaseRef = facts?.isGit
-    ? facts.resolvedBaseRef
-    : await getResolvedBaseRefForCwd(cwd, context);
-  const currentBranch = facts?.isGit ? facts.currentBranch : await getCurrentBranch(cwd);
-  const comparisonRef = await resolveShortstatComparisonRef({
-    cwd,
-    currentBranch,
-    localBaseRef,
-    facts,
-  });
-  if (!comparisonRef) {
-    return null;
-  }
-
-  try {
-    const { stdout: mergeBaseOut } = await runGitCommand(["merge-base", "HEAD", comparisonRef], {
-      cwd,
-      envOverlay: READ_ONLY_GIT_ENV,
-    });
-    const mergeBase = mergeBaseOut.trim();
-    if (!mergeBase) {
-      return null;
-    }
-
-    const [{ stdout }, untrackedAdditions] = await Promise.all([
-      runGitCommand(["diff", "--shortstat", mergeBase], {
+  const loadTrackedShortstat = async (): Promise<CheckoutShortstat | null> => {
+    try {
+      const { stdout } = await runGitCommand(["diff", "--shortstat", "HEAD"], {
         cwd,
         envOverlay: READ_ONLY_GIT_ENV,
-      }),
-      countUntrackedAdditions(cwd, options?.throwOnGitError),
-    ]);
-
-    const tracked = parseCheckoutShortstat(stdout);
-
-    if (tracked) {
-      return { additions: tracked.additions + untrackedAdditions, deletions: tracked.deletions };
+      });
+      return parseCheckoutShortstat(stdout);
+    } catch (error) {
+      if (!isUnbornHeadDiffError(error)) {
+        return handleShortstatGitError(error, options?.throwOnGitError);
+      }
     }
-    if (untrackedAdditions > 0) {
-      return { additions: untrackedAdditions, deletions: 0 };
-    }
-    return null;
-  } catch (error) {
-    return handleShortstatGitError(error, options?.throwOnGitError);
-  }
-}
 
-async function resolveShortstatComparisonRef(input: {
-  cwd: string;
-  currentBranch: string | null;
-  localBaseRef: string | null;
-  facts?: CheckoutSnapshotFacts | null;
-}): Promise<string | null> {
-  const { cwd, currentBranch, localBaseRef, facts } = input;
-  if (!currentBranch) {
-    return null;
-  }
-
-  if (localBaseRef && currentBranch !== localBaseRef) {
     try {
-      return facts?.isGit && facts.resolvedBaseRef === localBaseRef && facts.comparisonBaseRef
-        ? facts.comparisonBaseRef
-        : await resolveBestComparisonBaseRef(cwd, localBaseRef);
-    } catch {
-      return null;
+      const { stdout } = await runGitCommand(["diff", "--shortstat", EMPTY_TREE_OBJECT_ID], {
+        cwd,
+        envOverlay: READ_ONLY_GIT_ENV,
+      });
+      return parseCheckoutShortstat(stdout);
+    } catch (error) {
+      return handleShortstatGitError(error, options?.throwOnGitError);
     }
-  }
+  };
 
-  const hasOrigin = await doesGitRefExist(cwd, `refs/remotes/origin/${currentBranch}`);
-  return hasOrigin ? `origin/${currentBranch}` : null;
+  const [tracked, untrackedAdditions] = await Promise.all([
+    loadTrackedShortstat(),
+    countUntrackedAdditions(cwd, options?.throwOnGitError),
+  ]);
+
+  if (tracked) {
+    return { additions: tracked.additions + untrackedAdditions, deletions: tracked.deletions };
+  }
+  if (untrackedAdditions > 0) {
+    return { additions: untrackedAdditions, deletions: 0 };
+  }
+  return null;
 }
 
 function getOrLoadCheckoutShortstat(
@@ -3246,6 +3213,9 @@ export async function getCheckoutDiff(
     if (a.path === b.path) return 0;
     return a.path < b.path ? -1 : 1;
   });
+  if (compare.includeStructured && changes.length > CHECKOUT_DIFF_MAX_FILES) {
+    return { diff: "", structured: [], diffTooLarge: true };
+  }
 
   const structured = createStructuredDiffAccumulator();
   let diffText = "";

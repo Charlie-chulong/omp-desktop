@@ -38,6 +38,20 @@ function createGeneration(handler: (request: StructuredTextGenerationRequest<unk
   return { generation, generateCalls };
 }
 
+const readNoRecentCommitSubjects = async (): Promise<readonly string[]> => [];
+
+function createGenerator(
+  diffSource: DiffSource,
+  generation: StructuredTextGeneration,
+  readRecentCommitSubjects = readNoRecentCommitSubjects,
+) {
+  return createGitMetadataGenerator({
+    workspaceGitService: diffSource,
+    generation,
+    readRecentCommitSubjects,
+  });
+}
+
 const DIFF_WITH_ONE_FILE: CheckoutDiffResult = {
   diff: "diff --git a/src/foo.ts b/src/foo.ts\n+added\n",
   structured: [
@@ -59,7 +73,15 @@ describe("createGitMetadataGenerator", () => {
     const { generation, generateCalls } = createGeneration(() => ({
       message: "Fix the flaky retry test",
     }));
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const recentCommitCalls: Array<{ cwd: string; limit: number }> = [];
+    const generator = createGenerator(diffSource, generation, async (cwd, limit) => {
+      recentCommitCalls.push({ cwd, limit });
+      return [
+        "feat: add repository browser",
+        "fix: preserve selected account",
+        "test: cover provider fallback",
+      ];
+    });
 
     const message = await generator.generateCommitMessage("/repo");
 
@@ -67,22 +89,44 @@ describe("createGitMetadataGenerator", () => {
     expect(diffCalls).toEqual([
       { cwd: "/repo", options: { mode: "uncommitted", includeStructured: true } },
     ]);
+    expect(recentCommitCalls).toEqual([{ cwd: "/repo", limit: 12 }]);
     expect(generateCalls[0]).toMatchObject({
       cwd: "/repo",
       schemaName: "CommitMessage",
       agentTitle: "Commit generator",
     });
+    expect(generateCalls[0].maxRetries).toBe(0);
     expect(generateCalls[0].prompt).toContain("Write a concise git commit message");
     expect(generateCalls[0].prompt).toContain("M\tsrc/foo.ts\t(+3 -1)");
     expect(generateCalls[0].prompt).toContain("diff --git a/src/foo.ts");
+    expect(generateCalls[0].prompt).toContain("feat: add repository browser");
+    expect(generateCalls[0].prompt).toContain(
+      "Match their language, conventional prefix/scope pattern, and capitalization.",
+    );
   });
 
+  it("limits commit patch context to keep generation responsive", async () => {
+    const unreachableTail = "UNREACHABLE_PATCH_TAIL";
+    const { diffSource } = createDiffSource({
+      ...DIFF_WITH_ONE_FILE,
+      diff: `${"x".repeat(30_000)}${unreachableTail}`,
+    });
+    const { generation, generateCalls } = createGeneration(() => ({
+      message: "feat: summarize the change",
+    }));
+    const generator = createGenerator(diffSource, generation);
+
+    await generator.generateCommitMessage("/repo");
+
+    expect(generateCalls[0].prompt).toContain("diff truncated to 12000 chars");
+    expect(generateCalls[0].prompt).not.toContain(unreachableTail);
+  });
   it("generateCommitMessage falls back to a default message when generation exhausts its providers", async () => {
     const { diffSource } = createDiffSource(DIFF_WITH_ONE_FILE);
     const { generation } = createGeneration(() => {
       throw new StructuredAgentFallbackError([]);
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGenerator(diffSource, generation);
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
   });
@@ -95,7 +139,7 @@ describe("createGitMetadataGenerator", () => {
         validationErrors: ["message: required"],
       });
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGenerator(diffSource, generation);
 
     await expect(generator.generateCommitMessage("/repo")).resolves.toBe("Update files");
   });
@@ -105,7 +149,7 @@ describe("createGitMetadataGenerator", () => {
     const { generation } = createGeneration(() => {
       throw new Error("network down");
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGenerator(diffSource, generation);
 
     await expect(generator.generateCommitMessage("/repo")).rejects.toThrow("network down");
   });
@@ -116,7 +160,7 @@ describe("createGitMetadataGenerator", () => {
       title: "Add retry with backoff",
       body: "Retries transient failures up to twice.",
     }));
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGenerator(diffSource, generation);
 
     const result = await generator.generatePullRequestText("/repo", "main");
 
@@ -140,7 +184,7 @@ describe("createGitMetadataGenerator", () => {
     const { generation } = createGeneration(() => {
       throw new StructuredAgentFallbackError([]);
     });
-    const generator = createGitMetadataGenerator({ workspaceGitService: diffSource, generation });
+    const generator = createGenerator(diffSource, generation);
 
     await expect(generator.generatePullRequestText("/repo")).resolves.toEqual({
       title: "Update changes",

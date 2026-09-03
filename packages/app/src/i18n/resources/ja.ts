@@ -934,6 +934,12 @@ export const ja: TranslationResources = {
           unpushedCommits: "{{count}}件の未プッシュコミット",
         },
       },
+      commitComposer: {
+        placeholder: "「{{branch}}」にコミットするメッセージ",
+        generate: "コミットメッセージを生成",
+        generating: "コミットメッセージを生成中...",
+        failedGeneration: "コミットメッセージを生成できませんでした",
+      },
       diff: {
         openChangesTab: "変更タブを開く",
         closeChangesTab: "変更タブを閉じる",
@@ -963,6 +969,8 @@ export const ja: TranslationResources = {
         seeUncommittedChanges: "未コミットの変更を表示",
         seeCommittedChanges: "コミット済みの変更を表示",
         emptyAgainstBase: "{{baseRef}}との差分なし",
+        repositoryAccessError:
+          "{{brand}} はこのリポジトリにアクセスできません。アクセス権のあるアカウントでサインインし、必要に応じて組織の SSO を承認してください。",
         checkingRepository: "リポジトリを確認中...",
         notRepository: "gitリポジトリではありません",
         diffMode: "差分モード",

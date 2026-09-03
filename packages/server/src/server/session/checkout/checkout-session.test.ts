@@ -811,6 +811,37 @@ describe("CheckoutSession", () => {
         },
       ]);
     });
+
+    it("generates a commit message without mutating git state", async () => {
+      const { checkout, emitted, generatorCalls, gitMutationCalls } = makeCheckoutSession({
+        gitMetadataGenerator: {
+          generateCommitMessage: async (cwd) => {
+            generatorCalls.generateCommitMessage.push(cwd);
+            return "  Refactor the changes panel  ";
+          },
+        },
+      });
+
+      await checkout.handleGenerateCommitMessageRequest({
+        type: "checkout.commit_message.generate.request",
+        cwd: "/repo",
+        requestId: "c2",
+      });
+
+      expect(generatorCalls.generateCommitMessage).toEqual(["/repo"]);
+      expect(gitMutationCalls.notifyGitMutation).toEqual([]);
+      expect(emitted).toEqual([
+        {
+          type: "checkout.commit_message.generate.response",
+          payload: {
+            cwd: "/repo",
+            message: "Refactor the changes panel",
+            error: null,
+            requestId: "c2",
+          },
+        },
+      ]);
+    });
   });
 
   describe("merge preflight", () => {

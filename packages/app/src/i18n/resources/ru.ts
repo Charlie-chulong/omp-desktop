@@ -948,6 +948,12 @@ export const ru: TranslationResources = {
           unpushedCommits: "Неотправленных коммитов: {{count}}",
         },
       },
+      commitComposer: {
+        placeholder: "Сообщение коммита в «{{branch}}»",
+        generate: "Создать сообщение коммита",
+        generating: "Создание сообщения коммита...",
+        failedGeneration: "Не удалось создать сообщение коммита",
+      },
       diff: {
         openChangesTab: "Открыть вкладку «Изменения»",
         closeChangesTab: "Закрыть вкладку «Изменения»",
@@ -977,6 +983,8 @@ export const ru: TranslationResources = {
         seeUncommittedChanges: "Показать незафиксированные изменения",
         seeCommittedChanges: "Показать зафиксированные изменения",
         emptyAgainstBase: "Нет изменений относительно {{baseRef}}",
+        repositoryAccessError:
+          "{{brand}} не может получить доступ к этому репозиторию. Войдите в аккаунт с доступом и при необходимости авторизуйте SSO организации.",
         checkingRepository: "Проверяем репозиторий...",
         notRepository: "Это не репозиторий Git",
         diffMode: "Режим диффа",

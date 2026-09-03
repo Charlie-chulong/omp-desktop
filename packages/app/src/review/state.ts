@@ -103,7 +103,7 @@ export function resolveDiffMode(input: {
   if (override && override.isDirtyAtSelection === hasUncommittedChanges) {
     return override.mode;
   }
-  return hasUncommittedChanges ? "uncommitted" : "base";
+  return "uncommitted";
 }
 
 export function addCommentToState(

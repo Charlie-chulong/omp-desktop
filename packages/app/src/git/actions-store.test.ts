@@ -73,6 +73,28 @@ describe("checkout-git-actions-store", () => {
     expect(store.getStatus({ serverId, cwd, actionId: "commit" })).toBe("idle");
   });
 
+  it("forwards an explicit commit message", async () => {
+    const client = {
+      checkoutCommit: vi.fn(async () => ({ error: null })),
+    };
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessions: {
+        ...state.sessions,
+        [serverId]: { client } as unknown as (typeof state.sessions)[string],
+      },
+    }));
+
+    await useCheckoutGitActionsStore
+      .getState()
+      .commit({ serverId, cwd, message: "Refactor the changes panel" });
+
+    expect(client.checkoutCommit).toHaveBeenCalledWith(cwd, {
+      addAll: true,
+      message: "Refactor the changes panel",
+    });
+  });
+
   it("runs pull then push sequentially for pull-and-push", async () => {
     const order: string[] = [];
     const client = {

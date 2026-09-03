@@ -925,6 +925,12 @@ export const zhCN: TranslationResources = {
           unpushedCommits: "{{count}} 个未 push 的 commit",
         },
       },
+      commitComposer: {
+        placeholder: "提交到“{{branch}}”的消息",
+        generate: "生成 commit message",
+        generating: "正在生成 commit message...",
+        failedGeneration: "生成 commit message 失败",
+      },
       diff: {
         openChangesTab: "打开“更改”标签页",
         closeChangesTab: "关闭“更改”标签页",
@@ -954,6 +960,8 @@ export const zhCN: TranslationResources = {
         seeUncommittedChanges: "查看未 commit 的变更",
         seeCommittedChanges: "查看已 commit 的变更",
         emptyAgainstBase: "相对于 {{baseRef}} 没有变更",
+        repositoryAccessError:
+          "{{brand}} 无法访问此仓库。请重新登录有仓库权限的账号；如果组织启用了 SSO，还需完成组织授权。",
         checkingRepository: "正在检查 repository...",
         notRepository: "不是 git repository",
         diffMode: "Diff 模式",

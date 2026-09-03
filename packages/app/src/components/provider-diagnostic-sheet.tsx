@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react-native";
 import type { TFunction } from "i18next";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Linking, Pressable, type PressableStateCallbackType, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -72,7 +72,11 @@ import {
   updateOmpProviderAccountNote,
 } from "./omp-provider-account-notes";
 import { formatOmpAccountIdentity, resolveOmpLoginAction } from "./omp-provider-accounts";
-import { resolveOmpRemainingQuotaPct, shouldShowOmpFiveHourQuota } from "./omp-provider-quota";
+import {
+  formatOmpQuotaResetTime,
+  resolveOmpRemainingQuotaPct,
+  shouldShowOmpFiveHourQuota,
+} from "./omp-provider-quota";
 import {
   groupOmpDiscoveredModels,
   resolveProviderDiscoveredModels,
@@ -253,6 +257,8 @@ interface OmpProviderSummary {
   login?: OmpProviderManagement["loginProviders"][number];
 }
 
+const EMPTY_OMP_ACCOUNT_NOTES: Record<string, string> = {};
+
 type OmpManagedProviderModel = NonNullable<
   OmpProviderManagement["providerModels"][number]["models"]
 >[number];
@@ -260,13 +266,6 @@ type OmpManagedProviderModel = NonNullable<
 type OmpProviderAccount = NonNullable<
   OmpProviderManagement["loginProviders"][number]["accounts"]
 >[number];
-
-function formatQuotaResetTime(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const timestamp = Date.parse(iso);
-  if (!Number.isFinite(timestamp)) return null;
-  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 
 function OmpAccountQuotaWindow({
   label,
@@ -287,17 +286,17 @@ function OmpAccountQuotaWindow({
   unknownLabel?: string;
   limitReached?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { theme } = useUnistyles();
   const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
   const reached = limitReached || remainingPct === 0;
-  const toneColor = reached
-    ? theme.colors.destructive
-    : remainingPct !== null
-      ? remainingPct <= 30
-        ? theme.colors.palette.amber[500]
-        : theme.colors.palette.green[500]
-      : theme.colors.foregroundMuted;
+  let toneColor = theme.colors.foregroundMuted;
+  if (reached) {
+    toneColor = theme.colors.destructive;
+  } else if (remainingPct !== null) {
+    toneColor =
+      remainingPct <= 30 ? theme.colors.palette.amber[500] : theme.colors.palette.green[500];
+  }
   const remainingText =
     remainingPct !== null
       ? t("settings.providers.omp.multiAccount.quotaRemaining", {
@@ -308,7 +307,11 @@ function OmpAccountQuotaWindow({
     status !== "available"
       ? t("settings.providers.omp.multiAccount.quotaUnavailable")
       : (remainingText ?? unknownLabel ?? t("settings.providers.omp.multiAccount.quotaUnknown"));
-  const resetTime = formatQuotaResetTime(resetsAt);
+  const resetTime = formatOmpQuotaResetTime(resetsAt, i18n.language);
+  const accessibilityValue = useMemo(
+    () => ({ min: 0, max: 100, now: Math.round(remainingPct ?? 0) }),
+    [remainingPct],
+  );
   return (
     <View style={sheetStyles.accountQuotaWindow}>
       <View style={sheetStyles.accountQuotaHeader}>
@@ -319,7 +322,7 @@ function OmpAccountQuotaWindow({
         <View
           accessibilityRole="progressbar"
           accessibilityLabel={label}
-          accessibilityValue={{ min: 0, max: 100, now: Math.round(remainingPct) }}
+          accessibilityValue={accessibilityValue}
           style={sheetStyles.accountQuotaTrack}
         >
           <View
@@ -532,30 +535,7 @@ function OmpProviderAccountRow({
   );
 }
 
-function OmpProviderSummaryRow({
-  summary,
-  loggingInProviderId,
-  loggingOutProviderId,
-  loggingOutCredentialId,
-  loginFlowActive,
-  removingProviderId,
-  reorderingProviderId,
-  accountNotes = {},
-  editingAccountId = null,
-  accountNoteDraft = "",
-  savingAccountNoteId = null,
-  onConfigureModels,
-  onEdit,
-  onLogin,
-  onRemove,
-  onLogout,
-  onLogoutAccount,
-  onEditAccountNote,
-  onReorderAccounts,
-  onChangeAccountNote,
-  onSaveAccountNote,
-  onCancelAccountNote,
-}: {
+interface OmpProviderSummaryRowProps {
   summary: OmpProviderSummary;
   loggingInProviderId: string | null;
   loggingOutProviderId: string | null;
@@ -578,7 +558,349 @@ function OmpProviderSummaryRow({
   onChangeAccountNote?: (value: string) => void;
   onSaveAccountNote?: () => void;
   onCancelAccountNote?: () => void;
+}
+
+function OmpProviderSummaryActions({
+  summary,
+  login,
+  loginAction,
+  loggingInProviderId,
+  loggingOutProviderId,
+  loggingOutAll,
+  loginFlowActive,
+  removingProviderId,
+  canConfigureModels,
+  canEdit,
+  canRemove,
+  canLogout,
+  onConfigureModels,
+  onEdit,
+  onRemove,
+  onLogin,
+  onLogout,
+}: {
+  summary: OmpProviderSummary;
+  login: OmpProviderSummary["login"];
+  loginAction: ReturnType<typeof resolveOmpLoginAction> | null;
+  loggingInProviderId: string | null;
+  loggingOutProviderId: string | null;
+  loggingOutAll: boolean;
+  loginFlowActive: boolean;
+  removingProviderId?: string | null;
+  canConfigureModels: boolean;
+  canEdit: boolean;
+  canRemove: boolean;
+  canLogout: boolean;
+  onConfigureModels: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  onLogin: () => void;
+  onLogout: () => void;
 }) {
+  const { t } = useTranslation();
+  const accounts = login?.accounts ?? [];
+  function renderConfigureModelsAction(): ReactElement | null {
+    if (!login || !summary.models || summary.models.length === 0 || !canConfigureModels) {
+      return null;
+    }
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        leftIcon={Settings2}
+        onPress={onConfigureModels}
+        testID={`omp-configure-models-${summary.id}`}
+      >
+        {t("settings.providers.omp.contextWindow.configure")}
+      </Button>
+    );
+  }
+
+  function renderLoginAction(): ReactElement | null {
+    if (!login || !loginAction) {
+      return null;
+    }
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        leftIcon={loggingInProviderId === login.id ? undefined : LogIn}
+        onPress={onLogin}
+        disabled={Boolean(loggingInProviderId || loggingOutProviderId || loginFlowActive)}
+        testID={`omp-login-provider-${login.id}`}
+      >
+        {loggingInProviderId === login.id
+          ? t("settings.providers.omp.provider.starting")
+          : t(
+              loginAction === "add-account"
+                ? "settings.providers.omp.multiAccount.add"
+                : "settings.providers.omp.provider.signIn",
+            )}
+      </Button>
+    );
+  }
+
+  function renderLogoutAction(): ReactElement | null {
+    if (!login?.authenticated || !canLogout) {
+      return null;
+    }
+    return (
+      <Button
+        variant="destructive"
+        size="sm"
+        leftIcon={loggingOutAll ? undefined : LogOut}
+        onPress={onLogout}
+        disabled={Boolean(loggingInProviderId || loggingOutProviderId)}
+        testID={`omp-logout-provider-${login.id}`}
+      >
+        {loggingOutAll
+          ? t("settings.providers.omp.provider.signingOut")
+          : t(
+              accounts.length > 1
+                ? "settings.providers.omp.multiAccount.signOutAll"
+                : "settings.providers.omp.provider.signOut",
+            )}
+      </Button>
+    );
+  }
+
+  function renderEditAction(): ReactElement | null {
+    if (login || !canEdit) {
+      return null;
+    }
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        leftIcon={Pencil}
+        onPress={onEdit}
+        disabled={Boolean(removingProviderId)}
+        testID={`omp-edit-provider-${summary.id}`}
+      >
+        {t("settings.providers.omp.custom.editProvider")}
+      </Button>
+    );
+  }
+
+  function renderRemoveAction(): ReactElement | null {
+    if (login || !canRemove) {
+      return null;
+    }
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        leftIcon={removingProviderId === summary.id ? undefined : Trash2}
+        onPress={onRemove}
+        disabled={Boolean(removingProviderId)}
+        testID={`omp-remove-provider-${summary.id}`}
+      >
+        {removingProviderId === summary.id
+          ? t("settings.providers.omp.custom.removingProvider")
+          : t("settings.providers.omp.custom.removeProvider")}
+      </Button>
+    );
+  }
+
+  return (
+    <View style={sheetStyles.providerSummaryActions}>
+      {renderConfigureModelsAction()}
+      {renderLoginAction()}
+      {renderLogoutAction()}
+      {renderEditAction()}
+      {renderRemoveAction()}
+    </View>
+  );
+}
+
+function OmpProviderAccountListItem({
+  account,
+  showQuota,
+  index,
+  credentialIds,
+  loginId,
+  note,
+  editing,
+  noteDraft,
+  saving,
+  loggingOut,
+  disabled,
+  moving,
+  onEditAccountNote,
+  onChangeAccountNote,
+  onSaveAccountNote,
+  onCancelAccountNote,
+  onLogoutAccount,
+  onReorderAccounts,
+}: {
+  account: OmpProviderAccount;
+  showQuota: boolean;
+  index: number;
+  credentialIds: number[];
+  loginId?: string;
+  note?: string;
+  editing: boolean;
+  noteDraft: string;
+  saving: boolean;
+  loggingOut: boolean;
+  disabled: boolean;
+  moving: boolean;
+  onEditAccountNote?: (credentialId: number) => void;
+  onChangeAccountNote?: (value: string) => void;
+  onSaveAccountNote?: () => void;
+  onCancelAccountNote?: () => void;
+  onLogoutAccount?: (providerId: string, credentialId: number) => void;
+  onReorderAccounts?: (providerId: string, credentialIds: number[]) => void;
+}) {
+  const handleEdit = useCallback(
+    () => onEditAccountNote?.(account.credentialId),
+    [account.credentialId, onEditAccountNote],
+  );
+  const handleChangeNote = useCallback(
+    (value: string) => onChangeAccountNote?.(value),
+    [onChangeAccountNote],
+  );
+  const handleSave = useCallback(() => onSaveAccountNote?.(), [onSaveAccountNote]);
+  const handleCancel = useCallback(() => onCancelAccountNote?.(), [onCancelAccountNote]);
+  const handleLogout = useCallback(() => {
+    if (loginId) onLogoutAccount?.(loginId, account.credentialId);
+  }, [account.credentialId, loginId, onLogoutAccount]);
+  const handleMoveUp = useCallback(() => {
+    if (!loginId || index === 0) return;
+    const next = [...credentialIds];
+    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+    onReorderAccounts?.(loginId, next);
+  }, [credentialIds, index, loginId, onReorderAccounts]);
+  const handleMoveDown = useCallback(() => {
+    if (!loginId || index >= credentialIds.length - 1) return;
+    const next = [...credentialIds];
+    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+    onReorderAccounts?.(loginId, next);
+  }, [credentialIds, index, loginId, onReorderAccounts]);
+  return (
+    <OmpProviderAccountRow
+      account={account}
+      showQuota={showQuota}
+      index={index}
+      note={note}
+      editing={editing}
+      noteDraft={noteDraft}
+      saving={saving}
+      loggingOut={loggingOut}
+      disabled={disabled}
+      canMoveUp={index > 0}
+      canMoveDown={index < credentialIds.length - 1}
+      moving={moving}
+      onEdit={handleEdit}
+      onChangeNote={handleChangeNote}
+      onSave={handleSave}
+      onCancel={handleCancel}
+      onMoveUp={handleMoveUp}
+      onMoveDown={handleMoveDown}
+      onLogout={handleLogout}
+    />
+  );
+}
+
+function OmpProviderAccounts({
+  summary,
+  accounts,
+  loggingInProviderId,
+  loggingOutProviderId,
+  loggingOutCredentialId,
+  reorderingProviderId,
+  accountNotes,
+  editingAccountId,
+  accountNoteDraft,
+  savingAccountNoteId,
+  onEditAccountNote,
+  onChangeAccountNote,
+  onSaveAccountNote,
+  onCancelAccountNote,
+  onLogoutAccount,
+  onReorderAccounts,
+}: {
+  summary: OmpProviderSummary;
+  accounts: OmpProviderAccount[];
+  loggingInProviderId: string | null;
+  loggingOutProviderId: string | null;
+  loggingOutCredentialId: number | null;
+  reorderingProviderId?: string | null;
+  accountNotes: Record<string, string>;
+  editingAccountId: number | null;
+  accountNoteDraft: string;
+  savingAccountNoteId: number | null;
+  onEditAccountNote?: (credentialId: number) => void;
+  onChangeAccountNote?: (value: string) => void;
+  onSaveAccountNote?: () => void;
+  onCancelAccountNote?: () => void;
+  onLogoutAccount?: (providerId: string, credentialId: number) => void;
+  onReorderAccounts?: (providerId: string, credentialIds: number[]) => void;
+}) {
+  const { t } = useTranslation();
+  const credentialIds = useMemo(() => accounts.map((account) => account.credentialId), [accounts]);
+  if (accounts.length === 0) {
+    return null;
+  }
+  const disabled = Boolean(loggingInProviderId || loggingOutProviderId || reorderingProviderId);
+  return (
+    <View style={sheetStyles.accountList}>
+      {accounts.length > 1 ? (
+        <Text style={sheetStyles.mutedText}>
+          {t("settings.providers.omp.multiAccount.orderHint")}
+        </Text>
+      ) : null}
+      {accounts.map((account, index) => (
+        <OmpProviderAccountListItem
+          key={account.credentialId}
+          account={account}
+          showQuota={summary.id === "openai-codex"}
+          index={index}
+          credentialIds={credentialIds}
+          loginId={summary.login?.id}
+          note={accountNotes[String(account.credentialId)]}
+          editing={editingAccountId === account.credentialId}
+          noteDraft={accountNoteDraft}
+          saving={savingAccountNoteId === account.credentialId}
+          loggingOut={loggingOutCredentialId === account.credentialId}
+          disabled={disabled}
+          moving={reorderingProviderId === summary.id}
+          onEditAccountNote={onEditAccountNote}
+          onChangeAccountNote={onChangeAccountNote}
+          onSaveAccountNote={onSaveAccountNote}
+          onCancelAccountNote={onCancelAccountNote}
+          onLogoutAccount={onLogoutAccount}
+          onReorderAccounts={onReorderAccounts}
+        />
+      ))}
+    </View>
+  );
+}
+
+function OmpProviderSummaryRow({
+  summary,
+  loggingInProviderId,
+  loggingOutProviderId,
+  loggingOutCredentialId,
+  loginFlowActive,
+  removingProviderId,
+  reorderingProviderId,
+  accountNotes = EMPTY_OMP_ACCOUNT_NOTES,
+  editingAccountId = null,
+  accountNoteDraft = "",
+  savingAccountNoteId = null,
+  onConfigureModels,
+  onEdit,
+  onLogin,
+  onRemove,
+  onLogout,
+  onLogoutAccount,
+  onEditAccountNote,
+  onReorderAccounts,
+  onChangeAccountNote,
+  onSaveAccountNote,
+  onCancelAccountNote,
+}: OmpProviderSummaryRowProps) {
   const { t } = useTranslation();
   const { login } = summary;
   const accounts = login?.accounts ?? [];
@@ -628,129 +950,44 @@ function OmpProviderSummaryRow({
             {loginStatus}
           </Text>
         </View>
-        <View style={sheetStyles.providerSummaryActions}>
-          {login && summary.models && summary.models.length > 0 && onConfigureModels ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={Settings2}
-              onPress={handleConfigureModels}
-              testID={`omp-configure-models-${summary.id}`}
-            >
-              {t("settings.providers.omp.contextWindow.configure")}
-            </Button>
-          ) : null}
-          {login && loginAction ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={loggingInProviderId === login.id ? undefined : LogIn}
-              onPress={handleLogin}
-              disabled={Boolean(loggingInProviderId || loggingOutProviderId || loginFlowActive)}
-              testID={`omp-login-provider-${login.id}`}
-            >
-              {loggingInProviderId === login.id
-                ? t("settings.providers.omp.provider.starting")
-                : t(
-                    loginAction === "add-account"
-                      ? "settings.providers.omp.multiAccount.add"
-                      : "settings.providers.omp.provider.signIn",
-                  )}
-            </Button>
-          ) : null}
-          {login?.authenticated && onLogout ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              leftIcon={loggingOutAll ? undefined : LogOut}
-              onPress={handleLogout}
-              disabled={Boolean(loggingInProviderId || loggingOutProviderId)}
-              testID={`omp-logout-provider-${login.id}`}
-            >
-              {loggingOutAll
-                ? t("settings.providers.omp.provider.signingOut")
-                : t(
-                    accounts.length > 1
-                      ? "settings.providers.omp.multiAccount.signOutAll"
-                      : "settings.providers.omp.provider.signOut",
-                  )}
-            </Button>
-          ) : null}
-          {!login && onEdit ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={Pencil}
-              onPress={handleEdit}
-              disabled={Boolean(removingProviderId)}
-              testID={`omp-edit-provider-${summary.id}`}
-            >
-              {t("settings.providers.omp.custom.editProvider")}
-            </Button>
-          ) : null}
-          {!login && onRemove ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={removingProviderId === summary.id ? undefined : Trash2}
-              onPress={handleRemove}
-              disabled={Boolean(removingProviderId)}
-              testID={`omp-remove-provider-${summary.id}`}
-            >
-              {removingProviderId === summary.id
-                ? t("settings.providers.omp.custom.removingProvider")
-                : t("settings.providers.omp.custom.removeProvider")}
-            </Button>
-          ) : null}
-        </View>
+        <OmpProviderSummaryActions
+          summary={summary}
+          login={login}
+          loginAction={loginAction}
+          loggingInProviderId={loggingInProviderId}
+          loggingOutProviderId={loggingOutProviderId}
+          loggingOutAll={loggingOutAll}
+          loginFlowActive={loginFlowActive}
+          removingProviderId={removingProviderId}
+          canConfigureModels={Boolean(onConfigureModels)}
+          canEdit={Boolean(onEdit)}
+          canRemove={Boolean(onRemove)}
+          canLogout={Boolean(onLogout)}
+          onConfigureModels={handleConfigureModels}
+          onEdit={handleEdit}
+          onRemove={handleRemove}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+        />
       </View>
-      {accounts.length > 0 ? (
-        <View style={sheetStyles.accountList}>
-          {accounts.length > 1 ? (
-            <Text style={sheetStyles.mutedText}>
-              {t("settings.providers.omp.multiAccount.orderHint")}
-            </Text>
-          ) : null}
-          {accounts.map((account, index) => (
-            <OmpProviderAccountRow
-              key={account.credentialId}
-              account={account}
-              showQuota={summary.id === "openai-codex"}
-              index={index}
-              note={accountNotes[String(account.credentialId)]}
-              editing={editingAccountId === account.credentialId}
-              noteDraft={accountNoteDraft}
-              saving={savingAccountNoteId === account.credentialId}
-              loggingOut={loggingOutCredentialId === account.credentialId}
-              disabled={Boolean(
-                loggingInProviderId || loggingOutProviderId || reorderingProviderId,
-              )}
-              canMoveUp={index > 0}
-              canMoveDown={index < accounts.length - 1}
-              moving={reorderingProviderId === summary.id}
-              onEdit={() => onEditAccountNote?.(account.credentialId)}
-              onChangeNote={(value) => onChangeAccountNote?.(value)}
-              onSave={() => onSaveAccountNote?.()}
-              onCancel={() => onCancelAccountNote?.()}
-              onMoveUp={() => {
-                if (!login || index === 0) return;
-                const next = accounts.map((candidate) => candidate.credentialId);
-                [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                onReorderAccounts?.(login.id, next);
-              }}
-              onMoveDown={() => {
-                if (!login || index >= accounts.length - 1) return;
-                const next = accounts.map((candidate) => candidate.credentialId);
-                [next[index], next[index + 1]] = [next[index + 1], next[index]];
-                onReorderAccounts?.(login.id, next);
-              }}
-              onLogout={() => {
-                if (login) onLogoutAccount?.(login.id, account.credentialId);
-              }}
-            />
-          ))}
-        </View>
-      ) : null}
+      <OmpProviderAccounts
+        summary={summary}
+        accounts={accounts}
+        loggingInProviderId={loggingInProviderId}
+        loggingOutProviderId={loggingOutProviderId}
+        loggingOutCredentialId={loggingOutCredentialId}
+        reorderingProviderId={reorderingProviderId}
+        accountNotes={accountNotes}
+        editingAccountId={editingAccountId}
+        accountNoteDraft={accountNoteDraft}
+        savingAccountNoteId={savingAccountNoteId}
+        onEditAccountNote={onEditAccountNote}
+        onChangeAccountNote={onChangeAccountNote}
+        onSaveAccountNote={onSaveAccountNote}
+        onCancelAccountNote={onCancelAccountNote}
+        onLogoutAccount={onLogoutAccount}
+        onReorderAccounts={onReorderAccounts}
+      />
     </View>
   );
 }
@@ -762,6 +999,57 @@ function parseOptionalPositiveInteger(value: string, errorMessage: string): numb
     throw new Error(errorMessage);
   }
   return parsed;
+}
+
+function OmpModelContextWindowEditor({
+  providerId,
+  model,
+  draft,
+  onChange,
+}: {
+  providerId: string;
+  model: OmpManagedProviderModel;
+  draft: string;
+  onChange: (modelId: string, value: string) => void;
+}) {
+  const { t } = useTranslation();
+  const currentContext =
+    model.contextWindow !== undefined
+      ? new Intl.NumberFormat().format(model.contextWindow)
+      : t("settings.providers.omp.contextWindow.unknown");
+  const handleChange = useCallback(
+    (value: string) => onChange(model.id, value),
+    [model.id, onChange],
+  );
+  return (
+    <View style={sheetStyles.modelEditor}>
+      <View style={sheetStyles.modelInputRow}>
+        <View style={sheetStyles.modelInputMeta}>
+          <Text style={sheetStyles.modelEditorTitle}>{model.name}</Text>
+          <Text style={sheetStyles.modelInputHint}>{model.id}</Text>
+          <Text style={sheetStyles.modelInputHint}>
+            {t(
+              model.contextWindowOverride !== undefined
+                ? "settings.providers.omp.contextWindow.currentOverride"
+                : "settings.providers.omp.contextWindow.currentDefault",
+              { count: currentContext },
+            )}
+          </Text>
+        </View>
+        <AdaptiveTextInput
+          initialValue={draft}
+          resetKey={`${providerId}:${model.id}:${model.contextWindowOverride ?? "default"}`}
+          onChangeText={handleChange}
+          placeholder={model.contextWindow !== undefined ? String(model.contextWindow) : ""}
+          inputMode="numeric"
+          accessibilityLabel={t("settings.providers.omp.contextWindow.inputAccessibility", {
+            model: model.name,
+          })}
+          style={[sheetStyles.formInput, sheetStyles.contextWindowInput]}
+        />
+      </View>
+    </View>
+  );
 }
 
 function OmpModelContextWindowForm({
@@ -813,41 +1101,15 @@ function OmpModelContextWindowForm({
         {t("settings.providers.omp.contextWindow.description")}
       </Text>
       <View style={sheetStyles.modelList}>
-        {models.map((model) => {
-          const currentContext =
-            model.contextWindow !== undefined
-              ? new Intl.NumberFormat().format(model.contextWindow)
-              : t("settings.providers.omp.contextWindow.unknown");
-          return (
-            <View key={model.id} style={sheetStyles.modelEditor}>
-              <View style={sheetStyles.modelInputRow}>
-                <View style={sheetStyles.modelInputMeta}>
-                  <Text style={sheetStyles.modelEditorTitle}>{model.name}</Text>
-                  <Text style={sheetStyles.modelInputHint}>{model.id}</Text>
-                  <Text style={sheetStyles.modelInputHint}>
-                    {t(
-                      model.contextWindowOverride !== undefined
-                        ? "settings.providers.omp.contextWindow.currentOverride"
-                        : "settings.providers.omp.contextWindow.currentDefault",
-                      { count: currentContext },
-                    )}
-                  </Text>
-                </View>
-                <AdaptiveTextInput
-                  initialValue={drafts[model.id] ?? ""}
-                  resetKey={`${providerId}:${model.id}:${model.contextWindowOverride ?? "default"}`}
-                  onChangeText={(value) => updateDraft(model.id, value)}
-                  placeholder={model.contextWindow !== undefined ? String(model.contextWindow) : ""}
-                  inputMode="numeric"
-                  accessibilityLabel={t("settings.providers.omp.contextWindow.inputAccessibility", {
-                    model: model.name,
-                  })}
-                  style={[sheetStyles.formInput, sheetStyles.contextWindowInput]}
-                />
-              </View>
-            </View>
-          );
-        })}
+        {models.map((model) => (
+          <OmpModelContextWindowEditor
+            key={model.id}
+            providerId={providerId}
+            model={model}
+            draft={drafts[model.id] ?? ""}
+            onChange={updateDraft}
+          />
+        ))}
       </View>
       {error ? <Text style={sheetStyles.errorText}>{error}</Text> : null}
       <View style={sheetStyles.formActions}>
@@ -1209,15 +1471,18 @@ function OmpProviderForm({
     }
   }, [canAdd, client, configYaml, draft, editingProviderId, onSaved, t]);
   const handleAddPress = useCallback(() => void addProvider(), [addProvider]);
-  const addProviderLabel = adding
-    ? t(
-        editingProviderId
-          ? "settings.providers.omp.custom.savingProvider"
-          : "settings.providers.omp.custom.validating",
-      )
-    : editingProviderId
-      ? t("settings.providers.omp.custom.saveProvider")
-      : t("settings.providers.omp.custom.addWithCount", { count: draft.models.length });
+  let addProviderLabel = t("settings.providers.omp.custom.addWithCount", {
+    count: draft.models.length,
+  });
+  if (adding) {
+    addProviderLabel = t(
+      editingProviderId
+        ? "settings.providers.omp.custom.savingProvider"
+        : "settings.providers.omp.custom.validating",
+    );
+  } else if (editingProviderId) {
+    addProviderLabel = t("settings.providers.omp.custom.saveProvider");
+  }
 
   return (
     <View style={sheetStyles.formGroup}>
@@ -1566,6 +1831,7 @@ function OmpManagementPanel({
     void loadOmpProviderAccountNotes(AsyncStorage, serverId)
       .then((notes) => {
         if (mounted) setAccountNotes(notes);
+        return undefined;
       })
       .catch((notesError) => {
         if (mounted) {
@@ -1896,250 +2162,297 @@ function OmpManagementPanel({
     [removeProvider],
   );
 
-  if (!supported) {
-    return (
-      <SurfaceCard>
-        <Text style={sheetStyles.mutedText}>{t("settings.providers.omp.updateHost")}</Text>
-      </SurfaceCard>
-    );
-  }
-  if (loading && !management) {
-    return (
-      <View style={sheetStyles.emptyState}>
-        <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
-        <Text style={sheetStyles.mutedText}>{t("settings.providers.omp.loading")}</Text>
-      </View>
-    );
-  }
-  return (
-    <>
-      <View style={sheetStyles.managementHeader}>
-        <SectionHeader title={t("settings.providers.omp.managementTitle")} />
-        <Button
-          variant="secondary"
-          size="sm"
-          leftIcon={loading ? undefined : RotateCw}
-          onPress={handleRefreshPress}
-          disabled={loading}
-        >
-          {loading ? t("settings.providers.omp.refreshing") : t("settings.providers.omp.refresh")}
-        </Button>
-      </View>
-      {error ? <Text style={sheetStyles.errorText}>{error}</Text> : null}
-      {management?.runtimeError ? (
+  function renderSignedInProviders(): ReactElement | null {
+    if (signedInProviders.length === 0) {
+      return (
         <SurfaceCard>
-          <Text style={sheetStyles.errorText}>{management.runtimeError}</Text>
+          <Text style={sheetStyles.emptyCardText}>
+            {t("settings.providers.omp.signInDirectory.noSignedIn")}
+          </Text>
         </SurfaceCard>
-      ) : null}
-      {management ? (
-        <>
-          <SegmentedControl
-            options={tabOptions}
-            value={activeTab}
-            onValueChange={setActiveTab}
-            size="sm"
-            testID="omp-provider-tabs"
-            style={sheetStyles.managementTabs}
+      );
+    }
+    if (!signedInProvidersExpanded) {
+      return null;
+    }
+    return (
+      <View style={settingsStyles.card}>
+        {signedInProviders.map((summary) => (
+          <OmpProviderSummaryRow
+            key={summary.id}
+            summary={summary}
+            loggingInProviderId={loginProviderId}
+            loginFlowActive={loginFlow !== null}
+            loggingOutProviderId={logoutProviderId}
+            loggingOutCredentialId={logoutCredentialId}
+            accountNotes={accountNotes}
+            editingAccountId={editingAccountId}
+            accountNoteDraft={accountNoteDraft}
+            savingAccountNoteId={savingAccountNoteId}
+            onConfigureModels={handleOpenContextWindow}
+            onEditAccountNote={editAccountNote}
+            reorderingProviderId={reorderingProviderId}
+            onChangeAccountNote={setAccountNoteDraft}
+            onSaveAccountNote={saveAccountNote}
+            onCancelAccountNote={cancelAccountNote}
+            onLogin={startLogin}
+            onLogout={handleLogout}
+            onLogoutAccount={handleAccountLogout}
+            onReorderAccounts={reorderAccounts}
           />
-          {activeTab === "sign-in" ? (
-            <View style={sheetStyles.tabContent}>
-              <View style={sheetStyles.providerDirectorySection}>
-                <CollapsibleSectionHeader
-                  title={t("settings.providers.omp.signInDirectory.signedInTitle")}
-                  count={signedInProviders.length}
-                  expanded={signedInProvidersExpanded}
-                  disabled={signedInProviders.length === 0}
-                  onPress={toggleSignedInProviders}
-                  testID="omp-signed-in-providers-toggle"
-                />
-                {signedInProviders.length > 0 && signedInProvidersExpanded ? (
-                  <View style={settingsStyles.card}>
-                    {signedInProviders.map((summary) => (
-                      <OmpProviderSummaryRow
-                        key={summary.id}
-                        summary={summary}
-                        loggingInProviderId={loginProviderId}
-                        loginFlowActive={loginFlow !== null}
-                        loggingOutProviderId={logoutProviderId}
-                        loggingOutCredentialId={logoutCredentialId}
-                        accountNotes={accountNotes}
-                        editingAccountId={editingAccountId}
-                        accountNoteDraft={accountNoteDraft}
-                        savingAccountNoteId={savingAccountNoteId}
-                        onConfigureModels={handleOpenContextWindow}
-                        onEditAccountNote={editAccountNote}
-                        reorderingProviderId={reorderingProviderId}
-                        onChangeAccountNote={setAccountNoteDraft}
-                        onSaveAccountNote={saveAccountNote}
-                        onCancelAccountNote={cancelAccountNote}
-                        onLogin={startLogin}
-                        onLogout={handleLogout}
-                        onLogoutAccount={handleAccountLogout}
-                        onReorderAccounts={reorderAccounts}
-                      />
-                    ))}
-                  </View>
-                ) : signedInProviders.length === 0 ? (
-                  <SurfaceCard>
-                    <Text style={sheetStyles.emptyCardText}>
-                      {t("settings.providers.omp.signInDirectory.noSignedIn")}
-                    </Text>
-                  </SurfaceCard>
-                ) : null}
-              </View>
-              <View style={sheetStyles.providerDirectorySection}>
-                <CollapsibleSectionHeader
-                  title={t("settings.providers.omp.signInDirectory.notSignedInTitle")}
-                  count={availableSignInProviders.length}
-                  expanded={notSignedInProvidersExpanded}
-                  disabled={availableSignInProviders.length === 0}
-                  onPress={toggleNotSignedInProviders}
-                  testID="omp-not-signed-in-providers-toggle"
-                />
-                {notSignedInProvidersExpanded ? (
-                  <View style={sheetStyles.providerDirectorySearch}>
-                    <AdaptiveTextInput
-                      initialValue={providerSearchQuery}
-                      resetKey={`${serverId}:${visible}`}
-                      onChangeText={setProviderSearchQuery}
-                      placeholder={t("settings.providers.omp.signInDirectory.searchPlaceholder")}
-                      accessibilityLabel={t(
-                        "settings.providers.omp.signInDirectory.searchPlaceholder",
-                      )}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      testID="omp-provider-search"
-                      style={sheetStyles.formInput}
-                    />
-                    {displayedNotSignedInProviders.length > 0 ? (
-                      <View style={settingsStyles.card}>
-                        {displayedNotSignedInProviders.map((summary) => (
-                          <OmpProviderSummaryRow
-                            key={summary.id}
-                            summary={summary}
-                            loggingInProviderId={loginProviderId}
-                            loginFlowActive={loginFlow !== null}
-                            loggingOutProviderId={logoutProviderId}
-                            loggingOutCredentialId={logoutCredentialId}
-                            onLogin={startLogin}
-                          />
-                        ))}
-                      </View>
-                    ) : (
-                      <SurfaceCard>
-                        <Text style={sheetStyles.emptyCardText}>
-                          {t("settings.providers.omp.signInDirectory.noMatches")}
-                        </Text>
-                      </SurfaceCard>
-                    )}
-                  </View>
-                ) : null}
-              </View>
-              {loginFlow ? (
-                <View style={sheetStyles.section}>
-                  <SectionHeader
-                    title={t("settings.providers.omp.login.completeTitle", {
-                      provider: loginFlow.providerId,
-                    })}
-                  />
-                  <SurfaceCard>
-                    <View style={sheetStyles.formGroup}>
-                      {loginFlow.instructions ? (
-                        <Text style={sheetStyles.mutedText}>{loginFlow.instructions}</Text>
-                      ) : null}
-                      <Text style={sheetStyles.monoHint} selectable>
-                        {loginFlow.url}
-                      </Text>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={ExternalLink}
-                        onPress={handleOpenAuthorizationPress}
-                      >
-                        {t("settings.providers.omp.login.openAuthorization")}
-                      </Button>
-                      <AdaptiveTextInput
-                        initialValue={loginInput}
-                        resetKey={loginFlow.flowId}
-                        onChangeText={setLoginInput}
-                        placeholder={t("settings.providers.omp.login.inputPlaceholder")}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        style={sheetStyles.formInput}
-                      />
-                      <Button
-                        variant="default"
-                        size="sm"
-                        leftIcon={ExternalLink}
-                        onPress={handleFinishLoginPress}
-                        disabled={Boolean(loginProviderId)}
-                      >
-                        {loginProviderId
-                          ? t("settings.providers.omp.login.completing")
-                          : t("settings.providers.omp.login.complete")}
-                      </Button>
-                    </View>
-                  </SurfaceCard>
-                </View>
-              ) : null}
-            </View>
-          ) : (
-            <OmpCustomProvidersTab
-              providers={customProviders}
-              management={management}
-              configYaml={configYaml}
-              saving={saving}
-              removingProviderId={removingProviderId}
-              onOpenAddProvider={handleOpenAddProvider}
-              onEditProvider={handleOpenEditProvider}
-              onRemoveProvider={handleRemoveProvider}
-              onConfigYamlChange={setConfigYaml}
-              onSave={handleSavePress}
+        ))}
+      </View>
+    );
+  }
+
+  function renderAvailableProviders(): ReactElement | null {
+    if (!notSignedInProvidersExpanded) {
+      return null;
+    }
+    return (
+      <View style={sheetStyles.providerDirectorySearch}>
+        <AdaptiveTextInput
+          initialValue={providerSearchQuery}
+          resetKey={`${serverId}:${visible}`}
+          onChangeText={setProviderSearchQuery}
+          placeholder={t("settings.providers.omp.signInDirectory.searchPlaceholder")}
+          accessibilityLabel={t("settings.providers.omp.signInDirectory.searchPlaceholder")}
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="omp-provider-search"
+          style={sheetStyles.formInput}
+        />
+        {displayedNotSignedInProviders.length > 0 ? (
+          <View style={settingsStyles.card}>
+            {displayedNotSignedInProviders.map((summary) => (
+              <OmpProviderSummaryRow
+                key={summary.id}
+                summary={summary}
+                loggingInProviderId={loginProviderId}
+                loginFlowActive={loginFlow !== null}
+                loggingOutProviderId={logoutProviderId}
+                loggingOutCredentialId={logoutCredentialId}
+                onLogin={startLogin}
+              />
+            ))}
+          </View>
+        ) : (
+          <SurfaceCard>
+            <Text style={sheetStyles.emptyCardText}>
+              {t("settings.providers.omp.signInDirectory.noMatches")}
+            </Text>
+          </SurfaceCard>
+        )}
+      </View>
+    );
+  }
+
+  function renderLoginFlow(): ReactElement | null {
+    if (!loginFlow) {
+      return null;
+    }
+    return (
+      <View style={sheetStyles.section}>
+        <SectionHeader
+          title={t("settings.providers.omp.login.completeTitle", {
+            provider: loginFlow.providerId,
+          })}
+        />
+        <SurfaceCard>
+          <View style={sheetStyles.formGroup}>
+            {loginFlow.instructions ? (
+              <Text style={sheetStyles.mutedText}>{loginFlow.instructions}</Text>
+            ) : null}
+            <Text style={sheetStyles.monoHint} selectable>
+              {loginFlow.url}
+            </Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={ExternalLink}
+              onPress={handleOpenAuthorizationPress}
+            >
+              {t("settings.providers.omp.login.openAuthorization")}
+            </Button>
+            <AdaptiveTextInput
+              initialValue={loginInput}
+              resetKey={loginFlow.flowId}
+              onChangeText={setLoginInput}
+              placeholder={t("settings.providers.omp.login.inputPlaceholder")}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={sheetStyles.formInput}
             />
-          )}
-        </>
-      ) : null}
-      <AdaptiveModalSheet
-        header={providerFormHeader}
-        visible={addProviderOpen || editingProvider !== null}
-        onClose={handleCloseProviderForm}
-        testID="omp-add-provider-sheet"
-        snapPoints={ADD_PROVIDER_SNAP_POINTS}
-        contentStyle={sheetStyles.addProviderModalContent}
-      >
-        {client && (addProviderOpen || editingProvider) ? (
-          <OmpProviderForm
-            key={editingProvider?.id ?? "add"}
-            client={client}
-            initialDraft={editingProvider?.draft}
-            editingProviderId={editingProvider?.id}
-            configYaml={editingProvider ? configYaml : undefined}
-            onSaved={handleProviderSaved}
-            onCancel={handleCloseProviderForm}
-          />
-        ) : null}
-      </AdaptiveModalSheet>
-      <AdaptiveModalSheet
-        header={contextWindowFormHeader}
-        visible={contextProvider !== null}
-        onClose={handleCloseContextWindow}
-        testID="omp-model-context-window-sheet"
-        snapPoints={ADD_PROVIDER_SNAP_POINTS}
-        contentStyle={sheetStyles.addProviderModalContent}
-      >
-        {contextProvider?.models ? (
-          <OmpModelContextWindowForm
-            key={`${contextProvider.id}:${management?.configYaml ?? ""}`}
-            providerId={contextProvider.id}
-            models={contextProvider.models}
+            <Button
+              variant="default"
+              size="sm"
+              leftIcon={ExternalLink}
+              onPress={handleFinishLoginPress}
+              disabled={Boolean(loginProviderId)}
+            >
+              {loginProviderId
+                ? t("settings.providers.omp.login.completing")
+                : t("settings.providers.omp.login.complete")}
+            </Button>
+          </View>
+        </SurfaceCard>
+      </View>
+    );
+  }
+
+  function renderManagementTabs(): ReactElement | null {
+    if (!management) {
+      return null;
+    }
+    return (
+      <>
+        <SegmentedControl
+          options={tabOptions}
+          value={activeTab}
+          onValueChange={setActiveTab}
+          size="sm"
+          testID="omp-provider-tabs"
+          style={sheetStyles.managementTabs}
+        />
+        {activeTab === "sign-in" ? (
+          <View style={sheetStyles.tabContent}>
+            <View style={sheetStyles.providerDirectorySection}>
+              <CollapsibleSectionHeader
+                title={t("settings.providers.omp.signInDirectory.signedInTitle")}
+                count={signedInProviders.length}
+                expanded={signedInProvidersExpanded}
+                disabled={signedInProviders.length === 0}
+                onPress={toggleSignedInProviders}
+                testID="omp-signed-in-providers-toggle"
+              />
+              {renderSignedInProviders()}
+            </View>
+            <View style={sheetStyles.providerDirectorySection}>
+              <CollapsibleSectionHeader
+                title={t("settings.providers.omp.signInDirectory.notSignedInTitle")}
+                count={availableSignInProviders.length}
+                expanded={notSignedInProvidersExpanded}
+                disabled={availableSignInProviders.length === 0}
+                onPress={toggleNotSignedInProviders}
+                testID="omp-not-signed-in-providers-toggle"
+              />
+              {renderAvailableProviders()}
+            </View>
+            {renderLoginFlow()}
+          </View>
+        ) : (
+          <OmpCustomProvidersTab
+            providers={customProviders}
+            management={management}
+            configYaml={configYaml}
             saving={saving}
-            onSave={saveContextWindowConfig}
-            onCancel={handleCloseContextWindow}
+            removingProviderId={removingProviderId}
+            onOpenAddProvider={handleOpenAddProvider}
+            onEditProvider={handleOpenEditProvider}
+            onRemoveProvider={handleRemoveProvider}
+            onConfigYamlChange={setConfigYaml}
+            onSave={handleSavePress}
           />
+        )}
+      </>
+    );
+  }
+
+  function renderProviderForm(): ReactElement | null {
+    if (!client || (!addProviderOpen && !editingProvider)) {
+      return null;
+    }
+    return (
+      <OmpProviderForm
+        key={editingProvider?.id ?? "add"}
+        client={client}
+        initialDraft={editingProvider?.draft}
+        editingProviderId={editingProvider?.id}
+        configYaml={editingProvider ? configYaml : undefined}
+        onSaved={handleProviderSaved}
+        onCancel={handleCloseProviderForm}
+      />
+    );
+  }
+
+  function renderContextWindowForm(): ReactElement | null {
+    if (!contextProvider?.models) {
+      return null;
+    }
+    return (
+      <OmpModelContextWindowForm
+        key={`${contextProvider.id}:${management?.configYaml ?? ""}`}
+        providerId={contextProvider.id}
+        models={contextProvider.models}
+        saving={saving}
+        onSave={saveContextWindowConfig}
+        onCancel={handleCloseContextWindow}
+      />
+    );
+  }
+
+  function renderPanel(): ReactElement {
+    if (!supported) {
+      return (
+        <SurfaceCard>
+          <Text style={sheetStyles.mutedText}>{t("settings.providers.omp.updateHost")}</Text>
+        </SurfaceCard>
+      );
+    }
+    if (loading && !management) {
+      return (
+        <View style={sheetStyles.emptyState}>
+          <LoadingSpinner size="small" color={theme.colors.foregroundMuted} />
+          <Text style={sheetStyles.mutedText}>{t("settings.providers.omp.loading")}</Text>
+        </View>
+      );
+    }
+    return (
+      <>
+        <View style={sheetStyles.managementHeader}>
+          <SectionHeader title={t("settings.providers.omp.managementTitle")} />
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={loading ? undefined : RotateCw}
+            onPress={handleRefreshPress}
+            disabled={loading}
+          >
+            {loading ? t("settings.providers.omp.refreshing") : t("settings.providers.omp.refresh")}
+          </Button>
+        </View>
+        {error ? <Text style={sheetStyles.errorText}>{error}</Text> : null}
+        {management?.runtimeError ? (
+          <SurfaceCard>
+            <Text style={sheetStyles.errorText}>{management.runtimeError}</Text>
+          </SurfaceCard>
         ) : null}
-      </AdaptiveModalSheet>
-    </>
-  );
+        {renderManagementTabs()}
+        <AdaptiveModalSheet
+          header={providerFormHeader}
+          visible={addProviderOpen || editingProvider !== null}
+          onClose={handleCloseProviderForm}
+          testID="omp-add-provider-sheet"
+          snapPoints={ADD_PROVIDER_SNAP_POINTS}
+          contentStyle={sheetStyles.addProviderModalContent}
+        >
+          {renderProviderForm()}
+        </AdaptiveModalSheet>
+        <AdaptiveModalSheet
+          header={contextWindowFormHeader}
+          visible={contextProvider !== null}
+          onClose={handleCloseContextWindow}
+          testID="omp-model-context-window-sheet"
+          snapPoints={ADD_PROVIDER_SNAP_POINTS}
+          contentStyle={sheetStyles.addProviderModalContent}
+        >
+          {renderContextWindowForm()}
+        </AdaptiveModalSheet>
+      </>
+    );
+  }
+
+  return renderPanel();
 }
 export function OmpProviderConfigurationPanel({ serverId }: { serverId: string }) {
   const { refresh } = useProvidersSnapshot(serverId);

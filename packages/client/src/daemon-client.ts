@@ -3920,6 +3920,27 @@ export class DaemonClient {
     });
   }
 
+  async generateCheckoutCommitMessage(cwd: string, requestId?: string): Promise<string> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"checkout.commit_message.generate.response">(
+        {
+          requestId,
+          message: {
+            type: "checkout.commit_message.generate.request",
+            cwd,
+          },
+          timeout: 120000,
+        },
+      );
+    if (payload.error) {
+      throw new Error(payload.error.message);
+    }
+    if (!payload.message) {
+      throw new Error("Commit message generation returned an empty message");
+    }
+    return payload.message;
+  }
+
   async checkoutMerge(
     cwd: string,
     input: { baseRef?: string; strategy?: "merge" | "squash"; requireCleanTarget?: boolean },

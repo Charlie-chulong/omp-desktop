@@ -3686,6 +3686,45 @@ test("getCheckoutDiff uses one-shot subscription protocol", async () => {
   expect(unsubscribeRequest.subscriptionId).toBe(subscribeRequest.subscriptionId);
 });
 
+test("generates a commit message via checkout RPC", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.generateCheckoutCommitMessage("/tmp/project", "req-commit-message");
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toMatchObject({
+    type: "checkout.commit_message.generate.request",
+    cwd: "/tmp/project",
+    requestId: "req-commit-message",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "checkout.commit_message.generate.response",
+      payload: {
+        cwd: "/tmp/project",
+        message: "Refactor the changes panel",
+        error: null,
+        requestId: "req-commit-message",
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toBe("Refactor the changes panel");
+});
+
 test("requests branch suggestions via RPC", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

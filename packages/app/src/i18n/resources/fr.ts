@@ -953,6 +953,12 @@ export const fr: TranslationResources = {
           unpushedCommits: "Validations non poussées{{count}}",
         },
       },
+      commitComposer: {
+        placeholder: "Message du commit sur « {{branch}} »",
+        generate: "Générer le message du commit",
+        generating: "Génération du message du commit...",
+        failedGeneration: "Échec de la génération du message du commit",
+      },
       diff: {
         openChangesTab: "Ouvrir l'onglet Modifications",
         closeChangesTab: "Fermer l'onglet Modifications",
@@ -982,6 +988,8 @@ export const fr: TranslationResources = {
         seeUncommittedChanges: "Voir les modifications non validées",
         seeCommittedChanges: "Voir les modifications validées",
         emptyAgainstBase: "Aucun changement par rapport à{{baseRef}}",
+        repositoryAccessError:
+          "{{brand}} ne peut pas accéder à ce dépôt. Connectez-vous avec un compte autorisé, puis autorisez le SSO de l’organisation si nécessaire.",
         checkingRepository: "Vérification du référentiel...",
         notRepository: "Pas un dépôt git",
         diffMode: "Mode différentiel",

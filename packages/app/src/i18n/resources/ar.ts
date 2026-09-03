@@ -922,6 +922,12 @@ export const ar: TranslationResources = {
           unpushedCommits: "التزامات{{count}}غير المدفوعة",
         },
       },
+      commitComposer: {
+        placeholder: 'رسالة الالتزام على "{{branch}}"',
+        generate: "إنشاء رسالة التزام",
+        generating: "جارٍ إنشاء رسالة الالتزام...",
+        failedGeneration: "فشل إنشاء رسالة الالتزام",
+      },
       diff: {
         openChangesTab: "فتح علامة تبويب التغييرات",
         closeChangesTab: "إغلاق علامة تبويب التغييرات",
@@ -951,6 +957,8 @@ export const ar: TranslationResources = {
         seeUncommittedChanges: "عرض التغييرات غير الملتزم بها",
         seeCommittedChanges: "عرض التغييرات الملتزم بها",
         emptyAgainstBase: "لا توجد تغييرات مقابل{{baseRef}}",
+        repositoryAccessError:
+          "يتعذر على {{brand}} الوصول إلى هذا المستودع. سجّل الدخول بحساب لديه صلاحية الوصول، ثم فوّض تسجيل الدخول الموحّد للمؤسسة إذا لزم الأمر.",
         checkingRepository: "فحص المستودع...",
         notRepository: "ليس مستودع جيت",
         diffMode: "وضع الفرق",

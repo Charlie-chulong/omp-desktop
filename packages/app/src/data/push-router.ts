@@ -262,6 +262,7 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
       active: activeCheckoutDiffSubscriptions,
       client: input.client,
       desired: desiredCheckoutDiffSubscriptions,
+      queryClient: input.queryClient,
       serverId: input.serverId,
     });
     reconcileTerminalSubscriptions({
@@ -366,6 +367,7 @@ function reconcileCheckoutDiffSubscriptions(input: {
   active: Map<string, CheckoutDiffRoute>;
   client: ServerDataPushClient;
   desired: Map<string, CheckoutDiffRoute>;
+  queryClient: QueryClient;
   serverId: string;
 }): void {
   for (const [subscriptionId, current] of input.active) {
@@ -388,9 +390,25 @@ function reconcileCheckoutDiffSubscriptions(input: {
         requestId: `push-router:${input.serverId}:${subscriptionId}`,
       })
       .catch((error) => {
-        if (areCheckoutDiffRoutesEqual(input.active.get(subscriptionId), desired)) {
-          input.active.delete(subscriptionId);
+        if (!areCheckoutDiffRoutesEqual(input.active.get(subscriptionId), desired)) {
+          return;
         }
+        input.active.delete(subscriptionId);
+        setCheckoutDiffPayload({
+          activeCheckoutDiffSubscriptions: input.active,
+          queryClient: input.queryClient,
+          serverId: input.serverId,
+          subscriptionId,
+          payload: {
+            cwd: desired.cwd,
+            files: [],
+            error: {
+              code: "UNKNOWN",
+              message: error instanceof Error ? error.message : String(error),
+            },
+            requestId: `subscription:${subscriptionId}`,
+          },
+        });
         console.error("[server-data] subscribeCheckoutDiff failed", {
           serverId: input.serverId,
           cwd: desired.cwd,

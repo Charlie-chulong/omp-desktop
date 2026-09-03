@@ -954,6 +954,12 @@ export const es: TranslationResources = {
           unpushedCommits: "Confirmaciones no enviadas de{{count}}",
         },
       },
+      commitComposer: {
+        placeholder: 'Mensaje para confirmar en "{{branch}}"',
+        generate: "Generar mensaje de commit",
+        generating: "Generando mensaje de commit...",
+        failedGeneration: "No se pudo generar el mensaje de commit",
+      },
       diff: {
         openChangesTab: "Abrir la pestaña Cambios",
         closeChangesTab: "Cerrar la pestaña Cambios",
@@ -983,6 +989,8 @@ export const es: TranslationResources = {
         seeUncommittedChanges: "Ver cambios no confirmados",
         seeCommittedChanges: "Ver cambios confirmados",
         emptyAgainstBase: "Sin cambios frente a{{baseRef}}",
+        repositoryAccessError:
+          "{{brand}} no puede acceder a este repositorio. Inicia sesión con una cuenta que tenga acceso y autoriza el SSO de la organización si es necesario.",
         checkingRepository: "Comprobando repositorio...",
         notRepository: "No es un repositorio de git",
         diffMode: "modo diferencial",

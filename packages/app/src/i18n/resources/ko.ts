@@ -930,6 +930,12 @@ export const ko: TranslationResources = {
           unpushedCommits: "푸시되지 않은 커밋 {{count}}개",
         },
       },
+      commitComposer: {
+        placeholder: '"{{branch}}"에 커밋할 메시지',
+        generate: "커밋 메시지 생성",
+        generating: "커밋 메시지 생성 중...",
+        failedGeneration: "커밋 메시지를 생성하지 못했습니다",
+      },
       diff: {
         openChangesTab: "변경사항 탭 열기",
         closeChangesTab: "변경사항 탭 닫기",
@@ -959,6 +965,8 @@ export const ko: TranslationResources = {
         seeUncommittedChanges: "커밋되지 않은 변경 사항 보기",
         seeCommittedChanges: "커밋된 변경 사항 보기",
         emptyAgainstBase: "{{baseRef}} 대비 변경 사항이 없습니다",
+        repositoryAccessError:
+          "{{brand}}에서 이 저장소에 접근할 수 없습니다. 저장소 접근 권한이 있는 계정으로 로그인하고 필요한 경우 조직 SSO를 승인하세요.",
         checkingRepository: "저장소 확인 중...",
         notRepository: "Git 저장소가 아닙니다",
         diffMode: "Diff 모드",

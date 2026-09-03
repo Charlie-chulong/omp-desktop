@@ -216,11 +216,13 @@ describe("serializeReviewDraftState", () => {
 });
 
 describe("diff mode override", () => {
-  it("resolves to auto mode from the dirty state when no override exists", () => {
+  it("defaults to the current branch regardless of dirty state", () => {
     expect(resolveDiffMode({ override: undefined, hasUncommittedChanges: true })).toBe(
       "uncommitted",
     );
-    expect(resolveDiffMode({ override: undefined, hasUncommittedChanges: false })).toBe("base");
+    expect(resolveDiffMode({ override: undefined, hasUncommittedChanges: false })).toBe(
+      "uncommitted",
+    );
   });
 
   it("honors the override while isDirty matches the value at selection, across remounts", () => {
@@ -234,14 +236,14 @@ describe("diff mode override", () => {
     expect(resolveDiffMode({ override, hasUncommittedChanges: true })).toBe("base");
   });
 
-  it("masks a stale override before its expiry lands", () => {
+  it("falls back to the current branch when an override becomes stale", () => {
     const state = setDiffModeOverrideInState(emptyState(), {
       scopeKey: "review:scope",
-      override: makeOverride({ mode: "uncommitted", isDirtyAtSelection: true }),
+      override: makeOverride({ mode: "base", isDirtyAtSelection: true }),
     });
 
     const override = state.diffModeOverrides["review:scope"];
-    expect(resolveDiffMode({ override, hasUncommittedChanges: false })).toBe("base");
+    expect(resolveDiffMode({ override, hasUncommittedChanges: false })).toBe("uncommitted");
   });
 
   it("expires overrides for the checkout whose dirty state flipped, keeping the rest", () => {

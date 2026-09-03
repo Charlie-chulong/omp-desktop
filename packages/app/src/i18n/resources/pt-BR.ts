@@ -945,6 +945,12 @@ export const ptBR: TranslationResources = {
           unpushedCommits: "{{count}} commits não enviados",
         },
       },
+      commitComposer: {
+        placeholder: 'Mensagem do commit em "{{branch}}"',
+        generate: "Gerar mensagem de commit",
+        generating: "Gerando mensagem de commit...",
+        failedGeneration: "Falha ao gerar a mensagem de commit",
+      },
       diff: {
         openChangesTab: "Abrir a aba Alterações",
         closeChangesTab: "Fechar a aba Alterações",
@@ -974,6 +980,8 @@ export const ptBR: TranslationResources = {
         seeUncommittedChanges: "Ver alterações sem commit",
         seeCommittedChanges: "Ver alterações com commit",
         emptyAgainstBase: "Nenhuma alteração vs {{baseRef}}",
+        repositoryAccessError:
+          "O {{brand}} não consegue acessar este repositório. Entre com uma conta que tenha acesso e autorize o SSO da organização, se necessário.",
         checkingRepository: "Verificando repositório...",
         notRepository: "Não é um repositório git",
         diffMode: "Modo de diff",

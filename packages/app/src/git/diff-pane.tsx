@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, type ReactElement } from "react";
+import { useState, useCallback, useEffect, useMemo, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { TreeRail } from "@/components/tree-rail";
@@ -19,6 +19,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import {
   AlignJustify,
   ChevronDown,
+  ChevronLeft,
   Columns2,
   ListChevronsDownUp,
   ListChevronsUpDown,
@@ -65,6 +66,7 @@ import { buildForgeSignInCommand, getForgePresentation, type Forge } from "@/git
 import { GitHubAuthCallout } from "@/git/github-auth-callout";
 import { isGitHubHost, parseGitRemoteLocation } from "@omp-desktop/protocol/git-remote";
 import type { ForgeAuthState } from "@omp-desktop/protocol/messages";
+import { resolvePrStatusErrorMessage } from "@/git/pr-status";
 import { useCheckoutGitActionsStore } from "@/git/actions-store";
 import { useToast } from "@/contexts/toast-context";
 import { useSessionStore } from "@/stores/session-store";
@@ -84,6 +86,7 @@ import { isWeb } from "@/constants/platform";
 import { usePublishWorkingDiffAttachment, useWorkingDiff } from "@/git/use-working-diff";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { DiffTooLargeState } from "@/git/diff-too-large-state";
+import { CommitComposer } from "@/git/commit-composer";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 
 export type { GitActionId, GitAction, GitActions } from "@/git/policy";
@@ -99,7 +102,7 @@ function computeSelectedDiffStat(
   files: ParsedDiffFile[],
   isLoading: boolean,
 ): { additions: number; deletions: number } | null {
-  if (isLoading) {
+  if (isLoading || files.length === 0) {
     return null;
   }
   return files.reduce(
@@ -193,6 +196,7 @@ const ThemedListChevronsUpDown = withUnistyles(ListChevronsUpDown);
 const ThemedMaximize2 = withUnistyles(Maximize2);
 const noopStateChange = () => {};
 const ThemedChevronDown = withUnistyles(ChevronDown);
+const ThemedChevronLeft = withUnistyles(ChevronLeft);
 const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
 const DIFF_OPTIONS_WHITESPACE_ICON = (
   <ThemedPilcrow size={14} uniProps={foregroundMutedIconColorMapping} />
@@ -336,6 +340,7 @@ interface ChangesToolbarProps {
   committedDescription?: string;
   cwd: string;
   desktopTreeVisible: boolean;
+  treeToggleAvailable: boolean;
   diffMode: "uncommitted" | "base";
   gitActions: GitActions;
   hasFiles: boolean;
@@ -372,9 +377,11 @@ function ChangesToolbar(props: ChangesToolbarProps) {
     committedDescription,
     cwd,
     desktopTreeVisible,
+    treeToggleAvailable,
     diffMode,
     gitActions,
     hasFiles,
+    host,
     isMobile,
     selectedDiffStat,
     serverId,
@@ -409,7 +416,7 @@ function ChangesToolbar(props: ChangesToolbarProps) {
         ) : null}
       </View>
       <View style={styles.changesToolbarControls}>
-        {!isMobile && hasFiles ? (
+        {!isMobile && host === "panel" && treeToggleAvailable && hasFiles ? (
           <TreeRailToggle
             visible={desktopTreeVisible}
             testID="changes-toggle-tree"
@@ -732,14 +739,6 @@ function computeChangesEmptyAction(input: {
   return null;
 }
 
-function computePrErrorMessage(
-  githubFeaturesEnabled: boolean,
-  prPayloadError: { message?: string } | null | undefined,
-): string | null {
-  if (!githubFeaturesEnabled) return null;
-  return prPayloadError?.message ?? null;
-}
-
 // The precise setup step a workspace needs before its forge features work, or
 // null when nothing is actionable (authenticated, or no forge remote at all).
 type ForgeSetupAction = "install_cli" | "sign_in" | null;
@@ -994,12 +993,10 @@ function useDiffTabNavigation({
   serverId,
   workspaceId,
   cwd,
-  isMobile,
 }: {
   serverId: string;
   workspaceId?: string | null;
   cwd: string;
-  isMobile: boolean;
 }) {
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
   const openWorkspaceTabInFocusedPane = useCallback(
@@ -1014,7 +1011,7 @@ function useDiffTabNavigation({
   const changesTabOpen = false;
   const openChanges = useCallback(
     (path?: string) => {
-      if (!persistenceKey || isMobile) {
+      if (!persistenceKey) {
         return;
       }
       openWorkspaceTabInFocusedPane(
@@ -1026,14 +1023,14 @@ function useDiffTabNavigation({
         FOCUSED_PANE_PLACEMENT,
       );
     },
-    [isMobile, openWorkspaceTabInFocusedPane, persistenceKey],
+    [openWorkspaceTabInFocusedPane, persistenceKey],
   );
   const toggleChanges = useCallback(() => {
-    if (!persistenceKey || isMobile) {
+    if (!persistenceKey) {
       return;
     }
     openChanges();
-  }, [isMobile, openChanges, persistenceKey]);
+  }, [openChanges, persistenceKey]);
   const openCommit = useCallback(
     (sha: string) => {
       if (persistenceKey) {
@@ -1051,8 +1048,46 @@ function useDiffTabNavigation({
     openChanges,
     toggleChanges,
     openCommit,
-    onChangesFilePress: changesTabOpen ? openChanges : undefined,
+    onChangesFilePress: openChanges,
   };
+}
+
+function resolveCanUseSplitLayout(isMobile: boolean): boolean {
+  return isWeb && !isMobile;
+}
+
+function resolveChangesState(state: ChangesSurfaceProps["state"]) {
+  return state ?? defaultChangesState;
+}
+
+function resolveChangesStateChange(onStateChange: ChangesSurfaceProps["onStateChange"]) {
+  return onStateChange ?? noopStateChange;
+}
+
+function resolveNativeAuthConfigured(
+  forgeHost: string | null,
+  githubOAuthConfigured: boolean,
+): boolean {
+  if (!forgeHost || isGitHubHost(forgeHost)) {
+    return githubOAuthConfigured;
+  }
+  return true;
+}
+
+function resolveNativeGitHubSignIn(
+  isGitHub: boolean,
+  isSignInAction: boolean,
+  githubNativeAuthSupported: boolean,
+  nativeAuthConfigured: boolean,
+  usesNativeSignIn: boolean,
+): boolean {
+  return (
+    isGitHub &&
+    isSignInAction &&
+    githubNativeAuthSupported &&
+    nativeAuthConfigured &&
+    usesNativeSignIn
+  );
 }
 
 export function ChangesSurface({
@@ -1072,9 +1107,9 @@ export function ChangesSurface({
   const { settings: appSettings } = useAppSettings();
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
-  const canUseSplitLayout = isWeb && !isMobile;
-  const instanceState = changesState ?? defaultChangesState;
-  const updateState = onStateChange ?? noopStateChange;
+  const canUseSplitLayout = resolveCanUseSplitLayout(isMobile);
+  const instanceState = resolveChangesState(changesState);
+  const updateState = resolveChangesStateChange(onStateChange);
   const wrapLines = instanceState.wrapLines;
   const desktopTreeVisible = instanceState.treeVisible;
   const effectiveLayout = resolveDiffLayout(instanceState.layout, canUseSplitLayout);
@@ -1124,7 +1159,7 @@ export function ChangesSurface({
     toggleChanges: handleToggleChangesTab,
     openCommit: handleCommitPress,
     onChangesFilePress: workspaceOnChangesFilePress,
-  } = useDiffTabNavigation({ serverId, workspaceId, cwd, isMobile });
+  } = useDiffTabNavigation({ serverId, workspaceId, cwd });
   const changesTabOpen = resolveChangesTabOpen(host, workspaceChangesTabOpen);
   const onChangesFilePress = resolveChangesFilePress(host, workspaceOnChangesFilePress);
   const refreshSupported = useSessionStore(
@@ -1207,8 +1242,7 @@ export function ChangesSurface({
     authState,
   });
   const forgeHost = parseForgeHost(status?.remoteUrl);
-  const nativeAuthConfigured =
-    forgeHost !== null && !isGitHubHost(forgeHost) ? true : githubOAuthConfigured;
+  const nativeAuthConfigured = resolveNativeAuthConfigured(forgeHost, githubOAuthConfigured);
   const forgeSetupMessage = useMemo(
     () =>
       buildForgeSetupMessage({
@@ -1220,12 +1254,13 @@ export function ChangesSurface({
       }),
     [forgeSetupAction, forge, nativeAuthConfigured, status?.remoteUrl, t],
   );
-  const nativeGitHubSignIn =
-    forge === "github" &&
-    forgeSetupAction === "sign_in" &&
-    githubNativeAuthSupported &&
-    nativeAuthConfigured &&
-    getForgePresentation(forge).signInKind === "native";
+  const nativeGitHubSignIn = resolveNativeGitHubSignIn(
+    forge === "github",
+    forgeSetupAction === "sign_in",
+    githubNativeAuthSupported,
+    nativeAuthConfigured,
+    getForgePresentation(forge).signInKind === "native",
+  );
   const handleToggleDesktopTree = useCallback(() => {
     updateState({ ...instanceState, treeVisible: !desktopTreeVisible });
   }, [desktopTreeVisible, instanceState, updateState]);
@@ -1300,6 +1335,14 @@ export function ChangesSurface({
     [client, cwd, t, toast],
   );
   const onRevertPath = useDiscardChangesAction({ serverId, cwd, diffMode });
+  const [panelView, setPanelView] = useState<"tree" | "diff">(() =>
+    host === "panel" && focusPath ? "diff" : "tree",
+  );
+  useEffect(() => {
+    if (host === "panel" && focusPath) {
+      setPanelView("diff");
+    }
+  }, [focusPath, focusRequestId, host]);
   const [localFocusRequest, setLocalFocusRequest] = useState<{
     path: string;
     revision: number;
@@ -1313,12 +1356,22 @@ export function ChangesSurface({
     (!externalFocusRequest || localFocusRequest.revision >= externalFocusRequest.revision)
       ? localFocusRequest
       : externalFocusRequest;
-  const handleSelectTreeFile = useCallback((path: string) => {
-    setLocalFocusRequest((current) => ({
-      path,
-      revision: Math.max(Date.now(), (current?.revision ?? 0) + 1),
-    }));
-  }, []);
+  const handleSelectTreeFile = useCallback(
+    (path: string) => {
+      if (host === "explorer" && onChangesFilePress) {
+        onChangesFilePress(path);
+        return;
+      }
+      setPanelView("diff");
+      setLocalFocusRequest((current) => ({
+        path,
+        revision: Math.max(Date.now(), (current?.revision ?? 0) + 1),
+      }));
+    },
+    [host, onChangesFilePress],
+  );
+  const showTreeAsPrimaryContent = host === "explorer" || panelView === "tree";
+  const handleShowTree = useCallback(() => setPanelView("tree"), []);
   const workingMode = useMemo(
     () => ({
       kind: "working" as const,
@@ -1373,7 +1426,13 @@ export function ChangesSurface({
     [updateCollapsedFilePaths],
   );
   const diffErrorMessage = diffPayloadError?.message ?? null;
-  const prErrorMessage = computePrErrorMessage(githubFeaturesEnabled, prPayloadError);
+  const prErrorMessage = resolvePrStatusErrorMessage({
+    featuresEnabled: githubFeaturesEnabled,
+    error: prPayloadError,
+    repositoryAccessMessage: t("workspace.git.diff.repositoryAccessError", {
+      brand: getForgePresentation(forge).brandLabel,
+    }),
+  });
   const baseRefLabel = useMemo(
     () => computeBaseRefLabel(baseRef, t("workspace.git.diff.base")),
     [baseRef, t],
@@ -1416,17 +1475,33 @@ export function ChangesSurface({
       checkingRepositoryLabel={t("workspace.git.diff.checkingRepository")}
       notRepositoryLabel={t("workspace.git.diff.notRepository")}
     >
-      <DiffDocument
-        files={files}
-        collapseState={collapseState}
-        displayPreferences={sharedDisplayPreferences}
-        mode={workingMode}
-      />
+      {showTreeAsPrimaryContent ? (
+        <ChangedFilesTree
+          files={files}
+          mode={workingMode}
+          onSelectFile={handleSelectTreeFile}
+          collapsedFolderPaths={instanceState.collapsedFolderPaths}
+          onCollapsedFolderPathsChange={updateCollapsedFolderPaths}
+        />
+      ) : (
+        <DiffDocument
+          files={files}
+          collapseState={collapseState}
+          displayPreferences={sharedDisplayPreferences}
+          mode={workingMode}
+        />
+      )}
     </DiffBodyContent>
   );
   const bodyContent = (
     <ChangesTreeRail
-      shown={desktopTreeVisible && !isMobile && files.length > 0}
+      shown={
+        host === "panel" &&
+        panelView === "diff" &&
+        desktopTreeVisible &&
+        !isMobile &&
+        files.length > 0
+      }
       files={files}
       mode={workingMode}
       onSelectFile={handleSelectTreeFile}
@@ -1439,79 +1514,129 @@ export function ChangesSurface({
     </ChangesTreeRail>
   );
 
-  return (
-    <View
-      {...{
-        onContextMenu: (event: { preventDefault?: () => void }) => event.preventDefault?.(),
-      }}
-      style={styles.container}
-    >
-      {isGit ? (
-        <ChangesToolbar
-          branchName={currentBranchName}
-          allFilesCollapsed={allFilesCollapsed}
-          canUseSplitLayout={canUseSplitLayout}
-          changesTabOpen={changesTabOpen}
-          committedDescription={committedDiffDescription}
-          cwd={cwd}
-          desktopTreeVisible={desktopTreeVisible}
-          diffMode={diffMode}
-          gitActions={gitActions}
-          hasFiles={hasChanges}
-          hideWhitespace={instanceState.hideWhitespace}
-          host={host}
-          isMobile={isMobile}
-          isRefreshing={isRefreshing}
-          layout={instanceState.layout}
-          overflowToggleStyle={overflowToggleStyle}
-          refreshSupported={refreshSupported}
-          selectedDiffStat={selectedDiffStat}
+  function renderContent(): ReactElement {
+    let forgeSetupCallout: ReactElement | null = null;
+    if (forgeSetupMessage) {
+      forgeSetupCallout = nativeGitHubSignIn ? (
+        <GitHubAuthCallout
           serverId={serverId}
-          workspaceId={workspaceId}
-          wrapLines={wrapLines}
-          onCollapseAll={handleCollapseAllFiles}
-          onExpandAll={handleExpandAllFiles}
-          onRefresh={handleRefresh}
-          onSelectBase={handleSelectBase}
-          onSelectUncommitted={handleSelectUncommitted}
-          onToggleChangesTab={handleToggleChangesTab}
-          onToggleDesktopTree={handleToggleDesktopTree}
-          onToggleHideWhitespace={handleToggleHideWhitespace}
-          onToggleLayout={handleToggleLayout}
-          onToggleWrapLines={handleToggleWrapLines}
+          cwd={cwd}
+          host={forgeHost}
+          message={forgeSetupMessage}
+          onAuthenticated={handleRefresh}
         />
-      ) : null}
+      ) : (
+        <View style={styles.forgeSetupCallout} testID="forge-setup-callout">
+          <Text style={styles.forgeSetupCalloutText}>{forgeSetupMessage}</Text>
+        </View>
+      );
+    }
 
-      {forgeSetupMessage ? (
-        nativeGitHubSignIn ? (
-          <GitHubAuthCallout
+    return (
+      <View
+        {...{
+          onContextMenu: (event: { preventDefault?: () => void }) => event.preventDefault?.(),
+        }}
+        style={styles.container}
+      >
+        {isGit ? (
+          <ChangesToolbar
+            branchName={currentBranchName}
+            allFilesCollapsed={allFilesCollapsed}
+            canUseSplitLayout={canUseSplitLayout}
+            changesTabOpen={changesTabOpen}
+            committedDescription={committedDiffDescription}
+            cwd={cwd}
+            desktopTreeVisible={desktopTreeVisible}
+            treeToggleAvailable={panelView === "diff"}
+            diffMode={diffMode}
+            gitActions={gitActions}
+            hasFiles={hasChanges}
+            hideWhitespace={instanceState.hideWhitespace}
+            host={host}
+            isMobile={isMobile}
+            isRefreshing={isRefreshing}
+            layout={instanceState.layout}
+            overflowToggleStyle={overflowToggleStyle}
+            refreshSupported={refreshSupported}
+            selectedDiffStat={selectedDiffStat}
+            serverId={serverId}
+            workspaceId={workspaceId}
+            wrapLines={wrapLines}
+            onCollapseAll={handleCollapseAllFiles}
+            onExpandAll={handleExpandAllFiles}
+            onRefresh={handleRefresh}
+            onSelectBase={handleSelectBase}
+            onSelectUncommitted={handleSelectUncommitted}
+            onToggleChangesTab={handleToggleChangesTab}
+            onToggleDesktopTree={handleToggleDesktopTree}
+            onToggleHideWhitespace={handleToggleHideWhitespace}
+            onToggleLayout={handleToggleLayout}
+            onToggleWrapLines={handleToggleWrapLines}
+          />
+        ) : null}
+
+        {isGit ? (
+          <>
+            <CommitComposer
+              serverId={serverId}
+              cwd={cwd}
+              branchName={currentBranchName}
+              hasChanges={diffMode === "uncommitted" && hasChanges}
+            />
+            <View style={styles.changesSectionHeader} testID="changes-tree-header">
+              {host === "panel" && panelView === "diff" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t("common.actions.back")}: ${t(
+                    "workspace.tabs.sidePanel.changes",
+                  )}`}
+                  onPress={handleShowTree}
+                  style={styles.changesSectionBack}
+                  testID="changes-show-file-tree"
+                >
+                  <ThemedChevronLeft size={14} uniProps={foregroundMutedIconColorMapping} />
+                  <Text style={styles.changesSectionTitle}>
+                    {t("workspace.tabs.sidePanel.changes")}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.changesSectionTitle}>
+                  {t("workspace.tabs.sidePanel.changes")}
+                </Text>
+              )}
+              <View style={styles.changesCountBadge}>
+                <Text style={styles.changesCountText}>{files.length}</Text>
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        {forgeSetupCallout}
+
+        {prErrorMessage ? (
+          <View style={styles.forgeSetupCallout} testID="forge-status-error-callout">
+            <Text style={styles.forgeSetupCalloutText}>{prErrorMessage}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.diffContainer}>{bodyContent}</View>
+
+        {host === "panel" ? (
+          <CommitsSection
             serverId={serverId}
             cwd={cwd}
-            host={forgeHost}
-            message={forgeSetupMessage}
-            onAuthenticated={handleRefresh}
+            currentBranchName={currentBranchName}
+            onCommitPress={handleCommitPress}
+            collapsed={instanceState.commitsCollapsed}
+            onCollapsedChange={handleCommitsCollapsedChange}
           />
-        ) : (
-          <View style={styles.forgeSetupCallout} testID="forge-setup-callout">
-            <Text style={styles.forgeSetupCalloutText}>{forgeSetupMessage}</Text>
-          </View>
-        )
-      ) : null}
+        ) : null}
+      </View>
+    );
+  }
 
-      {prErrorMessage ? <Text style={styles.actionErrorText}>{prErrorMessage}</Text> : null}
-
-      <View style={styles.diffContainer}>{bodyContent}</View>
-
-      <CommitsSection
-        serverId={serverId}
-        cwd={cwd}
-        currentBranchName={currentBranchName}
-        onCommitPress={handleCommitPress}
-        collapsed={instanceState.commitsCollapsed}
-        onCollapsedChange={handleCommitsCollapsedChange}
-      />
-    </View>
-  );
+  return renderContent();
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -1566,12 +1691,6 @@ const styles = StyleSheet.create((theme) => ({
   diffStatusIconHidden: {
     opacity: 0,
   },
-  actionErrorText: {
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[1],
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.destructive,
-  },
   forgeSetupCallout: {
     marginHorizontal: theme.spacing[3],
     marginBottom: theme.spacing[2],
@@ -1585,6 +1704,38 @@ const styles = StyleSheet.create((theme) => ({
   forgeSetupCalloutText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
+  },
+  changesSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  changesSectionTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+  },
+  changesSectionBack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+  },
+  changesCountBadge: {
+    minWidth: 24,
+    height: 20,
+    paddingHorizontal: theme.spacing[2],
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.surface3,
+  },
+  changesCountText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   diffContainer: {
     flex: 1,

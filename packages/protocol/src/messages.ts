@@ -2217,6 +2217,12 @@ export const CheckoutCommitRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const CheckoutGenerateCommitMessageRequestSchema = z.object({
+  type: z.literal("checkout.commit_message.generate.request"),
+  cwd: z.string(),
+  requestId: z.string(),
+});
+
 export const CheckoutMergeRequestSchema = z.object({
   type: z.literal("checkout_merge_request"),
   cwd: z.string(),
@@ -3262,6 +3268,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SubscribeCheckoutDiffRequestSchema,
   UnsubscribeCheckoutDiffRequestSchema,
   CheckoutCommitRequestSchema,
+  CheckoutGenerateCommitMessageRequestSchema,
   CheckoutMergeRequestSchema,
   CheckoutMergeFromBaseRequestSchema,
   CheckoutPullRequestSchema,
@@ -3586,6 +3593,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentHistorySearch: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: z.boolean().optional(),
+        // COMPAT(checkoutCommitMessageGeneration): added in v0.5.2, remove gate after 2027-03-03.
+        checkoutCommitMessageGeneration: z.boolean().optional(),
         // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
         workspaceMultiplicity: z.boolean().optional(),
         // COMPAT(projectRemove): added in v0.1.97, drop the gate when floor >= v0.1.97.
@@ -5191,6 +5200,16 @@ export const CheckoutCommitResponseSchema = z.object({
   }),
 });
 
+export const CheckoutGenerateCommitMessageResponseSchema = z.object({
+  type: z.literal("checkout.commit_message.generate.response"),
+  payload: z.object({
+    cwd: z.string(),
+    message: z.string().nullable(),
+    error: CheckoutErrorSchema.nullable(),
+    requestId: z.string(),
+  }),
+});
+
 export const CheckoutMergeResponseSchema = z.object({
   type: z.literal("checkout_merge_response"),
   payload: z.object({
@@ -6726,6 +6745,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SubscribeCheckoutDiffResponseSchema,
   CheckoutDiffUpdateSchema,
   CheckoutCommitResponseSchema,
+  CheckoutGenerateCommitMessageResponseSchema,
   CheckoutMergeResponseSchema,
   CheckoutMergeFromBaseResponseSchema,
   CheckoutPullResponseSchema,
@@ -7164,6 +7184,12 @@ export type SubscribeCheckoutDiffResponse = z.infer<typeof SubscribeCheckoutDiff
 export type CheckoutDiffUpdate = z.infer<typeof CheckoutDiffUpdateSchema>;
 export type CheckoutCommitRequest = z.infer<typeof CheckoutCommitRequestSchema>;
 export type CheckoutCommitResponse = z.infer<typeof CheckoutCommitResponseSchema>;
+export type CheckoutGenerateCommitMessageRequest = z.infer<
+  typeof CheckoutGenerateCommitMessageRequestSchema
+>;
+export type CheckoutGenerateCommitMessageResponse = z.infer<
+  typeof CheckoutGenerateCommitMessageResponseSchema
+>;
 export type CheckoutMergeRequest = z.infer<typeof CheckoutMergeRequestSchema>;
 export type CheckoutMergeResponse = z.infer<typeof CheckoutMergeResponseSchema>;
 export type CheckoutMergeFromBaseRequest = z.infer<typeof CheckoutMergeFromBaseRequestSchema>;

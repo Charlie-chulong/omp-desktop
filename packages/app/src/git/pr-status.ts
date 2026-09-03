@@ -19,3 +19,18 @@ export function normalizeCheckoutPrStatusPayload(
       (payload.githubFeaturesEnabled ? "authenticated" : "unauthenticated"),
   };
 }
+
+export function resolvePrStatusErrorMessage(input: {
+  featuresEnabled: boolean;
+  error: { message?: string } | null | undefined;
+  repositoryAccessMessage: string;
+}): string | null {
+  if (!input.featuresEnabled) {
+    return null;
+  }
+  const message = input.error?.message?.trim();
+  if (!message) {
+    return null;
+  }
+  return /^not found$/i.test(message) ? input.repositoryAccessMessage : message;
+}

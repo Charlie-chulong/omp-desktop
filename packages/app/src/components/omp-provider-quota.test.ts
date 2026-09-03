@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { resolveOmpRemainingQuotaPct, shouldShowOmpFiveHourQuota } from "./omp-provider-quota";
+import {
+  formatOmpQuotaResetTime,
+  resolveOmpRemainingQuotaPct,
+  shouldShowOmpFiveHourQuota,
+} from "./omp-provider-quota";
 
 describe("OMP provider quota percentage", () => {
   test.each([
@@ -17,6 +21,20 @@ describe("OMP provider quota percentage", () => {
     expect(resolveOmpRemainingQuotaPct(null)).toBeNull();
     expect(resolveOmpRemainingQuotaPct(undefined)).toBeNull();
     expect(resolveOmpRemainingQuotaPct(Number.NaN)).toBeNull();
+  });
+});
+
+describe("OMP provider quota reset time", () => {
+  test("includes the localized calendar date and time", () => {
+    const result = formatOmpQuotaResetTime("2026-06-15T11:03:00.000Z", "zh-CN");
+
+    expect(result).toContain("2026");
+    expect(result).toContain("6");
+    expect(result).toContain("15");
+  });
+
+  test.each([null, undefined, "", "not-a-date"])("omits invalid reset time %s", (value) => {
+    expect(formatOmpQuotaResetTime(value, "zh-CN")).toBeNull();
   });
 });
 

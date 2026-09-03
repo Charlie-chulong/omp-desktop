@@ -2345,6 +2345,8 @@ export class Session {
         return this.checkoutSession.handleCheckoutRenameBranchRequest(msg);
       case "checkout_commit_request":
         return this.checkoutSession.handleCheckoutCommitRequest(msg);
+      case "checkout.commit_message.generate.request":
+        return this.checkoutSession.handleGenerateCommitMessageRequest(msg);
       case "checkout_merge_request":
         return this.checkoutSession.handleCheckoutMergeRequest(msg);
       case "checkout_merge_from_base_request":
@@ -2434,6 +2436,13 @@ export class Session {
         return this.handleWorkspaceCreateRequest(msg);
       case "workspace.clear_attention.request":
         return this.handleWorkspaceClearAttentionRequest(msg);
+      default:
+        return this.dispatchWorkspaceMetadataMessage(msg);
+    }
+  }
+
+  private dispatchWorkspaceMetadataMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
       case "workspace.title.set.request":
         return this.handleWorkspaceTitleSetRequest(msg.workspaceId, msg.title, msg.requestId);
       case "workspace.pin.set.request":
@@ -2523,6 +2532,13 @@ export class Session {
         return this.providerCatalogSession.handleRefreshProvidersSnapshotRequest(msg);
       case "provider_diagnostic_request":
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
+      default:
+        return this.dispatchOmpProviderMessage(msg);
+    }
+  }
+
+  private dispatchOmpProviderMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
       case "omp.provider.management.get.request":
         return this.providerCatalogSession.handleOmpProviderManagementGetRequest(msg);
       case "omp.provider.management.save.request":
@@ -4287,17 +4303,16 @@ export class Session {
       });
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
+      let errorMessage: string | null = null;
+      if (code !== "ENOENT" && code !== "ENOTDIR") {
+        errorMessage = error instanceof Error ? error.message : String(error);
+      }
       this.emit({
         type: "directory_exists_response",
         payload: {
           cwd,
           exists: false,
-          error:
-            code === "ENOENT" || code === "ENOTDIR"
-              ? null
-              : error instanceof Error
-                ? error.message
-                : String(error),
+          error: errorMessage,
           requestId: msg.requestId,
         },
       });
@@ -6384,12 +6399,12 @@ export class Session {
     } catch (error) {
       const unauthenticated =
         error instanceof GitHubAuthenticationError || error instanceof GitHubHostNotConfiguredError;
-      const message =
-        error instanceof GitHubAuthenticationError
-          ? error.stderr
-          : error instanceof Error
-            ? error.message
-            : "GitHub search failed";
+      let message = "GitHub search failed";
+      if (error instanceof GitHubAuthenticationError) {
+        message = error.stderr;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
       const payload: WorkspaceGithubSearchRepositoriesResponsePayload = unauthenticated
         ? {
             status: "unauthenticated",

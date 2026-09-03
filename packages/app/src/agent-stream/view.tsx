@@ -79,6 +79,7 @@ import {
   type InFlightTurnForkHandler,
   type TurnContentStrategy,
 } from "./turn-footer";
+import { useOutputTokenSpeed } from "./token-output-speed";
 import { resolveBottomOverlayTailInset } from "./bottom-overlay-inset";
 import { layoutStream, type StreamLayoutItem } from "./layout";
 import {
@@ -301,6 +302,21 @@ function resolveBottomOverlayControlOffset(clearance: number | undefined): numbe
   return Math.max(16, clearance ?? 0);
 }
 
+function resolveHistoryPagination(
+  override: AgentStreamViewProps["historyPagination"],
+  fallback: ReturnType<typeof useLoadOlderAgentHistory>,
+) {
+  if (!override) {
+    return fallback;
+  }
+  return {
+    isLoadingOlder: override.isLoadingOlder,
+    hasOlder: override.hasOlder,
+    progressKey: override.progressKey,
+    loadOlder: override.onLoadOlder,
+  };
+}
+
 const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamViewProps>(
   function AgentStreamView(
     {
@@ -354,6 +370,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
     // Get serverId (fallback to agent's serverId if not provided)
     const resolvedServerId = serverId ?? context.serverId ?? "";
+    const outputTokens = useSessionStore(
+      (state) =>
+        state.sessions[resolvedServerId]?.agents?.get(agentId)?.lastUsage?.outputTokens ?? null,
+    );
 
     const client = useSessionStore((state) => state.sessions[resolvedServerId]?.client ?? null);
     const pendingPermissionItems = useMemo(
@@ -404,14 +424,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       hasOlder: remoteHasOlder,
       progressKey: remoteProgressKey,
       loadOlder: loadRemoteOlder,
-    } = historyPagination
-      ? {
-          isLoadingOlder: historyPagination.isLoadingOlder,
-          hasOlder: historyPagination.hasOlder,
-          progressKey: historyPagination.progressKey,
-          loadOlder: historyPagination.onLoadOlder,
-        }
-      : agentHistoryPagination;
+    } = resolveHistoryPagination(historyPagination, agentHistoryPagination);
     // Keep entry/exit animations off on Android due to RN dispatchDraw crashes
     // tracked in react-native-reanimated#8422.
     const shouldDisableEntryExitAnimations = Platform.OS === "android";
@@ -527,6 +540,11 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const effectiveStreamHead = useRetainedValue(streamHead, isActive);
     const effectiveTurnPresentation = useRetainedValue(turnPresentation, isActive);
     const isTurnActive = effectiveTurnPresentation.isActive;
+    const outputTokenSpeed = useOutputTokenSpeed(
+      context.provider,
+      isTurnActive ? "running" : "idle",
+      outputTokens,
+    );
     // Keep retained history outside the 48ms live-head flush path.
     const preparedToolCallHistory = useMemo(
       () => prepareToolCallHistory(toolCallDetailLevel, effectiveStreamItems),
@@ -1047,6 +1065,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           <TurnFooter
             isRunning={isTurnActive}
             inFlightTurnStartedAt={baseRenderModel.turnTiming.runningStartedAt}
+            outputTokenSpeed={outputTokenSpeed}
             host={bottomTurnFooterHost}
             strategy={streamRenderStrategy}
             supportsTimelineCursor={supportsAgentForkContextCursor}
@@ -1060,6 +1079,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         readOnly,
         isTurnActive,
         baseRenderModel.turnTiming.runningStartedAt,
+        outputTokenSpeed,
         bottomTurnFooterHost,
         streamRenderStrategy,
         supportsAgentForkContextCursor,

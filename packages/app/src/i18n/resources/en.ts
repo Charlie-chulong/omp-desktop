@@ -943,6 +943,12 @@ export const en = {
           unpushedCommits: "{{count}} unpushed commits",
         },
       },
+      commitComposer: {
+        placeholder: 'Message to commit on "{{branch}}"',
+        generate: "Generate commit message",
+        generating: "Generating commit message...",
+        failedGeneration: "Failed to generate a commit message",
+      },
       diff: {
         openChangesTab: "Open Changes tab",
         closeChangesTab: "Close Changes tab",
@@ -972,6 +978,8 @@ export const en = {
         seeUncommittedChanges: "See uncommitted changes",
         seeCommittedChanges: "See committed changes",
         emptyAgainstBase: "No changes vs {{baseRef}}",
+        repositoryAccessError:
+          "{{brand}} cannot access this repository. Sign in with an account that has repository access, then authorize organization SSO if required.",
         checkingRepository: "Checking repository...",
         notRepository: "Not a git repository",
         diffMode: "Diff mode",

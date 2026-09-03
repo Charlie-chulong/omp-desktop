@@ -26,7 +26,6 @@ import {
   RotateCw,
   Maximize2,
   Minimize2,
-  Plus,
   X,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -52,13 +51,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
-import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
 import { retainWorkspaceTabMeasuredWidth } from "@/screens/workspace/workspace-tab-layout";
 import {
@@ -81,16 +78,12 @@ import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
-import { WorkspaceNewTabMenuContent } from "@/screens/workspace/workspace-new-tab-menu";
-import { SIDE_PANEL_PANE_ID } from "@/stores/workspace-layout-actions";
 
 const DROPDOWN_WIDTH = 220;
-const DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH = 36;
 // Chip geometry. `layoutMetrics` measures tabs from these same numbers, so a chip that changes
 // shape without changing them mis-measures and drops the row into the overflow-scroll fallback at
 // the wrong width. Keep them together.
-// Tabs and the adjacent New Tab trigger are one control family. Keep their outer box and corner
-// token identical; only their horizontal sizing differs (content-width chip versus square icon).
+// Tab chips use content-width sizing within the shared control-height geometry.
 const TAB_CHIP_HORIZONTAL_PADDING = 8;
 const TAB_CHIP_GAP = 4;
 const TAB_ROW_PADDING_HORIZONTAL = 4;
@@ -169,7 +162,6 @@ const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
 const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
-const ThemedPlus = withUnistyles(Plus);
 const ThemedMaximize2 = withUnistyles(Maximize2);
 const ThemedMinimize2 = withUnistyles(Minimize2);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -217,53 +209,6 @@ function TabLabelMeasurement({
     >
       {label}
     </Text>
-  );
-}
-
-interface WorkspaceNewTabButtonProps {
-  serverId: string;
-  paneId?: string;
-  shortcutKeys: ShortcutKey[][] | null;
-  onLayout: (event: LayoutChangeEvent) => void;
-}
-
-function WorkspaceNewTabButton({
-  serverId,
-  paneId,
-  shortcutKeys,
-  onLayout,
-}: WorkspaceNewTabButtonProps) {
-  const { t } = useTranslation();
-  const tooltipText = t("workspace.tabs.actions.newTab");
-
-  return (
-    <View style={styles.inlineAddButton} onLayout={onLayout}>
-      <DropdownMenu>
-        <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-          <TooltipTrigger asChild triggerRefProp="triggerRef">
-            <DropdownMenuTrigger
-              testID="workspace-new-tab-button"
-              accessibilityRole="button"
-              accessibilityLabel={tooltipText}
-              style={inlineAddActionButtonStyle}
-            >
-              <ThemedPlus size={14} uniProps={extraMutedColorMapping} />
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="center" offset={8}>
-            <View style={styles.newTabTooltipRow}>
-              <Text style={styles.newTabTooltipText}>{tooltipText}</Text>
-              {shortcutKeys ? <Shortcut chord={shortcutKeys} /> : null}
-            </View>
-          </TooltipContent>
-        </Tooltip>
-        <WorkspaceNewTabMenuContent
-          serverId={serverId}
-          purpose={paneId === SIDE_PANEL_PANE_ID ? "supporting" : "primary"}
-          paneId={paneId}
-        />
-      </DropdownMenu>
-    </View>
   );
 }
 
@@ -978,11 +923,9 @@ function ResolvedWorkspaceDesktopTabsRow({
   onExitFocusMode,
 }: ResolvedWorkspaceDesktopTabsRowProps) {
   const { t } = useTranslation();
-  const newTabKeys = useShortcutKeys("workspace-tab-new");
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
-  const [inlineAddButtonWidth, setInlineAddButtonWidth] = useState<number>(0);
   const [paneMaximizeButtonWidth, setPaneMaximizeButtonWidth] = useState<number>(0);
-  const [exitFocusModeWidth, setExitFocusModeWidth] = useState<number>(0);
+  const [, setExitFocusModeWidth] = useState<number>(0);
   const tabScrollOffset = useSharedValue(0);
   const tabScrollViewportWidth = useSharedValue(0);
   const tabScrollContentWidth = useSharedValue(0);
@@ -994,10 +937,6 @@ function ResolvedWorkspaceDesktopTabsRow({
 
   const handleTabsContainerLayout = useCallback((event: LayoutChangeEvent) => {
     updateMeasuredWidth(setTabsContainerWidth, event);
-  }, []);
-
-  const handleInlineAddButtonLayout = useCallback((event: LayoutChangeEvent) => {
-    updateMeasuredWidth(setInlineAddButtonWidth, event);
   }, []);
 
   const handleExitFocusModeLayout = useCallback((event: LayoutChangeEvent) => {
@@ -1041,10 +980,9 @@ function ResolvedWorkspaceDesktopTabsRow({
   const layoutMetrics = useMemo(
     () => ({
       rowHorizontalInset: 0,
-      actionsReservedWidth: Math.max(
-        0,
-        (inlineAddButtonWidth || DEFAULT_INLINE_ADD_BUTTON_RESERVED_WIDTH) +
-          resolvePaneMaximizeReservedWidth(showPaneMaximizeAction, paneMaximizeButtonWidth),
+      actionsReservedWidth: resolvePaneMaximizeReservedWidth(
+        showPaneMaximizeAction,
+        paneMaximizeButtonWidth,
       ),
       rowPaddingHorizontal: TAB_ROW_PADDING_HORIZONTAL,
       tabGap: TAB_CHIP_GAP,
@@ -1055,13 +993,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       tabHorizontalPadding: TAB_CHIP_HORIZONTAL_PADDING,
       closeButtonWidth: TAB_CLOSE_BUTTON_RESERVED_WIDTH,
     }),
-    [
-      exitFocusModeWidth,
-      focusModeEnabled,
-      inlineAddButtonWidth,
-      paneMaximizeButtonWidth,
-      showPaneMaximizeAction,
-    ],
+    [paneMaximizeButtonWidth, showPaneMaximizeAction],
   );
 
   const fallbackTabLabels = useMemo(
@@ -1362,14 +1294,6 @@ function ResolvedWorkspaceDesktopTabsRow({
             getItemData={getTabDragData}
             renderItem={renderTab}
           />
-          {!layout.requiresHorizontalScrollFallback ? (
-            <WorkspaceNewTabButton
-              serverId={normalizedServerId}
-              paneId={paneId}
-              shortcutKeys={newTabKeys}
-              onLayout={handleInlineAddButtonLayout}
-            />
-          ) : null}
         </Animated.ScrollView>
         <WorkspaceTabScrollShades
           visible={layout.requiresHorizontalScrollFallback}
@@ -1377,14 +1301,6 @@ function ResolvedWorkspaceDesktopTabsRow({
           rightStyle={rightTabScrollShadeStyle}
         />
       </View>
-      {layout.requiresHorizontalScrollFallback ? (
-        <WorkspaceNewTabButton
-          serverId={normalizedServerId}
-          paneId={paneId}
-          shortcutKeys={newTabKeys}
-          onLayout={handleInlineAddButtonLayout}
-        />
-      ) : null}
       <WorkspacePaneMaximizeButton
         visible={showPaneMaximizeAction}
         maximized={paneMaximized}

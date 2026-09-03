@@ -276,6 +276,13 @@ describe("server data push router", () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    expect(queryClient.getQueryData(queryKey)).toEqual({
+      cwd,
+      files: [],
+      error: { code: "UNKNOWN", message: "subscribe failed" },
+      requestId: `subscription:${subscriptionId}`,
+    });
+
     queryClient.setQueryData(["unrelated"], "value");
 
     expect(fake.subscribeCheckoutDiffCalls).toHaveLength(1);

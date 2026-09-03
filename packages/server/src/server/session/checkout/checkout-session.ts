@@ -701,6 +701,28 @@ export class CheckoutSession {
     }
   }
 
+  async handleGenerateCommitMessageRequest(
+    msg: Extract<SessionInboundMessage, { type: "checkout.commit_message.generate.request" }>,
+  ): Promise<void> {
+    const { cwd, requestId } = msg;
+
+    try {
+      const message = (await this.gitMetadataGenerator.generateCommitMessage(cwd)).trim();
+      if (!message) {
+        throw new Error("Commit message generation returned an empty message");
+      }
+      this.host.emit({
+        type: "checkout.commit_message.generate.response",
+        payload: { cwd, message, error: null, requestId },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "checkout.commit_message.generate.response",
+        payload: { cwd, message: null, error: toCheckoutError(error), requestId },
+      });
+    }
+  }
+
   async handleCheckoutCommitRequest(
     msg: Extract<SessionInboundMessage, { type: "checkout_commit_request" }>,
   ): Promise<void> {

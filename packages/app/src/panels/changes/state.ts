@@ -22,7 +22,7 @@ export const defaultChangesState: ChangesState = {
   layout: "unified",
   wrapLines: false,
   hideWhitespace: false,
-  treeVisible: false,
+  treeVisible: true,
   collapsedFilePaths: [],
   collapsedFolderPaths: [],
   commitsCollapsed: true,
