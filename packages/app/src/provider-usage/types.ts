@@ -18,7 +18,10 @@ export type {
 };
 
 export type ProviderUsageBalanceUnit = ProviderUsageBalance["unit"];
-export type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
+export type ProviderUsageListPayload = Omit<
+  ProviderUsageListResponseMessage["payload"],
+  "requestId"
+>;
 
 export type ProviderUsageView =
   | { kind: "loading" }
