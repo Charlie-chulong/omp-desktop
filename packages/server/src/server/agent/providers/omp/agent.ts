@@ -3504,7 +3504,9 @@ export class OmpAgentClient implements AgentClient {
     }
     await setOmpHostTools(runtimeSession, catalog);
   }
-  private readOAuthAccounts(launchEnv?: Record<string, string>): StoredOmpOAuthAccount[] {
+  private async readOAuthAccounts(
+    launchEnv?: Record<string, string>,
+  ): Promise<StoredOmpOAuthAccount[]> {
     if (this.oauthAccountsOverride !== undefined) {
       return [...this.oauthAccountsOverride];
     }
@@ -3515,7 +3517,17 @@ export class OmpAgentClient implements AgentClient {
         ...launchEnv,
       };
       const { agentDb } = resolveOmpDiagnosticPaths(env);
-      return readStoredOmpOAuthAccounts(agentDb);
+      const accounts = readStoredOmpOAuthAccounts(agentDb);
+      const accountOrder = await readOmpProviderAccountOrder(agentDb);
+      const accountsByProvider = new Map<string, StoredOmpOAuthAccount[]>();
+      for (const account of accounts) {
+        const providerAccounts = accountsByProvider.get(account.provider) ?? [];
+        providerAccounts.push(account);
+        accountsByProvider.set(account.provider, providerAccounts);
+      }
+      return [...accountsByProvider].flatMap(([providerId, providerAccounts]) =>
+        sortStoredOmpOAuthAccounts(providerAccounts, accountOrder[providerId] ?? []),
+      );
     } catch (error) {
       this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
       return [];
@@ -3658,7 +3670,7 @@ export class OmpAgentClient implements AgentClient {
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const initialState = await runtimeSession.getState();
-      const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
+      const oauthAccounts = await this.readOAuthAccounts(launchContext?.env);
       const automaticCredentialId = await this.resolveAutomaticCredentialId(
         config,
         initialState,
@@ -3718,7 +3730,7 @@ export class OmpAgentClient implements AgentClient {
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const initialState = await runtimeSession.getState();
-      const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
+      const oauthAccounts = await this.readOAuthAccounts(launchContext?.env);
       const automaticCredentialResolver = (state: OmpSessionState) =>
         Promise.resolve(
           this.readAutomaticCredentialId(
@@ -3803,7 +3815,7 @@ export class OmpAgentClient implements AgentClient {
   }
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
-    const oauthAccounts = this.readOAuthAccounts();
+    const oauthAccounts = await this.readOAuthAccounts();
     const fallbackFeatures = createOmpFeatures(config, oauthAccounts);
     const launchMode = this.resolveLaunchMode(config.modeId);
     let runtimeSession: OmpRuntimeSession | undefined;
