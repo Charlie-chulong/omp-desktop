@@ -1059,12 +1059,79 @@ function parseOmpModelsDocument(configYaml: string) {
   return { document, providers: isRecord(providers) ? providers : null };
 }
 
+const YAML_TO_STRING_OPTIONS = {
+  collectionStyle: "block",
+  indent: 2,
+  lineWidth: 0,
+} as const;
+
 export function formatOmpModelsYaml(configYaml: string): string {
-  return parseOmpYamlDocument(configYaml).toString({
-    collectionStyle: "block",
-    indent: 2,
-    lineWidth: 0,
+  return parseOmpYamlDocument(configYaml).toString(YAML_TO_STRING_OPTIONS);
+}
+
+/**
+ * OMP `--mode rpc` / `rpc-ui` exits before the ready frame when no authenticated
+ * or keyless model exists. Desktop still needs that process to list OAuth login
+ * providers. This keyless stub lets RPC boot; management UI and catalogs hide it.
+ */
+export const OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID = "omp-desktop-bootstrap";
+
+const OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER = {
+  baseUrl: "http://127.0.0.1:9/v1",
+  api: "openai-completions",
+  auth: "none",
+  models: [{ id: "bootstrap" }],
+} as const;
+
+function isOmpRpcMissingModelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no models available/i.test(message);
+}
+
+export function mergeOmpDesktopRpcBootstrapIntoModelsYaml(configYaml: string): string {
+  const document = parseOmpYamlDocument(configYaml.trim() === "" ? "providers: {}\n" : configYaml);
+  const providersNode = document.get("providers");
+  if (providersNode == null) {
+    document.set("providers", {});
+  } else if (!isMap(providersNode)) {
+    throw new Error("OMP models.yml providers must be an object");
+  }
+  if (document.hasIn(["providers", OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID])) {
+    return document.toString(YAML_TO_STRING_OPTIONS);
+  }
+  document.setIn(["providers", OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID], {
+    baseUrl: OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER.baseUrl,
+    api: OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER.api,
+    auth: OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER.auth,
+    models: [{ id: "bootstrap" }],
   });
+  return document.toString(YAML_TO_STRING_OPTIONS);
+}
+
+export function stripOmpDesktopRpcBootstrapFromModelsYaml(configYaml: string): string {
+  try {
+    const { document, providers } = parseOmpModelsDocument(configYaml);
+    if (!providers || !(OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID in providers)) {
+      return configYaml;
+    }
+    document.deleteIn(["providers", OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID]);
+    const remaining = document.toJS() as unknown;
+    const remainingProviders = isRecord(remaining) ? remaining.providers : undefined;
+    if (!isRecord(remainingProviders) || Object.keys(remainingProviders).length === 0) {
+      return "providers: {}\n";
+    }
+    return formatOmpModelsYaml(document.toString());
+  } catch {
+    return configYaml;
+  }
+}
+
+function isOmpDesktopRpcBootstrapModel(model: AgentModelDefinition): boolean {
+  const metadata = model.metadata;
+  if (isRecord(metadata) && metadata.provider === OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID) {
+    return true;
+  }
+  return model.id.startsWith(`${OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID}/`);
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -1705,6 +1772,7 @@ export class OmpAgentSession implements AgentSession {
     };
   }
 
+  // eslint-disable-next-line complexity
   async setFeature(featureId: string, value: unknown): Promise<void> {
     if (featureId === OMP_FAST_MODE_FEATURE_ID) {
       if (typeof value !== "boolean") {
@@ -1896,8 +1964,12 @@ export class OmpAgentSession implements AgentSession {
       this.clearGoalConfiguration();
       return;
     }
-    const command =
-      action === "start" ? `/goal ${objective}` : action === "pause" ? "/goal pause" : "/goal drop";
+    let command = "/goal drop";
+    if (action === "start") {
+      command = `/goal ${objective}`;
+    } else if (action === "pause") {
+      command = "/goal pause";
+    }
     if (this.activeTurnId) {
       this.runtimeSession.followUp(command);
     } else {
@@ -3508,17 +3580,51 @@ export class OmpAgentClient implements AgentClient {
     return session;
   }
 
+  private async ensureRpcBootstrapModel(): Promise<boolean> {
+    const configPath = this.resolveModelsConfigPath();
+    let raw: string | undefined;
+    try {
+      raw = await fs.readFile(configPath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (raw !== undefined) {
+      try {
+        const { providers } = parseOmpModelsDocument(raw);
+        if (providers && Object.hasOwn(providers, OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID)) {
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+    await writeFileAtomic(configPath, mergeOmpDesktopRpcBootstrapIntoModelsYaml(raw ?? ""));
+    return true;
+  }
+
+  private async startOmpRuntimeSession(input: OmpStartSessionInput): Promise<OmpRuntimeSession> {
+    try {
+      return await this.runtime.startSession(input);
+    } catch (error) {
+      if (!isOmpRpcMissingModelError(error)) throw error;
+      const injected = await this.ensureRpcBootstrapModel();
+      if (!injected) throw error;
+      this.logger.debug({}, "Retrying OMP RPC after adding a keyless bootstrap model");
+      return await this.runtime.startSession(input);
+    }
+  }
+
   private async startConversationRuntimeSession(
     input: OmpStartSessionInput,
   ): Promise<OmpRuntimeSession> {
     try {
-      return await this.runtime.startSession(input);
+      return await this.startOmpRuntimeSession(input);
     } catch (error) {
       if (!(error instanceof OmpReadyTimeoutError)) throw error;
       this.logger.warn({ err: error }, "OMP conversation startup timed out; retrying once");
     }
     try {
-      return await this.runtime.startSession(input);
+      return await this.startOmpRuntimeSession(input);
     } catch (error) {
       if (!(error instanceof OmpReadyTimeoutError)) throw error;
       throw new Error(
@@ -3664,7 +3770,7 @@ export class OmpAgentClient implements AgentClient {
     context?.signal.addEventListener("abort", handleAbort, { once: true });
     try {
       await runProviderRefreshActivity(context, "runtime.start", async () => {
-        runtimeSession = await this.runtime.startSession({
+        runtimeSession = await this.startOmpRuntimeSession({
           cwd: options.scope === "global" ? homedir() : options.cwd,
           protocolMode: "rpc-ui",
           modeId: launchMode.modeId,
@@ -3680,7 +3786,9 @@ export class OmpAgentClient implements AgentClient {
           await runProviderRefreshActivity(context, "get_available_models", () =>
             catalogSession.getAvailableModels(null),
           )
-        ).map((model) => mapOmpModel(model, this.provider)),
+        )
+          .map((model) => mapOmpModel(model, this.provider))
+          .filter((model) => !isOmpDesktopRpcBootstrapModel(model)),
       );
       return { models, modes: [...OMP_MODES] };
     } finally {
@@ -3695,7 +3803,7 @@ export class OmpAgentClient implements AgentClient {
     const launchMode = this.resolveLaunchMode(config.modeId);
     let runtimeSession: OmpRuntimeSession | undefined;
     try {
-      runtimeSession = await this.runtime.startSession({
+      runtimeSession = await this.startOmpRuntimeSession({
         cwd: config.cwd,
         protocolMode: "rpc-ui",
         model: config.model,
@@ -3770,13 +3878,15 @@ export class OmpAgentClient implements AgentClient {
       return false;
     }
   }
+  // eslint-disable-next-line complexity
   async getOmpProviderManagement(): Promise<OmpProviderManagement> {
     const configPath = this.resolveModelsConfigPath();
-    const configYaml = await fs
+    let configYaml = await fs
       .readFile(configPath, "utf8")
       .catch((error: NodeJS.ErrnoException) =>
         error.code === "ENOENT" ? "providers: {}\n" : Promise.reject(error),
       );
+    let displayConfigYaml = stripOmpDesktopRpcBootstrapFromModelsYaml(configYaml);
     const providerModels = new Map<
       string,
       Array<{
@@ -3789,7 +3899,7 @@ export class OmpAgentClient implements AgentClient {
     const customProviderIds = new Set<string>();
     const contextWindowOverrides = new Map<string, Map<string, number>>();
     try {
-      const configuredProviders = parseOmpModelsDocument(configYaml).providers;
+      const configuredProviders = parseOmpModelsDocument(displayConfigYaml).providers;
       for (const [providerId, configuredProvider] of Object.entries(configuredProviders ?? {})) {
         providerModels.set(providerId, []);
         if (!isRecord(configuredProvider)) continue;
@@ -3822,12 +3932,18 @@ export class OmpAgentClient implements AgentClient {
     let runtimeSession: OmpRuntimeSession | undefined;
     try {
       const launchMode = this.resolveLaunchMode(undefined);
-      runtimeSession = await this.runtime.startSession({
+      runtimeSession = await this.startOmpRuntimeSession({
         cwd: homedir(),
         protocolMode: "rpc-ui",
         modeId: launchMode.modeId,
         extraArgs: launchMode.extraArgs,
       });
+      configYaml = await fs
+        .readFile(configPath, "utf8")
+        .catch((error: NodeJS.ErrnoException) =>
+          error.code === "ENOENT" ? configYaml : Promise.reject(error),
+        );
+      displayConfigYaml = stripOmpDesktopRpcBootstrapFromModelsYaml(configYaml);
       const [models, providers] = await Promise.all([
         runtimeSession.getAvailableModels(null),
         runtimeSession.getLoginProviders(),
@@ -3873,6 +3989,7 @@ export class OmpAgentClient implements AgentClient {
             quotaByCredentialId.set(account.credentialId, quota);
           }),
       );
+      // eslint-disable-next-line oxc/no-map-spread
       loginProviders = providers.map((provider) => {
         const accounts = sortStoredOmpOAuthAccounts(
           storedAccountsByProvider.get(provider.id) ?? [],
@@ -3881,6 +3998,7 @@ export class OmpAgentClient implements AgentClient {
         if (!accounts || accounts.length === 0) return provider;
         return {
           ...provider,
+          // eslint-disable-next-line oxc/no-map-spread
           accounts: accounts.map(({ credentialId, identityKey }) => {
             const quota =
               provider.id === "openai-codex" ? quotaByCredentialId.get(credentialId) : undefined;
@@ -3900,8 +4018,9 @@ export class OmpAgentClient implements AgentClient {
     }
     return {
       configPath,
-      configYaml,
+      configYaml: displayConfigYaml,
       providerModels: [...providerModels]
+        .filter(([id]) => id !== OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER_ID)
         .map(([id, models]) => ({
           id,
           modelCount: models.length,
@@ -4071,7 +4190,7 @@ export class OmpAgentClient implements AgentClient {
   }
 
   async startOmpProviderLogin(providerId: string): Promise<OmpProviderLoginStart> {
-    const runtimeSession = await this.runtime.startSession({
+    const runtimeSession = await this.startOmpRuntimeSession({
       cwd: homedir(),
       protocolMode: "rpc-ui",
       noSession: true,
