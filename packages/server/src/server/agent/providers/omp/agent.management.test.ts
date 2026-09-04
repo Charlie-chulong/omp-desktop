@@ -85,7 +85,80 @@ describe("OMP provider management", () => {
         { id: "openai", name: "OpenAI", available: true, authenticated: false },
       ],
     });
+    await expect(readFile(path.join(agentDir, "models.yml"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
+
+  test("does not rewrite models.yml when OMP RPC starts successfully", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    const configPath = path.join(agentDir, "models.yml");
+    await writeFile(
+      configPath,
+      `# Keep this comment
+providers:
+  mintcat:
+    baseUrl: https://mintcat.example.test
+    models:
+      - id: mint-model
+`,
+      "utf8",
+    );
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([
+      { id: "anthropic", name: "Anthropic", available: true, authenticated: false },
+    ]);
+
+    const management = await client.getOmpProviderManagement();
+    expect(management.loginProviders).toEqual([
+      { id: "anthropic", name: "Anthropic", available: true, authenticated: false },
+    ]);
+    expect(await readFile(configPath, "utf8")).toBe(`# Keep this comment
+providers:
+  mintcat:
+    baseUrl: https://mintcat.example.test
+    models:
+      - id: mint-model
+`);
+  });
+
+  test("merges a keyless bootstrap model after OMP RPC fails with no models", async () => {
+    const { agentDir, client, runtime } = await createClient();
+    const configPath = path.join(agentDir, "models.yml");
+    await writeFile(
+      configPath,
+      `# Keep this comment
+providers:
+  mintcat:
+    baseUrl: https://mintcat.example.test
+    models:
+      - id: mint-model
+`,
+      "utf8",
+    );
+    runtime.failNextStart(
+      new Error(
+        "OMP RPC process exited with code 1 and signal null\nNo models available. Use /login or set an API key environment variable.",
+      ),
+    );
+    runtime.queueModels([]);
+    runtime.queueLoginProviders([
+      { id: "anthropic", name: "Anthropic", available: true, authenticated: false },
+    ]);
+
+    const management = await client.getOmpProviderManagement();
+    expect(management.configYaml).toContain("# Keep this comment");
+    expect(management.configYaml).toContain("mintcat");
+    expect(management.configYaml).not.toContain("omp-desktop-bootstrap");
+    expect(management.loginProviders).toEqual([
+      { id: "anthropic", name: "Anthropic", available: true, authenticated: false },
+    ]);
+    const onDisk = await readFile(configPath, "utf8");
+    expect(onDisk).toContain("# Keep this comment");
+    expect(onDisk).toContain("mintcat");
+    expect(onDisk).toContain("omp-desktop-bootstrap");
+  });
+
   test("reports every active OAuth account without exposing credential data", async () => {
     const quotaFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
