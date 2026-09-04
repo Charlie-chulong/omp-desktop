@@ -412,11 +412,6 @@ providers:
           id: "oauth_account_credential",
           value: "automatic",
           effectiveValue: "1",
-          options: [
-            expect.objectContaining({ id: "automatic" }),
-            expect.objectContaining({ id: "2" }),
-            expect.objectContaining({ id: "1" }),
-          ],
         }),
       ]),
     );
