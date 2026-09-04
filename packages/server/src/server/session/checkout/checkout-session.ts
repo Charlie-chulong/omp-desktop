@@ -43,6 +43,7 @@ import {
   commitChanges,
   createPullRequest,
   discardChanges,
+  discardUnstagedChanges,
   forgeAuthStateFromError,
   isForgeAuthError,
   mergeFromBase,
@@ -618,13 +619,21 @@ export class CheckoutSession {
   ): Promise<void> {
     const { cwd, paths, requestId } = msg;
     try {
-      await discardChanges(cwd, paths);
-      await this.gitMutation.notifyGitMutation(cwd, "discard-changes");
+      if (msg.scope === "unstaged") {
+        await discardUnstagedChanges(cwd, paths);
+      } else {
+        await discardChanges(cwd, paths);
+      }
       this.scheduleDiffRefresh(cwd);
       this.host.emit({
         type: "checkout.discard_changes.response",
         payload: { cwd, success: true, error: null, requestId },
       });
+      void this.gitMutation
+        .notifyGitMutation(cwd, "discard-changes")
+        .catch((error) =>
+          this.logger.warn({ err: error, cwd }, "Failed to refresh git state after discarding"),
+        );
     } catch (error) {
       this.host.emit({
         type: "checkout.discard_changes.response",

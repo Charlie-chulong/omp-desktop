@@ -23,6 +23,7 @@ describe("file context action messages", () => {
     expect(legacy.features?.fsEntryOps).toBeUndefined();
     expect(legacy.features?.fsEntryDuplicate).toBeUndefined();
     expect(legacy.features?.checkoutDiscardChanges).toBeUndefined();
+    expect(legacy.features?.checkoutDiscardUnstagedChanges).toBeUndefined();
 
     const current = ServerInfoStatusPayloadSchema.parse({
       status: "server_info",
@@ -31,12 +32,14 @@ describe("file context action messages", () => {
         fsEntryOps: true,
         fsEntryDuplicate: true,
         checkoutDiscardChanges: true,
+        checkoutDiscardUnstagedChanges: true,
       },
     });
     expect(current.features).toMatchObject({
       fsEntryOps: true,
       fsEntryDuplicate: true,
       checkoutDiscardChanges: true,
+      checkoutDiscardUnstagedChanges: true,
     });
   });
 
@@ -164,5 +167,16 @@ describe("file context action messages", () => {
       },
     };
     expect(CheckoutDiscardChangesResponseSchema.parse(response)).toEqual(response);
+  });
+
+  test("preserves the unstaged-only discard scope", () => {
+    const request = {
+      type: "checkout.discard_changes.request",
+      cwd: "/workspace",
+      paths: ["src"],
+      scope: "unstaged",
+      requestId: "discard-unstaged",
+    } as const;
+    expect(CheckoutDiscardChangesRequestSchema.parse(request)).toEqual(request);
   });
 });

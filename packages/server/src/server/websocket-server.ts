@@ -1780,6 +1780,8 @@ export class VoiceAssistantWebSocketServer {
         fsEntryDuplicate: true,
         // COMPAT(checkoutDiscardChanges): added in v0.3.0, remove gate after 2027-02-08.
         checkoutDiscardChanges: true,
+        // COMPAT(checkoutDiscardUnstagedChanges): preserves staged content when discarding from Changes.
+        checkoutDiscardUnstagedChanges: true,
         // COMPAT(agentProfiles): added in v0.3.2, remove gate after 2027-02-11.
         agentProfiles: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.

@@ -4661,10 +4661,15 @@ export class DaemonClient {
 
   async checkoutDiscardChanges(
     cwd: string,
-    input: { paths: string[] },
+    input: { paths: string[]; scope?: "all" | "unstaged" },
   ): Promise<CorrelatedResponsePayload<"checkout.discard_changes.response">> {
     return this.sendNamespacedCorrelatedSessionRequest<"checkout.discard_changes.response">({
-      message: { type: "checkout.discard_changes.request", cwd, paths: input.paths },
+      message: {
+        type: "checkout.discard_changes.request",
+        cwd,
+        paths: input.paths,
+        ...(input.scope ? { scope: input.scope } : {}),
+      },
     });
   }
 

@@ -343,7 +343,8 @@ function getFallbackTabOptionLabel(
     return tab.target.path.split("/").findLast(Boolean) ?? tab.target.path;
   }
   if (tab.target.kind === "working_diff") {
-    return labels.changes;
+    const path = tab.target.focusPath;
+    return path ? (path.split("/").findLast(Boolean) ?? path) : labels.changes;
   }
   if (tab.target.kind === "files") {
     return labels.files;
@@ -396,7 +397,7 @@ function getFallbackTabOptionDescription(
     return tab.target.sha.slice(0, 7);
   }
   if (tab.target.kind === "working_diff") {
-    return labels.changes;
+    return tab.target.focusPath ?? labels.changes;
   }
   if (tab.target.kind === "files") {
     return labels.files;
@@ -2332,7 +2333,7 @@ function WorkspaceScreenContent({
           }
         }
 
-        if (closePolicy.kind === "layout-only") {
+        if (closePolicy.kind === "layout-only" && closePolicy.syncOpenLabel) {
           const sessionClient = useSessionStore.getState().sessions[normalizedServerId]?.client;
           if (!sessionClient) {
             toast.error(t("common.errors.daemonClientUnavailable"));
@@ -2587,6 +2588,12 @@ function WorkspaceScreenContent({
         groups,
         closeTab,
         closeLayoutOnlyAgent: async (agentId) => {
+          const agent =
+            useSessionStore.getState().sessions[normalizedServerId]?.agents?.get(agentId) ?? null;
+          const closePolicy = resolveCloseAgentTabPolicy(agent);
+          if (closePolicy.kind === "layout-only" && !closePolicy.syncOpenLabel) {
+            return;
+          }
           if (!client) {
             throw new Error(t("common.errors.daemonClientUnavailable"));
           }

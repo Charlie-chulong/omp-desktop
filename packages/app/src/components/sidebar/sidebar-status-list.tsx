@@ -23,6 +23,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { StyleSheet } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { withUnistyles } from "react-native-unistyles";
 import {
   ChevronDown,
@@ -843,6 +844,7 @@ function StatusWorkspaceRowInnerContent({
                 leadingProjectIconDataUri={projectIconDataUri}
                 serviceSummary={serviceSummary}
                 backdrop={backdrop}
+                selected={selected}
                 isHovered={isHovered}
                 isLoading={isArchiving}
                 shortcutNumber={shortcutNumber}
@@ -1045,7 +1047,7 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   workspaceRow: {
-    minHeight: 32,
+    minHeight: buttonControlHeight.xs,
     marginBottom: 0,
     paddingVertical: theme.spacing[1],
     paddingLeft: theme.spacing[2],

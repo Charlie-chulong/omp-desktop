@@ -1,10 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { commitChanges, getCheckoutDiff, stageChanges, unstageChanges } from "./checkout-git.js";
+import {
+  commitChanges,
+  discardUnstagedChanges,
+  getCheckoutDiff,
+  stageChanges,
+  unstageChanges,
+} from "./checkout-git.js";
 
 describe("checkout git staging", () => {
   let tempDir: string;
@@ -62,5 +68,23 @@ describe("checkout git staging", () => {
     const unstaged = await getCheckoutDiff(repoDir, { mode: "unstaged", includeStructured: true });
     expect(staged.structured).toEqual([]);
     expect(unstaged.structured?.map((file) => file.path)).toEqual(["staged.txt"]);
+  });
+
+  it("discards worktree changes while preserving the staged version", async () => {
+    writeFileSync(join(repoDir, "staged.txt"), "staged version\n");
+    await stageChanges(repoDir, ["staged.txt"]);
+    writeFileSync(join(repoDir, "staged.txt"), "unstaged version\n");
+    writeFileSync(join(repoDir, "scratch.txt"), "remove\n");
+
+    await discardUnstagedChanges(repoDir, ["staged.txt", "scratch.txt"]);
+
+    expect(readFileSync(join(repoDir, "staged.txt"), "utf8")).toBe("staged version\n");
+    expect(existsSync(join(repoDir, "scratch.txt"))).toBe(false);
+    expect(execFileSync("git", ["show", ":staged.txt"], { cwd: repoDir }).toString()).toBe(
+      "staged version\n",
+    );
+    expect(
+      execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: repoDir }).toString(),
+    ).toBe("staged.txt\n");
   });
 });

@@ -2004,12 +2004,16 @@ test("file context action RPCs correlate success and error responses", async () 
   );
   await expect(deletePromise).resolves.toMatchObject({ success: true, error: null });
 
-  const discardPromise = client.checkoutDiscardChanges("/tmp/project", { paths: ["src"] });
+  const discardPromise = client.checkoutDiscardChanges("/tmp/project", {
+    paths: ["src"],
+    scope: "unstaged",
+  });
   const discardRequest = parseSentFrame(mock.sent.at(-1));
   expect(discardRequest).toMatchObject({
     type: "checkout.discard_changes.request",
     cwd: "/tmp/project",
     paths: ["src"],
+    scope: "unstaged",
   });
   mock.triggerMessage(
     wrapSessionMessage({

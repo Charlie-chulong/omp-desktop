@@ -33,6 +33,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { type GestureType } from "react-native-gesture-handler";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -1183,6 +1184,7 @@ function WorkspaceRowInner({
                 leadingProjectIconDataUri={leadingProjectIconDataUri}
                 serviceSummary={serviceSummary}
                 backdrop={backdrop}
+                selected={selected}
                 isHovered={isHovered}
                 isLoading={isArchiving || isCreating}
                 isCreating={isCreating}
@@ -2652,7 +2654,7 @@ const styles = StyleSheet.create((theme) => ({
     right: theme.spacing[2],
   },
   workspaceRow: {
-    minHeight: 32,
+    minHeight: buttonControlHeight.xs,
     marginBottom: 0,
     paddingVertical: theme.spacing[1],
     paddingLeft: theme.spacing[2],

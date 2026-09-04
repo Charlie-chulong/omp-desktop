@@ -517,7 +517,8 @@ function getFallbackTabLabel(
     return tab.target.path.split("/").findLast(Boolean) ?? tab.target.path;
   }
   if (tab.target.kind === "working_diff") {
-    return labels.changes;
+    const path = tab.target.focusPath;
+    return path ? (path.split("/").findLast(Boolean) ?? path) : labels.changes;
   }
   if (tab.target.kind === "files") {
     return labels.files;

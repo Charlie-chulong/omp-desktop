@@ -3371,30 +3371,7 @@ export async function unstageChanges(cwd: string, pathspecs: string[]): Promise<
   }
 }
 
-export async function discardChanges(cwd: string, pathspecs: string[]): Promise<void> {
-  await requireGitRepo(cwd);
-  if (pathspecs.length === 0) {
-    return;
-  }
-  try {
-    await runGitCommand(["--literal-pathspecs", "reset", "-q", "HEAD", "--", ...pathspecs], {
-      cwd,
-      timeout: DISCARD_CHANGES_TIMEOUT_MS,
-    });
-  } catch {
-    // Why: unborn HEAD has no commit for reset, so remove the paths directly from the index.
-    await runGitCommand(
-      ["--literal-pathspecs", "rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", ...pathspecs],
-      {
-        cwd,
-        timeout: DISCARD_CHANGES_TIMEOUT_MS,
-      },
-    );
-  }
-  // With everything unstaged, the remaining state is only worktree
-  // modifications/deletions (restore from the index) and untracked files
-  // (clean). Classify from porcelain so each path gets the command that
-  // actually applies to it.
+async function discardWorktreeChanges(cwd: string, pathspecs: string[]): Promise<void> {
   const status = await runGitCommand(
     ["--literal-pathspecs", "status", "--porcelain=v1", "-z", "--", ...pathspecs],
     {
@@ -3434,6 +3411,39 @@ export async function discardChanges(cwd: string, pathspecs: string[]): Promise<
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     });
   }
+}
+
+export async function discardUnstagedChanges(cwd: string, pathspecs: string[]): Promise<void> {
+  await requireGitRepo(cwd);
+  if (pathspecs.length === 0) {
+    return;
+  }
+  await discardWorktreeChanges(cwd, pathspecs);
+}
+
+export async function discardChanges(cwd: string, pathspecs: string[]): Promise<void> {
+  await requireGitRepo(cwd);
+  if (pathspecs.length === 0) {
+    return;
+  }
+  try {
+    await runGitCommand(["--literal-pathspecs", "reset", "-q", "HEAD", "--", ...pathspecs], {
+      cwd,
+      timeout: DISCARD_CHANGES_TIMEOUT_MS,
+    });
+  } catch {
+    // Why: unborn HEAD has no commit for reset, so remove the paths directly from the index.
+    await runGitCommand(
+      ["--literal-pathspecs", "rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", ...pathspecs],
+      {
+        cwd,
+        timeout: DISCARD_CHANGES_TIMEOUT_MS,
+      },
+    );
+  }
+  // Reset makes staged changes worktree-only; the shared worktree pass then
+  // restores tracked files and removes untracked files.
+  await discardWorktreeChanges(cwd, pathspecs);
 }
 
 interface DetectMergeToBaseConflictInput {

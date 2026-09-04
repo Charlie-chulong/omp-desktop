@@ -125,7 +125,12 @@ interface CheckoutGitActionsStoreState {
   disablePrAutoMerge: (params: { serverId: string; cwd: string }) => Promise<void>;
   mergeBranch: (params: { serverId: string; cwd: string; baseRef: string }) => Promise<void>;
   mergeFromBase: (params: { serverId: string; cwd: string; baseRef: string }) => Promise<void>;
-  discardChanges: (params: { serverId: string; cwd: string; paths: string[] }) => Promise<void>;
+  discardChanges: (params: {
+    serverId: string;
+    cwd: string;
+    paths: string[];
+    scope?: "all" | "unstaged";
+  }) => Promise<void>;
   stageChanges: (params: { serverId: string; cwd: string; paths: string[] }) => Promise<void>;
   unstageChanges: (params: { serverId: string; cwd: string; paths: string[] }) => Promise<void>;
 }
@@ -426,14 +431,18 @@ export const useCheckoutGitActionsStore = create<CheckoutGitActionsStoreState>()
     });
   },
 
-  discardChanges: async ({ serverId, cwd, paths }) => {
+  discardChanges: async ({ serverId, cwd, paths, scope }) => {
     await runCheckoutAction({
       serverId,
       cwd,
       actionId: "discard-changes",
+      invalidateQueries: false,
       run: async () => {
         const client = resolveClient(serverId);
-        const payload = await client.checkoutDiscardChanges(cwd, { paths });
+        const payload = await client.checkoutDiscardChanges(cwd, {
+          paths,
+          ...(scope ? { scope } : {}),
+        });
         if (!payload.success) {
           throw new Error(
             payload.error?.message ?? i18n.t("workspace.fileActions.confirmRevert.failed"),

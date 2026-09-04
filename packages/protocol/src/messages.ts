@@ -2263,6 +2263,7 @@ export const CheckoutDiscardChangesRequestSchema = z.object({
   type: z.literal("checkout.discard_changes.request"),
   cwd: z.string(),
   paths: z.array(z.string()).min(1),
+  scope: z.enum(["all", "unstaged"]).optional(),
   requestId: z.string(),
 });
 
@@ -3681,6 +3682,8 @@ export const ServerInfoStatusPayloadSchema = z
         fsEntryDuplicate: z.boolean().optional(),
         // COMPAT(checkoutDiscardChanges): added in v0.3.0, remove gate after 2027-02-08.
         checkoutDiscardChanges: z.boolean().optional(),
+        // COMPAT(checkoutDiscardUnstagedChanges): preserves staged content when discarding from Changes.
+        checkoutDiscardUnstagedChanges: z.boolean().optional(),
         // COMPAT(agentProfiles): added in v0.3.2, remove gate after 2027-02-11.
         // An older daemon parses its persisted config strictly, so writing
         // agentProfiles to one is silently dropped. The client hides the feature

@@ -96,6 +96,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   serviceSummary = null,
   backdrop,
   isHovered,
+  selected,
   isLoading,
   isCreating = false,
   shortcutNumber = null,
@@ -111,6 +112,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   serviceSummary?: WorkspaceServiceSummary | null;
   /** The row's current background, so the project status badge can knock out of it. */
   backdrop: SidebarSurfaceBackdrop;
+  selected: boolean;
   isHovered: boolean;
   isLoading: boolean;
   isCreating?: boolean;
@@ -130,10 +132,10 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   const workspaceTitleTextStyle = useMemo(
     () => [
       styles.workspaceTitleText,
-      isHovered && styles.workspaceTitleTextHovered,
+      (selected || isHovered) && styles.workspaceTitleTextHighlighted,
       isCreating && styles.workspaceTitleTextCreating,
     ],
-    [isHovered, isCreating],
+    [selected, isHovered, isCreating],
   );
 
   return (
@@ -523,7 +525,7 @@ const styles = StyleSheet.create((theme) => ({
   workspaceTitleTextCreating: {
     opacity: 0.92,
   },
-  workspaceTitleTextHovered: {
+  workspaceTitleTextHighlighted: {
     opacity: 1,
   },
   statusDotNeedsInput: {

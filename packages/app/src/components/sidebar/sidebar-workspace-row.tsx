@@ -21,6 +21,7 @@ import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-ar
 import { requireWorkspaceDirectory } from "@/utils/workspace-directory";
 import { isNative as platformIsNative } from "@/constants/platform";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import {
   SidebarWorkspaceContextMenu,
@@ -373,6 +374,7 @@ function WorkspaceRowBody({
                 hostBadge={hostBadge}
                 serviceSummary={serviceSummary}
                 backdrop={backdrop}
+                selected={selected}
                 isHovered={isHovered}
                 isLoading={isArchiving || isCreating}
                 isCreating={isCreating}
@@ -528,7 +530,7 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   workspaceRow: {
-    minHeight: 32,
+    minHeight: buttonControlHeight.xs,
     marginBottom: 0,
     paddingVertical: theme.spacing[1],
     paddingLeft: theme.spacing[2],

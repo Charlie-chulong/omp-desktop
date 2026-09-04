@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { TreeRail } from "@/components/tree-rail";
 import { TreeRailToggle } from "@/components/tree-rail-toggle";
-import { DiffStat } from "@/components/diff-stat";
 import {
   View,
   Text,
@@ -30,6 +29,7 @@ import {
   RotateCw,
   Plus,
   WrapText,
+  Undo2,
 } from "lucide-react-native";
 import { useCheckoutDiffQuery, type ParsedDiffFile } from "@/git/use-diff-query";
 import type { ChangesState } from "@/panels/changes/state";
@@ -100,23 +100,15 @@ export function resolveDiffLayout(
   return canUseSplitLayout ? layout : "unified";
 }
 
-function computeSelectedDiffStat(
-  files: ParsedDiffFile[],
-  isLoading: boolean,
-): { additions: number; deletions: number } | null {
-  if (isLoading || files.length === 0) {
-    return null;
-  }
-  return files.reduce(
-    (total, file) => ({
-      additions: total.additions + file.additions,
-      deletions: total.deletions + file.deletions,
-    }),
-    { additions: 0, deletions: 0 },
-  );
+type DiscardPathsAction = (paths: string[], name: string) => void;
+
+interface DiscardChangesActions {
+  discardAll: ((path: string, oldPath?: string) => void) | undefined;
+  discardUnstaged: DiscardPathsAction | undefined;
+  pending: boolean;
 }
 
-function useDiscardChangesAction({
+function useDiscardChangesActions({
   serverId,
   cwd,
   diffMode,
@@ -124,33 +116,39 @@ function useDiscardChangesAction({
   serverId: string;
   cwd: string;
   diffMode: "uncommitted" | "base";
-}): ((path: string, oldPath?: string) => void) | undefined {
+}): DiscardChangesActions {
   const { t } = useTranslation();
   const toast = useToast();
   const discardChanges = useCheckoutGitActionsStore((state) => state.discardChanges);
+  const pending =
+    useCheckoutGitActionsStore((state) =>
+      state.getStatus({ serverId, cwd, actionId: "discard-changes" }),
+    ) === "pending";
   // COMPAT(checkoutDiscardChanges): added in v0.3.0, remove gate after 2027-02-08.
   const discardSupported = useSessionStore(
-    (s) => s.sessions[serverId]?.serverInfo?.features?.checkoutDiscardChanges === true,
+    (state) => state.sessions[serverId]?.serverInfo?.features?.checkoutDiscardChanges === true,
   );
-  const discardPath = useCallback(
-    async (path: string, oldPath?: string) => {
+  const discardUnstagedSupported = useSessionStore(
+    (state) =>
+      state.sessions[serverId]?.serverInfo?.features?.checkoutDiscardUnstagedChanges === true,
+  );
+  const discardPaths = useCallback(
+    async (paths: string[], name: string, scope: "all" | "unstaged") => {
+      if (paths.length === 0 || pending) return;
       const confirmed = await confirmDialog({
         title: t("workspace.fileActions.confirmRevert.title"),
-        message: t("workspace.fileActions.confirmRevert.message", {
-          name: path,
-        }),
+        message: t("workspace.fileActions.confirmRevert.message", { name }),
         confirmLabel: t("workspace.fileActions.confirmRevert.confirm"),
         cancelLabel: t("workspace.fileActions.confirmRevert.cancel"),
         destructive: true,
       });
-      if (!confirmed) {
-        return;
-      }
+      if (!confirmed) return;
       try {
         await discardChanges({
           serverId,
           cwd,
-          paths: oldPath ? [path, oldPath] : [path],
+          paths,
+          ...(scope === "unstaged" ? { scope } : {}),
         });
       } catch (cause) {
         toast.error(
@@ -158,15 +156,31 @@ function useDiscardChangesAction({
         );
       }
     },
-    [cwd, discardChanges, serverId, t, toast],
+    [cwd, discardChanges, pending, serverId, t, toast],
   );
-  const handleDiscardPath = useCallback(
+  const discardAll = useCallback(
     (path: string, oldPath?: string) => {
-      void discardPath(path, oldPath);
+      void discardPaths(oldPath ? [path, oldPath] : [path], path, "all");
     },
-    [discardPath],
+    [discardPaths],
   );
-  return discardSupported && diffMode === "uncommitted" ? handleDiscardPath : undefined;
+  const discardUnstaged = useCallback<DiscardPathsAction>(
+    (paths, name) => {
+      void discardPaths(paths, name, "unstaged");
+    },
+    [discardPaths],
+  );
+  return useMemo(
+    () => ({
+      discardAll: discardSupported && diffMode === "uncommitted" ? discardAll : undefined,
+      discardUnstaged:
+        discardSupported && discardUnstagedSupported && diffMode === "uncommitted"
+          ? discardUnstaged
+          : undefined,
+      pending,
+    }),
+    [diffMode, discardAll, discardSupported, discardUnstaged, discardUnstagedSupported, pending],
+  );
 }
 
 interface ChangesSurfaceProps {
@@ -206,6 +220,7 @@ const ThemedChevronLeft = withUnistyles(ChevronLeft);
 const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
 const ThemedMinus = withUnistyles(Minus);
 const ThemedPlus = withUnistyles(Plus);
+const ThemedUndo2 = withUnistyles(Undo2);
 const DIFF_OPTIONS_WHITESPACE_ICON = (
   <ThemedPilcrow size={14} uniProps={foregroundMutedIconColorMapping} />
 );
@@ -286,70 +301,14 @@ function resolveChangesFilePress(
   return host === "explorer" ? onChangesFilePress : undefined;
 }
 
-interface DiffModeMenuProps {
-  diffMode: "uncommitted" | "base";
-  committedDescription?: string;
-  testIDPrefix?: string;
-  onSelectUncommitted: () => void;
-  onSelectBase: () => void;
-}
-
-export function DiffModeMenu({
-  diffMode,
-  committedDescription,
-  testIDPrefix = "changes-diff",
-  onSelectUncommitted,
-  onSelectBase,
-}: DiffModeMenuProps) {
-  const { t } = useTranslation();
-  const triggerStyle = useMemo(() => buildDiffModeTriggerStyle(), []);
-  const uncommittedLabel = t("workspace.git.diff.uncommitted");
-  const committedLabel = t("workspace.git.diff.committed");
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        testID={`${testIDPrefix}-status-trigger`}
-        style={triggerStyle}
-        accessibilityRole="button"
-        accessibilityLabel={t("workspace.git.diff.diffMode")}
-      >
-        <Text style={styles.diffStatusText} numberOfLines={1}>
-          {diffMode === "uncommitted" ? uncommittedLabel : committedLabel}
-        </Text>
-        <ThemedChevronDown size={12} uniProps={foregroundMutedIconColorMapping} />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" width={260} testID={`${testIDPrefix}-status-menu`}>
-        <DropdownMenuItem
-          testID={`${testIDPrefix}-mode-uncommitted`}
-          selected={diffMode === "uncommitted"}
-          onSelect={onSelectUncommitted}
-        >
-          {uncommittedLabel}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          testID={`${testIDPrefix}-mode-committed`}
-          selected={diffMode === "base"}
-          description={committedDescription}
-          onSelect={onSelectBase}
-        >
-          {committedLabel}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 interface ChangesToolbarProps {
   branchName: string | null;
   allFilesCollapsed: boolean;
   canUseSplitLayout: boolean;
   changesTabOpen: boolean;
-  committedDescription?: string;
   cwd: string;
   desktopTreeVisible: boolean;
   treeToggleAvailable: boolean;
-  diffMode: "uncommitted" | "base";
   gitActions: GitActions;
   hasFiles: boolean;
   hideWhitespace: boolean;
@@ -359,15 +318,12 @@ interface ChangesToolbarProps {
   layout: "unified" | "split";
   overflowToggleStyle: PressableStyleFn;
   refreshSupported: boolean;
-  selectedDiffStat: { additions: number; deletions: number } | null;
   serverId: string;
   workspaceId?: string | null;
   wrapLines: boolean;
   onRefresh: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
-  onSelectBase: () => void;
-  onSelectUncommitted: () => void;
   onToggleChangesTab: () => void;
   onToggleDesktopTree: () => void;
   onToggleHideWhitespace: () => void;
@@ -375,38 +331,25 @@ interface ChangesToolbarProps {
   onToggleWrapLines: () => void;
 }
 
-// One row: the diff-mode and branch pickers lead, the git actions and the
-// overflow menu trail. The tree toggle is the only icon action that stays out
-// of the menu, and it only exists on desktop, so a phone-width row holds two
-// pickers, the split button, and the trigger without wrapping.
+// One row: the branch picker leads, while git actions and the overflow menu
+// trail. The tree toggle is the only icon action that stays out of the menu.
 function ChangesToolbar(props: ChangesToolbarProps) {
   const {
     branchName,
-    committedDescription,
     cwd,
     desktopTreeVisible,
     treeToggleAvailable,
-    diffMode,
     gitActions,
     hasFiles,
     host,
     isMobile,
-    selectedDiffStat,
     serverId,
     workspaceId,
-    onSelectBase,
-    onSelectUncommitted,
     onToggleDesktopTree,
   } = props;
   return (
     <PaneContentToolbar style={styles.changesToolbar} testID="changes-header">
       <View style={styles.changesToolbarIdentity}>
-        <DiffModeMenu
-          diffMode={diffMode}
-          committedDescription={committedDescription}
-          onSelectUncommitted={onSelectUncommitted}
-          onSelectBase={onSelectBase}
-        />
         <BranchSwitcher
           currentBranchName={branchName}
           serverId={serverId}
@@ -415,13 +358,6 @@ function ChangesToolbar(props: ChangesToolbarProps) {
           isGitCheckout
           testID="changes-branch-switcher"
         />
-        {!isMobile && selectedDiffStat ? (
-          <DiffStat
-            additions={selectedDiffStat.additions}
-            deletions={selectedDiffStat.deletions}
-            testID="changes-selected-diff-stat"
-          />
-        ) : null}
       </View>
       <View style={styles.changesToolbarControls}>
         {!isMobile && host === "panel" && treeToggleAvailable && hasFiles ? (
@@ -711,16 +647,6 @@ function computeBaseRefLabel(baseRef: string | undefined, fallbackLabel: string)
   return trimmed.startsWith("origin/") ? trimmed.slice("origin/".length) : trimmed;
 }
 
-function computeCommittedDiffDescription(
-  branchLabel: string,
-  baseRefLabel: string,
-): string | undefined {
-  if (!branchLabel || !baseRefLabel) {
-    return undefined;
-  }
-  return branchLabel === baseRefLabel ? undefined : `${branchLabel} -> ${baseRefLabel}`;
-}
-
 interface ChangesEmptyAction {
   label: string;
   onPress: () => void;
@@ -822,13 +748,6 @@ function buildForgeSetupMessage(input: {
   });
 }
 
-function buildDiffModeTriggerStyle(): PressableStyleFn {
-  return ({ hovered, pressed, open }) => [
-    styles.diffModeTrigger,
-    (Boolean(hovered) || pressed || Boolean(open)) && styles.diffModeTriggerHovered,
-  ];
-}
-
 function buildOverflowButtonStyle(isMobile: boolean): PressableStyleFn {
   return (state) => paneContentToolbarIconButtonStyle(state, false, isMobile);
 }
@@ -847,6 +766,11 @@ interface ChangeStageAction {
   operation: ChangeStageOperation;
   disabled: boolean;
   onPress: (paths: string[]) => void;
+}
+
+interface ChangeDiscardAction {
+  disabled: boolean;
+  onPress: DiscardPathsAction;
 }
 
 function changePathspecs(file: ParsedDiffFile): string[] {
@@ -919,48 +843,129 @@ function StageChangeButton({
   );
 }
 
-function FolderStageChangeButton({
-  action,
+function DiscardChangeButton({
+  disabled,
+  onPress,
+  testID,
+}: {
+  disabled: boolean;
+  onPress: () => void;
+  testID: string;
+}) {
+  const { t } = useTranslation();
+  const label = t("workspace.fileActions.revert");
+  const handlePress = useCallback(
+    (event: { stopPropagation: () => void }) => {
+      event.stopPropagation();
+      onPress();
+    },
+    [onPress],
+  );
+  const pressableStyle = useMemo<PressableStyleFn>(
+    () =>
+      ({ hovered, pressed }) => [
+        styles.stageAction,
+        (Boolean(hovered) || pressed) && styles.stageActionHovered,
+        disabled && styles.stageActionDisabled,
+      ],
+    [disabled],
+  );
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          disabled={disabled}
+          onPress={handlePress}
+          style={pressableStyle}
+          testID={testID}
+        >
+          <ThemedUndo2 size={14} uniProps={foregroundMutedIconColorMapping} />
+        </Pressable>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <Text style={styles.tooltipText}>{label}</Text>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function FolderChangeButtons({
+  stageAction,
+  discardAction,
   files,
   dirPath,
   testID,
 }: {
-  action: ChangeStageAction;
+  stageAction?: ChangeStageAction;
+  discardAction?: ChangeDiscardAction;
   files: ParsedDiffFile[];
   dirPath: string;
   testID: string;
 }) {
-  const handlePress = useCallback(
-    () => action.onPress(folderChangePathspecs(files, dirPath)),
-    [action, dirPath, files],
+  const pathspecs = useMemo(() => folderChangePathspecs(files, dirPath), [dirPath, files]);
+  const handleStage = useCallback(() => stageAction?.onPress(pathspecs), [pathspecs, stageAction]);
+  const handleDiscard = useCallback(
+    () => discardAction?.onPress(pathspecs, dirPath),
+    [dirPath, discardAction, pathspecs],
   );
   return (
-    <StageChangeButton
-      operation={action.operation}
-      disabled={action.disabled}
-      onPress={handlePress}
-      testID={testID}
-    />
+    <View style={styles.changeRowActions}>
+      {discardAction ? (
+        <DiscardChangeButton
+          disabled={discardAction.disabled}
+          onPress={handleDiscard}
+          testID={`${testID}-discard`}
+        />
+      ) : null}
+      {stageAction ? (
+        <StageChangeButton
+          operation={stageAction.operation}
+          disabled={stageAction.disabled}
+          onPress={handleStage}
+          testID={`${testID}-${stageAction.operation}`}
+        />
+      ) : null}
+    </View>
   );
 }
 
-function FileStageChangeButton({
-  action,
+function FileChangeButtons({
+  stageAction,
+  discardAction,
   file,
   testID,
 }: {
-  action: ChangeStageAction;
+  stageAction?: ChangeStageAction;
+  discardAction?: ChangeDiscardAction;
   file: ParsedDiffFile;
   testID: string;
 }) {
-  const handlePress = useCallback(() => action.onPress(changePathspecs(file)), [action, file]);
+  const pathspecs = useMemo(() => changePathspecs(file), [file]);
+  const handleStage = useCallback(() => stageAction?.onPress(pathspecs), [pathspecs, stageAction]);
+  const handleDiscard = useCallback(
+    () => discardAction?.onPress(pathspecs, file.path),
+    [discardAction, file.path, pathspecs],
+  );
   return (
-    <StageChangeButton
-      operation={action.operation}
-      disabled={action.disabled}
-      onPress={handlePress}
-      testID={testID}
-    />
+    <View style={styles.changeRowActions}>
+      {discardAction ? (
+        <DiscardChangeButton
+          disabled={discardAction.disabled}
+          onPress={handleDiscard}
+          testID={`${testID}-discard`}
+        />
+      ) : null}
+      {stageAction ? (
+        <StageChangeButton
+          operation={stageAction.operation}
+          disabled={stageAction.disabled}
+          onPress={handleStage}
+          testID={`${testID}-${stageAction.operation}`}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -972,6 +977,7 @@ function StagingSectionHeader({
   disabled,
   onToggle,
   onApplyAll,
+  onDiscardAll,
   testID,
 }: {
   operation: ChangeStageOperation;
@@ -981,6 +987,7 @@ function StagingSectionHeader({
   disabled: boolean;
   onToggle: () => void;
   onApplyAll: () => void;
+  onDiscardAll?: () => void;
   testID: string;
 }) {
   const accessibilityState = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
@@ -1004,12 +1011,21 @@ function StagingSectionHeader({
         </View>
       </Pressable>
       {count > 0 ? (
-        <StageChangeButton
-          operation={operation}
-          disabled={disabled}
-          onPress={onApplyAll}
-          testID={`${testID}-all`}
-        />
+        <View style={styles.changeRowActions}>
+          {onDiscardAll ? (
+            <DiscardChangeButton
+              disabled={disabled}
+              onPress={onDiscardAll}
+              testID={`${testID}-discard-all`}
+            />
+          ) : null}
+          <StageChangeButton
+            operation={operation}
+            disabled={disabled}
+            onPress={onApplyAll}
+            testID={`${testID}-all`}
+          />
+        </View>
       ) : null}
     </View>
   );
@@ -1022,6 +1038,7 @@ function ChangedFilesTree({
   collapsedFolderPaths,
   onCollapsedFolderPathsChange,
   stageAction,
+  discardAction,
   listStyle,
   fitContent,
   testID = "changes-file-tree",
@@ -1032,6 +1049,7 @@ function ChangedFilesTree({
   collapsedFolderPaths: string[];
   onCollapsedFolderPathsChange: (paths: string[]) => void;
   stageAction?: ChangeStageAction;
+  discardAction?: ChangeDiscardAction;
   listStyle?: StyleProp<ViewStyle>;
   fitContent?: boolean;
   testID?: string;
@@ -1083,12 +1101,13 @@ function ChangedFilesTree({
   const renderItem = useCallback(
     ({ item }: { item: DiffTreeRow }) => {
       let trailingAction: ReactElement | undefined;
-      if (stageAction && item.kind === "folder") {
-        trailingAction = createElement(FolderStageChangeButton, {
-          action: stageAction,
+      if ((stageAction || discardAction) && item.kind === "folder") {
+        trailingAction = createElement(FolderChangeButtons, {
+          stageAction,
+          discardAction,
           files,
           dirPath: item.dirPath,
-          testID: `${testID}-${stageAction.operation}-folder-${item.dirPath}`,
+          testID: `${testID}-folder-${item.dirPath}`,
         });
       }
       if (item.kind === "folder") {
@@ -1116,11 +1135,12 @@ function ChangedFilesTree({
           />
         );
       }
-      if (stageAction) {
-        trailingAction = createElement(FileStageChangeButton, {
-          action: stageAction,
+      if (stageAction || discardAction) {
+        trailingAction = createElement(FileChangeButtons, {
+          stageAction,
+          discardAction,
           file: item.file,
-          testID: `${testID}-${stageAction.operation}-${item.fileIndex}`,
+          testID: `${testID}-file-${item.fileIndex}`,
         });
       }
       return (
@@ -1153,6 +1173,7 @@ function ChangedFilesTree({
       handleCollapseFolder,
       handleSelectFile,
       handleSelectPath,
+      discardAction,
       handleToggleFolder,
       files,
       collapsedFolders,
@@ -1190,6 +1211,7 @@ function StagingChangesTree({
   mutationPending,
   onStagePaths,
   onUnstagePaths,
+  onDiscardPaths,
 }: {
   stagedFiles: ParsedDiffFile[];
   unstagedFiles: ParsedDiffFile[];
@@ -1200,6 +1222,7 @@ function StagingChangesTree({
   mutationPending: boolean;
   onStagePaths: (paths: string[]) => void;
   onUnstagePaths: (paths: string[]) => void;
+  onDiscardPaths?: DiscardPathsAction;
 }) {
   const { t } = useTranslation();
   const [stagedCollapsed, setStagedCollapsed] = useState(true);
@@ -1220,6 +1243,16 @@ function StagingChangesTree({
     }),
     [mutationPending, onUnstagePaths],
   );
+  const discardAction = useMemo<ChangeDiscardAction | undefined>(
+    () =>
+      onDiscardPaths
+        ? {
+            disabled: mutationPending,
+            onPress: onDiscardPaths,
+          }
+        : undefined,
+    [mutationPending, onDiscardPaths],
+  );
   const stageAll = useCallback(
     () => onStagePaths(allChangePathspecs(unstagedFiles)),
     [onStagePaths, unstagedFiles],
@@ -1227,6 +1260,11 @@ function StagingChangesTree({
   const unstageAll = useCallback(
     () => onUnstagePaths(allChangePathspecs(stagedFiles)),
     [onUnstagePaths, stagedFiles],
+  );
+  const discardAll = useCallback(
+    () =>
+      onDiscardPaths?.(allChangePathspecs(unstagedFiles), t("workspace.git.diff.staging.changes")),
+    [onDiscardPaths, t, unstagedFiles],
   );
   const toggleStaged = useCallback(() => setStagedCollapsed((current) => !current), []);
   const toggleUnstaged = useCallback(() => setUnstagedCollapsed((current) => !current), []);
@@ -1264,6 +1302,7 @@ function StagingChangesTree({
         disabled={mutationPending}
         onToggle={toggleUnstaged}
         onApplyAll={stageAll}
+        onDiscardAll={onDiscardPaths ? discardAll : undefined}
         testID="unstaged-changes-header"
       />
       {!unstagedCollapsed && unstagedFiles.length > 0 ? (
@@ -1274,6 +1313,7 @@ function StagingChangesTree({
           collapsedFolderPaths={collapsedFolderPaths}
           onCollapsedFolderPathsChange={onCollapsedFolderPathsChange}
           stageAction={stageAction}
+          discardAction={discardAction}
           listStyle={styles.unstagedChangesList}
           testID="unstaged-changes-tree"
         />
@@ -1460,6 +1500,52 @@ function shouldShowChangesTree(host: ChangesSurfaceProps["host"], panelView: "tr
 function hasCommittableChanges(stagingSupported: boolean, stagedFiles: ParsedDiffFile[]): boolean {
   return !stagingSupported || stagedFiles.length > 0;
 }
+
+interface ChangesViewState {
+  displayedFiles: ParsedDiffFile[];
+  isStagingDiffLoading: boolean;
+  allFilesCollapsed: boolean;
+  showChangesTreeRail: boolean;
+}
+
+function resolveChangesViewState({
+  files,
+  focusPath,
+  documentOnly,
+  stagingQueriesEnabled,
+  stagedLoading,
+  unstagedLoading,
+  collapsedFilePaths,
+  host,
+  panelView,
+  desktopTreeVisible,
+  isMobile,
+}: {
+  files: ParsedDiffFile[];
+  focusPath: string | undefined;
+  documentOnly: boolean;
+  stagingQueriesEnabled: boolean;
+  stagedLoading: boolean;
+  unstagedLoading: boolean;
+  collapsedFilePaths: string[];
+  host: ChangesSurfaceProps["host"];
+  panelView: "tree" | "diff";
+  desktopTreeVisible: boolean;
+  isMobile: boolean;
+}): ChangesViewState {
+  const displayedFiles = documentOnly ? files.filter((file) => file.path === focusPath) : files;
+  const isStagingDiffLoading = stagingQueriesEnabled && (stagedLoading || unstagedLoading);
+  const allFilesCollapsed =
+    files.length > 0 && files.every((file) => collapsedFilePaths.includes(file.path));
+  const showChangesTreeRail =
+    host === "panel" && panelView === "diff" && desktopTreeVisible && !isMobile && files.length > 0;
+  return {
+    displayedFiles,
+    isStagingDiffLoading,
+    allFilesCollapsed,
+    showChangesTreeRail,
+  };
+}
 export function ChangesSurface({
   serverId,
   workspaceId,
@@ -1582,6 +1668,7 @@ export function ChangesSurface({
     enabled: enabled !== false,
     modeScope,
   });
+  const discardActions = useDiscardChangesActions({ serverId, cwd, diffMode });
   const stagingQueriesEnabled = canQueryStagingDiffs(stagingSupported, diffMode, isGit, enabled);
   const stagedDiff = useCheckoutDiffQuery({
     serverId,
@@ -1607,28 +1694,29 @@ export function ChangesSurface({
   const unstageStatus = useCheckoutGitActionsStore((s) =>
     s.getStatus({ serverId, cwd, actionId: "unstage-changes" }),
   );
-  const stageMutationPending = stageStatus === "pending" || unstageStatus === "pending";
+  const changeMutationPending =
+    stageStatus === "pending" || unstageStatus === "pending" || discardActions.pending;
   const handleStagePaths = useCallback(
     (paths: string[]) => {
-      if (stageMutationPending || paths.length === 0) return;
+      if (changeMutationPending || paths.length === 0) return;
       void runStageChanges({ serverId, cwd, paths }).catch((error) => {
         toast.error(
           error instanceof Error ? error.message : t("workspace.git.diff.staging.failedStage"),
         );
       });
     },
-    [cwd, runStageChanges, serverId, stageMutationPending, t, toast],
+    [changeMutationPending, cwd, runStageChanges, serverId, t, toast],
   );
   const handleUnstagePaths = useCallback(
     (paths: string[]) => {
-      if (stageMutationPending || paths.length === 0) return;
+      if (changeMutationPending || paths.length === 0) return;
       void runUnstageChanges({ serverId, cwd, paths }).catch((error) => {
         toast.error(
           error instanceof Error ? error.message : t("workspace.git.diff.staging.failedUnstage"),
         );
       });
     },
-    [cwd, runUnstageChanges, serverId, stageMutationPending, t, toast],
+    [changeMutationPending, cwd, runUnstageChanges, serverId, t, toast],
   );
   usePublishWorkingDiffAttachment({
     serverId,
@@ -1762,7 +1850,8 @@ export function ChangesSurface({
     },
     [client, cwd, t, toast],
   );
-  const onRevertPath = useDiscardChangesAction({ serverId, cwd, diffMode });
+  const onRevertPath = discardActions.discardAll;
+  const documentOnly = host === "panel" && Boolean(focusPath);
   const [panelView, setPanelView] = useState<"tree" | "diff">(() =>
     host === "panel" && focusPath ? "diff" : "tree",
   );
@@ -1838,16 +1927,35 @@ export function ChangesSurface({
   const stagedFiles = stagedDiff.files;
   const unstagedFiles = unstagedDiff.files;
   const hasStagedChanges = hasCommittableChanges(stagingSupported, stagedFiles);
-  const isStagingDiffLoading = stagingQueriesEnabled
-    ? stagedDiff.isLoading || unstagedDiff.isLoading
-    : false;
-  const selectedDiffStat = useMemo(
-    () => computeSelectedDiffStat(files, isDiffLoading),
-    [files, isDiffLoading],
+  const { displayedFiles, isStagingDiffLoading, allFilesCollapsed, showChangesTreeRail } = useMemo(
+    () =>
+      resolveChangesViewState({
+        files,
+        focusPath,
+        documentOnly,
+        stagingQueriesEnabled,
+        stagedLoading: stagedDiff.isLoading,
+        unstagedLoading: unstagedDiff.isLoading,
+        collapsedFilePaths,
+        host,
+        panelView,
+        desktopTreeVisible,
+        isMobile,
+      }),
+    [
+      collapsedFilePaths,
+      desktopTreeVisible,
+      documentOnly,
+      files,
+      focusPath,
+      host,
+      isMobile,
+      panelView,
+      stagedDiff.isLoading,
+      stagingQueriesEnabled,
+      unstagedDiff.isLoading,
+    ],
   );
-  const allFilesCollapsed = hasChanges
-    ? files.every((file) => collapsedFilePaths.includes(file.path))
-    : false;
   const handleCollapseAllFiles = useCallback(
     () => updateCollapsedFilePaths(files.map((file) => file.path)),
     [files, updateCollapsedFilePaths],
@@ -1872,15 +1980,11 @@ export function ChangesSurface({
     () => computeBaseRefLabel(baseRef, t("workspace.git.diff.base")),
     [baseRef, t],
   );
-  const { gitActions, branchLabel } = useGitActions({
+  const { gitActions } = useGitActions({
     serverId,
     cwd,
     icons: GIT_ACTION_ICONS,
   });
-  const committedDiffDescription = useMemo(
-    () => computeCommittedDiffDescription(branchLabel, baseRefLabel),
-    [baseRefLabel, branchLabel],
-  );
   const emptyMessage = computeEmptyMessage(instanceState.hideWhitespace, diffMode, baseRefLabel, {
     hiddenWhitespace: t("workspace.git.diff.emptyHiddenWhitespace"),
     uncommitted: t("workspace.git.diff.emptyUncommitted"),
@@ -1913,9 +2017,10 @@ export function ChangesSurface({
         onSelectFile={handleSelectTreeFile}
         collapsedFolderPaths={instanceState.collapsedFolderPaths}
         onCollapsedFolderPathsChange={updateCollapsedFolderPaths}
-        mutationPending={stageMutationPending}
+        mutationPending={changeMutationPending}
         onStagePaths={handleStagePaths}
         onUnstagePaths={handleUnstagePaths}
+        onDiscardPaths={discardActions.discardUnstaged}
       />
     );
   } else if (showTreeAsPrimaryContent) {
@@ -1931,7 +2036,7 @@ export function ChangesSurface({
   } else {
     primaryChangesContent = (
       <DiffDocument
-        files={files}
+        files={displayedFiles}
         collapseState={collapseState}
         displayPreferences={sharedDisplayPreferences}
         mode={workingMode}
@@ -1947,7 +2052,7 @@ export function ChangesSurface({
       isDiffLoading={isDiffLoading || isStagingDiffLoading}
       diffErrorMessage={diffErrorMessage}
       diffTooLarge={diffTooLarge || stagedDiff.diffTooLarge || unstagedDiff.diffTooLarge}
-      hasChanges={hasChanges}
+      hasChanges={documentOnly ? displayedFiles.length > 0 : hasChanges}
       emptyMessage={emptyMessage}
       emptyAction={emptyAction}
       checkingRepositoryLabel={t("workspace.git.diff.checkingRepository")}
@@ -1956,15 +2061,11 @@ export function ChangesSurface({
       {primaryChangesContent}
     </DiffBodyContent>
   );
-  const bodyContent = (
+  const bodyContent = documentOnly ? (
+    diffContent
+  ) : (
     <ChangesTreeRail
-      shown={
-        host === "panel" &&
-        panelView === "diff" &&
-        desktopTreeVisible &&
-        !isMobile &&
-        files.length > 0
-      }
+      shown={showChangesTreeRail}
       files={files}
       mode={workingMode}
       onSelectFile={handleSelectTreeFile}
@@ -1976,6 +2077,20 @@ export function ChangesSurface({
       {diffContent}
     </ChangesTreeRail>
   );
+
+  if (documentOnly) {
+    return (
+      <View
+        {...{
+          onContextMenu: (event: { preventDefault?: () => void }) => event.preventDefault?.(),
+        }}
+        style={styles.container}
+        testID="working-file-diff"
+      >
+        <View style={styles.diffContainer}>{bodyContent}</View>
+      </View>
+    );
+  }
 
   function renderContent(): ReactElement {
     let forgeSetupCallout: ReactElement | null = null;
@@ -2008,11 +2123,9 @@ export function ChangesSurface({
             allFilesCollapsed={allFilesCollapsed}
             canUseSplitLayout={canUseSplitLayout}
             changesTabOpen={changesTabOpen}
-            committedDescription={committedDiffDescription}
             cwd={cwd}
             desktopTreeVisible={desktopTreeVisible}
             treeToggleAvailable={panelView === "diff"}
-            diffMode={diffMode}
             gitActions={gitActions}
             hasFiles={hasChanges}
             hideWhitespace={instanceState.hideWhitespace}
@@ -2022,15 +2135,12 @@ export function ChangesSurface({
             layout={instanceState.layout}
             overflowToggleStyle={overflowToggleStyle}
             refreshSupported={refreshSupported}
-            selectedDiffStat={selectedDiffStat}
             serverId={serverId}
             workspaceId={workspaceId}
             wrapLines={wrapLines}
             onCollapseAll={handleCollapseAllFiles}
             onExpandAll={handleExpandAllFiles}
             onRefresh={handleRefresh}
-            onSelectBase={handleSelectBase}
-            onSelectUncommitted={handleSelectUncommitted}
             onToggleChangesTab={handleToggleChangesTab}
             onToggleDesktopTree={handleToggleDesktopTree}
             onToggleHideWhitespace={handleToggleHideWhitespace}
@@ -2114,6 +2224,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     paddingRight: theme.spacing[3],
+    borderBottomWidth: 0,
   },
   changesToolbarIdentity: {
     minWidth: 0,
@@ -2128,31 +2239,6 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "flex-end",
     gap: theme.spacing[1],
     flexShrink: 0,
-  },
-  diffModeTrigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[1],
-    height: {
-      xs: 28,
-      sm: 28,
-      md: 24,
-    },
-    borderRadius: theme.borderRadius.base,
-    flexShrink: 0,
-  },
-  diffModeTriggerHovered: {
-    backgroundColor: theme.colors.surface2,
-  },
-  diffStatusText: {
-    fontSize: theme.fontSize.sm,
-    lineHeight: theme.fontSize.sm * 1.25,
-    color: theme.colors.foregroundMuted,
-  },
-  diffStatusIconHidden: {
-    opacity: 0,
   },
   forgeSetupCallout: {
     marginHorizontal: theme.spacing[3],
@@ -2205,6 +2291,11 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.medium,
+  },
+  changeRowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
   },
   stageAction: {
     width: 20,

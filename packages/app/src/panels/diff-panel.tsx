@@ -175,12 +175,15 @@ function CommitDiffPanel() {
   );
 }
 
-function useWorkingDiffPanelDescriptor(): PanelDescriptor {
+function useWorkingDiffPanelDescriptor(
+  target: Extract<WorkspaceTabTarget, { kind: "working_diff" }>,
+): PanelDescriptor {
   const { t } = useTranslation();
+  const path = target.focusPath;
   return {
-    label: t("panels.diff.changesLabel"),
-    subtitle: t("panels.diff.changesSubtitle"),
-    tooltip: t("panels.diff.changesSubtitle"),
+    label: path ? (path.split("/").findLast(Boolean) ?? path) : t("panels.diff.changesLabel"),
+    subtitle: path ?? t("panels.diff.changesSubtitle"),
+    tooltip: path ?? t("panels.diff.changesSubtitle"),
     titleState: "ready",
     icon: ThemedFileDiff,
     statusBucket: null,

@@ -1,9 +1,11 @@
 import type { Agent } from "@/stores/session-store";
 
-export type CloseAgentTabPolicy = { kind: "archive-on-close" } | { kind: "layout-only" };
+export type CloseAgentTabPolicy =
+  | { kind: "archive-on-close" }
+  | { kind: "layout-only"; syncOpenLabel: boolean };
 
 export function resolveCloseAgentTabPolicy(
-  _agent: Pick<Agent, "parentAgentId"> | null | undefined,
+  agent: Pick<Agent, "parentAgentId"> | null | undefined,
 ): CloseAgentTabPolicy {
-  return { kind: "layout-only" };
+  return { kind: "layout-only", syncOpenLabel: agent != null };
 }
