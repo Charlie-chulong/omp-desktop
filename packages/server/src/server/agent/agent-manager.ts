@@ -911,9 +911,9 @@ export class AgentManager {
     return this.subscribers.size;
   }
 
-  listAgents(): ManagedAgent[] {
+  listAgents(options: { includeInternal?: boolean } = {}): ManagedAgent[] {
     return Array.from(this.agents.values())
-      .filter((agent) => !agent.internal)
+      .filter((agent) => options.includeInternal === true || !agent.internal)
       .map((agent) => Object.assign({}, agent));
   }
 

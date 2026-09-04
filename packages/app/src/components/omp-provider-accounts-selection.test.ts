@@ -3,6 +3,7 @@ import {
   isOmpAutomaticAccountOption,
   orderOmpAccountFeatureOptions,
   resolveOmpAccountFeatureSelection,
+  resolveOmpAccountSelectorOptions,
 } from "./omp-provider-accounts";
 
 describe("OMP account feature selection", () => {
@@ -26,6 +27,15 @@ describe("OMP account feature selection", () => {
     const ordered = orderOmpAccountFeatureOptions(options);
     expect(ordered[0]?.id).toBe("automatic");
     expect(ordered.map((opt) => opt.id)).toEqual(["automatic", "41", "42"]);
+  });
+
+  test("falls back to management accounts before the selector feature loads", () => {
+    expect(
+      resolveOmpAccountSelectorOptions(undefined, [{ credentialId: 41 }, { credentialId: 42 }]),
+    ).toEqual([
+      { id: "41", label: "41" },
+      { id: "42", label: "42" },
+    ]);
   });
 
   test("resolves automatic selection when value is null", () => {

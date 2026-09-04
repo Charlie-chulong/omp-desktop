@@ -358,6 +358,8 @@ export interface WorkspaceDesktopTabRowItem {
   isActive: boolean;
   isCloseHovered: boolean;
   isClosingTab: boolean;
+  /** Static surfaces can provide their own presentation without mounting a panel resolver. */
+  presentation?: WorkspaceTabPresentation;
 }
 
 interface ResolvedWorkspaceDesktopTabRowItem extends WorkspaceDesktopTabRowItem {
@@ -411,6 +413,7 @@ function sameWidths(left: number[], right: number[]): boolean {
 interface WorkspaceDesktopTabsRowProps {
   paneId?: string;
   isFocused?: boolean;
+  newTabShortcutEnabled?: boolean;
   tabs: WorkspaceDesktopTabRowItem[];
   normalizedServerId: string;
   normalizedWorkspaceId: string;
@@ -871,7 +874,7 @@ export function WorkspaceDesktopTabsRow(props: WorkspaceDesktopTabsRowProps) {
   const resolvedTabs = useMemo(
     () =>
       props.tabs.flatMap((item) => {
-        const presentation = presentations.get(item.tab.key);
+        const presentation = item.presentation ?? presentations.get(item.tab.key);
         return presentation ? [{ ...item, presentation }] : [];
       }),
     [presentations, props.tabs],
@@ -880,15 +883,17 @@ export function WorkspaceDesktopTabsRow(props: WorkspaceDesktopTabsRowProps) {
   return (
     <>
       <ResolvedWorkspaceDesktopTabsRow {...props} tabs={resolvedTabs} />
-      {props.tabs.map(({ tab }) => (
-        <WorkspaceDesktopTabPresentationSlot
-          key={`${tab.key}:${tab.kind}`}
-          tab={tab}
-          serverId={props.normalizedServerId}
-          workspaceId={props.normalizedWorkspaceId}
-          onResolve={handlePresentation}
-        />
-      ))}
+      {props.tabs.map((item) =>
+        item.presentation ? null : (
+          <WorkspaceDesktopTabPresentationSlot
+            key={`${item.tab.key}:${item.tab.kind}`}
+            tab={item.tab}
+            serverId={props.normalizedServerId}
+            workspaceId={props.normalizedWorkspaceId}
+            onResolve={handlePresentation}
+          />
+        ),
+      )}
     </>
   );
 }
@@ -896,6 +901,7 @@ export function WorkspaceDesktopTabsRow(props: WorkspaceDesktopTabsRowProps) {
 function ResolvedWorkspaceDesktopTabsRow({
   paneId,
   isFocused = false,
+  newTabShortcutEnabled = true,
   tabs,
   normalizedServerId,
   normalizedWorkspaceId,
@@ -1140,14 +1146,14 @@ function ResolvedWorkspaceDesktopTabsRow({
 
   const handleNewTabKeyboardAction = useCallback(
     (action: KeyboardActionDefinition): boolean => {
-      if (!isFocused) return false;
+      if (!isFocused || !newTabShortcutEnabled) return false;
       if (action.id === "workspace.tab.menu.open") {
         createNewTab();
         return true;
       }
       return false;
     },
-    [createNewTab, isFocused],
+    [createNewTab, isFocused, newTabShortcutEnabled],
   );
 
   useKeyboardActionHandler({
@@ -1158,7 +1164,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       paneId,
     }),
     actions: ["workspace.tab.menu.open"],
-    enabled: isFocused,
+    enabled: isFocused && newTabShortcutEnabled,
     priority: 200,
     handle: handleNewTabKeyboardAction,
   });

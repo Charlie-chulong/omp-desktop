@@ -960,6 +960,14 @@ export const fr: TranslationResources = {
         failedGeneration: "Échec de la génération du message du commit",
       },
       diff: {
+        staging: {
+          stagedChanges: "Modifications indexées",
+          changes: "Modifications",
+          stage: "Indexer les modifications",
+          unstage: "Désindexer les modifications",
+          failedStage: "Échec de l’indexation des modifications",
+          failedUnstage: "Échec de la désindexation des modifications",
+        },
         openChangesTab: "Ouvrir l'onglet Modifications",
         closeChangesTab: "Fermer l'onglet Modifications",
         binaryFile: "Fichier binaire",
@@ -2076,11 +2084,6 @@ export const fr: TranslationResources = {
         label: "DéfilementTerminal",
         description: "Lignes conservées dans le tampon du terminal intégré",
         accessibilityLabel: "Lignes de défilementTerminal",
-      },
-      sidePanelRouting: {
-        label: "Ouvrir les onglets d'appoint dans le panneau latéral",
-        description:
-          "Les liens de fichiers, les pull requests et la progression de la configuration s'ouvrent à côté de votre travail plutôt que dans le volet actif",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",

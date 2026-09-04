@@ -25,6 +25,8 @@ export type CheckoutGitAsyncActionId =
   | "disable-pr-auto-merge"
   | "merge-branch"
   | "merge-from-base"
+  | "stage-changes"
+  | "unstage-changes"
   | "discard-changes";
 
 type CheckoutKey = string;
@@ -82,7 +84,10 @@ function setStatus(
 }
 
 function invalidateCheckoutGitQueries(serverId: string, cwd: string) {
-  return invalidateCheckoutGitQueriesForClient(appQueryClient, { serverId, cwd });
+  return invalidateCheckoutGitQueriesForClient(appQueryClient, {
+    serverId,
+    cwd,
+  });
 }
 
 const successTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -121,6 +126,8 @@ interface CheckoutGitActionsStoreState {
   mergeBranch: (params: { serverId: string; cwd: string; baseRef: string }) => Promise<void>;
   mergeFromBase: (params: { serverId: string; cwd: string; baseRef: string }) => Promise<void>;
   discardChanges: (params: { serverId: string; cwd: string; paths: string[] }) => Promise<void>;
+  stageChanges: (params: { serverId: string; cwd: string; paths: string[] }) => Promise<void>;
+  unstageChanges: (params: { serverId: string; cwd: string; paths: string[] }) => Promise<void>;
 }
 
 async function runCheckoutAction({
@@ -128,11 +135,13 @@ async function runCheckoutAction({
   cwd,
   actionId,
   run,
+  invalidateQueries = true,
 }: {
   serverId: string;
   cwd: string;
   actionId: CheckoutGitAsyncActionId;
   run: () => Promise<void>;
+  invalidateQueries?: boolean;
 }): Promise<void> {
   const key = checkoutKey(serverId, cwd);
   const inflightId = inFlightKey(key, actionId);
@@ -154,7 +163,9 @@ async function runCheckoutAction({
   const promise = (async () => {
     try {
       await run();
-      await invalidateCheckoutGitQueries(serverId, cwd);
+      if (invalidateQueries) {
+        await invalidateCheckoutGitQueries(serverId, cwd);
+      }
       setStatus(key, actionId, "success");
       const timer = setTimeout(() => {
         setStatus(key, actionId, "idle");
@@ -188,10 +199,7 @@ export const useCheckoutGitActionsStore = create<CheckoutGitActionsStoreState>()
       actionId: "commit",
       run: async () => {
         const client = resolveClient(serverId);
-        const payload = await client.checkoutCommit(cwd, {
-          addAll: true,
-          ...(message ? { message } : {}),
-        });
+        const payload = await client.checkoutCommit(cwd, message ? { message } : {});
         if (payload.error) {
           throw new Error(payload.error.message);
         }
@@ -305,8 +313,14 @@ export const useCheckoutGitActionsStore = create<CheckoutGitActionsStoreState>()
         // all supported clients use checkout.forge.set_auto_merge.*.
         const payload =
           rpc === "forge"
-            ? await client.checkoutForgeSetAutoMerge(cwd, { enabled: true, method })
-            : await client.checkoutGithubSetAutoMerge(cwd, { enabled: true, method });
+            ? await client.checkoutForgeSetAutoMerge(cwd, {
+                enabled: true,
+                method,
+              })
+            : await client.checkoutGithubSetAutoMerge(cwd, {
+                enabled: true,
+                method,
+              });
         if (payload.error) {
           throw new Error(payload.error.message);
         }
@@ -327,7 +341,9 @@ export const useCheckoutGitActionsStore = create<CheckoutGitActionsStoreState>()
         const payload =
           rpc === "forge"
             ? await client.checkoutForgeSetAutoMerge(cwd, { enabled: false })
-            : await client.checkoutGithubSetAutoMerge(cwd, { enabled: false });
+            : await client.checkoutGithubSetAutoMerge(cwd, {
+                enabled: false,
+              });
         if (payload.error) {
           throw new Error(payload.error.message);
         }
@@ -367,6 +383,44 @@ export const useCheckoutGitActionsStore = create<CheckoutGitActionsStoreState>()
         });
         if (payload.error) {
           throw new Error(payload.error.message);
+        }
+      },
+    });
+  },
+
+  stageChanges: async ({ serverId, cwd, paths }) => {
+    await runCheckoutAction({
+      serverId,
+      cwd,
+      actionId: "stage-changes",
+      invalidateQueries: false,
+      run: async () => {
+        const client = resolveClient(serverId);
+        const payload = await client.checkoutStageChanges(cwd, {
+          operation: "stage",
+          paths,
+        });
+        if (!payload.success) {
+          throw new Error(payload.error?.message ?? "Failed to stage changes");
+        }
+      },
+    });
+  },
+
+  unstageChanges: async ({ serverId, cwd, paths }) => {
+    await runCheckoutAction({
+      serverId,
+      cwd,
+      actionId: "unstage-changes",
+      invalidateQueries: false,
+      run: async () => {
+        const client = resolveClient(serverId);
+        const payload = await client.checkoutStageChanges(cwd, {
+          operation: "unstage",
+          paths,
+        });
+        if (!payload.success) {
+          throw new Error(payload.error?.message ?? "Failed to unstage changes");
         }
       },
     });

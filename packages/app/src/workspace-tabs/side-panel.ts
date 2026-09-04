@@ -15,6 +15,7 @@ import {
 } from "@/stores/workspace-layout-store";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
+import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-target";
 
 /**
  * The side panel is the companion surface beside the user's work — Changes, Files,
@@ -32,7 +33,6 @@ import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
  * pane there would silently disappear.
  */
 
-/** Tab kinds that are side panel views rather than user content. */
 const SIDE_PANEL_TAB_KINDS = ["working_diff", "files", "pull_request"] as const;
 type SidePanelTabKind = (typeof SIDE_PANEL_TAB_KINDS)[number];
 
@@ -54,10 +54,6 @@ export interface SidePanelInput extends SidePanelQuery {
 }
 
 type LayoutState = ReturnType<typeof useWorkspaceLayoutStore.getState>;
-
-function isSidePanelTabKind(kind: string): kind is SidePanelTabKind {
-  return (SIDE_PANEL_TAB_KINDS as readonly string[]).includes(kind);
-}
 
 function canUseSidePanelPane(input: SidePanelQuery): boolean {
   return !input.isCompact && (input.supportsPaneSplits ?? supportsDesktopPaneSplits());
@@ -93,15 +89,14 @@ function findActiveSidePanelTabId(state: LayoutState, workspaceKey: string): str
     return null;
   }
   const tab = collectAllTabs(layout.root).find((candidate) => candidate.tabId === focusedTabId);
-  return tab && isSidePanelTabKind(tab.target.kind) ? tab.tabId : null;
+  return tab && isWorkspaceSidePanelToolTarget(tab.target) ? tab.tabId : null;
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
 export interface OpenSupportingTabInput extends SidePanelQuery {
   target: WorkspaceTabTarget;
-  /** The user's preference for where new supporting tabs land. Ignored on compact. */
-  openInSidePanelByDefault: boolean;
+  /** Side-panel tools route right; content always falls back to the main workspace. */
   parentTabId?: string | null;
   /** Add the tab without revealing the side panel or moving focus. */
   background?: boolean;
@@ -111,7 +106,6 @@ type SidePanelViewTarget = Extract<WorkspaceTabTarget, { kind: SidePanelTabKind 
 
 export interface ToggleSupportingTabInput extends SidePanelInput {
   target: SidePanelViewTarget;
-  openInSidePanelByDefault: boolean;
 }
 
 /**
@@ -129,7 +123,7 @@ export function openSupportingTab(input: OpenSupportingTabInput): string | null 
   const placement = resolveSidePanelPlacement({
     store,
     workspaceKey,
-    routeToSidePanel: input.openInSidePanelByDefault && canUseSidePanelPane(input),
+    routeToSidePanel: isWorkspaceSidePanelToolTarget(input.target) && canUseSidePanelPane(input),
     background,
   });
 
@@ -154,7 +148,6 @@ export function toggleSupportingTab(input: ToggleSupportingTabInput): string | n
   if (!input.workspaceKey) return null;
   const store = useWorkspaceLayoutStore.getState();
   if (
-    input.openInSidePanelByDefault &&
     canUseSidePanelPane(input) &&
     isTargetVisibleInSidePanel(store, input.workspaceKey, input.target)
   ) {
@@ -181,6 +174,9 @@ export function openTabInSidePanel(
 ): string | null {
   if (!input.workspaceKey) {
     return null;
+  }
+  if (!isWorkspaceSidePanelToolTarget(input.target)) {
+    return openSupportingTab(input);
   }
 
   if (input.isCompact) {
@@ -242,7 +238,6 @@ export function openSidePanelView(input: SidePanelInput & { view: ExplorerTab })
     isCompact: input.isCompact,
     workspaceKey: input.workspaceKey,
     target: SIDE_PANEL_VIEW_TARGETS[input.view],
-    openInSidePanelByDefault: true,
   });
 }
 

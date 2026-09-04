@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import pino from "pino";
 import {
   type CheckoutDiffSubscriber,
@@ -525,6 +525,60 @@ describe("CheckoutSession", () => {
     });
   });
 
+  describe("stage changes", () => {
+    it("confirms staging before the background workspace refresh completes", async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "checkout-session-stage-"));
+      const cwd = realpathSync(tempDir);
+      try {
+        execFileSync("git", ["init", "-q"], { cwd });
+        execFileSync("git", ["config", "user.email", "test@example.com"], { cwd });
+        execFileSync("git", ["config", "user.name", "Test User"], { cwd });
+        writeFileSync(join(cwd, "file.txt"), "original\n");
+        execFileSync("git", ["add", "file.txt"], { cwd });
+        execFileSync("git", ["commit", "-qm", "initial"], { cwd });
+        writeFileSync(join(cwd, "file.txt"), "changed\n");
+
+        const { subscriber, refreshedCwds } = createFakeDiffSubscriber({
+          cwd: "",
+          files: [],
+          error: null,
+        });
+        const notifyGitMutation = vi
+          .fn<() => Promise<void>>()
+          .mockRejectedValue(new Error("background refresh failed"));
+        const { checkout, emitted } = makeCheckoutSession({
+          diff: subscriber,
+          gitMutation: { notifyGitMutation },
+        });
+
+        await checkout.handleCheckoutStageChangesRequest({
+          type: "checkout.stage_changes.request",
+          cwd,
+          operation: "stage",
+          paths: ["file.txt"],
+          requestId: "stage-1",
+        });
+
+        expect(
+          execFileSync("git", ["diff", "--cached", "--name-only"], {
+            cwd,
+            encoding: "utf8",
+          }).trim(),
+        ).toBe("file.txt");
+        expect(refreshedCwds).toEqual([cwd]);
+        expect(notifyGitMutation).toHaveBeenCalledWith(cwd, "stage-changes");
+        expect(emitted).toEqual([
+          {
+            type: "checkout.stage_changes.response",
+            payload: { cwd, success: true, error: null, requestId: "stage-1" },
+          },
+        ]);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("diff subscriptions", () => {
     it("opens a subscription, streams updates tagged with the id, and tears down on unsubscribe", async () => {
       const { subscriber, subscriptions } = createFakeDiffSubscriber({
@@ -794,7 +848,6 @@ describe("CheckoutSession", () => {
         type: "checkout_commit_request",
         cwd: "/repo",
         message: "",
-        addAll: true,
         requestId: "c1",
       });
 

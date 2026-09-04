@@ -142,6 +142,7 @@ import {
 } from "./agent/tools/paseo-tools.js";
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
+import { applyPendingOmpUpdate } from "./agent/providers/omp/installer.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
@@ -537,8 +538,29 @@ function resolveExpressTrustProxySetting(config: PaseoDaemonConfig): true | stri
   return config.trustedProxies ?? ["loopback"];
 }
 
+function createInitialImageGenerationConfig(
+  config: PaseoDaemonConfig,
+): MutableDaemonConfig["imageGeneration"] {
+  const imageGeneration = config.imageGeneration;
+  if (!imageGeneration) return undefined;
+
+  return {
+    enabled: imageGeneration.enabled,
+    provider: imageGeneration.provider,
+    backend: imageGeneration.backend,
+    model: imageGeneration.model,
+    ...(imageGeneration.baseUrl ? { baseUrl: imageGeneration.baseUrl } : {}),
+    apiKeyConfigured: imageGeneration.apiKeyConfigured,
+    apiKeySource: imageGeneration.apiKeySource,
+    ...(imageGeneration.subscriptionCredentialId
+      ? { subscriptionCredentialId: imageGeneration.subscriptionCredentialId }
+      : {}),
+  };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
+  const imageGeneration = createInitialImageGenerationConfig(config);
 
   const initialConfig: MutableDaemonConfig = {
     relay: { enabled: false },
@@ -559,22 +581,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
     },
-    ...(config.imageGeneration
-      ? {
-          imageGeneration: {
-            enabled: config.imageGeneration.enabled,
-            provider: config.imageGeneration.provider,
-            backend: config.imageGeneration.backend,
-            model: config.imageGeneration.model,
-            ...(config.imageGeneration.baseUrl ? { baseUrl: config.imageGeneration.baseUrl } : {}),
-            apiKeyConfigured: config.imageGeneration.apiKeyConfigured,
-            apiKeySource: config.imageGeneration.apiKeySource,
-            ...(config.imageGeneration.subscriptionCredentialId
-              ? { subscriptionCredentialId: config.imageGeneration.subscriptionCredentialId }
-              : {}),
-          },
-        }
-      : {}),
+    ...(imageGeneration ? { imageGeneration } : {}),
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,
     appendSystemPrompt: config.appendSystemPrompt ?? "",
@@ -594,13 +601,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
   return initialConfig;
 }
 
-export async function createPaseoDaemon(
-  config: PaseoDaemonConfig,
-  rootLogger: Logger,
-  dependencies: PaseoDaemonDependencies = {},
-): Promise<PaseoDaemon> {
-  configureGitProcessPolicy(config.git ?? resolveGitProcessPolicy({ env: process.env }));
-  const logger = rootLogger.child({ module: "bootstrap" });
+async function prepareOmpRuntime(config: PaseoDaemonConfig, logger: Logger): Promise<void> {
   const obsoleteTimelineDirectory = path.join(config.paseoHome, "agent-timelines");
   await rm(obsoleteTimelineDirectory, { recursive: true, force: true }).catch((error) => {
     logger.warn(
@@ -608,6 +609,28 @@ export async function createPaseoDaemon(
       "Failed to remove obsolete agent timeline data",
     );
   });
+
+  const pendingOmpUpdate = await applyPendingOmpUpdate();
+  if (pendingOmpUpdate.applied) {
+    logger.info("Applied pending OMP update before starting Agent providers");
+    return;
+  }
+  if (pendingOmpUpdate.message) {
+    logger.warn(
+      { error: pendingOmpUpdate.message },
+      "Pending OMP update could not be applied before Agent startup",
+    );
+  }
+}
+
+export async function createPaseoDaemon(
+  config: PaseoDaemonConfig,
+  rootLogger: Logger,
+  dependencies: PaseoDaemonDependencies = {},
+): Promise<PaseoDaemon> {
+  configureGitProcessPolicy(config.git ?? resolveGitProcessPolicy({ env: process.env }));
+  const logger = rootLogger.child({ module: "bootstrap" });
+  await prepareOmpRuntime(config, logger);
   const bootstrapStart = performance.now();
   const elapsed = () => `${(performance.now() - bootstrapStart).toFixed(0)}ms`;
   const daemonVersion = config.daemonVersion ?? resolveDaemonVersion(import.meta.url);

@@ -68,7 +68,7 @@ const DIFF_WITH_ONE_FILE: CheckoutDiffResult = {
 };
 
 describe("createGitMetadataGenerator", () => {
-  it("generateCommitMessage returns the generated message from an uncommitted-diff prompt", async () => {
+  it("generateCommitMessage returns the generated message from a staged-diff prompt", async () => {
     const { diffSource, diffCalls } = createDiffSource(DIFF_WITH_ONE_FILE);
     const { generation, generateCalls } = createGeneration(() => ({
       message: "Fix the flaky retry test",
@@ -87,7 +87,7 @@ describe("createGitMetadataGenerator", () => {
 
     expect(message).toBe("Fix the flaky retry test");
     expect(diffCalls).toEqual([
-      { cwd: "/repo", options: { mode: "uncommitted", includeStructured: true } },
+      { cwd: "/repo", options: { mode: "staged", includeStructured: true } },
     ]);
     expect(recentCommitCalls).toEqual([{ cwd: "/repo", limit: 12 }]);
     expect(generateCalls[0]).toMatchObject({

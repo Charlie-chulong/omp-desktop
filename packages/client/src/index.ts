@@ -392,7 +392,11 @@ export interface OmpProviderActions {
     requestId?: string;
     checkForUpdates?: boolean;
   }): Promise<OmpInstallationStatus>;
-  install(options?: { requestId?: string }): Promise<OmpInstallationStatus>;
+  install(options?: {
+    requestId?: string;
+    strategy?: "immediate" | "stop-agents" | "defer";
+  }): Promise<OmpInstallationStatus>;
+  cancelInstall(options?: { requestId?: string }): Promise<OmpInstallationStatus>;
   startProviderLogin(
     providerId: string,
     options?: { requestId?: string },
@@ -540,6 +544,7 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
       removeProvider: (providerId, options) => daemonClient.removeOmpProvider(providerId, options),
       getInstallationStatus: (options) => daemonClient.getOmpInstallationStatus(options),
       install: (options) => daemonClient.installOmp(options),
+      cancelInstall: (options) => daemonClient.cancelOmpInstall(options),
       startProviderLogin: (providerId, options) =>
         daemonClient.startOmpProviderLogin(providerId, options),
       finishProviderLogin: (flowId, input, options) =>

@@ -13,6 +13,7 @@ import {
   navigateToWorkspace as navigateToWorkspacePure,
   parseActiveWorkspaceSelection,
   type NavigateToSidebarWorkspaceDeps,
+  type NavigateToSidebarWorkspaceInput,
   type NavigateToWorkspaceDeps,
   type NavigateToWorkspaceInput,
 } from "./navigation";
@@ -67,7 +68,9 @@ export function navigateToWorkspace(input: NavigateToWorkspaceInput): string {
   return navigateToWorkspacePure(input, navigateDeps());
 }
 
-export async function navigateToSidebarWorkspace(input: NavigateToWorkspaceInput): Promise<string> {
+export async function navigateToSidebarWorkspace(
+  input: NavigateToSidebarWorkspaceInput,
+): Promise<string> {
   const deps: NavigateToSidebarWorkspaceDeps = {
     ...navigateDeps(),
     getSessionAgentsHydrated: (serverId) =>

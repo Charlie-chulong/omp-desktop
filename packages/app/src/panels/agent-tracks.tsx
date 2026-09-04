@@ -6,7 +6,6 @@ import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { ComposerTrackBar } from "@/composer/tracks";
 import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
 import { usePaneContext } from "@/panels/pane-context";
-import { useSettings } from "@/hooks/use-settings";
 import { useSessionStore } from "@/stores/session-store";
 import {
   type ArchiveFinishedStatus,
@@ -45,9 +44,6 @@ export const AgentTracks = memo(function AgentTracks({
   const hasWorkspaceBranch = useWorkspaceHasBranch(serverId, workspaceId);
   const isCompact = useIsCompactFormFactor();
   const canSplit = supportsDesktopPaneSplits() && !isCompact;
-  const openInSidePanelByDefault = useSettings(
-    (settings) => settings.openSupportingTabsInSidePanel,
-  );
   const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
   const canDetachSubagents = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.agentDetach === true,
@@ -67,14 +63,13 @@ export const AgentTracks = memo(function AgentTracks({
           isCompact,
           workspaceKey,
           target: { kind: "agent", agentId: subagentId },
-          openInSidePanelByDefault,
           parentTabId: tabId,
         });
         return;
       }
       navigateToAgent({ serverId, agentId: subagentId });
     },
-    [canSplit, isCompact, openInSidePanelByDefault, serverId, tabId, workspaceId, workspaceKey],
+    [canSplit, isCompact, serverId, tabId, workspaceId, workspaceKey],
   );
   const handleOpenProviderSubagent = useCallback(
     (parentAgentId: string, subagentId: string) => {
@@ -83,14 +78,13 @@ export const AgentTracks = memo(function AgentTracks({
           isCompact,
           workspaceKey,
           target: { kind: "provider_subagent", parentAgentId, subagentId },
-          openInSidePanelByDefault,
           parentTabId: tabId,
         });
         return;
       }
       openTab({ kind: "provider_subagent", parentAgentId, subagentId });
     },
-    [canSplit, isCompact, openInSidePanelByDefault, openTab, tabId, workspaceKey],
+    [canSplit, isCompact, openTab, tabId, workspaceKey],
   );
   const handleOpenChanges = useCallback(() => {
     if (!workspaceKey) {
@@ -101,9 +95,8 @@ export const AgentTracks = memo(function AgentTracks({
       workspaceKey,
       checkout: { serverId, cwd, isGit: true },
       target: { kind: "working_diff" },
-      openInSidePanelByDefault,
     });
-  }, [cwd, isCompact, openInSidePanelByDefault, serverId, workspaceKey]);
+  }, [cwd, isCompact, serverId, workspaceKey]);
 
   if (
     !hasWorkspaceDiffStat &&

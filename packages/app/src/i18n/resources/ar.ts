@@ -929,6 +929,14 @@ export const ar: TranslationResources = {
         failedGeneration: "فشل إنشاء رسالة الالتزام",
       },
       diff: {
+        staging: {
+          stagedChanges: "التغييرات المرحّلة",
+          changes: "التغييرات",
+          stage: "ترحيل التغييرات",
+          unstage: "إلغاء ترحيل التغييرات",
+          failedStage: "فشل ترحيل التغييرات",
+          failedUnstage: "فشل إلغاء ترحيل التغييرات",
+        },
         openChangesTab: "فتح علامة تبويب التغييرات",
         closeChangesTab: "إغلاق علامة تبويب التغييرات",
         binaryFile: "ملف ثنائي",
@@ -2022,11 +2030,6 @@ export const ar: TranslationResources = {
         label: "التمرير Terminal",
         description: "يتم الاحتفاظ بالخطوط في المخزن المؤقت الطرفي المدمج",
         accessibilityLabel: "خطوط التمرير Terminal",
-      },
-      sidePanelRouting: {
-        label: "فتح علامات التبويب المساعدة في اللوحة الجانبية",
-        description:
-          "تفتح روابط الملفات وطلبات السحب وتقدم الإعداد بجوار عملك بدلاً من الجزء المركّز عليه",
       },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",

@@ -51,6 +51,8 @@ import {
   pushCurrentBranch,
   listCheckoutCommits,
   getCommitFileDiff,
+  stageChanges,
+  unstageChanges,
 } from "../../../utils/checkout-git.js";
 import { runGitCommand } from "../../../utils/run-git-command.js";
 import { expandTilde } from "../../../utils/path.js";
@@ -631,6 +633,37 @@ export class CheckoutSession {
     }
   }
 
+  async handleCheckoutStageChangesRequest(
+    msg: Extract<SessionInboundMessage, { type: "checkout.stage_changes.request" }>,
+  ): Promise<void> {
+    const { cwd, operation, paths, requestId } = msg;
+    try {
+      if (operation === "stage") {
+        await stageChanges(cwd, paths);
+      } else {
+        await unstageChanges(cwd, paths);
+      }
+      this.scheduleDiffRefresh(cwd);
+      this.host.emit({
+        type: "checkout.stage_changes.response",
+        payload: { cwd, success: true, error: null, requestId },
+      });
+      void this.gitMutation
+        .notifyGitMutation(cwd, `${operation}-changes`)
+        .catch((error) =>
+          this.logger.warn(
+            { err: error, cwd, operation },
+            "Failed to refresh git state after staging",
+          ),
+        );
+    } catch (error) {
+      this.host.emit({
+        type: "checkout.stage_changes.response",
+        payload: { cwd, success: false, error: toCheckoutError(error), requestId },
+      });
+    }
+  }
+
   async handleStashSaveRequest(
     msg: Extract<SessionInboundMessage, { type: "stash_save_request" }>,
   ): Promise<void> {
@@ -737,10 +770,7 @@ export class CheckoutSession {
         throw new Error("Commit message is required");
       }
 
-      await commitChanges(cwd, {
-        message,
-        addAll: msg.addAll ?? true,
-      });
+      await commitChanges(cwd, { message });
       await this.gitMutation.notifyGitMutation(cwd, "commit-changes");
       this.scheduleDiffRefresh(cwd);
 

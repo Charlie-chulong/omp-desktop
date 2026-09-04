@@ -937,6 +937,14 @@ export const ko: TranslationResources = {
         failedGeneration: "커밋 메시지를 생성하지 못했습니다",
       },
       diff: {
+        staging: {
+          stagedChanges: "스테이징된 변경 사항",
+          changes: "변경 사항",
+          stage: "변경 사항 스테이징",
+          unstage: "변경 사항 스테이징 해제",
+          failedStage: "변경 사항을 스테이징하지 못했습니다",
+          failedUnstage: "변경 사항의 스테이징을 해제하지 못했습니다",
+        },
         openChangesTab: "변경사항 탭 열기",
         closeChangesTab: "변경사항 탭 닫기",
         binaryFile: "바이너리 파일",
@@ -2035,11 +2043,6 @@ export const ko: TranslationResources = {
         label: "터미널 스크롤백",
         description: "내장 터미널 버퍼에 보관되는 줄 수",
         accessibilityLabel: "터미널 스크롤백 줄 수",
-      },
-      sidePanelRouting: {
-        label: "보조 탭을 사이드 패널에서 열기",
-        description:
-          "파일 링크, 풀 리퀘스트, 설정 진행 상황이 포커스된 창이 아니라 작업 옆에서 열립니다",
       },
       autoExpandReasoning: {
         label: "추론 항상 펼치기",

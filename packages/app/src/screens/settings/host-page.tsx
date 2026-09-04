@@ -242,30 +242,57 @@ export function HostConnectionsPage({ serverId }: { serverId: string }) {
 }
 
 type OmpInstallationAction = "install" | "check" | "update";
+type OmpInstallStrategy = "immediate" | "stop-agents" | "defer";
 
-function resolveOmpInstallationPresentation(
+function resolveOmpInstallationStatusText(
   t: TFunction,
   status: OmpInstallationStatus | null,
   loading: boolean,
   checking: boolean,
-  installing: boolean,
-) {
-  let statusText = t("settings.providers.omp.install.notInstalled");
-  if (loading) {
-    statusText = t("settings.providers.omp.install.detecting");
-  } else if (status?.installed) {
-    statusText = status.version ?? t("settings.providers.omp.install.installed");
-    if (status.updateAvailable === true) {
-      statusText += status.latestVersion
-        ? ` · ${t("settings.providers.omp.install.versionAvailable", {
-            version: status.latestVersion,
-          })}`
-        : ` · ${t("settings.providers.omp.install.updateAvailable")}`;
-    } else if (status.updateAvailable === false) {
-      statusText += ` · ${t("settings.providers.omp.install.upToDate")}`;
-    }
+): string {
+  if (loading) return t("settings.providers.omp.install.detecting");
+  if (checking) return t("settings.providers.omp.install.checking");
+  if (!status) return t("settings.providers.omp.install.notInstalled");
+
+  switch (status.updatePhase) {
+    case "downloading":
+      return t("settings.providers.omp.install.downloading", {
+        progress: status.updateProgress ?? 0,
+      });
+    case "waiting-for-agents":
+      return t("settings.providers.omp.install.waitingForAgents");
+    case "pending-restart":
+      return t("settings.providers.omp.install.pendingRestart");
+    case "verifying":
+      return t("settings.providers.omp.install.verifying");
+    case "installing":
+      return t("settings.providers.omp.install.applying");
+    case "complete":
+      return t("settings.providers.omp.install.updateComplete");
+    case "canceled":
+      return t("settings.providers.omp.install.updateCanceled");
   }
 
+  if (!status.installed) return t("settings.providers.omp.install.notInstalled");
+  let statusText = status.version ?? t("settings.providers.omp.install.installed");
+  if (status.updateAvailable === true) {
+    statusText += status.latestVersion
+      ? ` · ${t("settings.providers.omp.install.versionAvailable", {
+          version: status.latestVersion,
+        })}`
+      : ` · ${t("settings.providers.omp.install.updateAvailable")}`;
+  } else if (status.updateAvailable === false) {
+    statusText += ` · ${t("settings.providers.omp.install.upToDate")}`;
+  }
+  return statusText;
+}
+
+function resolveOmpInstallationAction(
+  t: TFunction,
+  status: OmpInstallationStatus | null,
+  checking: boolean,
+  installing: boolean,
+) {
   let action: OmpInstallationAction = "install";
   if (status?.installed) {
     action = status.updateAvailable === true ? "update" : "check";
@@ -275,6 +302,18 @@ function resolveOmpInstallationPresentation(
   if (action === "update") actionLabel = t("settings.providers.omp.install.update");
   if (checking) actionLabel = t("settings.providers.omp.install.checking");
   if (installing) actionLabel = t("settings.providers.omp.install.installing");
+  return { action, actionLabel };
+}
+
+function resolveOmpInstallationPresentation(
+  t: TFunction,
+  status: OmpInstallationStatus | null,
+  loading: boolean,
+  checking: boolean,
+  installing: boolean,
+) {
+  const statusText = resolveOmpInstallationStatusText(t, status, loading, checking);
+  const { action, actionLabel } = resolveOmpInstallationAction(t, status, checking, installing);
   return {
     action,
     statusText,
@@ -283,6 +322,89 @@ function resolveOmpInstallationPresentation(
       : t("settings.providers.omp.install.detectingPath"),
     actionLabel,
   };
+}
+
+function resolveOmpUpdateActionState(status: OmpInstallationStatus | null, installing: boolean) {
+  return {
+    showBusyUpdateActions:
+      !installing &&
+      status?.platform === "win32" &&
+      status.updateAvailable === true &&
+      (status.activeAgentCount ?? 0) > 0,
+    showCancelDownload: installing && status?.updatePhase === "downloading",
+    updateIsPending: status?.pendingUpdate === true && !installing,
+  };
+}
+
+function OmpInstallationActions({
+  status,
+  loading,
+  checking,
+  installing,
+  canceling,
+  install,
+  cancelDownload,
+  onPrimaryAction,
+}: {
+  status: OmpInstallationStatus | null;
+  loading: boolean;
+  checking: boolean;
+  installing: boolean;
+  canceling: boolean;
+  install: (strategy?: OmpInstallStrategy) => Promise<void>;
+  cancelDownload: () => Promise<void>;
+  onPrimaryAction: () => void;
+}) {
+  const { t } = useTranslation();
+  const { action, actionLabel } = resolveOmpInstallationAction(t, status, checking, installing);
+  let actionIcon: typeof Download | undefined = action === "check" ? RotateCw : Download;
+  if (installing || checking) actionIcon = undefined;
+  const { showBusyUpdateActions, showCancelDownload, updateIsPending } =
+    resolveOmpUpdateActionState(status, installing);
+  const handleStopAgents = useCallback(() => void install("stop-agents"), [install]);
+  const handleDefer = useCallback(() => void install("defer"), [install]);
+  const handleCancelDownload = useCallback(() => void cancelDownload(), [cancelDownload]);
+
+  if (showBusyUpdateActions) {
+    return (
+      <>
+        <Button
+          variant="secondary"
+          onPress={handleStopAgents}
+          testID="host-page-omp-stop-agents-update-button"
+        >
+          {t("settings.providers.omp.install.stopAgentsAndUpdate")}
+        </Button>
+        <Button variant="outline" onPress={handleDefer} testID="host-page-omp-defer-update-button">
+          {t("settings.providers.omp.install.updateAfterRestart")}
+        </Button>
+      </>
+    );
+  }
+  if (showCancelDownload) {
+    return (
+      <Button
+        variant="outline"
+        loading={canceling}
+        onPress={handleCancelDownload}
+        testID="host-page-omp-cancel-download-button"
+      >
+        {t("settings.providers.omp.install.cancelDownload")}
+      </Button>
+    );
+  }
+  if (updateIsPending) return null;
+  return (
+    <Button
+      variant={status?.installed ? "secondary" : "default"}
+      leftIcon={actionIcon}
+      onPress={onPrimaryAction}
+      disabled={loading || checking || installing || status?.supported === false}
+      testID="host-page-omp-install-button"
+    >
+      {actionLabel}
+    </Button>
+  );
 }
 
 function OmpInstallationCard({ serverId }: { serverId: string }) {
@@ -295,6 +417,7 @@ function OmpInstallationCard({ serverId }: { serverId: string }) {
   const [status, setStatus] = useState<OmpInstallationStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const OmpIcon = getProviderIcon("omp");
@@ -314,6 +437,37 @@ function OmpInstallationCard({ serverId }: { serverId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!client || !installing) return;
+    let disposed = false;
+    let polling = false;
+    const poll = async () => {
+      if (disposed || polling) return;
+      polling = true;
+      try {
+        const next = await client.getOmpInstallationStatus();
+        if (disposed) return;
+        setStatus((current) => ({
+          ...current,
+          ...next,
+          latestVersion: next.latestVersion ?? current?.latestVersion,
+          updateAvailable: next.updateAvailable ?? current?.updateAvailable,
+        }));
+      } catch {
+        // The install request owns the actionable error; polling is progress-only.
+      } finally {
+        polling = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 500);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [client, installing]);
+
   const checkForUpdates = useCallback(async () => {
     if (!client) return;
     setChecking(true);
@@ -326,18 +480,36 @@ function OmpInstallationCard({ serverId }: { serverId: string }) {
       setChecking(false);
     }
   }, [client]);
-  const install = useCallback(async () => {
-    if (!client) return;
-    setInstalling(true);
+
+  const install = useCallback(
+    async (strategy: OmpInstallStrategy = "immediate") => {
+      if (!client || installing) return;
+      setInstalling(true);
+      setError(null);
+      try {
+        setStatus(await client.installOmp({ strategy }));
+      } catch (installError) {
+        setError(installError instanceof Error ? installError.message : String(installError));
+      } finally {
+        setInstalling(false);
+      }
+    },
+    [client, installing],
+  );
+
+  const cancelDownload = useCallback(async () => {
+    if (!client || canceling) return;
+    setCanceling(true);
     setError(null);
     try {
-      setStatus(await client.installOmp());
-    } catch (installError) {
-      setError(installError instanceof Error ? installError.message : String(installError));
+      setStatus(await client.cancelOmpInstall());
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : String(cancelError));
     } finally {
-      setInstalling(false);
+      setCanceling(false);
     }
-  }, [client]);
+  }, [canceling, client]);
+
   const handleActionPress = useCallback(() => {
     if (status?.installed && status.updateAvailable !== true) {
       void checkForUpdates();
@@ -347,15 +519,13 @@ function OmpInstallationCard({ serverId }: { serverId: string }) {
   }, [checkForUpdates, install, status?.installed, status?.updateAvailable]);
 
   if (!supported) return null;
-  const { action, statusText, detailText, actionLabel } = resolveOmpInstallationPresentation(
+  const { statusText, detailText } = resolveOmpInstallationPresentation(
     t,
     status,
     loading,
     checking,
     installing,
   );
-  let actionIcon: typeof Download | undefined = action === "check" ? RotateCw : Download;
-  if (installing || checking) actionIcon = undefined;
 
   return (
     <View style={settingsStyles.card} testID="host-page-omp-install-card">
@@ -373,15 +543,18 @@ function OmpInstallationCard({ serverId }: { serverId: string }) {
             <Text style={styles.errorText}>{error ?? status?.message}</Text>
           ) : null}
         </View>
-        <Button
-          variant={status?.installed ? "secondary" : "default"}
-          leftIcon={actionIcon}
-          onPress={handleActionPress}
-          disabled={loading || checking || installing || status?.supported === false}
-          testID="host-page-omp-install-button"
-        >
-          {actionLabel}
-        </Button>
+        <View style={styles.ompInstallActions}>
+          <OmpInstallationActions
+            status={status}
+            loading={loading}
+            checking={checking}
+            installing={installing}
+            canceling={canceling}
+            install={install}
+            cancelDownload={cancelDownload}
+            onPrimaryAction={handleActionPress}
+          />
+        </View>
       </View>
     </View>
   );
@@ -1982,6 +2155,10 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.palette.red[300],
     fontSize: theme.fontSize.sm,
     marginBottom: theme.spacing[2],
+  },
+  ompInstallActions: {
+    alignItems: "stretch",
+    gap: theme.spacing[2],
   },
   ompInstallPath: {
     color: theme.colors.foregroundMuted,

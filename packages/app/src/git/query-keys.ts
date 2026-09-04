@@ -13,6 +13,8 @@ interface CheckoutQueryScope {
 
 type CheckoutQueryKey = readonly unknown[];
 
+export type CheckoutDiffMode = "uncommitted" | "staged" | "unstaged" | "base";
+
 // A commit's file diff is immutable for a given sha+path, so every consumer
 // can share the same long-lived cache policy.
 export const COMMIT_FILE_DIFF_STALE_TIME = 5 * 60_000;
@@ -24,7 +26,7 @@ export function checkoutStatusQueryKey(serverId: string, cwd: string) {
 export function checkoutDiffQueryKey(
   serverId: string,
   cwd: string,
-  mode: "uncommitted" | "base",
+  mode: CheckoutDiffMode,
   baseRef?: string,
   ignoreWhitespace?: boolean,
 ) {

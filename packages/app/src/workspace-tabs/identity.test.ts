@@ -86,8 +86,9 @@ describe("working diff tab identity", () => {
       path: target.focusPath,
     });
 
-    expect(workingDiffId).toBe("working_diff");
+    expect(workingDiffId).toBe("working_diff_document");
     expect(workingDiffId).toBe(otherFocusId);
+    expect(workingDiffId).not.toBe(buildDeterministicWorkspaceTabId({ kind: "working_diff" }));
     expect(workingDiffId).not.toBe(fileId);
   });
 });

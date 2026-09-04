@@ -38,6 +38,7 @@ describe("checkout-git-actions-store", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     __resetCheckoutGitActionsStoreForTests();
     appQueryClient.clear();
     useSessionStore.setState((state) => ({ ...state, sessions: {} }));
@@ -90,9 +91,35 @@ describe("checkout-git-actions-store", () => {
       .commit({ serverId, cwd, message: "Refactor the changes panel" });
 
     expect(client.checkoutCommit).toHaveBeenCalledWith(cwd, {
-      addAll: true,
       message: "Refactor the changes panel",
     });
+  });
+
+  it("completes staging RPCs without broad query invalidation", async () => {
+    const checkoutStageChanges = vi.fn(async () => ({ success: true, error: null }));
+    const invalidateQueries = vi.spyOn(appQueryClient, "invalidateQueries");
+    const client = { checkoutStageChanges };
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessions: {
+        ...state.sessions,
+        [serverId]: { client } as unknown as (typeof state.sessions)[string],
+      },
+    }));
+
+    const store = useCheckoutGitActionsStore.getState();
+    await store.stageChanges({ serverId, cwd, paths: ["src"] });
+    await store.unstageChanges({ serverId, cwd, paths: ["src"] });
+
+    expect(checkoutStageChanges).toHaveBeenNthCalledWith(1, cwd, {
+      operation: "stage",
+      paths: ["src"],
+    });
+    expect(checkoutStageChanges).toHaveBeenNthCalledWith(2, cwd, {
+      operation: "unstage",
+      paths: ["src"],
+    });
+    expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
   it("runs pull then push sequentially for pull-and-push", async () => {

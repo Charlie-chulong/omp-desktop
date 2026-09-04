@@ -2026,6 +2026,30 @@ test("file context action RPCs correlate success and error responses", async () 
     success: false,
     error: { code: "NOT_GIT_REPO", message: "Not a git repository" },
   });
+
+  const stagePromise = client.checkoutStageChanges("/tmp/project", {
+    operation: "stage",
+    paths: ["src/new.ts"],
+  });
+  const stageRequest = parseSentFrame(mock.sent.at(-1));
+  expect(stageRequest).toMatchObject({
+    type: "checkout.stage_changes.request",
+    cwd: "/tmp/project",
+    operation: "stage",
+    paths: ["src/new.ts"],
+  });
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "checkout.stage_changes.response",
+      payload: {
+        cwd: "/tmp/project",
+        success: true,
+        error: null,
+        requestId: stageRequest.requestId,
+      },
+    }),
+  );
+  await expect(stagePromise).resolves.toMatchObject({ success: true, error: null });
 });
 
 test("a connection loss rejects an in-flight file context action", async () => {

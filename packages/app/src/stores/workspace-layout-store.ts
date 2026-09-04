@@ -35,6 +35,7 @@ import {
   normalizeLayout,
   openTabInLayoutBackground,
   replaceTabTargetInLayout,
+  rekeyTabInLayout,
   revealTargetInLayout,
   restoreEmptyPanesInLayout,
   reconcileWorkspaceTabs,
@@ -55,8 +56,15 @@ import {
   type WorkspaceTabSnapshot,
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-actions";
-import { normalizeWorkspaceTabTarget } from "@/workspace-tabs/identity";
+import {
+  buildDeterministicWorkspaceTabId,
+  normalizeWorkspaceTabTarget,
+} from "@/workspace-tabs/identity";
 import { createValidatedPersistStorage } from "@/storage/validated-persist-storage";
+import {
+  DEFAULT_WORKSPACE_SIDE_PANEL_TARGET,
+  isWorkspaceSidePanelToolTarget,
+} from "@/workspace-tabs/side-panel-target";
 
 export {
   AMBIENT_PLACEMENT,
@@ -368,24 +376,83 @@ export function resolveSidePanelPaneId(
   const defaultPane = findPaneById(layout.root, SIDE_PANEL_PANE_ID);
   return defaultPane?.id ?? null;
 }
+function findMainWorkspacePaneId(layout: WorkspaceLayout, sidePanelPaneId: string): string | null {
+  const defaultPane = findPaneById(layout.root, DEFAULT_PANE_ID);
+  if (defaultPane && defaultPane.id !== sidePanelPaneId && defaultPane.hidden !== true) {
+    return defaultPane.id;
+  }
+  return collectAllPanes(layout.root).find((pane) => pane.id !== sidePanelPaneId)?.id ?? null;
+}
+
+function migrateLegacyWorkingDiffDocumentIds(layout: WorkspaceLayout): WorkspaceLayout {
+  let nextLayout = layout;
+  for (const tab of collectAllTabs(layout.root)) {
+    if (
+      tab.tabId !== "working_diff" ||
+      tab.target.kind !== "working_diff" ||
+      isWorkspaceSidePanelToolTarget(tab.target)
+    ) {
+      continue;
+    }
+    nextLayout =
+      rekeyTabInLayout({
+        layout: nextLayout,
+        tabId: tab.tabId,
+        nextTabId: buildDeterministicWorkspaceTabId(tab.target),
+      }) ?? nextLayout;
+  }
+  return nextLayout;
+}
+
+function relocateContentOutOfSidePanel(
+  layout: WorkspaceLayout,
+  sidePanelPaneId: string,
+): WorkspaceLayout {
+  const sidePanel = findPaneById(layout.root, sidePanelPaneId);
+  const mainPaneId = findMainWorkspacePaneId(layout, sidePanelPaneId);
+  if (!sidePanel || !mainPaneId) {
+    return layout;
+  }
+
+  const tabsById = new Map(collectAllTabs(layout.root).map((tab) => [tab.tabId, tab]));
+  let nextLayout = layout;
+  for (const tabId of sidePanel.tabIds) {
+    const tab = tabsById.get(tabId);
+    if (!tab || tab.target.kind === "new_tab" || isWorkspaceSidePanelToolTarget(tab.target)) {
+      continue;
+    }
+    nextLayout =
+      moveTabToPaneInLayout({
+        layout: nextLayout,
+        tabId,
+        toPaneId: mainPaneId,
+        preserveEmptyPaneId: sidePanelPaneId,
+      }) ?? nextLayout;
+  }
+  return nextLayout;
+}
 
 function ensurePersistedSidePanelPane(input: {
   layout: WorkspaceLayout;
   registeredPaneId: string | null | undefined;
   ids: WorkspaceLayoutIdSource;
 }): { layout: WorkspaceLayout; paneId: string } | null {
-  const existingPaneId = resolveSidePanelPaneId(input.layout, input.registeredPaneId);
+  const migratedLayout = migrateLegacyWorkingDiffDocumentIds(input.layout);
+  const existingPaneId = resolveSidePanelPaneId(migratedLayout, input.registeredPaneId);
   if (existingPaneId) {
-    return { layout: input.layout, paneId: existingPaneId };
+    return {
+      layout: relocateContentOutOfSidePanel(migratedLayout, existingPaneId),
+      paneId: existingPaneId,
+    };
   }
   const targetPaneId =
-    findPaneById(input.layout.root, input.layout.focusedPaneId)?.id ??
-    collectAllPanes(input.layout.root)[0]?.id;
+    findPaneById(migratedLayout.root, migratedLayout.focusedPaneId)?.id ??
+    collectAllPanes(migratedLayout.root)[0]?.id;
   if (!targetPaneId) {
     return null;
   }
   const split = splitPaneEmptyInLayout({
-    layout: input.layout,
+    layout: migratedLayout,
     targetPaneId,
     position: "right",
     createNodeId: input.ids.createNodeId,
@@ -551,6 +618,25 @@ export function createWorkspaceLayoutStore(
           if (!paneId) {
             return null;
           }
+          if (!get().layoutByWorkspace[normalizedWorkspaceKey]) {
+            set((state) => ({
+              layoutByWorkspace: {
+                ...state.layoutByWorkspace,
+                [normalizedWorkspaceKey]: layout,
+              },
+            }));
+          }
+          const currentLayout = getWorkspaceLayout(get().layoutByWorkspace, normalizedWorkspaceKey);
+          const sidePanel = findPaneById(currentLayout.root, paneId);
+          if (sidePanel?.tabIds.length === 1) {
+            const tabId = sidePanel.tabIds[0];
+            const tab = collectAllTabs(currentLayout.root).find(
+              (candidate) => candidate.tabId === tabId,
+            );
+            if (tabId && tab?.target.kind === "new_tab") {
+              get().replaceTab(normalizedWorkspaceKey, tabId, DEFAULT_WORKSPACE_SIDE_PANEL_TARGET);
+            }
+          }
 
           set((state) =>
             state.sidePanelPaneIdByWorkspace[normalizedWorkspaceKey] === paneId
@@ -610,15 +696,12 @@ export function createWorkspaceLayoutStore(
             const closingTab = collectAllTabs(layout.root).find(
               (tab) => tab.tabId === normalizedTabId,
             );
-            if (closingPane?.tabIds.length === 1 && closingTab?.target.kind === "new_tab") {
-              const nextLayout =
-                closingPane.id === sidePanelPaneId
-                  ? setPaneHiddenInLayout({
-                      layout,
-                      paneId: closingPane.id,
-                      hidden: true,
-                    })
-                  : closePaneInLayout({ layout, paneId: closingPane.id });
+            if (
+              closingPane?.tabIds.length === 1 &&
+              closingTab?.target.kind === "new_tab" &&
+              closingPane.id !== sidePanelPaneId
+            ) {
+              const nextLayout = closePaneInLayout({ layout, paneId: closingPane.id });
               if (!nextLayout) {
                 return state;
               }
@@ -631,7 +714,7 @@ export function createWorkspaceLayoutStore(
               };
             }
             const preserveEmptyPaneId =
-              closingPane?.id === "main" || closingPane?.id === sidePanelPaneId
+              closingPane?.id === DEFAULT_PANE_ID || closingPane?.id === sidePanelPaneId
                 ? closingPane.id
                 : null;
             const closedLayout = closeTabInLayout({
@@ -690,14 +773,37 @@ export function createWorkspaceLayoutStore(
           const normalizedTabId = trimNonEmpty(tabId);
           const normalizedTarget = normalizeWorkspaceTabTarget(target);
           if (!normalizedWorkspaceKey || !normalizedTabId || !normalizedTarget) return null;
+          const currentLayout = getWorkspaceLayout(get().layoutByWorkspace, normalizedWorkspaceKey);
+          const sidePanelPaneId = resolveSidePanelPaneId(
+            currentLayout,
+            get().sidePanelPaneIdByWorkspace[normalizedWorkspaceKey],
+          );
+          const sourcePane = findPaneContainingTab(currentLayout.root, normalizedTabId);
           const result = replaceTabTargetInLayout({
-            layout: getWorkspaceLayout(get().layoutByWorkspace, normalizedWorkspaceKey),
+            layout: currentLayout,
             tabId: normalizedTabId,
             target: normalizedTarget,
             createTabId: createWorkspaceTabInstanceId,
             state: tabState,
           });
           if (!result) return null;
+          let nextLayout = result.layout;
+          if (
+            sidePanelPaneId &&
+            sourcePane?.id === sidePanelPaneId &&
+            !isWorkspaceSidePanelToolTarget(normalizedTarget)
+          ) {
+            const mainPaneId = findMainWorkspacePaneId(nextLayout, sidePanelPaneId);
+            if (mainPaneId) {
+              nextLayout =
+                moveTabToPaneInLayout({
+                  layout: nextLayout,
+                  tabId: result.tabId,
+                  toPaneId: mainPaneId,
+                  preserveEmptyPaneId: sidePanelPaneId,
+                }) ?? nextLayout;
+            }
+          }
           set((state) => ({
             ...withoutFocusRestoration(state, normalizedWorkspaceKey),
             hiddenAgentIdsByWorkspace:
@@ -710,7 +816,7 @@ export function createWorkspaceLayoutStore(
                   ),
             layoutByWorkspace: {
               ...state.layoutByWorkspace,
-              [normalizedWorkspaceKey]: result.layout,
+              [normalizedWorkspaceKey]: nextLayout,
             },
           }));
           return result.tabId;
@@ -922,10 +1028,24 @@ export function createWorkspaceLayoutStore(
           }
 
           set((state) => {
+            const layout = getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey);
+            const sidePanelPaneId = resolveSidePanelPaneId(
+              layout,
+              state.sidePanelPaneIdByWorkspace[normalizedWorkspaceKey],
+            );
+            const sourcePane = findPaneContainingTab(layout.root, normalizedTabId);
+            if (
+              sidePanelPaneId &&
+              sourcePane?.id !== normalizedToPaneId &&
+              (sourcePane?.id === sidePanelPaneId || normalizedToPaneId === sidePanelPaneId)
+            ) {
+              return state;
+            }
             const nextLayout = moveTabToPaneInLayout({
-              layout: getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey),
+              layout,
               tabId: normalizedTabId,
               toPaneId: normalizedToPaneId,
+              preserveEmptyPaneId: sidePanelPaneId,
             });
             if (!nextLayout) {
               return state;

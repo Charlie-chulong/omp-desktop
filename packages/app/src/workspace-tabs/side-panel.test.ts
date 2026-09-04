@@ -80,7 +80,6 @@ describe("compact surface", () => {
     toggleSupportingTab({
       ...compact,
       target: { kind: "working_diff" },
-      openInSidePanelByDefault: true,
     });
 
     expect(usePanelStore.getState().mobilePanel.target).toBe("file-explorer");
@@ -114,11 +113,11 @@ describe("non-compact with splits", () => {
     checkout: CHECKOUT,
   };
 
-  it("reveals a New tab pane rather than seeding a supporting view into it", () => {
+  it("reveals the tool pane with its default Files view", () => {
     toggleSidePanel(wide);
 
     expect(isSidePanelOpen(wide)).toBe(true);
-    expect(tabKinds()).toEqual(["new_tab", "new_tab"]);
+    expect(tabKinds()).toEqual(["new_tab", "files"]);
     expect(collectAllPanes(layout().root).length).toBeGreaterThan(1);
   });
 
@@ -154,7 +153,6 @@ describe("non-compact with splits", () => {
       supportsPaneSplits: true,
       workspaceKey: WORKSPACE_KEY,
       target: { kind: "files" },
-      openInSidePanelByDefault: true,
     });
 
     expect(tabId).not.toBeNull();
@@ -162,52 +160,65 @@ describe("non-compact with splits", () => {
     expect(isSidePanelOpen(wide)).toBe(true);
   });
 
-  it("finds a supporting tab the user moved instead of dragging it back", () => {
+  it("keeps tool tabs fixed in the side panel", () => {
     const tabId = openSupportingTab({
       isCompact: false,
       supportsPaneSplits: true,
       workspaceKey: WORKSPACE_KEY,
       target: { kind: "files" },
-      openInSidePanelByDefault: true,
     }) as string;
+
     useWorkspaceLayoutStore.getState().moveTabToPane(WORKSPACE_KEY, tabId, "main");
 
-    const reopened = openSupportingTab({
-      isCompact: false,
-      supportsPaneSplits: true,
-      workspaceKey: WORKSPACE_KEY,
-      target: { kind: "files" },
-      openInSidePanelByDefault: true,
-    });
-
-    expect(reopened).toBe(tabId);
-    expect(paneIdHolding(tabId)).toBe("main");
+    expect(paneIdHolding(tabId)).toBe(sidePanelPaneId());
   });
 
-  it("opens a new supporting tab in the focused pane when routing is off", () => {
+  it("routes file content to the main pane while the tool pane owns focus", () => {
+    openSidePanelView({ ...wide, view: "files" });
     const tabId = openSupportingTab({
       isCompact: false,
       supportsPaneSplits: true,
       workspaceKey: WORKSPACE_KEY,
-      target: { kind: "files" },
-      openInSidePanelByDefault: false,
+      target: { kind: "file", path: "src/example.ts" },
     });
 
-    expect(paneIdHolding(tabId as string)).toBe(layout().focusedPaneId);
-    expect(isSidePanelOpen(wide)).toBe(false);
+    expect(paneIdHolding(tabId as string)).toBe("main");
+    expect(isSidePanelOpen(wide)).toBe(true);
   });
 
-  it("adds a background supporting tab without revealing the panel", () => {
+  it("opens a selected diff as a distinct document in the main pane", () => {
+    openSidePanelView({ ...wide, view: "changes" });
+    const tabId = useWorkspaceLayoutStore.getState().openTab({
+      workspaceKey: WORKSPACE_KEY,
+      target: {
+        kind: "working_diff",
+        focusPath: "src/example.ts",
+        focusRequestId: 1,
+      },
+      intent: "reveal",
+      placement: { mode: "focused" },
+    });
+
+    expect(tabId).toBe("working_diff_document");
+    expect(paneIdHolding(tabId as string)).toBe("main");
+    expect(
+      collectAllTabs(layout().root).filter(
+        (tab) => tab.target.kind === "working_diff" && tab.target.focusPath === undefined,
+      ),
+    ).toHaveLength(1);
+    expect(isSidePanelOpen(wide)).toBe(true);
+  });
+
+  it("adds background setup content to the main pane without revealing tools", () => {
     const tabId = openSupportingTab({
       isCompact: false,
       supportsPaneSplits: true,
       workspaceKey: WORKSPACE_KEY,
       target: { kind: "setup", workspaceId: "ws-main" },
-      openInSidePanelByDefault: true,
       background: true,
     });
 
-    expect(paneIdHolding(tabId as string)).toBe(sidePanelPaneId());
+    expect(paneIdHolding(tabId as string)).toBe("main");
     expect(isSidePanelOpen(wide)).toBe(false);
   });
 
@@ -223,7 +234,6 @@ describe("non-compact with splits", () => {
     const changes = {
       ...wide,
       target: { kind: "working_diff" } as const,
-      openInSidePanelByDefault: true,
     };
     const tabId = toggleSupportingTab(changes);
     openSidePanelView({ ...wide, view: "files" });
@@ -271,7 +281,6 @@ describe("non-compact without splits", () => {
       supportsPaneSplits: false,
       workspaceKey: WORKSPACE_KEY,
       target: { kind: "files" },
-      openInSidePanelByDefault: true,
     });
 
     expect(tabId).not.toBeNull();

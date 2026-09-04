@@ -932,6 +932,14 @@ export const zhCN: TranslationResources = {
         failedGeneration: "生成 commit message 失败",
       },
       diff: {
+        staging: {
+          stagedChanges: "暂存的更改",
+          changes: "更改",
+          stage: "暂存更改",
+          unstage: "取消暂存",
+          failedStage: "暂存更改失败",
+          failedUnstage: "取消暂存失败",
+        },
         openChangesTab: "打开“更改”标签页",
         closeChangesTab: "关闭“更改”标签页",
         binaryFile: "二进制文件",
@@ -2010,10 +2018,6 @@ export const zhCN: TranslationResources = {
         label: "终端回滚",
         description: "内置终端缓冲区保留的行数",
         accessibilityLabel: "终端回滚行数",
-      },
-      sidePanelRouting: {
-        label: "在侧边面板中打开辅助标签页",
-        description: "文件链接、拉取请求和设置进度会在你的工作旁边打开，而不是在聚焦的窗格中",
       },
       autoExpandReasoning: {
         label: "始终展开推理过程",

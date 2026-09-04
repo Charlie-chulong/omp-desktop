@@ -816,7 +816,8 @@ export interface AgentClient {
   getOmpInstallationStatus?(options?: {
     checkForUpdates?: boolean;
   }): Promise<OmpInstallationStatus>;
-  installOmp?(): Promise<OmpInstallationStatus>;
+  installOmp?(options?: { defer?: boolean }): Promise<OmpInstallationStatus>;
+  cancelOmpInstall?(): Promise<OmpInstallationStatus>;
   startOmpProviderLogin?(providerId: string): Promise<OmpProviderLoginStart>;
   finishOmpProviderLogin?(flowId: string, input?: string): Promise<OmpProviderManagement>;
   cancelOmpProviderLogin?(flowId: string): Promise<boolean>;

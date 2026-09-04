@@ -905,6 +905,14 @@ export class Session {
         supportsCompactProviderSnapshots: () => this.supports(CLIENT_CAPS.compactProviderSnapshots),
         listProviderAvailability: () => this.agentManager.listProviderAvailability(),
         listDraftFeatures: (config) => this.agentManager.listDraftFeatures(config),
+        listActiveOmpAgentIds: () =>
+          this.agentManager
+            .listAgents({ includeInternal: true })
+            .filter((agent) => agent.provider === "omp")
+            .map((agent) => agent.id),
+        stopOmpAgents: async (agentIds) => {
+          await Promise.all(agentIds.map((agentId) => this.agentManager.closeAgent(agentId)));
+        },
       },
       providerSnapshotManager,
       providerUsageService,
@@ -2359,6 +2367,8 @@ export class Session {
         return this.checkoutSession.handleRefreshRequest(msg);
       case "checkout.discard_changes.request":
         return this.checkoutSession.handleCheckoutDiscardChangesRequest(msg);
+      case "checkout.stage_changes.request":
+        return this.checkoutSession.handleCheckoutStageChangesRequest(msg);
       case "checkout_pr_create_request":
         return this.checkoutSession.handleCheckoutPrCreateRequest(msg);
       case "checkout_pr_merge_request":

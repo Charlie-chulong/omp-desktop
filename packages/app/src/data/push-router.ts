@@ -17,6 +17,7 @@ import {
   providersSnapshotQueryKey,
   providersSnapshotQueryRoot,
 } from "@/data/providers-snapshot";
+import type { CheckoutDiffMode } from "@/git/query-keys";
 
 type ProvidersSnapshotUpdateMessage = Extract<
   SessionOutboundMessage,
@@ -40,7 +41,7 @@ type CheckoutDiffCachePayload = Omit<CheckoutDiffResponsePayload, "subscriptionI
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
 
 interface CheckoutDiffCompare {
-  mode: "uncommitted" | "base";
+  mode: CheckoutDiffMode;
   baseRef?: string;
   ignoreWhitespace?: boolean;
 }
@@ -105,19 +106,25 @@ const RECONNECT_REPAIR_POLICIES: ReconnectRepairPolicy[] = [
   {
     domain: "providersSnapshot",
     invalidate: ({ queryClient, serverId }) => {
-      void queryClient.invalidateQueries({ queryKey: providersSnapshotQueryRoot(serverId) });
+      void queryClient.invalidateQueries({
+        queryKey: providersSnapshotQueryRoot(serverId),
+      });
     },
   },
   {
     domain: "daemonConfig",
     invalidate: ({ queryClient, serverId }) => {
-      void queryClient.invalidateQueries({ queryKey: daemonConfigQueryKey(serverId) });
+      void queryClient.invalidateQueries({
+        queryKey: daemonConfigQueryKey(serverId),
+      });
     },
   },
   {
     domain: "daemonPairingOffer",
     invalidate: ({ queryClient, serverId }) => {
-      void queryClient.invalidateQueries({ queryKey: daemonPairingOfferQueryKey(serverId) });
+      void queryClient.invalidateQueries({
+        queryKey: daemonPairingOfferQueryKey(serverId),
+      });
     },
   },
   {
@@ -301,7 +308,11 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
     });
   });
   const unsubscribeDaemonConfig = input.client.on("status", (message) => {
-    applyDaemonConfigStatus({ queryClient: input.queryClient, serverId: input.serverId, message });
+    applyDaemonConfigStatus({
+      queryClient: input.queryClient,
+      serverId: input.serverId,
+      message,
+    });
   });
   const unsubscribeCheckoutDiffUpdate = input.client.on("checkout_diff_update", (message) => {
     applyCheckoutDiffUpdate({
@@ -725,7 +736,7 @@ function readCheckoutDiffCompare(value: unknown): CheckoutDiffCompare | null {
   const mode = value.mode;
   const baseRef = value.baseRef;
   const ignoreWhitespace = value.ignoreWhitespace;
-  if (mode !== "uncommitted" && mode !== "base") {
+  if (mode !== "uncommitted" && mode !== "staged" && mode !== "unstaged" && mode !== "base") {
     return null;
   }
   if (baseRef !== undefined && typeof baseRef !== "string") {

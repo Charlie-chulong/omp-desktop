@@ -528,12 +528,20 @@ export class ProviderSnapshotManager {
     return await client.getOmpInstallationStatus(options);
   }
 
-  async installOmp() {
+  async installOmp(options?: { defer?: boolean }) {
     const definition = this.providerRegistry.omp;
     if (!definition) throw new Error("OMP provider is not configured");
     const client = this.ensureClient("omp", definition);
     if (!client.installOmp) throw new Error("OMP installation is unavailable");
-    return await client.installOmp();
+    return await client.installOmp(options);
+  }
+
+  async cancelOmpInstall() {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.cancelOmpInstall) throw new Error("Canceling the OMP installation is unavailable");
+    return await client.cancelOmpInstall();
   }
 
   async startOmpProviderLogin(providerId: string) {

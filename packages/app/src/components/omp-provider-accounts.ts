@@ -6,6 +6,7 @@ export interface OmpAccountIdentity {
 interface OmpAccountFeatureOption {
   id: string;
   label: string;
+  description?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -28,6 +29,17 @@ export function orderOmpAccountFeatureOptions<T extends OmpAccountFeatureOption>
     : [...options];
 }
 
+export function resolveOmpAccountSelectorOptions(
+  featureOptions: readonly OmpAccountFeatureOption[] | null | undefined,
+  accounts: readonly { credentialId: number }[],
+): OmpAccountFeatureOption[] {
+  if (featureOptions) return orderOmpAccountFeatureOptions(featureOptions);
+  return accounts.map((account) => {
+    const id = String(account.credentialId);
+    return { id, label: id };
+  });
+}
+
 export function resolveOmpAccountFeatureSelection(feature: OmpAccountFeatureSelection): {
   automaticOptionId: string | null;
   configuredValue: string;
@@ -41,8 +53,7 @@ export function resolveOmpAccountFeatureSelection(feature: OmpAccountFeatureSele
   return {
     automaticOptionId: automaticOption?.id ?? null,
     configuredValue: isAutomatic ? (automaticOption?.id ?? "") : (feature.value ?? ""),
-    effectiveValue:
-      feature.effectiveValue ?? (isAutomatic ? "" : (feature.value ?? "")),
+    effectiveValue: feature.effectiveValue ?? (isAutomatic ? "" : (feature.value ?? "")),
     isAutomatic,
   };
 }

@@ -16,6 +16,24 @@ interface CommitsSectionProps {
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
+type LoadedCommitsQuery = Extract<
+  Exclude<CheckoutCommitsQueryResult, { status: "unsupported" }>,
+  { status: "loaded" }
+>;
+type Commit = LoadedCommitsQuery["data"]["commits"][number];
+
+function commitKey(commit: Commit): string {
+  return commit.sha;
+}
+
+function commitItemLayout(_: ArrayLike<Commit> | null | undefined, index: number) {
+  return {
+    length: COMMIT_ROW_HEIGHT,
+    offset: COMMIT_ROW_HEIGHT * index,
+    index,
+  };
+}
+
 function CommitsSectionSkeleton() {
   const { t } = useTranslation();
   return (
@@ -33,6 +51,48 @@ function CommitsSectionSkeleton() {
         <View style={styles.skeletonCaret} />
       </View>
     </View>
+  );
+}
+
+function LoadedCommitsList({
+  query,
+  now,
+  currentBranchName,
+  onCommitPress,
+}: {
+  query: LoadedCommitsQuery;
+  now: Date;
+  currentBranchName?: string | null;
+  onCommitPress: (sha: string) => void;
+}) {
+  const commits = query.data.commits;
+  const renderItem = useCallback(
+    ({ item: commit, index }: { item: Commit; index: number }) => (
+      <CommitRow
+        commit={commit}
+        isFirst={index === 0}
+        isLast={index === commits.length - 1}
+        isContextCommit={Boolean(query.data.baseRef) && commit.isOnBase}
+        branchName={index === 0 ? currentBranchName : null}
+        now={now}
+        onCommitPress={onCommitPress}
+      />
+    ),
+    [commits.length, currentBranchName, now, onCommitPress, query.data.baseRef],
+  );
+
+  return (
+    <FlatList
+      data={commits}
+      keyExtractor={commitKey}
+      getItemLayout={commitItemLayout}
+      renderItem={renderItem}
+      extraData={`${now.getTime()}:${currentBranchName ?? ""}`}
+      style={styles.list}
+      contentContainerStyle={styles.listContent}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+    />
   );
 }
 
@@ -58,8 +118,7 @@ function CommitsSectionContent({
   if (query.status !== "loaded") {
     return <CommitsSectionSkeleton />;
   }
-  const commits = query.data.commits;
-  if (commits.length === 0) {
+  if (query.data.commits.length === 0) {
     return (
       <View style={styles.emptyRow} testID="commits-section-empty">
         <Text style={styles.emptyText}>{t("workspace.git.diff.commits.empty")}</Text>
@@ -67,30 +126,11 @@ function CommitsSectionContent({
     );
   }
   return (
-    <FlatList
-      data={commits}
-      keyExtractor={(commit) => commit.sha}
-      getItemLayout={(_, index) => ({
-        length: COMMIT_ROW_HEIGHT,
-        offset: COMMIT_ROW_HEIGHT * index,
-        index,
-      })}
-      renderItem={({ item: commit, index }) => (
-        <CommitRow
-          commit={commit}
-          isFirst={index === 0}
-          isLast={index === commits.length - 1}
-          isContextCommit={Boolean(query.data.baseRef) && commit.isOnBase}
-          branchName={index === 0 ? currentBranchName : null}
-          now={now}
-          onCommitPress={onCommitPress}
-        />
-      )}
-      extraData={`${now.getTime()}:${currentBranchName ?? ""}`}
-      style={styles.list}
-      contentContainerStyle={styles.listContent}
-      nestedScrollEnabled
-      showsVerticalScrollIndicator
+    <LoadedCommitsList
+      query={query}
+      now={now}
+      currentBranchName={currentBranchName}
+      onCommitPress={onCommitPress}
     />
   );
 }
@@ -179,6 +219,7 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     borderTopWidth: theme.borderWidth[1],
     borderTopColor: theme.colors.border,
+    flexShrink: 0,
   },
   header: {
     flexDirection: "row",

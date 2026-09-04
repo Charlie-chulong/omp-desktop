@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { router } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import ReanimatedAnimated from "react-native-reanimated";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PanelRight } from "lucide-react-native";
+import { MessageSquarePlus, PanelRight } from "lucide-react-native";
 import { Composer } from "@/composer";
 import { GoalBar, type GoalControlAction } from "@/composer/goal-bar";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -71,6 +72,10 @@ import type { AgentProvider } from "@omp-desktop/protocol/agent-types";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { openSupportingTab } from "@/workspace-tabs/side-panel";
+import {
+  WorkspaceDesktopTabsRow,
+  type WorkspaceDesktopTabRowItem,
+} from "@/screens/workspace/workspace-desktop-tabs-row";
 import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
 import {
   getWorkspaceNamingAttachments,
@@ -86,6 +91,7 @@ import { useNewWorkspaceProjectPicker } from "./new-workspace/project-picker";
 const ThemedPanelRight = withUnistyles(PanelRight);
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const noopWorkspaceTabAction = () => {};
 
 function useIsNewWorkspaceDraftHandoffActive(input: {
   draftId: string | undefined;
@@ -805,6 +811,34 @@ export function NewWorkspaceScreen({
     [draftId, removeSidebarConversationDraft],
   );
   const composerState = chatDraft.composerState;
+  const [hoveredCloseTabKey, setHoveredCloseTabKey] = useState<string | null>(null);
+  const newConversationTabs = useMemo<WorkspaceDesktopTabRowItem[]>(
+    () => [
+      {
+        tab: {
+          key: draftKey,
+          tabId: draftKey,
+          kind: "draft",
+          target: { kind: "draft", draftId: draftKey },
+        },
+        isActive: true,
+        isCloseHovered: hoveredCloseTabKey === draftKey,
+        isClosingTab: false,
+        presentation: {
+          key: draftKey,
+          kind: "draft",
+          label: t("newWorkspace.title"),
+          subtitle: t("newWorkspace.title"),
+          tooltip: t("newWorkspace.title"),
+          modified: chatDraft.text.length > 0 || chatDraft.attachments.length > 0,
+          titleState: "ready",
+          icon: MessageSquarePlus,
+          statusBucket: null,
+        },
+      },
+    ],
+    [chatDraft.attachments.length, chatDraft.text.length, draftKey, hoveredCloseTabKey, t],
+  );
   const [, dispatchPickerSelection] = useReducer(
     reducePickerSelection,
     initialPickerSelectionState,
@@ -1040,13 +1074,19 @@ export function NewWorkspaceScreen({
         : null,
     [lastWorkspaceSelectionForHeader],
   );
+  const handleCloseNewConversationTab = useCallback(() => {
+    if (lastWorkspaceSelectionForHeader) {
+      navigateToWorkspace(lastWorkspaceSelectionForHeader);
+      return;
+    }
+    router.replace("/");
+  }, [lastWorkspaceSelectionForHeader]);
   const handleOpenHeaderExplorer = useCallback(() => {
     if (!lastWorkspaceSelectionForHeader || !headerWorkspaceKey) return;
     openSupportingTab({
       isCompact: false,
       workspaceKey: headerWorkspaceKey,
       target: { kind: "files" },
-      openInSidePanelByDefault: true,
     });
     navigateToWorkspace(lastWorkspaceSelectionForHeader);
   }, [headerWorkspaceKey, lastWorkspaceSelectionForHeader]);
@@ -1080,6 +1120,34 @@ export function NewWorkspaceScreen({
   return (
     <FileDropZone style={styles.container}>
       <ScreenHeader left={screenHeaderLeft} right={screenHeaderRight} borderless />
+      {!isCompact ? (
+        <View style={styles.newConversationTabs}>
+          <TitlebarDragRegion />
+          <WorkspaceDesktopTabsRow
+            isFocused
+            newTabShortcutEnabled={false}
+            tabs={newConversationTabs}
+            normalizedServerId={selectedServerId}
+            normalizedWorkspaceId=""
+            setHoveredCloseTabKey={setHoveredCloseTabKey}
+            onNavigateTab={noopWorkspaceTabAction}
+            onCloseTab={handleCloseNewConversationTab}
+            onCopyResumeCommand={noopWorkspaceTabAction}
+            onCopyAgentId={noopWorkspaceTabAction}
+            onCopyTerminalId={noopWorkspaceTabAction}
+            onCopyFilePath={noopWorkspaceTabAction}
+            onReloadAgent={noopWorkspaceTabAction}
+            onRenameTab={noopWorkspaceTabAction}
+            onCloseTabsToLeft={noopWorkspaceTabAction}
+            onCloseTabsToRight={noopWorkspaceTabAction}
+            onCloseOtherTabs={noopWorkspaceTabAction}
+            onCreateNewTab={noopWorkspaceTabAction}
+            onReorderTabs={noopWorkspaceTabAction}
+            focusModeEnabled={false}
+            onExitFocusMode={noopWorkspaceTabAction}
+          />
+        </View>
+      ) : null}
       <View style={contentStyle}>
         <TitlebarDragRegion />
         <ReanimatedAnimated.View style={centeredStyle}>
@@ -1187,6 +1255,10 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     backgroundColor: theme.colors.surface0,
     userSelect: "none",
+  },
+  newConversationTabs: {
+    position: "relative",
+    minWidth: 0,
   },
   content: {
     position: "relative",

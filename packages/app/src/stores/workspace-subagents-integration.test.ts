@@ -258,7 +258,7 @@ describe("workspace subagents integration", () => {
     ).toEqual([child.id]);
   });
 
-  it("opens a subagent in the side panel when focused", () => {
+  it("opens a subagent in the main pane while the side panel is focused", () => {
     const workspaceKey = buildWorkspaceTabPersistenceKey({
       serverId: SERVER_ID,
       workspaceId: WORKSPACE_ID,
@@ -293,12 +293,12 @@ describe("workspace subagents integration", () => {
     const sidePanelPaneId = state.sidePanelPaneIdByWorkspace[workspaceKey!];
 
     expect(sidePanelPaneId).toBeTruthy();
-    expect(findPaneContainingTab(layout.root, tabId!)?.id).toBe(sidePanelPaneId);
+    expect(findPaneContainingTab(layout.root, tabId!)?.id).toBe("main");
     expect(findPaneById(layout.root, sidePanelPaneId!)?.hidden).toBeUndefined();
-    expect(layout.focusedPaneId).toBe(sidePanelPaneId);
+    expect(layout.focusedPaneId).toBe("main");
   });
 
-  it("opens a provider subagent in the side panel when focused", () => {
+  it("opens a provider subagent in the main pane while the side panel is focused", () => {
     const workspaceKey = buildWorkspaceTabPersistenceKey({
       serverId: SERVER_ID,
       workspaceId: WORKSPACE_ID,
@@ -320,8 +320,8 @@ describe("workspace subagents integration", () => {
     const sidePanelPaneId = state.sidePanelPaneIdByWorkspace[workspaceKey!];
 
     expect(sidePanelPaneId).toBeTruthy();
-    expect(findPaneContainingTab(layout.root, tabId!)?.id).toBe(sidePanelPaneId);
+    expect(findPaneContainingTab(layout.root, tabId!)?.id).toBe("main");
     expect(findPaneById(layout.root, sidePanelPaneId!)?.hidden).toBeUndefined();
-    expect(layout.focusedPaneId).toBe(sidePanelPaneId);
+    expect(layout.focusedPaneId).toBe("main");
   });
 });

@@ -2,6 +2,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { JsonValue } from "@omp-desktop/protocol/agent-types";
 import { getOpenAgentTabLabel } from "@omp-desktop/protocol/agent-labels";
 import {
+  createElement,
   memo,
   type ComponentProps,
   useCallback,
@@ -72,7 +73,6 @@ import {
   type WorkspaceTab,
   type WorkspaceTabTarget,
 } from "@/workspace-tabs/model";
-import { useSettings } from "@/hooks/use-settings";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type {
@@ -81,6 +81,7 @@ import type {
 } from "@/keyboard/keyboard-action-dispatcher";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { normalizeWorkspaceTabTarget, workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
+import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-target";
 import { useVisibleAgentIds } from "./visible-agent-ids";
 import {
   getHostRuntimeStore,
@@ -1337,6 +1338,16 @@ function resolveCommandCenterPanelTarget(target: WorkspacePanelTarget): Workspac
   }
 }
 
+function WorkspaceScreenFocusBoundary({
+  workspaceKey,
+  content,
+}: {
+  workspaceKey: string | null;
+  content: ReactNode;
+}) {
+  return <WorkspaceFocusProvider workspaceKey={workspaceKey}>{content}</WorkspaceFocusProvider>;
+}
+
 function WorkspaceScreenContent({
   serverId,
   workspaceId,
@@ -1467,17 +1478,6 @@ function WorkspaceScreenContent({
       recoveryRequested,
     ),
   });
-
-  const workspaceAgentVisibility = useStoreWithEqualityFn(
-    useSessionStore,
-    (state) =>
-      deriveWorkspaceAgentVisibility({
-        sessionAgents: state.sessions[normalizedServerId]?.agents,
-        agentDetails: state.sessions[normalizedServerId]?.agentDetails,
-        workspaceId: normalizedWorkspaceId,
-      }),
-    workspaceAgentVisibilityEqual,
-  );
 
   const {
     handleTerminalCreated,
@@ -1617,6 +1617,26 @@ function WorkspaceScreenContent({
     () => (workspaceLayout ? collectAllTabs(workspaceLayout.root) : EMPTY_UI_TABS),
     [workspaceLayout],
   );
+  const openAgentIds = useMemo(() => {
+    const agentIds = new Set<string>();
+    for (const tab of uiTabs) {
+      if (tab.target.kind === "agent") {
+        agentIds.add(tab.target.agentId);
+      }
+    }
+    return agentIds;
+  }, [uiTabs]);
+  const workspaceAgentVisibility = useStoreWithEqualityFn(
+    useSessionStore,
+    (state) =>
+      deriveWorkspaceAgentVisibility({
+        sessionAgents: state.sessions[normalizedServerId]?.agents,
+        agentDetails: state.sessions[normalizedServerId]?.agentDetails,
+        workspaceId: normalizedWorkspaceId,
+        openAgentIds,
+      }),
+    workspaceAgentVisibilityEqual,
+  );
   useOpenAgentTabLabels({
     client,
     serverId: normalizedServerId,
@@ -1632,9 +1652,6 @@ function WorkspaceScreenContent({
     (workspaceKey: string, target: WorkspaceTabTarget, placement?: WorkspaceTabPlacement) =>
       openTab({ workspaceKey, target, intent: "background", placement }),
     [openTab],
-  );
-  const openInSidePanelByDefault = useSettings(
-    (settings) => settings.openSupportingTabsInSidePanel,
   );
   const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
   const closeWorkspaceTab = useWorkspaceLayoutStore((state) => state.closeTab);
@@ -1977,7 +1994,7 @@ function WorkspaceScreenContent({
     ],
   );
 
-  const handleOpenAssistantFileInSidePanel = useCallback(
+  const handleOpenAssistantFile = useCallback(
     (input: { location: WorkspaceFileLocation; parentTabId?: string | null }) => {
       const location = normalizeWorkspaceFileLocation(input.location);
       if (!location) {
@@ -1994,7 +2011,6 @@ function WorkspaceScreenContent({
         isCompact: isMobile,
         workspaceKey: persistenceKey,
         target: createWorkspaceFileTabTarget(location),
-        openInSidePanelByDefault,
         parentTabId: input.parentTabId,
       });
       if (tabId) {
@@ -2002,14 +2018,7 @@ function WorkspaceScreenContent({
         navigateToTabId(tabId);
       }
     },
-    [
-      isMobile,
-      navigateToTabId,
-      openInSidePanelByDefault,
-      persistenceKey,
-      requestFileNavigation,
-      showMobileAgent,
-    ],
+    [isMobile, navigateToTabId, persistenceKey, requestFileNavigation, showMobileAgent],
   );
 
   const handleOpenWorkspaceFileFromPane = useStableEvent(function handleOpenWorkspaceFileFromPane({
@@ -2027,7 +2036,7 @@ function WorkspaceScreenContent({
       focusWorkspacePane(persistenceKey, paneId);
     }
     if (request.disposition === "side") {
-      handleOpenAssistantFileInSidePanel({
+      handleOpenAssistantFile({
         location: request.location,
         parentTabId,
       });
@@ -2178,6 +2187,15 @@ function WorkspaceScreenContent({
         }
       };
       if (selection.kind === "target") {
+        if (isWorkspaceSidePanelToolTarget(selection.target)) {
+          openTabInSidePanel({
+            isCompact: isMobile,
+            workspaceKey: persistenceKey,
+            checkout: activeExplorerCheckout,
+            target: selection.target,
+          });
+          return;
+        }
         openTarget(selection.target);
         return;
       }
@@ -2198,7 +2216,14 @@ function WorkspaceScreenContent({
       const { browserId } = createWorkspaceBrowser();
       openTarget({ kind: "browser", browserId });
     },
-    [createTerminal, createWorkspaceTab, persistenceKey, replaceWorkspaceTabTarget],
+    [
+      activeExplorerCheckout,
+      createTerminal,
+      createWorkspaceTab,
+      isMobile,
+      persistenceKey,
+      replaceWorkspaceTabTarget,
+    ],
   );
 
   const handleOpenUrlInBrowserTab = useCallback(
@@ -2736,7 +2761,6 @@ function WorkspaceScreenContent({
           isCompact: isMobile,
           workspaceKey: persistenceKey,
           target,
-          openInSidePanelByDefault,
         });
         return true;
       }
@@ -2761,7 +2785,6 @@ function WorkspaceScreenContent({
       activeExplorerCheckout,
       focusedPaneTabState.pane?.id,
       isMobile,
-      openInSidePanelByDefault,
       openWorkspaceTabFocused,
       persistenceKey,
     ],
@@ -2900,13 +2923,17 @@ function WorkspaceScreenContent({
               isCompact: isMobile,
               workspaceKey: persistenceKey,
               target: { kind: "working_diff" },
-              openInSidePanelByDefault,
             });
           }
           return true;
         case "workspace.tab.target.files":
           if (persistenceKey) {
-            openWorkspaceTabFocused(persistenceKey, { kind: "files" }, paneLocalPlacement(paneId));
+            openTabInSidePanel({
+              isCompact: isMobile,
+              workspaceKey: persistenceKey,
+              checkout: activeExplorerCheckout,
+              target: { kind: "files" },
+            });
           }
           return true;
         default:
@@ -2914,13 +2941,12 @@ function WorkspaceScreenContent({
       }
     },
     [
+      activeExplorerCheckout,
       focusedPaneTabState.pane?.id,
       handleCreateBrowserTab,
       handleCreateDraftTab,
       isGitCheckout,
       isMobile,
-      openInSidePanelByDefault,
-      openWorkspaceTabFocused,
       persistenceKey,
     ],
   );
@@ -3740,11 +3766,10 @@ function WorkspaceScreenContent({
   if (gatedWorkspaceScreen) {
     return gatedWorkspaceScreen;
   }
-  return (
-    <WorkspaceFocusProvider workspaceKey={persistenceKey}>
-      {renderedWorkspaceScreen}
-    </WorkspaceFocusProvider>
-  );
+  return createElement(WorkspaceScreenFocusBoundary, {
+    workspaceKey: persistenceKey,
+    content: renderedWorkspaceScreen,
+  });
 }
 
 const styles = StyleSheet.create((theme) => ({

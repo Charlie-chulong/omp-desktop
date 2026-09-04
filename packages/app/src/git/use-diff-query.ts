@@ -5,11 +5,12 @@ import { checkoutDiffPushRoute } from "@/data/push-router";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import type { ParsedDiffFile, SubscribeCheckoutDiffResponse } from "@omp-desktop/protocol/messages";
 import { checkoutDiffQueryKey } from "@/git/query-keys";
+import type { CheckoutDiffMode } from "@/git/query-keys";
 
 interface UseCheckoutDiffQueryOptions {
   serverId: string;
   cwd: string;
-  mode: "uncommitted" | "base";
+  mode: CheckoutDiffMode;
   baseRef?: string;
   ignoreWhitespace?: boolean;
   enabled?: boolean;
@@ -25,13 +26,13 @@ export type DiffLine = DiffHunk["lines"][number];
 export type HighlightToken = NonNullable<DiffLine["tokens"]>[number];
 
 function normalizeCheckoutDiffCompare(compare: {
-  mode: "uncommitted" | "base";
+  mode: CheckoutDiffMode;
   baseRef?: string;
   ignoreWhitespace?: boolean;
-}): { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean } {
+}): { mode: CheckoutDiffMode; baseRef?: string; ignoreWhitespace?: boolean } {
   const ignoreWhitespace = compare.ignoreWhitespace === true;
-  if (compare.mode === "uncommitted") {
-    return { mode: "uncommitted", ignoreWhitespace };
+  if (compare.mode !== "base") {
+    return { mode: compare.mode, ignoreWhitespace };
   }
   const trimmedBaseRef = compare.baseRef?.trim();
   return trimmedBaseRef

@@ -57,6 +57,7 @@ export function editorTheme(theme: EditorVisualTheme) {
           color: theme.foreground,
           fontFamily: theme.monoFont,
           fontSize: `${theme.codeFontSize}px`,
+          marginLeft: "12px",
         },
         ".cm-scroller": {
           overflow: "auto",

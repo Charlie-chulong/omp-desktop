@@ -952,6 +952,14 @@ export const ptBR: TranslationResources = {
         failedGeneration: "Falha ao gerar a mensagem de commit",
       },
       diff: {
+        staging: {
+          stagedChanges: "Alterações preparadas",
+          changes: "Alterações",
+          stage: "Preparar alterações",
+          unstage: "Remover alterações da preparação",
+          failedStage: "Falha ao preparar alterações",
+          failedUnstage: "Falha ao remover alterações da preparação",
+        },
         openChangesTab: "Abrir a aba Alterações",
         closeChangesTab: "Fechar a aba Alterações",
         binaryFile: "Arquivo binário",
@@ -2057,11 +2065,6 @@ export const ptBR: TranslationResources = {
         label: "Scrollback do terminal",
         description: "Linhas mantidas no buffer do terminal integrado",
         accessibilityLabel: "Linhas do scrollback do terminal",
-      },
-      sidePanelRouting: {
-        label: "Abrir abas de apoio no painel lateral",
-        description:
-          "Links de arquivo, pull requests e progresso da configuração abrem ao lado do seu trabalho em vez do painel em foco",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

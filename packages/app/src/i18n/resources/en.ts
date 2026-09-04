@@ -950,6 +950,14 @@ export const en = {
         failedGeneration: "Failed to generate a commit message",
       },
       diff: {
+        staging: {
+          stagedChanges: "Staged Changes",
+          changes: "Changes",
+          stage: "Stage Changes",
+          unstage: "Unstage Changes",
+          failedStage: "Failed to stage changes",
+          failedUnstage: "Failed to unstage changes",
+        },
         openChangesTab: "Open Changes tab",
         closeChangesTab: "Close Changes tab",
         binaryFile: "Binary file",
@@ -2098,11 +2106,6 @@ export const en = {
         label: "Terminal scrollback",
         description: "Lines kept in the built-in terminal buffer",
         accessibilityLabel: "Terminal scrollback lines",
-      },
-      sidePanelRouting: {
-        label: "Open supporting tabs in the Side panel",
-        description:
-          "File links, pull requests, and setup progress open beside your work instead of in the focused pane",
       },
       autoExpandReasoning: {
         label: "Always expand reasoning",

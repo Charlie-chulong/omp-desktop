@@ -13,14 +13,32 @@ function agentBelongsToWorkspace(agent: Agent, workspaceId: string): boolean {
   return normalizeWorkspaceOpaqueId(agent.workspaceId) === workspaceId;
 }
 
+function includeOpenAgentIds(
+  openAgentIds: Iterable<string> | undefined,
+  agentsById: Map<string, Agent>,
+  workspaceId: string,
+  activeAgentIds: Set<string>,
+  knownAgentIds: Set<string>,
+): void {
+  for (const rawAgentId of openAgentIds ?? []) {
+    const agentId = rawAgentId.trim();
+    if (!agentId) continue;
+    const agent = agentsById.get(agentId);
+    if (agent && agentBelongsToWorkspace(agent, workspaceId)) continue;
+    knownAgentIds.add(agentId);
+    activeAgentIds.add(agentId);
+  }
+}
+
 export function deriveWorkspaceAgentVisibility(input: {
   sessionAgents: Map<string, Agent> | undefined;
   agentDetails?: Map<string, Agent> | undefined;
   workspaceId: string | null | undefined;
+  openAgentIds?: Iterable<string>;
 }): WorkspaceAgentVisibility {
   const { sessionAgents, agentDetails } = input;
   const workspaceId = normalizeWorkspaceOpaqueId(input.workspaceId);
-  if ((!sessionAgents && !agentDetails) || !workspaceId) {
+  if (!workspaceId) {
     return {
       activeAgentIds: new Set<string>(),
       autoOpenAgentIds: new Set<string>(),
@@ -54,6 +72,7 @@ export function deriveWorkspaceAgentVisibility(input: {
     }
     knownAgentIds.add(agent.id);
   }
+  includeOpenAgentIds(input.openAgentIds, agentsById, workspaceId, activeAgentIds, knownAgentIds);
 
   return { activeAgentIds, autoOpenAgentIds, knownAgentIds };
 }

@@ -12,6 +12,7 @@ import {
 } from "@/workspace-tabs/identity";
 import { createNewWorkspaceTab } from "@/workspace-tabs/new-tab";
 import { generateDraftId } from "@/stores/draft-keys";
+import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-target";
 
 export interface SplitPane {
   id: string;
@@ -213,6 +214,7 @@ interface MoveTabToPaneInLayoutInput {
   layout: WorkspaceLayout;
   tabId: string;
   toPaneId: string;
+  preserveEmptyPaneId?: string | null;
 }
 
 interface FocusTabInLayoutInput {
@@ -1222,18 +1224,8 @@ export function removeTabFromTree(root: SplitNode, tabId: string): SplitNode {
   }).root;
 }
 
-// Tab kinds that belong in the main workspace rather than the side panel. Ambient
-// opens, and preferred opens whose requested pane no longer exists, have nobody
-// behind the fallback. The side panel can retain focus from an earlier reveal, so
-// placement must route these back to the main workspace.
-const SIDE_PANEL_EXCLUDED_TAB_KINDS: ReadonlySet<WorkspaceTabTarget["kind"]> = new Set([
-  "agent",
-  "provider_subagent",
-  "terminal",
-  "draft",
-  "browser",
-  "setup",
-]);
+// The dedicated right pane is a tool surface. Content opens from a tool must
+// fall back to the main workspace even when the tool pane still owns focus.
 
 function resolvePlacementPane(input: {
   layout: { root: SplitNodeInternal; focusedPaneId: string | null };
@@ -1245,7 +1237,10 @@ function resolvePlacementPane(input: {
     input.placement.mode === "pane" || input.placement.mode === "prefer"
       ? findPaneById(input.layout.root, input.placement.paneId)
       : null;
-  if (requestedPane) {
+  if (
+    requestedPane &&
+    (requestedPane.id !== input.sidePanelPaneId || isWorkspaceSidePanelToolTarget(input.target))
+  ) {
     return requestedPane as SplitPaneInternal;
   }
 
@@ -1257,11 +1252,7 @@ function resolvePlacementPane(input: {
     collectAllPanes(input.layout.root)[0] ??
     findPaneById(createDefaultLayout().root, DEFAULT_PANE_ID);
   invariant(focusedPane, "Workspace layout must always have a pane");
-  if (
-    (input.placement.mode !== "ambient" && input.placement.mode !== "prefer") ||
-    focusedPane.id !== input.sidePanelPaneId ||
-    !SIDE_PANEL_EXCLUDED_TAB_KINDS.has(input.target.kind)
-  ) {
+  if (focusedPane.id !== input.sidePanelPaneId || isWorkspaceSidePanelToolTarget(input.target)) {
     return focusedPane as SplitPaneInternal;
   }
 
@@ -1741,6 +1732,35 @@ export function setTabStateInLayout(input: {
   });
 }
 
+export function rekeyTabInLayout(input: {
+  layout: WorkspaceLayout;
+  tabId: string;
+  nextTabId: string;
+}): WorkspaceLayout | null {
+  const layout = asInternalLayout(input.layout);
+  const tabId = trimNonEmpty(input.tabId);
+  const nextTabId = trimNonEmpty(input.nextTabId);
+  if (!tabId || !nextTabId) return null;
+  const tab = collectAllTabs(layout.root).find((candidate) => candidate.tabId === tabId);
+  if (!tab) return null;
+  if (tabId === nextTabId) return input.layout;
+  if (collectAllTabs(layout.root).some((candidate) => candidate.tabId === nextTabId)) return null;
+  return withNormalizedParentTabMap({
+    root: replaceTabInTree(layout.root, {
+      tabId,
+      nextTabId,
+      target: tab.target,
+      state: tab.state,
+    }),
+    focusedPaneId: layout.focusedPaneId,
+    parentTabIdByTabId: transferReplacedTabParent({
+      parentTabIdByTabId: input.layout.parentTabIdByTabId,
+      replacedTabId: tabId,
+      replacementTabId: nextTabId,
+    }),
+  });
+}
+
 export function convertDraftToAgentInLayout(
   input: ConvertDraftToAgentInLayoutInput,
 ): ConvertDraftToAgentInLayoutResult | null {
@@ -1913,14 +1933,16 @@ export function moveTabToPaneInLayout(input: MoveTabToPaneInLayoutInput): Worksp
       : closePaneInLayout({ layout, paneId: sourcePane.id });
   }
 
+  const preservedPaneId =
+    sourcePane.id === input.toPaneId ||
+    sourcePane.id === (input.preserveEmptyPaneId ?? SIDE_PANEL_PANE_ID)
+      ? sourcePane.id
+      : null;
   const detached = detachTabFromTree(layout.root, {
     tabId: input.tabId,
-    // Dragging a pane's last tab elsewhere collapses that pane — except the side
-    // panel, which the user summons and expects to find again, geometry and all.
-    preserveEmptyPaneId:
-      sourcePane.id === input.toPaneId || sourcePane.id === SIDE_PANEL_PANE_ID
-        ? sourcePane.id
-        : null,
+    // Dragging a pane's last tab elsewhere collapses that pane — except the
+    // retained side panel, which the user summons and expects to find again.
+    preserveEmptyPaneId: preservedPaneId,
   });
   if (!detached.tab) {
     return null;

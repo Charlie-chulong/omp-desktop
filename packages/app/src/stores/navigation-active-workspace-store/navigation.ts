@@ -32,6 +32,10 @@ export interface NavigateToWorkspaceInput {
   deferAgentTargetUntilNavigation?: boolean;
 }
 
+export interface NavigateToSidebarWorkspaceInput extends NavigateToWorkspaceInput {
+  tabHost?: ActiveWorkspaceSelection | null;
+}
+
 export interface NavigateToWorkspaceDeps extends PrepareWorkspaceTabDeps {
   getSessionWorkspaces: (serverId: string) => Map<string, WorkspaceDescriptor> | null | undefined;
   getSessionAgents: (serverId: string) => Iterable<Agent>;
@@ -41,7 +45,7 @@ export interface NavigateToWorkspaceDeps extends PrepareWorkspaceTabDeps {
 
 export interface WorkspaceHistoryAgent {
   id: string;
-  workspaceId: string | null | undefined;
+  workspaceId?: string | null;
   parentAgentId: string | null;
 }
 
@@ -166,11 +170,49 @@ function pickWorkspaceRootAgentId(
   return null;
 }
 
+function resolveSidebarTabHost(
+  input: NavigateToSidebarWorkspaceInput,
+  deps: NavigateToSidebarWorkspaceDeps,
+): ActiveWorkspaceSelection | null {
+  const tabHost = input.tabHost;
+  if (!tabHost || tabHost.serverId !== input.serverId) {
+    return null;
+  }
+  const workspaceId =
+    resolveWorkspaceMapKeyByIdentity({
+      workspaces: deps.getSessionWorkspaces(tabHost.serverId),
+      workspaceId: tabHost.workspaceId,
+    }) ?? normalizeWorkspaceOpaqueId(tabHost.workspaceId);
+  return workspaceId ? { serverId: tabHost.serverId, workspaceId } : null;
+}
+
+function revealSidebarAgentInTabHost(
+  tabHost: ActiveWorkspaceSelection,
+  agentId: string,
+  deps: NavigateToSidebarWorkspaceDeps,
+): string {
+  prepareWorkspaceTab(
+    {
+      serverId: tabHost.serverId,
+      workspaceId: tabHost.workspaceId,
+      target: { kind: "agent", agentId },
+      pin: true,
+    },
+    deps,
+  );
+  return buildHostWorkspaceRoute(tabHost.serverId, tabHost.workspaceId);
+}
+
 export async function navigateToSidebarWorkspace(
-  input: NavigateToWorkspaceInput,
+  input: NavigateToSidebarWorkspaceInput,
   deps: NavigateToSidebarWorkspaceDeps,
 ): Promise<string> {
-  if (input.target || !deps.getSessionAgentsHydrated(input.serverId)) {
+  if (input.target) {
+    return navigateToWorkspace(input, deps);
+  }
+
+  const tabHost = resolveSidebarTabHost(input, deps);
+  if (!deps.getSessionAgentsHydrated(input.serverId) && !tabHost) {
     return navigateToWorkspace(input, deps);
   }
 
@@ -182,10 +224,17 @@ export async function navigateToSidebarWorkspace(
     return navigateToWorkspace(input, deps);
   }
 
-  const hasActiveWorkspaceAgent = Array.from(deps.getSessionAgents(input.serverId)).some(
+  const activeWorkspaceAgents = Array.from(deps.getSessionAgents(input.serverId)).filter(
     (agent) => !agent.archivedAt && normalizeWorkspaceOpaqueId(agent.workspaceId) === workspaceId,
   );
-  if (hasActiveWorkspaceAgent) {
+  if (activeWorkspaceAgents.length > 0) {
+    const agentId =
+      pickWorkspaceRootAgentId(activeWorkspaceAgents, workspaceId) ??
+      activeWorkspaceAgents[0]?.id ??
+      null;
+    if (agentId && tabHost) {
+      return revealSidebarAgentInTabHost(tabHost, agentId, deps);
+    }
     return navigateToWorkspace(input, deps);
   }
 
@@ -193,6 +242,9 @@ export async function navigateToSidebarWorkspace(
     const history = await deps.fetchWorkspaceAgentHistory(input.serverId, workspaceId);
     const agentId = pickWorkspaceRootAgentId(history, workspaceId);
     if (agentId) {
+      if (tabHost) {
+        return revealSidebarAgentInTabHost(tabHost, agentId, deps);
+      }
       return navigateToWorkspace(
         {
           ...input,
@@ -207,7 +259,9 @@ export async function navigateToSidebarWorkspace(
     // History is a best-effort fallback. The workspace itself must remain navigable.
   }
 
-  return navigateToWorkspace(input, deps);
+  return tabHost
+    ? buildHostWorkspaceRoute(tabHost.serverId, tabHost.workspaceId)
+    : navigateToWorkspace(input, deps);
 }
 
 export function navigateToLastWorkspace(deps: NavigateToLastWorkspaceDeps): boolean {

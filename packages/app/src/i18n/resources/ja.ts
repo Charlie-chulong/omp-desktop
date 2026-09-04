@@ -941,6 +941,14 @@ export const ja: TranslationResources = {
         failedGeneration: "コミットメッセージを生成できませんでした",
       },
       diff: {
+        staging: {
+          stagedChanges: "ステージ済みの変更",
+          changes: "変更",
+          stage: "変更をステージ",
+          unstage: "変更のステージを解除",
+          failedStage: "変更をステージできませんでした",
+          failedUnstage: "変更のステージを解除できませんでした",
+        },
         openChangesTab: "変更タブを開く",
         closeChangesTab: "変更タブを閉じる",
         binaryFile: "バイナリファイル",
@@ -2040,11 +2048,6 @@ export const ja: TranslationResources = {
         label: "ターミナルスクロールバック",
         description: "組み込みターミナルバッファに保持する行数",
         accessibilityLabel: "ターミナルスクロールバック行数",
-      },
-      sidePanelRouting: {
-        label: "補助タブをサイドパネルで開く",
-        description:
-          "ファイルリンク、プルリクエスト、セットアップの進行状況が、フォーカス中のペインではなく作業の横に開きます",
       },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",

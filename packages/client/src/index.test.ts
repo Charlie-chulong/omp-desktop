@@ -1318,10 +1318,17 @@ test("OMP provider actions use the native management RPCs", async () => {
   );
   await expect(statusPromise).resolves.toMatchObject({ installed: true });
 
-  const installPromise = client.omp.install({ requestId: "omp-install" });
+  const installPromise = client.omp.install({
+    requestId: "omp-install",
+    strategy: "defer",
+  });
   expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
     type: "session",
-    message: { type: "omp.install.request", requestId: "omp-install" },
+    message: {
+      type: "omp.install.request",
+      strategy: "defer",
+      requestId: "omp-install",
+    },
   });
   ws.message(
     sessionMessage({
@@ -1330,6 +1337,27 @@ test("OMP provider actions use the native management RPCs", async () => {
     }),
   );
   await expect(installPromise).resolves.toMatchObject({ version: "omp 16.3.9" });
+
+  const cancelInstallPromise = client.omp.cancelInstall({ requestId: "omp-install-cancel" });
+  expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
+    type: "session",
+    message: {
+      type: "omp.install.request",
+      action: "cancel",
+      requestId: "omp-install-cancel",
+    },
+  });
+  ws.message(
+    sessionMessage({
+      type: "omp.install.response",
+      payload: {
+        ...installationPayload,
+        updatePhase: "canceled",
+        requestId: "omp-install-cancel",
+      },
+    }),
+  );
+  await expect(cancelInstallPromise).resolves.toMatchObject({ updatePhase: "canceled" });
 
   const startPromise = client.omp.startProviderLogin("openai", {
     requestId: "omp-login-start",

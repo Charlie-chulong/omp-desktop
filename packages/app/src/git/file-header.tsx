@@ -26,6 +26,7 @@ export interface FileHeaderProps {
   bodyVisible: boolean;
   showsBodyState?: boolean;
   isSelected?: boolean;
+  compact?: boolean;
   depth?: number;
   showDir?: boolean;
   interactive?: boolean;
@@ -41,6 +42,7 @@ export interface FileHeaderProps {
   onDuplicate?: (path: string) => void;
   onRevert?: (path: string, oldPath?: string) => void;
   onHeaderHeightChange?: (path: string, height: number) => void;
+  trailingAction?: ReactElement;
   testID?: string;
 }
 
@@ -185,12 +187,14 @@ export const FileHeader = memo(function FileHeader({
   bodyVisible,
   showsBodyState = true,
   isSelected = false,
+  compact = false,
   depth = 0,
   showDir = true,
   interactive = true,
   onActivate,
   onSelect,
   onHeaderHeightChange,
+  trailingAction,
   testID,
   ...actions
 }: FileHeaderProps) {
@@ -217,6 +221,7 @@ export const FileHeader = memo(function FileHeader({
     ({ pressed }: PressableStateCallbackType) => [
       styles.header,
       !showsBodyState && workspaceTreeRowStyles.row,
+      !showsBodyState && compact && styles.compactTreeRow,
       showsBodyState && styles.documentHeader,
       depth > 0
         ? inlineUnistylesStyle({
@@ -230,7 +235,7 @@ export const FileHeader = memo(function FileHeader({
         isSelected,
       }),
     ],
-    [depth, hover.isHovered, isSelected, showsBodyState],
+    [compact, depth, hover.isHovered, isSelected, showsBodyState],
   );
   const accessibilityState = useMemo(
     () => fileHeaderAccessibilityState({ showsBodyState, bodyVisible, isSelected }),
@@ -265,6 +270,7 @@ export const FileHeader = memo(function FileHeader({
         {documentChangeIcon}
       </View>
       <View style={rightStyle}>
+        {trailingAction}
         <DiffStat
           additions={file.additions}
           deletions={file.deletions}
@@ -339,6 +345,9 @@ const styles = StyleSheet.create((theme) => ({
     zIndex: 2,
     elevation: 2,
     userSelect: "none",
+  },
+  compactTreeRow: {
+    paddingVertical: 2,
   },
   documentHeader: {
     height: 28,

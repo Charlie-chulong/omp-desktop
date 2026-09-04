@@ -961,6 +961,14 @@ export const es: TranslationResources = {
         failedGeneration: "No se pudo generar el mensaje de commit",
       },
       diff: {
+        staging: {
+          stagedChanges: "Cambios preparados",
+          changes: "Cambios",
+          stage: "Preparar cambios",
+          unstage: "Quitar cambios del área de preparación",
+          failedStage: "No se pudieron preparar los cambios",
+          failedUnstage: "No se pudieron quitar los cambios del área de preparación",
+        },
         openChangesTab: "Abrir la pestaña Cambios",
         closeChangesTab: "Cerrar la pestaña Cambios",
         binaryFile: "archivo binario",
@@ -2073,11 +2081,6 @@ export const es: TranslationResources = {
         label: "Historial de terminal",
         description: "Líneas mantenidas en el búfer de terminal incorporado",
         accessibilityLabel: "Líneas del historial de terminal",
-      },
-      sidePanelRouting: {
-        label: "Abrir pestañas de apoyo en el panel lateral",
-        description:
-          "Los enlaces a archivos, las solicitudes de incorporación y el progreso de configuración se abren junto a tu trabajo en lugar del panel enfocado",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

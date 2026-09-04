@@ -196,6 +196,44 @@ describe("workspace agent visibility", () => {
     expect(result.knownAgentIds.has("other-workspace-agent")).toBe(false);
   });
 
+  it("retains explicitly opened agents from another workspace without auto-opening them", () => {
+    const currentWorkspaceAgent = makeAgent({
+      id: "current-agent",
+      cwd: "/repo/current",
+      workspaceId: WORKSPACE_ID,
+    });
+    const externalWorkspaceAgent = makeAgent({
+      id: "external-agent",
+      cwd: "/repo/external",
+      workspaceId: "ws-external",
+    });
+
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map([
+        [currentWorkspaceAgent.id, currentWorkspaceAgent],
+        [externalWorkspaceAgent.id, externalWorkspaceAgent],
+      ]),
+      workspaceId: WORKSPACE_ID,
+      openAgentIds: [externalWorkspaceAgent.id],
+    });
+
+    expect(result.activeAgentIds).toEqual(new Set(["current-agent", "external-agent"]));
+    expect(result.autoOpenAgentIds).toEqual(new Set(["current-agent"]));
+    expect(result.knownAgentIds).toEqual(new Set(["current-agent", "external-agent"]));
+  });
+
+  it("retains an unresolved explicitly opened agent until its detail loads", () => {
+    const result = deriveWorkspaceAgentVisibility({
+      sessionAgents: new Map(),
+      workspaceId: WORKSPACE_ID,
+      openAgentIds: ["pending-external-agent"],
+    });
+
+    expect(result.activeAgentIds).toEqual(new Set(["pending-external-agent"]));
+    expect(result.autoOpenAgentIds).toEqual(new Set());
+    expect(result.knownAgentIds).toEqual(new Set(["pending-external-agent"]));
+  });
+
   it("treats lazy historical details as known without making them active", () => {
     const active = makeAgent({
       id: "active-agent",

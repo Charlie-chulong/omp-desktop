@@ -77,7 +77,8 @@ function PanelState({
 
 function WorkingDiffPanel() {
   const { t } = useTranslation();
-  const { serverId, workspaceId, tabId, target, openFileInWorkspace } = usePaneContext();
+  const { serverId, workspaceId, tabId, target, isSidePanel, openFileInWorkspace } =
+    usePaneContext();
   const [changesState, setChangesState] = usePanelState(changesStateSchema, defaultChangesState);
   const cwd = useWorkspaceDirectory(serverId, workspaceId);
   const isActive = useRetainedPanelActive();
@@ -85,7 +86,7 @@ function WorkingDiffPanel() {
   invariant(target.kind === "working_diff", "WorkingDiffPanel requires working_diff target");
 
   const handleOpenFile = useCallback(
-    (path: string) => openFileInWorkspace({ location: { path }, disposition: "side" }),
+    (path: string) => openFileInWorkspace({ location: { path }, disposition: "main" }),
     [openFileInWorkspace],
   );
 
@@ -100,7 +101,7 @@ function WorkingDiffPanel() {
         workspaceId={workspaceId}
         cwd={cwd}
         enabled={isActive}
-        host="panel"
+        host={isSidePanel ? "explorer" : "panel"}
         modeScope={tabId}
         focusPath={target.focusPath}
         focusRequestId={target.focusRequestId}
@@ -204,7 +205,10 @@ export const workingDiffPanelRegistration: PanelRegistration<"working_diff"> = {
   kind: "working_diff",
   component: WorkingDiffPanel,
   useDescriptor: useWorkingDiffPanelDescriptor,
-  resourceKey: () => "working_diff",
+  resourceKey: (target) =>
+    target.focusPath || target.focusRequestId !== undefined
+      ? "working_diff_document"
+      : "working_diff",
 };
 
 export const commitDiffPanelRegistration: PanelRegistration<"commit_diff"> = {

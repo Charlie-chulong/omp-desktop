@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { View, Text, type LayoutChangeEvent, type PressableStateCallbackType } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { DiffStat } from "@/components/diff-stat";
@@ -22,6 +22,7 @@ interface DiffFolderRowProps {
   depth: number;
   collapsed: boolean;
   isSelected: boolean;
+  compact?: boolean;
   additions: number;
   deletions: number;
   onToggle: (dirPath: string) => void;
@@ -34,15 +35,17 @@ interface DiffFolderRowProps {
   revealTargetName?: string;
   onDuplicate?: (path: string) => void;
   onRevert?: (path: string) => void;
+  trailingAction?: ReactElement;
   testID?: string;
 }
-
 function folderRowPressableStyle(
   { hovered, pressed }: PressableStateCallbackType & { hovered?: boolean },
   isSelected: boolean,
+  compact: boolean,
 ) {
   return [
     workspaceTreeRowStyles.row,
+    compact && styles.compactRow,
     (Boolean(hovered) || pressed || isSelected) && workspaceTreeRowStyles.active,
   ];
 }
@@ -53,6 +56,7 @@ export function DiffFolderRow({
   depth,
   collapsed,
   isSelected,
+  compact = false,
   additions,
   deletions,
   onToggle,
@@ -65,6 +69,7 @@ export function DiffFolderRow({
   revealTargetName,
   onDuplicate,
   onRevert,
+  trailingAction,
   testID,
 }: DiffFolderRowProps) {
   const handleSelect = useCallback(() => {
@@ -85,8 +90,8 @@ export function DiffFolderRow({
 
   const pressableStyle = useCallback(
     (state: PressableStateCallbackType & { hovered?: boolean }) =>
-      folderRowPressableStyle(state, isSelected),
-    [isSelected],
+      folderRowPressableStyle(state, isSelected, compact),
+    [compact, isSelected],
   );
 
   const handleLayout = useCallback(
@@ -167,6 +172,7 @@ export function DiffFolderRow({
             </Text>
           </View>
           <View style={styles.right}>
+            {trailingAction}
             <DiffStat
               additions={additions}
               deletions={deletions}
@@ -193,6 +199,9 @@ export function DiffFolderRow({
 const styles = StyleSheet.create((theme: Theme) => ({
   container: {
     overflow: "hidden",
+  },
+  compactRow: {
+    paddingVertical: 2,
   },
   left: {
     flexDirection: "row",

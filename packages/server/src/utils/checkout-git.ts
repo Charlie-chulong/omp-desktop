@@ -64,6 +64,8 @@ export type GitMutationRefreshReason =
   | "stash-push"
   | "stash-pop"
   | "discard-changes"
+  | "stage-changes"
+  | "unstage-changes"
   | "create-worktree";
 
 const DISCARD_CHANGES_TIMEOUT_MS = 120_000;
@@ -202,11 +204,12 @@ interface CheckoutFileChange {
 interface CheckoutDiffRefs {
   baseRef: string;
   targetRef?: string;
+  diffArgs?: string[];
   includeUntracked: boolean;
 }
 
 function getCheckoutDiffRefArgs(refs: CheckoutDiffRefs): string[] {
-  return [refs.baseRef, ...(refs.targetRef ? [refs.targetRef] : [])];
+  return refs.diffArgs ?? [refs.baseRef, ...(refs.targetRef ? [refs.targetRef] : [])];
 }
 
 function normalizeBranchSuggestionName(raw: string): string | null {
@@ -595,7 +598,8 @@ async function readGitFileContentAtRef(
   path: string,
 ): Promise<string | null> {
   try {
-    const { stdout } = await runGitCommand(["show", `${ref}:${path}`], {
+    const object = ref === ":" ? `:${path}` : `${ref}:${path}`;
+    const { stdout } = await runGitCommand(["show", object], {
       cwd,
       envOverlay: READ_ONLY_GIT_ENV,
     });
@@ -646,7 +650,7 @@ const EMPTY_TREE_OBJECT_ID = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 function isUnbornHeadDiffError(error: unknown): boolean {
   return (
     error instanceof Error &&
-    error.message.includes("--name-status HEAD") &&
+    error.message.includes("--name-status") &&
     error.message.includes("ambiguous argument 'HEAD'")
   );
 }
@@ -827,7 +831,7 @@ export type CheckoutDiffResult =
   | { diff: ""; structured: []; diffTooLarge: true };
 
 export interface CheckoutDiffCompare {
-  mode: "uncommitted" | "base";
+  mode: "uncommitted" | "staged" | "unstaged" | "base";
   baseRef?: string;
   ignoreWhitespace?: boolean;
   includeStructured?: boolean;
@@ -3168,6 +3172,17 @@ async function resolveCheckoutDiffRefs(
   if (compare.mode === "uncommitted") {
     return { baseRef: "HEAD", includeUntracked: true };
   }
+  if (compare.mode === "staged") {
+    return {
+      baseRef: "HEAD",
+      targetRef: ":",
+      diffArgs: ["--cached", "HEAD"],
+      includeUntracked: false,
+    };
+  }
+  if (compare.mode === "unstaged") {
+    return { baseRef: ":", diffArgs: [], includeUntracked: true };
+  }
   const { storedBaseRef, resolvedBaseRef } = await resolveBaseRefForCwd(cwd, context);
   const baseRef = resolveOperationBaseRef({
     storedBaseRef,
@@ -3206,7 +3221,11 @@ export async function getCheckoutDiff(
     if (!isUnbornHeadDiffError(error)) {
       throw error;
     }
-    effectiveRefsForDiff = { ...refsForDiff, baseRef: EMPTY_TREE_OBJECT_ID };
+    effectiveRefsForDiff = {
+      ...refsForDiff,
+      baseRef: EMPTY_TREE_OBJECT_ID,
+      diffArgs: refsForDiff.diffArgs?.map((arg) => (arg === "HEAD" ? EMPTY_TREE_OBJECT_ID : arg)),
+    };
     changes = await listCheckoutFileChanges(cwd, effectiveRefsForDiff, ignoreWhitespace);
   }
   changes.sort((a, b) => {
@@ -3304,14 +3323,8 @@ export async function getCheckoutDiff(
   return { diff: diffText };
 }
 
-export async function commitChanges(
-  cwd: string,
-  options: { message: string; addAll?: boolean },
-): Promise<void> {
+export async function commitChanges(cwd: string, options: { message: string }): Promise<void> {
   await requireGitRepo(cwd);
-  if (options.addAll ?? true) {
-    await runGitCommand(["add", "-A"], { cwd, timeout: 120_000 });
-  }
   await runGitCommand(["-c", "commit.gpgsign=false", "commit", "-m", options.message], {
     cwd,
     timeout: 120_000,
@@ -3319,7 +3332,43 @@ export async function commitChanges(
 }
 
 export async function commitAll(cwd: string, message: string): Promise<void> {
-  await commitChanges(cwd, { message, addAll: true });
+  await requireGitRepo(cwd);
+  await runGitCommand(["add", "-A"], { cwd, timeout: 120_000 });
+  await commitChanges(cwd, { message });
+}
+
+export async function stageChanges(cwd: string, pathspecs: string[]): Promise<void> {
+  await requireGitRepo(cwd);
+  if (pathspecs.length === 0) {
+    return;
+  }
+  await runGitCommand(["--literal-pathspecs", "add", "-A", "--", ...pathspecs], {
+    cwd,
+    timeout: 120_000,
+  });
+}
+
+export async function unstageChanges(cwd: string, pathspecs: string[]): Promise<void> {
+  await requireGitRepo(cwd);
+  if (pathspecs.length === 0) {
+    return;
+  }
+  try {
+    await runGitCommand(["--literal-pathspecs", "reset", "-q", "HEAD", "--", ...pathspecs], {
+      cwd,
+      timeout: 120_000,
+    });
+  } catch {
+    // Unborn HEAD has no tree to reset to; removing the paths from the index
+    // leaves their worktree content intact and therefore unstaged.
+    await runGitCommand(
+      ["--literal-pathspecs", "rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", ...pathspecs],
+      {
+        cwd,
+        timeout: 120_000,
+      },
+    );
+  }
 }
 
 export async function discardChanges(cwd: string, pathspecs: string[]): Promise<void> {

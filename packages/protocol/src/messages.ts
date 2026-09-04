@@ -1771,6 +1771,8 @@ export const OmpInstallStatusRequestMessageSchema = z.object({
 
 export const OmpInstallRequestMessageSchema = z.object({
   type: z.literal("omp.install.request"),
+  action: z.enum(["install", "cancel"]).optional(),
+  strategy: z.enum(["immediate", "stop-agents", "defer"]).optional(),
   requestId: z.string(),
 });
 
@@ -2185,7 +2187,7 @@ const CheckoutErrorSchema = z.object({
 });
 
 const CheckoutDiffCompareSchema = z.object({
-  mode: z.enum(["uncommitted", "base"]),
+  mode: z.enum(["uncommitted", "staged", "unstaged", "base"]),
   baseRef: z.string().optional(),
   ignoreWhitespace: z.boolean().optional(),
 });
@@ -2213,7 +2215,6 @@ export const CheckoutCommitRequestSchema = z.object({
   type: z.literal("checkout_commit_request"),
   cwd: z.string(),
   message: z.string().optional(),
-  addAll: z.boolean().optional(),
   requestId: z.string(),
 });
 
@@ -2261,6 +2262,14 @@ export const CheckoutRefreshRequestSchema = z.object({
 export const CheckoutDiscardChangesRequestSchema = z.object({
   type: z.literal("checkout.discard_changes.request"),
   cwd: z.string(),
+  paths: z.array(z.string()).min(1),
+  requestId: z.string(),
+});
+
+export const CheckoutStageChangesRequestSchema = z.object({
+  type: z.literal("checkout.stage_changes.request"),
+  cwd: z.string(),
+  operation: z.enum(["stage", "unstage"]),
   paths: z.array(z.string()).min(1),
   requestId: z.string(),
 });
@@ -3275,6 +3284,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   CheckoutPushRequestSchema,
   CheckoutRefreshRequestSchema,
   CheckoutDiscardChangesRequestSchema,
+  CheckoutStageChangesRequestSchema,
   CheckoutPrCreateRequestSchema,
   CheckoutPrMergeRequestSchema,
   CheckoutForgeSetAutoMergeRequestSchema,
@@ -3595,6 +3605,8 @@ export const ServerInfoStatusPayloadSchema = z
         checkoutRefresh: z.boolean().optional(),
         // COMPAT(checkoutCommitMessageGeneration): added in v0.5.2, remove gate after 2027-03-03.
         checkoutCommitMessageGeneration: z.boolean().optional(),
+        // COMPAT(checkoutStageChanges): added in v0.5.2, remove gate after 2027-03-03.
+        checkoutStageChanges: z.boolean().optional(),
         // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
         workspaceMultiplicity: z.boolean().optional(),
         // COMPAT(projectRemove): added in v0.1.97, drop the gate when floor >= v0.1.97.
@@ -5210,6 +5222,16 @@ export const CheckoutGenerateCommitMessageResponseSchema = z.object({
   }),
 });
 
+export const CheckoutStageChangesResponseSchema = z.object({
+  type: z.literal("checkout.stage_changes.response"),
+  payload: z.object({
+    cwd: z.string(),
+    success: z.boolean(),
+    error: CheckoutErrorSchema.nullable(),
+    requestId: z.string(),
+  }),
+});
+
 export const CheckoutMergeResponseSchema = z.object({
   type: z.literal("checkout_merge_response"),
   payload: z.object({
@@ -6077,6 +6099,16 @@ export const OmpProviderManagementSchema = z.object({
     }),
   ),
 });
+export const OmpUpdatePhaseSchema = z.enum([
+  "downloading",
+  "waiting-for-agents",
+  "pending-restart",
+  "verifying",
+  "installing",
+  "complete",
+  "canceled",
+]);
+
 export const OmpInstallationStatusSchema = z.object({
   platform: z.string(),
   arch: z.string(),
@@ -6085,6 +6117,12 @@ export const OmpInstallationStatusSchema = z.object({
   version: z.string().optional(),
   latestVersion: z.string().optional(),
   updateAvailable: z.boolean().optional(),
+  updatePhase: OmpUpdatePhaseSchema.optional(),
+  updateProgress: z.number().int().min(0).max(100).optional(),
+  downloadedBytes: z.number().int().nonnegative().optional(),
+  totalBytes: z.number().int().positive().optional(),
+  activeAgentCount: z.number().int().nonnegative().optional(),
+  pendingUpdate: z.boolean().optional(),
   installPath: z.string(),
   message: z.string().optional(),
 });
@@ -6752,6 +6790,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   CheckoutPushResponseSchema,
   CheckoutRefreshResponseSchema,
   CheckoutDiscardChangesResponseSchema,
+  CheckoutStageChangesResponseSchema,
   CheckoutPrCreateResponseSchema,
   CheckoutPrMergeResponseSchema,
   CheckoutForgeSetAutoMergeResponseSchema,
@@ -7202,6 +7241,8 @@ export type CheckoutRefreshRequest = z.infer<typeof CheckoutRefreshRequestSchema
 export type CheckoutRefreshResponse = z.infer<typeof CheckoutRefreshResponseSchema>;
 export type CheckoutDiscardChangesRequest = z.infer<typeof CheckoutDiscardChangesRequestSchema>;
 export type CheckoutDiscardChangesResponse = z.infer<typeof CheckoutDiscardChangesResponseSchema>;
+export type CheckoutStageChangesRequest = z.infer<typeof CheckoutStageChangesRequestSchema>;
+export type CheckoutStageChangesResponse = z.infer<typeof CheckoutStageChangesResponseSchema>;
 export type CheckoutCommitFile = z.infer<typeof CheckoutCommitFileSchema>;
 export type CheckoutCommit = z.infer<typeof CheckoutCommitSchema>;
 export type CheckoutCommitsListRequest = z.infer<typeof CheckoutCommitsListRequestSchema>;

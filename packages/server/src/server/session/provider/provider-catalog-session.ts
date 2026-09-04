@@ -54,6 +54,8 @@ export interface ProviderCatalogSessionHost {
   supportsCompactProviderSnapshots(): boolean;
   listProviderAvailability(): Promise<ProviderAvailability[]>;
   listDraftFeatures(config: AgentSessionConfig): Promise<AgentFeature[]>;
+  listActiveOmpAgentIds(): string[];
+  stopOmpAgents(agentIds: readonly string[]): Promise<void>;
 }
 
 export interface ProviderCatalogSessionOptions {
@@ -706,7 +708,11 @@ export class ProviderCatalogSession {
       });
       this.host.emit({
         type: "omp.install.status.response",
-        payload: { ...status, requestId: msg.requestId },
+        payload: {
+          ...status,
+          activeAgentCount: this.host.listActiveOmpAgentIds().length,
+          requestId: msg.requestId,
+        },
       });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -726,11 +732,56 @@ export class ProviderCatalogSession {
     msg: Extract<SessionInboundMessage, { type: "omp.install.request" }>,
   ): Promise<void> {
     try {
-      const status = await this.providerSnapshotManager.installOmp();
-      await this.providerSnapshotManager.refreshSettingsSnapshot({ providers: ["omp"] });
+      if (msg.action === "cancel") {
+        const status = await this.providerSnapshotManager.cancelOmpInstall();
+        this.host.emit({
+          type: "omp.install.response",
+          payload: {
+            ...status,
+            activeAgentCount: this.host.listActiveOmpAgentIds().length,
+            requestId: msg.requestId,
+          },
+        });
+        return;
+      }
+
+      let activeAgentIds = this.host.listActiveOmpAgentIds();
+      if (msg.strategy === "stop-agents" && activeAgentIds.length > 0) {
+        await this.host.stopOmpAgents(activeAgentIds);
+        activeAgentIds = this.host.listActiveOmpAgentIds();
+      }
+      if (activeAgentIds.length > 0 && msg.strategy !== "defer") {
+        const status = await this.providerSnapshotManager.getOmpInstallationStatus({
+          checkForUpdates: true,
+        });
+        if (status.platform === "win32") {
+          this.host.emit({
+            type: "omp.install.response",
+            payload: {
+              ...status,
+              updatePhase: "waiting-for-agents",
+              activeAgentCount: activeAgentIds.length,
+              message: `OMP is being used by ${activeAgentIds.length} Agent${activeAgentIds.length === 1 ? "" : "s"}. Stop them or install the update after restart.`,
+              requestId: msg.requestId,
+            },
+          });
+          return;
+        }
+      }
+
+      const status = await this.providerSnapshotManager.installOmp({
+        defer: msg.strategy === "defer",
+      });
+      if (status.updatePhase === "complete") {
+        await this.providerSnapshotManager.refreshSettingsSnapshot({ providers: ["omp"] });
+      }
       this.host.emit({
         type: "omp.install.response",
-        payload: { ...status, requestId: msg.requestId },
+        payload: {
+          ...status,
+          activeAgentCount: this.host.listActiveOmpAgentIds().length,
+          requestId: msg.requestId,
+        },
       });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));

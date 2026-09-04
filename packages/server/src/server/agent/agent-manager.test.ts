@@ -6744,6 +6744,8 @@ test("listAgents excludes internal agents", async () => {
   const agents = manager.listAgents();
   expect(agents).toHaveLength(1);
   expect(agents[0]?.config.title).toBe("Normal Agent");
+  const allAgents = manager.listAgents({ includeInternal: true });
+  expect(allAgents.map((agent) => agent.config.title)).toEqual(["Normal Agent", "Internal Agent"]);
 });
 
 test("getAgent returns internal agents by ID", async () => {

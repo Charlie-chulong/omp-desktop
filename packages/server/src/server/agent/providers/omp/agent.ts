@@ -83,7 +83,12 @@ import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
 import { getUserMessageText } from "./message-history.js";
 import { mapOmpSystemNoticeToToolCall } from "./system-notice.js";
 import { materializeProviderImage } from "../provider-image-output.js";
-import { ensureManagedOmpOnPath, getOmpInstallationStatus, installOmp } from "./installer.js";
+import {
+  cancelOmpInstall,
+  ensureManagedOmpOnPath,
+  getOmpInstallationStatus,
+  installOmp,
+} from "./installer.js";
 import { OmpCliRuntime, OmpReadyTimeoutError } from "./cli-runtime.js";
 import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
 import type { OmpRuntime, OmpRuntimeSession, OmpStartSessionInput } from "./runtime.js";
@@ -4185,8 +4190,12 @@ export class OmpAgentClient implements AgentClient {
     return await getOmpInstallationStatus(options);
   }
 
-  async installOmp(): Promise<OmpInstallationStatus> {
-    return await installOmp();
+  async installOmp(options?: { defer?: boolean }): Promise<OmpInstallationStatus> {
+    return await installOmp(options);
+  }
+
+  async cancelOmpInstall(): Promise<OmpInstallationStatus> {
+    return await cancelOmpInstall();
   }
 
   async startOmpProviderLogin(providerId: string): Promise<OmpProviderLoginStart> {

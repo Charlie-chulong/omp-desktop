@@ -1499,8 +1499,9 @@ function WorkspaceRowItem({
     void navigateToSidebarWorkspace({
       serverId: workspace.serverId,
       workspaceId: workspace.workspaceId,
+      tabHost: activeWorkspaceSelection,
     });
-  }, [onWorkspacePress, workspace.serverId, workspace.workspaceId]);
+  }, [activeWorkspaceSelection, onWorkspacePress, workspace.serverId, workspace.workspaceId]);
 
   return (
     <WorkspaceRow

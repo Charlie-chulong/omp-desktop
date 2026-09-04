@@ -134,7 +134,7 @@ export function createGitMetadataGenerator(deps: {
     async generateCommitMessage(cwd) {
       const [diff, recentCommitSubjects] = await Promise.all([
         workspaceGitService.getCheckoutDiff(cwd, {
-          mode: "uncommitted",
+          mode: "staged",
           includeStructured: true,
         }),
         readRecentCommitSubjects(cwd, RECENT_COMMIT_SUBJECT_LIMIT).catch(() => []),
@@ -142,7 +142,7 @@ export function createGitMetadataGenerator(deps: {
       const prompt = await buildPromptForDiff(
         {
           cwd,
-          diffOptions: { mode: "uncommitted", includeStructured: true },
+          diffOptions: { mode: "staged", includeStructured: true },
           maxPatchChars: MAX_COMMIT_PATCH_CHARS,
           contract:
             "Write a concise git commit message for the changes below. Match the repository's recent commit style when examples are provided.",

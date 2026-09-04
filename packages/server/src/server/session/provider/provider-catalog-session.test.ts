@@ -54,6 +54,8 @@ function makeSubsystem(options: MakeOptions = {}) {
     supportsCompactProviderSnapshots: () => options.supportsCompactProviderSnapshots ?? false,
     listProviderAvailability: async () => [],
     listDraftFeatures: async () => [],
+    listActiveOmpAgentIds: () => [],
+    stopOmpAgents: async () => {},
     ...options.host,
   };
   const providerSnapshotManager = createStub<ProviderSnapshotManager>({
@@ -389,5 +391,120 @@ describe("ProviderCatalogSession", () => {
     const res = findByType(emitted, "list_provider_features_response");
     expect(res?.payload.error).toBe("feature probe failed");
     expect(res?.payload.requestId).toBe("f1");
+  });
+  it("returns immediately when a Windows OMP Agent is using the executable", async () => {
+    const installOmp = vi.fn();
+    const getOmpInstallationStatus = vi.fn(async () => ({
+      platform: "win32",
+      arch: "x64",
+      supported: true,
+      installed: true,
+      version: "omp/18.1.6",
+      latestVersion: "18.1.8",
+      updateAvailable: true,
+      installPath: "C:\\Users\\test\\AppData\\Local\\omp\\omp.exe",
+    }));
+    const { subsystem, emitted } = makeSubsystem({
+      host: { listActiveOmpAgentIds: () => ["agent-1"] },
+      snapshot: { getOmpInstallationStatus, installOmp },
+    });
+
+    await subsystem.handleOmpInstallRequest({
+      type: "omp.install.request",
+      requestId: "omp-update",
+    });
+
+    expect(installOmp).not.toHaveBeenCalled();
+    expect(findByType(emitted, "omp.install.response")?.payload).toMatchObject({
+      requestId: "omp-update",
+      updatePhase: "waiting-for-agents",
+      activeAgentCount: 1,
+    });
+  });
+
+  it("stops active OMP Agents before applying a Windows update", async () => {
+    let activeAgentIds = ["agent-1"];
+    const stopOmpAgents = vi.fn(async () => {
+      activeAgentIds = [];
+    });
+    const installOmp = vi.fn(async () => ({
+      platform: "win32",
+      arch: "x64",
+      supported: true,
+      installed: true,
+      version: "omp/18.1.8",
+      installPath: "C:\\Users\\test\\AppData\\Local\\omp\\omp.exe",
+      updatePhase: "complete" as const,
+    }));
+    const refreshSettingsSnapshot = vi.fn(async () => {});
+    const { subsystem, emitted } = makeSubsystem({
+      host: {
+        listActiveOmpAgentIds: () => activeAgentIds,
+        stopOmpAgents,
+      },
+      snapshot: { installOmp, refreshSettingsSnapshot },
+    });
+
+    await subsystem.handleOmpInstallRequest({
+      type: "omp.install.request",
+      strategy: "stop-agents",
+      requestId: "omp-stop-update",
+    });
+
+    expect(stopOmpAgents).toHaveBeenCalledWith(["agent-1"]);
+    expect(installOmp).toHaveBeenCalledWith({ defer: false });
+    expect(findByType(emitted, "omp.install.response")?.payload.activeAgentCount).toBe(0);
+  });
+
+  it("stages a Windows update without stopping active Agents", async () => {
+    const stopOmpAgents = vi.fn();
+    const installOmp = vi.fn(async () => ({
+      platform: "win32",
+      arch: "x64",
+      supported: true,
+      installed: true,
+      version: "omp/18.1.6",
+      installPath: "C:\\Users\\test\\AppData\\Local\\omp\\omp.exe",
+      updatePhase: "pending-restart" as const,
+      pendingUpdate: true,
+    }));
+    const { subsystem } = makeSubsystem({
+      host: {
+        listActiveOmpAgentIds: () => ["agent-1"],
+        stopOmpAgents,
+      },
+      snapshot: { installOmp },
+    });
+
+    await subsystem.handleOmpInstallRequest({
+      type: "omp.install.request",
+      strategy: "defer",
+      requestId: "omp-deferred-update",
+    });
+
+    expect(stopOmpAgents).not.toHaveBeenCalled();
+    expect(installOmp).toHaveBeenCalledWith({ defer: true });
+  });
+
+  it("forwards cancellation to the active OMP update", async () => {
+    const cancelOmpInstall = vi.fn(async () => ({
+      platform: "win32",
+      arch: "x64",
+      supported: true,
+      installed: true,
+      installPath: "C:\\Users\\test\\AppData\\Local\\omp\\omp.exe",
+      updatePhase: "canceled" as const,
+    }));
+    const { subsystem } = makeSubsystem({
+      snapshot: { cancelOmpInstall },
+    });
+
+    await subsystem.handleOmpInstallRequest({
+      type: "omp.install.request",
+      action: "cancel",
+      requestId: "omp-cancel-update",
+    });
+
+    expect(cancelOmpInstall).toHaveBeenCalledOnce();
   });
 });

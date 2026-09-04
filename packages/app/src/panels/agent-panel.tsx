@@ -761,7 +761,7 @@ function AgentPanelBody({
   return (
     <ChatAgentContent
       serverId={serverId}
-      workspaceId={workspaceId}
+      workspaceId={agent.workspaceId?.trim() || workspaceId}
       agentId={agentId}
       isPaneFocused={isPaneFocused}
       client={client}

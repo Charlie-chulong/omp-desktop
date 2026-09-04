@@ -2531,7 +2531,6 @@ diff --git a/file.txt b/file.txt
       type: "checkout_commit_request",
       cwd: join(repoRoot, "nested"),
       message: "",
-      addAll: true,
       requestId: "request-generated-commit",
     });
 
@@ -2552,13 +2551,11 @@ diff --git a/file.txt b/file.txt
       type: "checkout_commit_request",
       cwd: "/tmp/request-worktree",
       message: "Ship it",
-      addAll: true,
       requestId: "request-commit",
     });
 
     expect(checkoutGitMocks.commitChanges).toHaveBeenCalledWith("/tmp/request-worktree", {
       message: "Ship it",
-      addAll: true,
     });
     expect(workspaceGitService.getSnapshot).toHaveBeenCalledTimes(1);
     expect(workspaceGitService.getSnapshot).toHaveBeenCalledWith("/tmp/request-worktree", {
@@ -2606,13 +2603,12 @@ diff --git a/file.txt b/file.txt
       type: "checkout_commit_request",
       cwd: "/tmp/request-worktree",
       message: "",
-      addAll: true,
       requestId: "request-generated-commit",
     });
 
     expect(workspaceGitService.getCheckoutDiff).toHaveBeenCalledTimes(1);
     expect(workspaceGitService.getCheckoutDiff).toHaveBeenCalledWith("/tmp/request-worktree", {
-      mode: "uncommitted",
+      mode: "staged",
       includeStructured: true,
     });
     expect(agentResponseMocks.generateStructuredAgentResponseWithFallback).toHaveBeenCalledWith(
@@ -2626,7 +2622,6 @@ diff --git a/file.txt b/file.txt
     );
     expect(checkoutGitMocks.commitChanges).toHaveBeenCalledWith("/tmp/request-worktree", {
       message: "Update file",
-      addAll: true,
     });
     expect(messages).toContainEqual({
       type: "checkout_commit_response",
@@ -2711,13 +2706,11 @@ diff --git a/file.txt b/file.txt
       type: "checkout_commit_request",
       cwd: "/tmp/request-worktree",
       message: "",
-      addAll: true,
       requestId: "request-generated-commit-fallback",
     });
 
     expect(checkoutGitMocks.commitChanges).toHaveBeenCalledWith("/tmp/request-worktree", {
       message: "Update files",
-      addAll: true,
     });
     expect(messages).toContainEqual({
       type: "checkout_commit_response",
@@ -2740,7 +2733,6 @@ diff --git a/file.txt b/file.txt
       type: "checkout_commit_request",
       cwd: "/tmp/request-worktree",
       message: "Ship it",
-      addAll: true,
       requestId: "request-commit-failure",
     });
 

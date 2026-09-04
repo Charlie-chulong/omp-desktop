@@ -213,7 +213,9 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
     return `commit_diff_${target.sha}`;
   }
   if (target.kind === "working_diff") {
-    return "working_diff";
+    return target.focusPath || target.focusRequestId !== undefined
+      ? "working_diff_document"
+      : "working_diff";
   }
   if (target.kind === "files" || target.kind === "pull_request") {
     return target.kind;

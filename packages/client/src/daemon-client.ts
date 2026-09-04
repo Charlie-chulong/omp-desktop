@@ -41,6 +41,7 @@ import type {
   CheckoutPullResponse,
   CheckoutPushResponse,
   CheckoutRefreshResponse,
+  CheckoutStageChangesResponse,
   CheckoutPrCreateResponse,
   CheckoutPrMergeResponse,
   CheckoutPrMergeMethod,
@@ -419,6 +420,7 @@ type CheckoutMergeFromBasePayload = CheckoutMergeFromBaseResponse["payload"];
 type CheckoutPullPayload = CheckoutPullResponse["payload"];
 type CheckoutPushPayload = CheckoutPushResponse["payload"];
 type CheckoutRefreshPayload = CheckoutRefreshResponse["payload"];
+type CheckoutStageChangesPayload = CheckoutStageChangesResponse["payload"];
 type CheckoutPrCreatePayload = CheckoutPrCreateResponse["payload"];
 type CheckoutPrMergePayload = CheckoutPrMergeResponse["payload"];
 type CheckoutForgeSetAutoMergePayload = CheckoutForgeSetAutoMergeResponse["payload"];
@@ -1119,7 +1121,11 @@ export class DaemonClient {
     string,
     {
       cwd: string;
-      compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean };
+      compare: {
+        mode: "uncommitted" | "staged" | "unstaged" | "base";
+        baseRef?: string;
+        ignoreWhitespace?: boolean;
+      };
     }
   >();
   private terminalDirectorySubscriptions = new Map<string, { cwd: string; workspaceId?: string }>();
@@ -3803,14 +3809,18 @@ export class DaemonClient {
   }
 
   private normalizeCheckoutDiffCompare(compare: {
-    mode: "uncommitted" | "base";
+    mode: "uncommitted" | "staged" | "unstaged" | "base";
     baseRef?: string;
     ignoreWhitespace?: boolean;
-  }): { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean } {
-    if (compare.mode === "uncommitted") {
+  }): {
+    mode: "uncommitted" | "staged" | "unstaged" | "base";
+    baseRef?: string;
+    ignoreWhitespace?: boolean;
+  } {
+    if (compare.mode !== "base") {
       return compare.ignoreWhitespace === true
-        ? { mode: "uncommitted", ignoreWhitespace: true }
-        : { mode: "uncommitted" };
+        ? { mode: compare.mode, ignoreWhitespace: true }
+        : { mode: compare.mode };
     }
     const trimmedBaseRef = compare.baseRef?.trim();
     if (!trimmedBaseRef) {
@@ -3825,7 +3835,11 @@ export class DaemonClient {
 
   async getCheckoutDiff(
     cwd: string,
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean },
+    compare: {
+      mode: "uncommitted" | "staged" | "unstaged" | "base";
+      baseRef?: string;
+      ignoreWhitespace?: boolean;
+    },
     requestId?: string,
   ): Promise<CheckoutDiffPayload> {
     const oneShotSubscriptionId = `oneshot-checkout-diff:${crypto.randomUUID()}`;
@@ -3852,7 +3866,11 @@ export class DaemonClient {
 
   async subscribeCheckoutDiff(
     cwd: string,
-    compare: { mode: "uncommitted" | "base"; baseRef?: string; ignoreWhitespace?: boolean },
+    compare: {
+      mode: "uncommitted" | "staged" | "unstaged" | "base";
+      baseRef?: string;
+      ignoreWhitespace?: boolean;
+    },
     options?: { subscriptionId?: string; requestId?: string },
   ): Promise<SubscribeCheckoutDiffPayload> {
     const subscriptionId = options?.subscriptionId ?? crypto.randomUUID();
@@ -3905,7 +3923,7 @@ export class DaemonClient {
 
   async checkoutCommit(
     cwd: string,
-    input: { message?: string; addAll?: boolean },
+    input: { message?: string },
     requestId?: string,
   ): Promise<CheckoutCommitPayload> {
     return this.sendCorrelatedSessionRequest({
@@ -3914,7 +3932,6 @@ export class DaemonClient {
         type: "checkout_commit_request",
         cwd,
         message: input.message,
-        addAll: input.addAll,
       },
       responseType: "checkout_commit_response",
     });
@@ -4006,6 +4023,23 @@ export class DaemonClient {
         cwd,
       },
       responseType: "checkout.refresh.response",
+    });
+  }
+
+  async checkoutStageChanges(
+    cwd: string,
+    input: { operation: "stage" | "unstage"; paths: string[] },
+    requestId?: string,
+  ): Promise<CheckoutStageChangesPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "checkout.stage_changes.request",
+        cwd,
+        operation: input.operation,
+        paths: input.paths,
+      },
+      responseType: "checkout.stage_changes.response",
     });
   }
 
@@ -5068,12 +5102,27 @@ export class DaemonClient {
     });
   }
 
-  async installOmp(options?: { requestId?: string }): Promise<OmpInstallPayload> {
+  async installOmp(options?: {
+    requestId?: string;
+    strategy?: "immediate" | "stop-agents" | "defer";
+  }): Promise<OmpInstallPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId: options?.requestId,
-      message: { type: "omp.install.request" },
+      message: {
+        type: "omp.install.request",
+        ...(options?.strategy ? { strategy: options.strategy } : {}),
+      },
       responseType: "omp.install.response",
       timeout: 960_000,
+    });
+  }
+
+  async cancelOmpInstall(options?: { requestId?: string }): Promise<OmpInstallPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "omp.install.request", action: "cancel" },
+      responseType: "omp.install.response",
+      timeout: 90_000,
     });
   }
 
