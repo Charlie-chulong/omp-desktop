@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ko: TranslationResources = {
@@ -1684,6 +1685,7 @@ export const ko: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "로컬 OMP Desktop 데몬을 기다리는 중…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "연결 추가",
       direct: {
@@ -1992,6 +1994,7 @@ export const ko: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ko,
     title: "설정",
     loading: "설정 불러오는 중...",
     groups: {
@@ -2543,6 +2546,7 @@ export const ko: TranslationResources = {
         moveUp: "위로 이동",
         moveDown: "아래로 이동",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "레이블 편집",
@@ -2575,6 +2579,7 @@ export const ko: TranslationResources = {
         update: {
           desktopManagedHint:
             "이 데몬은 OMP Desktop Desktop에서 관리됩니다. 호스트에서 OMP Desktop 데스크톱을 업데이트합니다.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "데몬 업데이트",
           hint: "데몬을 최신 버전으로 업데이트하고 다시 시작하세요.",
           confirm: "업데이트",

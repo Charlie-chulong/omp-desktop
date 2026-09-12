@@ -2586,6 +2586,14 @@ export class Session {
         return this.providerCatalogSession.handleOmpProviderManagementGetRequest(msg);
       case "omp.provider.management.save.request":
         return this.providerCatalogSession.handleOmpProviderManagementSaveRequest(msg);
+      case "omp.subagents.management.get.request":
+        return this.providerCatalogSession.handleOmpSubagentSettingsGetRequest(msg);
+      case "omp.subagents.management.update.request":
+        return this.providerCatalogSession.handleOmpSubagentSettingsUpdateRequest(msg);
+      case "omp.memory.settings.get.request":
+        return this.providerCatalogSession.handleOmpMemorySettingsGetRequest(msg);
+      case "omp.memory.settings.update.request":
+        return this.providerCatalogSession.handleOmpMemorySettingsUpdateRequest(msg);
       case "omp.provider.management.context_windows.update.request":
         return this.providerCatalogSession.handleOmpProviderContextWindowOverridesUpdateRequest(
           msg,

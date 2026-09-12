@@ -2,21 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import {
-  ConnectionOfferSchema,
-  type ConnectionOffer,
-} from "@omp-desktop/protocol/connection-offer";
+import { ConnectionOfferSchema } from "@omp-desktop/protocol/connection-offer";
 import type { HostProfile } from "@/types/host-connection";
 import { useAppSettings } from "@/hooks/use-settings";
 import { useHostMutations } from "@/runtime/host-runtime";
-import {
-  applyConfiguredRelayToOffer,
-  decodeOfferFragmentPayload,
-  formatRelayServerAddress,
-  normalizeHostPort,
-  shouldUseTlsForDefaultHostedRelay,
-} from "@/utils/daemon-endpoints";
-import { connectToDaemon } from "@/utils/test-daemon-connection";
+import { decodeOfferFragmentPayload } from "@/utils/daemon-endpoints";
+import { PairHostError, pairHostFromOffer } from "@/pairing/pair-host-from-offer";
 import { AdaptiveModalSheet, AdaptiveTextInput, type SheetHeader } from "./adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 
@@ -26,18 +17,6 @@ export interface PairLinkModalProps {
   onSaved?: (profile: HostProfile) => void;
   initialUrl?: string;
   autoPair?: boolean;
-}
-
-interface RelayAttemptContext {
-  relay: string;
-  advertisedRelay: string;
-}
-
-function formatOfferRelayAddress(relay: ConnectionOffer["relay"]): string {
-  return formatRelayServerAddress({
-    endpoint: normalizeHostPort(relay.endpoint),
-    useTls: relay.useTls ?? shouldUseTlsForDefaultHostedRelay(relay.endpoint),
-  });
 }
 
 export function PairLinkModal({
@@ -60,7 +39,6 @@ export function PairLinkModal({
 
   const handleSave = useCallback(async () => {
     if (busy.current) return;
-    let relayAttempt: RelayAttemptContext | null = null;
     const raw = offerUrl.current.trim();
     if (!raw || !raw.includes("#offer=")) {
       setErrorMessage(t(raw ? "pairing.link.errors.missingOffer" : "pairing.link.errors.required"));
@@ -73,31 +51,19 @@ export function PairLinkModal({
       const encoded = raw.slice(raw.indexOf("#offer=") + "#offer=".length).trim();
       if (!encoded) throw new Error(t("pairing.link.errors.emptyOffer"));
       const offer = ConnectionOfferSchema.parse(decodeOfferFragmentPayload(encoded));
-      const effectiveOffer = applyConfiguredRelayToOffer(offer, configuredRelayAddress);
-      relayAttempt = {
-        relay: formatOfferRelayAddress(effectiveOffer.relay),
-        advertisedRelay: formatOfferRelayAddress(offer.relay),
-      };
-      const { client, hostname, serverId } = await connectToDaemon(
-        {
-          id: "probe",
-          type: "relay",
-          relayEndpoint: normalizeHostPort(effectiveOffer.relay.endpoint),
-          useTls: effectiveOffer.relay.useTls,
-          daemonPublicKeyB64: effectiveOffer.daemonPublicKeyB64,
-        },
-        { serverId: effectiveOffer.serverId },
-      );
-      await client.close().catch(() => undefined);
-      if (serverId !== effectiveOffer.serverId) throw new Error(t("pairing.link.errors.invalid"));
-      const profile = await upsertConnectionFromOffer(effectiveOffer, hostname ?? undefined);
+      const profile = await pairHostFromOffer({
+        offer,
+        configuredRelayAddress,
+        upsertConnectionFromOffer,
+      });
       onSaved?.(profile);
       onClose();
     } catch (error) {
       const detail = error instanceof Error ? error.message : t("pairing.link.errors.unableToPair");
+      const relayContext = error instanceof PairHostError ? error.relayContext : null;
       setErrorMessage(
-        relayAttempt
-          ? t("pairing.link.errors.relayConnectionFailed", { ...relayAttempt, detail })
+        relayContext
+          ? t("pairing.link.errors.relayConnectionFailed", { ...relayContext, detail })
           : detail,
       );
     } finally {

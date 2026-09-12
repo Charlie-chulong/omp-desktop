@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ja: TranslationResources = {
@@ -1688,6 +1689,7 @@ export const ja: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "ローカルの OMP Desktop デーモンを待機中…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "接続を追加",
       direct: {
@@ -1999,6 +2001,7 @@ export const ja: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ja,
     title: "設定",
     loading: "設定を読み込み中...",
     groups: {
@@ -2553,6 +2556,7 @@ export const ja: TranslationResources = {
         moveUp: "上に移動",
         moveDown: "下に移動",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "ラベルを編集",
@@ -2585,6 +2589,7 @@ export const ja: TranslationResources = {
         update: {
           desktopManagedHint:
             "このデーモンはOMP Desktop Desktopによって管理されています。ホスト上のOMP Desktop Desktopを更新してください。",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "デーモンを更新",
           hint: "デーモンを最新バージョンに更新して再起動します",
           confirm: "更新",

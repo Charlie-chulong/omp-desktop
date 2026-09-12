@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 import type { Logger } from "pino";
+import type { OmpMemorySettingsPatch } from "@omp-desktop/protocol/messages";
 
 import { expandTilde } from "../../utils/path.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
@@ -494,6 +495,46 @@ export class ProviderSnapshotManager {
     }
     return await client.saveOmpProviderConfig(configYaml);
   }
+  async getOmpSubagentSettings() {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.getOmpSubagentSettings) {
+      throw new Error("OMP subagent configuration is unavailable");
+    }
+    return await client.getOmpSubagentSettings();
+  }
+
+  async updateOmpSubagentModel(agentName: string, model: string | null) {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.updateOmpSubagentModel) {
+      throw new Error("OMP subagent configuration is read-only");
+    }
+    return await client.updateOmpSubagentModel(agentName, model);
+  }
+
+  async getOmpMemorySettings() {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.getOmpMemorySettings) {
+      throw new Error("OMP memory configuration is unavailable");
+    }
+    return await client.getOmpMemorySettings();
+  }
+
+  async updateOmpMemorySettings(expectedRevision: string, patch: OmpMemorySettingsPatch) {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.updateOmpMemorySettings) {
+      throw new Error("OMP memory configuration is read-only");
+    }
+    return await client.updateOmpMemorySettings(expectedRevision, patch);
+  }
+
   async updateOmpModelContextWindowOverrides(
     providerId: string,
     overrides: Record<string, number | null>,

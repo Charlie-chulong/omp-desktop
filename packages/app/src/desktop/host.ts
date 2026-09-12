@@ -151,6 +151,66 @@ export interface DesktopAgentNavigationBridge {
   ready?: () => Promise<{ serverId: string; agentId: string } | null>;
 }
 
+export interface DesktopRemoteSshTarget {
+  host: string;
+  username?: string;
+  port?: number;
+  identityFile?: string;
+}
+
+export interface DesktopRemoteSshStartInput {
+  operationId: string;
+  target: DesktopRemoteSshTarget;
+  relayAddress?: string;
+  expectedServerId?: string;
+}
+
+export interface DesktopRemoteSshDeployResult {
+  operationId: string;
+  offerUrl: string;
+  hostname: string;
+  platform: "linux" | "darwin";
+  arch: "x64" | "arm64";
+  runtimeRoot: string;
+  deployedVersion: string;
+  target: DesktopRemoteSshTarget;
+}
+
+export interface DesktopRemoteSshProfile {
+  serverId: string;
+  target: DesktopRemoteSshTarget;
+  runtimeRoot: string;
+  deployedVersion: string;
+}
+
+export type DesktopRemoteSshEvent =
+  | {
+      operationId: string;
+      type: "phase";
+      phase:
+        | "connecting"
+        | "inspecting"
+        | "preparing-runtime"
+        | "uploading"
+        | "installing"
+        | "starting"
+        | "pairing"
+        | "complete";
+      message: string;
+    }
+  | { operationId: string; type: "terminal"; data: string }
+  | { operationId: string; type: "interactive"; enabled: boolean }
+  | { operationId: string; type: "failed"; message: string };
+
+export interface DesktopRemoteSshBridge {
+  start?: (input: DesktopRemoteSshStartInput) => Promise<DesktopRemoteSshDeployResult>;
+  writeInput?: (input: { operationId: string; input: string }) => Promise<void>;
+  cancel?: (input: { operationId: string }) => Promise<void>;
+  getProfile?: (serverId: string) => Promise<DesktopRemoteSshProfile | null>;
+  saveProfile?: (profile: DesktopRemoteSshProfile) => Promise<void>;
+  removeProfile?: (serverId: string) => Promise<void>;
+}
+
 export type DesktopBrowserShortcutEvent =
   | { browserId?: string; action: "focus-url" }
   | { browserId: string; action: "new-tab" };
@@ -201,6 +261,7 @@ export interface DesktopHostBridge {
   getPendingOpenProject?: () => Promise<string | null>;
   agentNavigation?: DesktopAgentNavigationBridge;
   events?: DesktopEventsBridge;
+  remoteSsh?: DesktopRemoteSshBridge;
   window?: DesktopWindowModuleBridge;
   dialog?: DesktopDialogBridge;
   notification?: DesktopNotificationBridge;

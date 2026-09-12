@@ -1,4 +1,5 @@
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 import { backgroundProcesses } from "./background-processes";
 
@@ -1712,6 +1713,37 @@ export const en = {
   },
   pairing: {
     desktopWaiting: "Waiting for the local OMP Desktop daemon…",
+    ssh: {
+      entry: "Connect via SSH",
+      title: "Connect a remote host via SSH",
+      helper:
+        "OMP Desktop uses your system SSH configuration to install and pair the remote daemon. The ongoing connection uses the encrypted relay.",
+      host: "SSH host or config alias",
+      username: "Username (optional)",
+      port: "Port (optional)",
+      identityFile: "Identity file (optional)",
+      identityFileDefault: "Use SSH configuration or agent",
+      choose: "Choose",
+      authenticationInput: "Password, passphrase, MFA code, or yes/no",
+      send: "Send",
+      connectAndDeploy: "Connect and deploy",
+      update: "Update via SSH",
+      phases: {
+        connecting: "Connecting with SSH…",
+        inspecting: "Inspecting the remote host…",
+        "preparing-runtime": "Preparing the managed runtime…",
+        uploading: "Uploading the backend…",
+        installing: "Installing backend dependencies…",
+        starting: "Starting the remote daemon…",
+        pairing: "Verifying the encrypted relay…",
+        complete: "Remote host connected",
+      },
+      errors: {
+        desktopOnly: "SSH deployment is available in OMP Desktop.",
+        hostRequired: "SSH host is required.",
+        invalidPort: "Port must be between 1 and 65535.",
+      },
+    },
     connectionMethods: {
       title: "Add connection",
       direct: {
@@ -2020,6 +2052,7 @@ export const en = {
     },
   },
   settings: {
+    memory: ompMemorySettings.en,
     title: "Settings",
     loading: "Loading settings...",
     groups: {
@@ -2591,14 +2624,15 @@ export const en = {
         emptyState: "No profiles yet. Add one to launch terminals with a specific command.",
       },
       agentProfiles: {
-        sectionTitle: "Agent profiles",
-        unavailable: "Connect to this host to manage agent profiles",
-        unsupported: "This host runs a daemon that does not support agent profiles yet",
-        emptyState: "No profiles yet. Add one to start agents from a saved provider and model.",
-        addProfileTitle: "Add agent profile",
-        newProfile: "New profile",
-        editProfile: "Edit profile",
-        editProfileTitle: "Edit agent profile",
+        sectionTitle: "Agent launch presets",
+        unavailable: "Connect to this host to manage agent launch presets",
+        unsupported: "This host runs a daemon that does not support agent launch presets yet",
+        emptyState:
+          "No presets yet. Add one to launch an agent from saved provider and model settings.",
+        addProfileTitle: "Add agent launch preset",
+        newProfile: "New preset",
+        editProfile: "Edit preset",
+        editProfileTitle: "Edit agent launch preset",
         nameLabel: "Name",
         namePlaceholder: "UI work",
         iconLabel: "Icon",
@@ -2615,9 +2649,9 @@ export const en = {
         featuresLabel: "Features",
         featureCount: "{{count}} features",
         featureCountOne: "{{count}} feature",
-        notesLabel: "When to use",
+        notesLabel: "Delegation guidance",
         notesPlaceholder: "Use for UI work — components, layout and design tokens.",
-        notesHint: "Helps agents choose this profile when starting another agent.",
+        notesHint: "Used by agents to choose this preset when delegating through create_agent.",
         save: "Save",
         saving: "Saving...",
         remove: "Remove",
@@ -2625,6 +2659,25 @@ export const en = {
         removeConfirmMessage: 'Remove "{{name}}"?',
         moveUp: "Move up",
         moveDown: "Move down",
+      },
+      ompSubagents: {
+        sectionTitle: "OMP subagents",
+        unavailable: "Connect to this host to manage OMP subagents",
+        unsupported: "Update this host to manage OMP subagent models",
+        loading: "Loading OMP subagent settings...",
+        inherit: "Inherit parent agent",
+        inheritHint: "Use the parent agent's active or default model.",
+        modelLabel: "Model",
+        noModels: "No OMP models are available on this host",
+        selectModelTitle: "Select a model for {{name}}",
+        configPath: "User configuration: {{path}}",
+        descriptions: {
+          scout: "Read-only codebase research and analysis.",
+          task: "General-purpose implementation work.",
+          sonic: "Lightweight mechanical updates.",
+          reviewer: "Correctness and quality review.",
+          "security-reviewer": "Security-focused review.",
+        },
       },
       daemon: {
         rename: {
@@ -2658,6 +2711,7 @@ export const en = {
         update: {
           desktopManagedHint:
             "This daemon is managed by OMP Desktop Desktop. Update OMP Desktop Desktop on the host.",
+          sshManagedHint: "This daemon was deployed by SSH. Reconnect with SSH to update it.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",

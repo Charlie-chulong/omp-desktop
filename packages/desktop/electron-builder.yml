@@ -34,6 +34,8 @@ extraResources:
     to: app-dist
   - from: assets/editor-targets
     to: editor-target-icons
+  - from: remote-backend-dist
+    to: remote-backend
 mac:
   artifactName: "OMP-Desktop-${version}-${arch}.${ext}"
   category: public.app-category.developer-tools
