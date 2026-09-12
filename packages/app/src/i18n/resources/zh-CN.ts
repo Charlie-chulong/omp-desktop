@@ -2619,6 +2619,21 @@ export const zhCN: TranslationResources = {
         feedback: {
           toggleFailed: "无法切换 {{id}}",
           removeFailed: "无法移除 {{id}}",
+          installFailed: "无法安装 {{id}}",
+        },
+        marketplace: {
+          title: "插件市场",
+          addLabel: "添加插件市场",
+          addPlaceholder: "owner/repo、git 地址或本地路径",
+          actions: {
+            add: "添加",
+            browse: "浏览({{count}})",
+            hide: "收起",
+          },
+          feedback: {
+            addFailed: "无法添加插件市场",
+            removeFailed: "无法移除 {{id}}",
+          },
         },
         states: {
           loading: "正在加载插件…",

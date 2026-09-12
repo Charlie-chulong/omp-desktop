@@ -133,6 +133,7 @@ import type {
   AgentSkillsSaveResult,
   OmpPluginInfo,
   OmpMarketplacePluginInfo,
+  OmpPluginMarketplaceInfo,
   OmpPluginDoctorCheck,
 } from "@omp-desktop/protocol/messages";
 import type {
@@ -5420,6 +5421,45 @@ export class DaemonClient {
       requestId,
       message: { type: "ompPlugins.doctor.request", ...(fix ? { fix: true } : {}) },
       responseType: "ompPlugins.doctor.response",
+    });
+  }
+
+  async listOmpPluginMarketplaces(): Promise<{
+    requestId: string;
+    marketplaces: OmpPluginMarketplaceInfo[];
+    rawOutput?: string;
+  }> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "ompPlugins.marketplace.list.request" },
+      responseType: "ompPlugins.marketplace.list.response",
+    });
+  }
+
+  async addOmpPluginMarketplace(source: string): Promise<{
+    requestId: string;
+    ok: boolean;
+    marketplace: OmpPluginMarketplaceInfo | null;
+    output?: string;
+  }> {
+    const requestId = this.createRequestId();
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "ompPlugins.marketplace.add.request", source },
+      responseType: "ompPlugins.marketplace.add.response",
+    });
+    return { ...payload, marketplace: payload.marketplace ?? null };
+  }
+
+  async removeOmpPluginMarketplace(
+    name: string,
+  ): Promise<{ requestId: string; ok: boolean; output?: string }> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "ompPlugins.marketplace.remove.request", name },
+      responseType: "ompPlugins.marketplace.remove.response",
     });
   }
 

@@ -1896,6 +1896,49 @@ export const OmpPluginDoctorRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const OmpPluginMarketplaceListRequestMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.list.request"),
+  requestId: z.string(),
+});
+
+export const OmpPluginMarketplaceAddRequestMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.add.request"),
+  /** Marketplace source: `owner/repo`, a git URL, or a local path. */
+  source: z.string().trim().min(1).max(300),
+  requestId: z.string(),
+});
+
+export const OmpPluginMarketplaceRemoveRequestMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.remove.request"),
+  /** Marketplace name as shown by `omp plugin marketplace list`. */
+  name: z.string().trim().min(1).max(200),
+  requestId: z.string(),
+});
+
+export const OmpPluginMarketplaceCatalogEntrySchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    version: z.string().optional(),
+    category: z.string().optional(),
+    keywords: z.array(z.string()).optional(),
+  })
+  .passthrough();
+export type OmpPluginMarketplaceCatalogEntry = z.infer<
+  typeof OmpPluginMarketplaceCatalogEntrySchema
+>;
+
+export const OmpPluginMarketplaceInfoSchema = z
+  .object({
+    name: z.string().min(1),
+    /** Source the marketplace was added from (repo slug, URL, or path). */
+    source: z.string().optional(),
+    /** Catalog entries available from this marketplace, when known. */
+    plugins: z.array(OmpPluginMarketplaceCatalogEntrySchema).optional(),
+  })
+  .passthrough();
+export type OmpPluginMarketplaceInfo = z.infer<typeof OmpPluginMarketplaceInfoSchema>;
+
 export const ProviderUsageListRequestMessageSchema = z.object({
   type: z.literal("provider.usage.list.request"),
   requestId: z.string(),
@@ -3381,6 +3424,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OmpPluginRemoveRequestMessageSchema,
   OmpPluginSetEnabledRequestMessageSchema,
   OmpPluginDoctorRequestMessageSchema,
+  OmpPluginMarketplaceListRequestMessageSchema,
+  OmpPluginMarketplaceAddRequestMessageSchema,
+  OmpPluginMarketplaceRemoveRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
   ResumeAgentRequestMessageSchema,
   ImportAgentRequestMessageSchema,
@@ -6477,6 +6523,34 @@ export const OmpPluginDoctorResponseMessageSchema = z.object({
   }),
 });
 
+export const OmpPluginMarketplaceListResponseMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    marketplaces: z.array(OmpPluginMarketplaceInfoSchema),
+    rawOutput: z.string().optional(),
+  }),
+});
+
+export const OmpPluginMarketplaceAddResponseMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.add.response"),
+  payload: z.object({
+    requestId: z.string(),
+    ok: z.boolean(),
+    marketplace: OmpPluginMarketplaceInfoSchema.nullable().optional(),
+    output: z.string().optional(),
+  }),
+});
+
+export const OmpPluginMarketplaceRemoveResponseMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.remove.response"),
+  payload: z.object({
+    requestId: z.string(),
+    ok: z.boolean(),
+    output: z.string().optional(),
+  }),
+});
+
 export const ProviderUsageToneSchema = z.enum(["default", "ok", "warning", "danger"]);
 export const ProviderUsageStatusSchema = z.enum(["available", "unavailable", "error"]);
 
@@ -7136,6 +7210,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   OmpPluginRemoveResponseMessageSchema,
   OmpPluginSetEnabledResponseMessageSchema,
   OmpPluginDoctorResponseMessageSchema,
+  OmpPluginMarketplaceListResponseMessageSchema,
+  OmpPluginMarketplaceAddResponseMessageSchema,
+  OmpPluginMarketplaceRemoveResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
   ListCommandsResponseSchema,
   ListTerminalsResponseSchema,

@@ -261,4 +261,63 @@ describe("plugin protocol compatibility", () => {
       payload: { rawOutput: "unparsable text", plugins: [{ someFutureField: 1 }] },
     });
   });
+
+  it("round-trips ompPlugins marketplace request and response pairs", () => {
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.add.request",
+        requestId: "m1",
+        source: "owner/repo",
+      }).type,
+    ).toBe("ompPlugins.marketplace.add.request");
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.remove.request",
+        requestId: "m2",
+        name: "probe",
+      }).type,
+    ).toBe("ompPlugins.marketplace.remove.request");
+    const list = SessionOutboundMessageSchema.parse({
+      type: "ompPlugins.marketplace.list.response",
+      payload: {
+        requestId: "m3",
+        marketplaces: [
+          {
+            name: "probe-mkt",
+            source: "D:/mp",
+            plugins: [{ name: "probe-plugin", description: "d", version: "1.0.0" }],
+            extraFutureField: true,
+          },
+        ],
+      },
+    });
+    expect(list).toMatchObject({
+      payload: {
+        marketplaces: [{ name: "probe-mkt", plugins: [{ name: "probe-plugin" }] }],
+      },
+    });
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.add.response",
+        payload: { requestId: "m1", ok: true, marketplace: null, output: "done" },
+      }).type,
+    ).toBe("ompPlugins.marketplace.add.response");
+  });
+
+  it("rejects ompPlugins marketplace requests missing the source", () => {
+    expect(() =>
+      SessionInboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.add.request",
+        requestId: "m",
+        source: "   ",
+      }),
+    ).toThrow();
+    expect(() =>
+      SessionInboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.remove.request",
+        requestId: "m",
+        name: "",
+      }),
+    ).toThrow();
+  });
 });

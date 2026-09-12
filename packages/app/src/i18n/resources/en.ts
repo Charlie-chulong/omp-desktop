@@ -2718,6 +2718,21 @@ export const en = {
         feedback: {
           toggleFailed: "Could not toggle {{id}}",
           removeFailed: "Could not remove {{id}}",
+          installFailed: "Could not install {{id}}",
+        },
+        marketplace: {
+          title: "Marketplaces",
+          addLabel: "Add marketplace",
+          addPlaceholder: "owner/repo, git URL, or local path",
+          actions: {
+            add: "Add",
+            browse: "Browse ({{count}})",
+            hide: "Hide",
+          },
+          feedback: {
+            addFailed: "Could not add marketplace",
+            removeFailed: "Could not remove {{id}}",
+          },
         },
         states: {
           loading: "Loading plugins…",
