@@ -22,7 +22,9 @@ import {
   DEFAULT_TERMINAL_PROFILES,
 } from "@omp-desktop/protocol/terminal-profiles";
 import { AgentProfilesSection } from "@/agent-profiles";
+import { OmpSubagentsSection } from "@/omp-subagents";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
+import { RemoteSshHostModal } from "@/components/remote-ssh-host-modal";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,7 @@ import {
 import { LocalDaemonSection } from "@/desktop/components/desktop-updates-section";
 import { useDaemonStatus } from "@/desktop/hooks/use-daemon-status";
 import { loadDesktopSettings, useDesktopSettings } from "@/desktop/settings/desktop-settings";
+import { getDesktopHost, type DesktopRemoteSshProfile } from "@/desktop/host";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useOmpCodexAccountQuota } from "@/hooks/use-omp-account-quota";
@@ -587,6 +590,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
         </View>
       )}
       <AgentProfilesSection serverId={serverId} />
+      <OmpSubagentsSection serverId={serverId} />
     </View>
   );
 }
@@ -1087,6 +1091,8 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
   const desktopManaged = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.desktopManaged === true,
   );
+  const [sshProfile, setSshProfile] = useState<DesktopRemoteSshProfile | null>(null);
+  const [sshUpdateVisible, setSshUpdateVisible] = useState(false);
 
   const appVersion = resolveAppVersion();
   const hasVersionMismatch = isVersionMismatch(appVersion, daemonVersion);
@@ -1097,6 +1103,22 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
       unsubscribeRef.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const getProfile = getDesktopHost()?.remoteSsh?.getProfile;
+    if (!getProfile) return () => undefined;
+    void getProfile(host.serverId)
+      .then((profile) => {
+        if (active) setSshProfile(profile);
+      })
+      .catch((error) => {
+        console.error(`[HostPage] Failed to load SSH profile for ${host.label}`, error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [host.label, host.serverId]);
 
   const isHostConnected = useCallback(
     () => isHostRuntimeConnected(runtime.getSnapshot(host.serverId)),
@@ -1269,7 +1291,8 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
     [theme.iconSize.sm, theme.colors.foreground],
   );
 
-  const shouldShowUpdate = hasVersionMismatch && (supportsSelfUpdate || desktopManaged);
+  const shouldShowUpdate =
+    hasVersionMismatch && (supportsSelfUpdate || desktopManaged || sshProfile !== null);
   if (!shouldShowUpdate) {
     return null;
   }
@@ -1283,20 +1306,24 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("settings.host.daemon.update.title")}</Text>
           <Text style={settingsStyles.rowHint}>
-            {desktopManaged
-              ? t("settings.host.daemon.update.desktopManagedHint")
-              : t("settings.host.daemon.update.hint")}
+            {sshProfile
+              ? t("settings.host.daemon.update.sshManagedHint")
+              : desktopManaged
+                ? t("settings.host.daemon.update.desktopManagedHint")
+                : t("settings.host.daemon.update.hint")}
           </Text>
         </View>
         <Button
           variant="outline"
           size="sm"
           leftIcon={updateIcon}
-          onPress={handleUpdate}
-          disabled={desktopManaged || isUpdating || !daemonClient || !isConnected}
+          onPress={sshProfile ? () => setSshUpdateVisible(true) : handleUpdate}
+          disabled={
+            sshProfile ? isUpdating : desktopManaged || isUpdating || !daemonClient || !isConnected
+          }
           testID="host-page-update-button"
         >
-          {buttonLabel}
+          {sshProfile ? t("pairing.ssh.update") : buttonLabel}
         </Button>
       </View>
       {updateState.status === "failed" ? (
@@ -1308,6 +1335,14 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
             testID="host-page-update-error"
           />
         </View>
+      ) : null}
+      {sshProfile && sshUpdateVisible ? (
+        <RemoteSshHostModal
+          visible
+          managedProfile={sshProfile}
+          onClose={() => setSshUpdateVisible(false)}
+          onSaved={() => setSshUpdateVisible(false)}
+        />
       ) : null}
     </View>
   );
@@ -1627,6 +1662,11 @@ function RemoveHostSection({
         return;
       }
       await removeHost(host.serverId);
+      await getDesktopHost()
+        ?.remoteSsh?.removeProfile?.(host.serverId)
+        .catch((error) => {
+          console.error("[HostPage] Failed to remove SSH host profile", error);
+        });
     };
     void remove()
       .then(() => {

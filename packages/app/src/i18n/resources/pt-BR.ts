@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ptBR: TranslationResources = {
@@ -1704,6 +1705,7 @@ export const ptBR: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "Aguardando o daemon local do OMP Desktop…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "Adicionar conexão",
       direct: {
@@ -2014,6 +2016,7 @@ export const ptBR: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings["pt-BR"],
     title: "Configurações",
     loading: "Carregando configurações...",
     groups: {
@@ -2570,6 +2573,7 @@ export const ptBR: TranslationResources = {
         moveUp: "Mover para cima",
         moveDown: "Mover para baixo",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "Editar rótulo",
@@ -2602,6 +2606,7 @@ export const ptBR: TranslationResources = {
         update: {
           desktopManagedHint:
             "Este daemon é gerenciado pelo OMP Desktop Desktop. Atualize o OMP Desktop Desktop no host.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Atualizar daemon",
           hint: "Atualiza o daemon para a versão mais recente e o reinicia",
           confirm: "Atualizar",

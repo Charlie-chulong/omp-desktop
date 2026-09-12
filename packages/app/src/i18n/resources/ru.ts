@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ru: TranslationResources = {
@@ -1712,6 +1713,7 @@ export const ru: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "Ожидание локального демона OMP Desktop…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "Добавить подключение",
       direct: {
@@ -2024,6 +2026,7 @@ export const ru: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ru,
     title: "Настройки",
     loading: "Загрузка настроек...",
     groups: {
@@ -2587,6 +2590,7 @@ export const ru: TranslationResources = {
         moveUp: "Переместить вверх",
         moveDown: "Переместить вниз",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "Изменить название",
@@ -2619,6 +2623,7 @@ export const ru: TranslationResources = {
         update: {
           desktopManagedHint:
             "Этот демон управляется OMP Desktop Desktop. Обновите OMP Desktop Desktop на хосте.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Обновить демон",
           hint: "Обновить демон до последней версии и перезапустить его",
           confirm: "Обновить",

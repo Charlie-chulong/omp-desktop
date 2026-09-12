@@ -1,0 +1,399 @@
+import { createHash } from "node:crypto";
+import { existsSync, promises as fs } from "node:fs";
+import { dirname, join } from "node:path";
+import {
+  OmpMemorySettingsPatchSchema,
+  type OmpMemoryBackend,
+  type OmpMemorySettings,
+  type OmpMemorySettingsPatch,
+} from "@omp-desktop/protocol/messages";
+import { isMap, parseDocument, type Document } from "yaml";
+
+import { writeFileAtomic } from "../../../atomic-file.js";
+import { resolveOmpDiagnosticPaths } from "./provider-config.js";
+
+const SUPPORTED_BACKENDS: OmpMemoryBackend[] = [
+  "off",
+  "local",
+  "hindsight",
+  "mnemopi",
+  "sharpshooter",
+];
+const mutationQueues = new Map<string, Promise<OmpMemorySettings>>();
+
+type ConfigRecord = Record<string, unknown>;
+type MemoryScoping = OmpMemorySettings["mnemopi"]["scoping"];
+
+export class OmpMemorySettingsConflictError extends Error {
+  constructor() {
+    super("OMP memory settings changed on disk; reload before saving");
+    this.name = "OmpMemorySettingsConflictError";
+  }
+}
+
+function resolveConfigPath(env: NodeJS.ProcessEnv): string {
+  const agentDir = resolveOmpDiagnosticPaths(env).agentDir;
+  const ymlPath = join(agentDir, "config.yml");
+  if (existsSync(ymlPath)) return ymlPath;
+  const yamlPath = join(agentDir, "config.yaml");
+  return existsSync(yamlPath) ? yamlPath : ymlPath;
+}
+
+async function readConfigFile(configPath: string): Promise<string> {
+  return fs
+    .readFile(configPath, "utf8")
+    .catch((error: NodeJS.ErrnoException) =>
+      error.code === "ENOENT" ? "{}\n" : Promise.reject(error),
+    );
+}
+
+function parseConfig(raw: string): Document.Parsed {
+  const document = parseDocument(raw.trim() ? raw : "{}\n");
+  if (document.errors.length > 0) {
+    throw new Error(`Invalid OMP config: ${document.errors[0]?.message ?? "YAML parse failed"}`);
+  }
+  const root = document.toJS() as unknown;
+  if (root != null && (typeof root !== "object" || Array.isArray(root))) {
+    throw new Error("Invalid OMP config: root must be a mapping");
+  }
+  return document;
+}
+
+function revisionOf(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+function readMapping(root: ConfigRecord, key: string): ConfigRecord {
+  const value = root[key];
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Invalid OMP config: ${key} must be a mapping`);
+  }
+  return value as ConfigRecord;
+}
+
+function readBoolean(record: ConfigRecord, key: string, fallback: boolean, path: string): boolean {
+  const value = record[key];
+  if (value === undefined) return fallback;
+  if (typeof value !== "boolean") throw new Error(`Invalid OMP config: ${path} must be boolean`);
+  return value;
+}
+
+function readNumber(
+  record: ConfigRecord,
+  key: string,
+  fallback: number,
+  path: string,
+  options: { integer?: boolean; min?: number } = {},
+): number {
+  const value = record[key];
+  if (value === undefined) return fallback;
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    (options.integer === true && !Number.isInteger(value)) ||
+    (options.min !== undefined && value < options.min)
+  ) {
+    throw new Error(`Invalid OMP config: ${path} has an invalid numeric value`);
+  }
+  return value;
+}
+
+function readOptionalString(record: ConfigRecord, key: string, path: string): string | null {
+  const value = record[key];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Invalid OMP config: ${path} must be a non-empty string`);
+  }
+  return value.trim();
+}
+
+function readString(record: ConfigRecord, key: string, fallback: string, path: string): string {
+  return readOptionalString(record, key, path) ?? fallback;
+}
+
+function readEnum<T extends string>(
+  record: ConfigRecord,
+  key: string,
+  fallback: T,
+  allowed: readonly T[],
+  path: string,
+): T {
+  const value = record[key];
+  if (value === undefined) return fallback;
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new Error(`Invalid OMP config: ${path} has an unsupported value`);
+  }
+  return value as T;
+}
+
+function parseEnvBoolean(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "off"].includes(normalized)) return false;
+  return undefined;
+}
+
+function parseEnvPositiveInteger(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function configuredSecret(
+  configValue: unknown,
+  envValue?: string,
+): OmpMemorySettings["secretState"]["hindsightApiToken"] {
+  if (envValue?.trim()) return { configured: true, source: "environment" };
+  if (typeof configValue === "string" && configValue.trim()) {
+    return { configured: true, source: "config" };
+  }
+  return { configured: false, source: "none" };
+}
+
+function environmentOverrides(env: NodeJS.ProcessEnv): string[] {
+  const paths: string[] = [];
+  if (env.HINDSIGHT_API_URL?.trim()) paths.push("hindsight.apiUrl");
+  if (env.HINDSIGHT_API_TOKEN?.trim()) paths.push("hindsight.apiToken");
+  if (env.HINDSIGHT_BANK_ID?.trim()) paths.push("hindsight.bankId");
+  if (parseEnvBoolean(env.HINDSIGHT_AUTO_RECALL) !== undefined) {
+    paths.push("hindsight.autoRecall");
+  }
+  if (parseEnvBoolean(env.HINDSIGHT_AUTO_RETAIN) !== undefined) {
+    paths.push("hindsight.autoRetain");
+  }
+  if (
+    ["global", "per-project", "per-project-tagged"].includes(env.HINDSIGHT_SCOPING?.trim() ?? "")
+  ) {
+    paths.push("hindsight.scoping");
+  }
+  if (parseEnvPositiveInteger(env.HINDSIGHT_RETAIN_EVERY_N_TURNS) !== undefined) {
+    paths.push("hindsight.retainEveryNTurns");
+  }
+  return paths;
+}
+
+function toSettings(
+  configPath: string,
+  raw: string,
+  document: Document.Parsed,
+  env: NodeJS.ProcessEnv,
+): OmpMemorySettings {
+  const root = (document.toJS() ?? {}) as ConfigRecord;
+  const memory = readMapping(root, "memory");
+  const autolearn = readMapping(root, "autolearn");
+  const memories = readMapping(root, "memories");
+  const mnemopi = readMapping(root, "mnemopi");
+  const hindsight = readMapping(root, "hindsight");
+  const scopingValues: MemoryScoping[] = ["global", "per-project", "per-project-tagged"];
+  const backend = readEnum(memory, "backend", "off", SUPPORTED_BACKENDS, "memory.backend");
+
+  const configuredHindsightScoping = readEnum(
+    hindsight,
+    "scoping",
+    "per-project-tagged",
+    scopingValues,
+    "hindsight.scoping",
+  );
+  const envHindsightScoping = env.HINDSIGHT_SCOPING;
+  const hindsightScoping = scopingValues.includes(envHindsightScoping as MemoryScoping)
+    ? (envHindsightScoping as MemoryScoping)
+    : configuredHindsightScoping;
+
+  return {
+    configPath,
+    revision: revisionOf(raw),
+    backend,
+    supportedBackends: SUPPORTED_BACKENDS,
+    autolearn: {
+      enabled: readBoolean(autolearn, "enabled", false, "autolearn.enabled"),
+      autoContinue: readBoolean(autolearn, "autoContinue", false, "autolearn.autoContinue"),
+    },
+    local: {
+      minRolloutIdleHours: readNumber(
+        memories,
+        "minRolloutIdleHours",
+        12,
+        "memories.minRolloutIdleHours",
+        { min: 0 },
+      ),
+      maxRolloutAgeDays: readNumber(
+        memories,
+        "maxRolloutAgeDays",
+        30,
+        "memories.maxRolloutAgeDays",
+        { min: Number.EPSILON },
+      ),
+      summaryInjectionTokenLimit: readNumber(
+        memories,
+        "summaryInjectionTokenLimit",
+        5000,
+        "memories.summaryInjectionTokenLimit",
+        { integer: true, min: 1 },
+      ),
+    },
+    mnemopi: {
+      scoping: readEnum(mnemopi, "scoping", "per-project", scopingValues, "mnemopi.scoping"),
+      autoRecall: readBoolean(mnemopi, "autoRecall", true, "mnemopi.autoRecall"),
+      autoRetain: readBoolean(mnemopi, "autoRetain", true, "mnemopi.autoRetain"),
+      retainEveryNTurns: readNumber(mnemopi, "retainEveryNTurns", 4, "mnemopi.retainEveryNTurns", {
+        integer: true,
+        min: 1,
+      }),
+      recallLimit: readNumber(mnemopi, "recallLimit", 8, "mnemopi.recallLimit", {
+        integer: true,
+        min: 1,
+      }),
+      recallContextTurns: readNumber(
+        mnemopi,
+        "recallContextTurns",
+        3,
+        "mnemopi.recallContextTurns",
+        { integer: true, min: 0 },
+      ),
+      recallMaxQueryChars: readNumber(
+        mnemopi,
+        "recallMaxQueryChars",
+        4000,
+        "mnemopi.recallMaxQueryChars",
+        { integer: true, min: 1 },
+      ),
+      injectionTokenLimit: readNumber(
+        mnemopi,
+        "injectionTokenLimit",
+        5000,
+        "mnemopi.injectionTokenLimit",
+        { integer: true, min: 1 },
+      ),
+      polyphonicRecall: readBoolean(mnemopi, "polyphonicRecall", false, "mnemopi.polyphonicRecall"),
+      enhancedRecall: readBoolean(mnemopi, "enhancedRecall", false, "mnemopi.enhancedRecall"),
+      proactiveLinking: readBoolean(mnemopi, "proactiveLinking", false, "mnemopi.proactiveLinking"),
+      noEmbeddings: readBoolean(mnemopi, "noEmbeddings", false, "mnemopi.noEmbeddings"),
+      embeddingVariant: readEnum(
+        mnemopi,
+        "embeddingVariant",
+        "en",
+        ["en", "multilingual"],
+        "mnemopi.embeddingVariant",
+      ),
+      llmMode: readEnum(mnemopi, "llmMode", "smol", ["smol", "remote", "none"], "mnemopi.llmMode"),
+      dbPath: readOptionalString(mnemopi, "dbPath", "mnemopi.dbPath"),
+      embeddingModel: readOptionalString(mnemopi, "embeddingModel", "mnemopi.embeddingModel"),
+      embeddingApiUrl: readOptionalString(mnemopi, "embeddingApiUrl", "mnemopi.embeddingApiUrl"),
+      llmBaseUrl: readOptionalString(mnemopi, "llmBaseUrl", "mnemopi.llmBaseUrl"),
+      llmModel: readOptionalString(mnemopi, "llmModel", "mnemopi.llmModel"),
+    },
+    hindsight: {
+      apiUrl:
+        env.HINDSIGHT_API_URL?.trim() ||
+        readString(hindsight, "apiUrl", "http://localhost:8888", "hindsight.apiUrl"),
+      scoping: hindsightScoping,
+      bankId:
+        env.HINDSIGHT_BANK_ID?.trim() ||
+        readOptionalString(hindsight, "bankId", "hindsight.bankId"),
+      autoRecall:
+        parseEnvBoolean(env.HINDSIGHT_AUTO_RECALL) ??
+        readBoolean(hindsight, "autoRecall", true, "hindsight.autoRecall"),
+      autoRetain:
+        parseEnvBoolean(env.HINDSIGHT_AUTO_RETAIN) ??
+        readBoolean(hindsight, "autoRetain", true, "hindsight.autoRetain"),
+      retainEveryNTurns:
+        parseEnvPositiveInteger(env.HINDSIGHT_RETAIN_EVERY_N_TURNS) ??
+        readNumber(hindsight, "retainEveryNTurns", 3, "hindsight.retainEveryNTurns", {
+          integer: true,
+          min: 1,
+        }),
+    },
+    secretState: {
+      hindsightApiToken: configuredSecret(hindsight.apiToken, env.HINDSIGHT_API_TOKEN),
+      mnemopiEmbeddingApiKey: configuredSecret(mnemopi.embeddingApiKey),
+      mnemopiLlmApiKey: configuredSecret(mnemopi.llmApiKey),
+    },
+    environmentOverrides: environmentOverrides(env),
+  };
+}
+
+function assertEditableMappings(document: Document.Parsed): void {
+  for (const key of ["memory", "autolearn", "memories", "mnemopi", "hindsight"]) {
+    const value = document.getIn([key], true);
+    if (value != null && !isMap(value)) {
+      throw new Error(`Invalid OMP config: ${key} must be a mapping`);
+    }
+  }
+}
+
+function applyObjectPatch(
+  document: Document.Parsed,
+  prefix: string[],
+  patch: Record<string, unknown> | undefined,
+): void {
+  if (!patch) return;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    const path = [...prefix, key];
+    if (value === null) document.deleteIn(path);
+    else document.setIn(path, value);
+  }
+}
+
+function removeEmptyMappings(document: Document.Parsed): void {
+  for (const key of ["memory", "autolearn", "memories", "mnemopi", "hindsight"]) {
+    const value = document.getIn([key], true);
+    if (isMap(value) && value.items.length === 0) document.deleteIn([key]);
+  }
+}
+
+function applyPatch(document: Document.Parsed, patch: OmpMemorySettingsPatch): void {
+  assertEditableMappings(document);
+  if (patch.backend !== undefined) document.setIn(["memory", "backend"], patch.backend);
+  applyObjectPatch(document, ["autolearn"], patch.autolearn);
+  applyObjectPatch(document, ["memories"], patch.local);
+  applyObjectPatch(document, ["mnemopi"], patch.mnemopi);
+  applyObjectPatch(document, ["hindsight"], patch.hindsight);
+  if (patch.secrets) {
+    applyObjectPatch(document, ["hindsight"], {
+      apiToken: patch.secrets.hindsightApiToken,
+    });
+    applyObjectPatch(document, ["mnemopi"], {
+      embeddingApiKey: patch.secrets.mnemopiEmbeddingApiKey,
+      llmApiKey: patch.secrets.mnemopiLlmApiKey,
+    });
+  }
+  removeEmptyMappings(document);
+}
+
+export async function readOmpMemorySettings(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<OmpMemorySettings> {
+  const configPath = resolveConfigPath(env);
+  const raw = await readConfigFile(configPath);
+  return toSettings(configPath, raw, parseConfig(raw), env);
+}
+
+export async function updateOmpMemorySettings(
+  expectedRevision: string,
+  input: OmpMemorySettingsPatch,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<OmpMemorySettings> {
+  const patch = OmpMemorySettingsPatchSchema.parse(input);
+  const configPath = resolveConfigPath(env);
+  const update = async (): Promise<OmpMemorySettings> => {
+    const raw = await readConfigFile(configPath);
+    if (revisionOf(raw) !== expectedRevision) throw new OmpMemorySettingsConflictError();
+    const document = parseConfig(raw);
+    applyPatch(document, patch);
+    const nextRaw = document.toString();
+    await fs.mkdir(dirname(configPath), { recursive: true });
+    await writeFileAtomic(configPath, nextRaw);
+    return toSettings(configPath, nextRaw, document, env);
+  };
+  const previous = mutationQueues.get(configPath);
+  const queued = previous ? previous.then(update, update) : update();
+  mutationQueues.set(configPath, queued);
+  try {
+    return await queued;
+  } finally {
+    if (mutationQueues.get(configPath) === queued) mutationQueues.delete(configPath);
+  }
+}

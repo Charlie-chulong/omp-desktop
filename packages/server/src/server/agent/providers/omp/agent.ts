@@ -15,6 +15,9 @@ import type {
   OmpCustomProviderInput,
   OmpInstallationStatus,
   OmpProviderAccountQuota,
+  OmpSubagentSettings,
+  OmpMemorySettings,
+  OmpMemorySettingsPatch,
 } from "@omp-desktop/protocol/messages";
 import { isMap, parseDocument } from "yaml";
 
@@ -88,6 +91,11 @@ import { OmpSubagentCardTracker, type OmpSubagentCardScheduler } from "./subagen
 import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
 import { getUserMessageImages, getUserMessageText } from "./message-history.js";
 import { mapOmpIrcMessageToToolCall, mapOmpSystemNoticeToToolCall } from "./system-notice.js";
+import { readOmpSubagentSettings, updateOmpSubagentModel } from "./subagent-settings.js";
+import {
+  readOmpMemorySettings,
+  updateOmpMemorySettings as updateMemorySettings,
+} from "./memory-settings.js";
 import { materializeProviderImage } from "../provider-image-output.js";
 import {
   cancelOmpInstall,
@@ -4304,6 +4312,34 @@ export class OmpAgentClient implements AgentClient {
       loginProviders,
       ...(runtimeError ? { runtimeError } : {}),
     };
+  }
+
+  async getOmpSubagentSettings(): Promise<OmpSubagentSettings> {
+    return readOmpSubagentSettings({ ...process.env, ...this.runtimeSettings?.env });
+  }
+
+  async updateOmpSubagentModel(
+    agentName: string,
+    model: string | null,
+  ): Promise<OmpSubagentSettings> {
+    return updateOmpSubagentModel(agentName, model, {
+      ...process.env,
+      ...this.runtimeSettings?.env,
+    });
+  }
+
+  async getOmpMemorySettings(): Promise<OmpMemorySettings> {
+    return readOmpMemorySettings({ ...process.env, ...this.runtimeSettings?.env });
+  }
+
+  async updateOmpMemorySettings(
+    expectedRevision: string,
+    patch: OmpMemorySettingsPatch,
+  ): Promise<OmpMemorySettings> {
+    return updateMemorySettings(expectedRevision, patch, {
+      ...process.env,
+      ...this.runtimeSettings?.env,
+    });
   }
 
   async saveOmpProviderConfig(configYaml: string): Promise<OmpProviderManagement> {

@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 import { backgroundProcesses } from "./background-processes";
 
@@ -1684,6 +1685,37 @@ export const zhCN: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "正在等待本地 OMP Desktop 守护进程…",
+    ssh: {
+      entry: "通过 SSH 连接",
+      title: "通过 SSH 连接远程 Host",
+      helper:
+        "OMP Desktop 使用系统 SSH 配置安装并配对远端 Daemon。部署完成后的日常连接走端到端加密 Relay。",
+      host: "SSH Host 或配置别名",
+      username: "用户名（可选）",
+      port: "端口（可选）",
+      identityFile: "身份文件（可选）",
+      identityFileDefault: "使用 SSH 配置或 Agent",
+      choose: "选择",
+      authenticationInput: "密码、私钥口令、MFA 验证码或 yes/no",
+      send: "发送",
+      connectAndDeploy: "连接并部署",
+      update: "通过 SSH 更新",
+      phases: {
+        connecting: "正在连接 SSH…",
+        inspecting: "正在检查远端 Host…",
+        "preparing-runtime": "正在准备托管 Runtime…",
+        uploading: "正在上传后端…",
+        installing: "正在安装后端依赖…",
+        starting: "正在启动远端 Daemon…",
+        pairing: "正在验证加密 Relay…",
+        complete: "远程 Host 已连接",
+      },
+      errors: {
+        desktopOnly: "SSH 部署仅在 OMP Desktop 中可用。",
+        hostRequired: "SSH Host 必填。",
+        invalidPort: "端口必须在 1 到 65535 之间。",
+      },
+    },
     connectionMethods: {
       title: "添加连接",
       direct: {
@@ -1987,6 +2019,7 @@ export const zhCN: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings["zh-CN"],
     title: "设置",
     loading: "正在加载设置...",
     groups: {
@@ -2496,14 +2529,14 @@ export const zhCN: TranslationResources = {
         emptyState: "No profiles yet. Add one to launch terminals with a specific command.",
       },
       agentProfiles: {
-        sectionTitle: "Agent 配置",
-        unavailable: "连接到这个 Host 以管理 Agent 配置",
-        unsupported: "此 Host 运行的 Daemon 尚不支持 Agent 配置",
-        emptyState: "还没有配置。添加一个以便使用保存的 Provider 和 Model 启动 Agent。",
-        addProfileTitle: "添加 Agent 配置",
-        newProfile: "新建配置",
-        editProfile: "编辑配置",
-        editProfileTitle: "编辑 Agent 配置",
+        sectionTitle: "Agent 启动预设",
+        unavailable: "连接到这个 Host 以管理 Agent 启动预设",
+        unsupported: "此 Host 运行的 Daemon 尚不支持 Agent 启动预设",
+        emptyState: "还没有启动预设。创建预设以快速启动 Agent，或供 Agent 在委派任务时选择。",
+        addProfileTitle: "添加 Agent 启动预设",
+        newProfile: "新建预设",
+        editProfile: "编辑预设",
+        editProfileTitle: "编辑 Agent 启动预设",
         nameLabel: "名称",
         namePlaceholder: "UI 工作",
         iconLabel: "图标",
@@ -2520,9 +2553,9 @@ export const zhCN: TranslationResources = {
         featuresLabel: "Features",
         featureCount: "{{count}} 个 Feature",
         featureCountOne: "{{count}} 个 Feature",
-        notesLabel: "适用场景",
+        notesLabel: "委派说明",
         notesPlaceholder: "用于 UI 工作 — 组件、布局和设计 token。",
-        notesHint: "帮助 Agent 在启动另一个 Agent 时选择此配置。",
+        notesHint: "供 Agent 通过 create_agent 委派任务时选择此预设。",
         save: "保存",
         saving: "保存中...",
         remove: "移除",
@@ -2530,6 +2563,25 @@ export const zhCN: TranslationResources = {
         removeConfirmMessage: "移除「{{name}}」？",
         moveUp: "上移",
         moveDown: "下移",
+      },
+      ompSubagents: {
+        sectionTitle: "OMP 子智能体",
+        unavailable: "连接到这个 Host 以管理 OMP 子智能体",
+        unsupported: "更新此 Host 后即可管理 OMP 子智能体模型",
+        loading: "正在加载 OMP 子智能体配置...",
+        inherit: "继承父 Agent",
+        inheritHint: "使用父 Agent 当前或默认的模型。",
+        modelLabel: "模型",
+        noModels: "此 Host 上没有可用的 OMP 模型",
+        selectModelTitle: "为 {{name}} 选择模型",
+        configPath: "用户级配置：{{path}}",
+        descriptions: {
+          scout: "只读代码库调研与分析。",
+          task: "通用实现任务。",
+          sonic: "轻量机械更新。",
+          reviewer: "正确性与质量审查。",
+          "security-reviewer": "安全专项审查。",
+        },
       },
       daemon: {
         rename: {
@@ -2559,6 +2611,7 @@ export const zhCN: TranslationResources = {
         update: {
           desktopManagedHint:
             "此 Daemon 由 OMP Desktop Desktop 管理。请在 Host 上更新 OMP Desktop Desktop。",
+          sshManagedHint: "此 Daemon 通过 SSH 部署。重新连接 SSH 即可更新。",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",

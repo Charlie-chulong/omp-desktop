@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ar: TranslationResources = {
@@ -1672,6 +1673,7 @@ export const ar: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "في انتظار خدمة OMP Desktop المحلية…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "إضافة اتصال",
       direct: {
@@ -1980,6 +1982,7 @@ export const ar: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ar,
     title: "إعدادات",
     loading: "جارٍ تحميل الإعدادات...",
     groups: {
@@ -2529,6 +2532,7 @@ export const ar: TranslationResources = {
         moveUp: "نقل لأعلى",
         moveDown: "نقل لأسفل",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "تحرير التسمية",
@@ -2560,6 +2564,7 @@ export const ar: TranslationResources = {
         update: {
           desktopManagedHint:
             "يدير OMP Desktop Desktop هذا البرنامج الخفي. حدّث OMP Desktop Desktop على المضيف.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",

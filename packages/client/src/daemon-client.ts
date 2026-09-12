@@ -93,6 +93,11 @@ import type {
   ProviderDiagnosticResponseMessage,
   OmpProviderManagementGetResponseMessage,
   OmpProviderManagementSaveResponseMessage,
+  OmpSubagentSettingsGetResponseMessage,
+  OmpSubagentSettingsUpdateResponseMessage,
+  OmpMemorySettingsGetResponseMessage,
+  OmpMemorySettingsUpdateResponseMessage,
+  OmpMemorySettingsPatch,
   OmpProviderContextWindowOverridesUpdateResponseMessage,
   OmpProviderAccountOrderUpdateResponseMessage,
   OmpProviderManagementAddResponseMessage,
@@ -486,6 +491,8 @@ type RefreshProvidersSnapshotPayload = RefreshProvidersSnapshotResponseMessage["
 type ProviderDiagnosticPayload = ProviderDiagnosticResponseMessage["payload"];
 type OmpProviderManagementGetPayload = OmpProviderManagementGetResponseMessage["payload"];
 type OmpProviderManagementSavePayload = OmpProviderManagementSaveResponseMessage["payload"];
+type OmpSubagentSettingsGetPayload = OmpSubagentSettingsGetResponseMessage["payload"];
+type OmpSubagentSettingsUpdatePayload = OmpSubagentSettingsUpdateResponseMessage["payload"];
 type OmpProviderContextWindowOverridesUpdatePayload =
   OmpProviderContextWindowOverridesUpdateResponseMessage["payload"];
 type OmpProviderAccountOrderUpdatePayload = OmpProviderAccountOrderUpdateResponseMessage["payload"];
@@ -5118,6 +5125,58 @@ export class DaemonClient {
       timeout: 180000,
     });
   }
+  async getOmpSubagentSettings(options?: {
+    requestId?: string;
+  }): Promise<OmpSubagentSettingsGetPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "omp.subagents.management.get.request" },
+      responseType: "omp.subagents.management.get.response",
+      timeout: 30_000,
+    });
+  }
+
+  async updateOmpSubagentModel(
+    agentName: string,
+    model: string | null,
+    options?: { requestId?: string },
+  ): Promise<OmpSubagentSettingsUpdatePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "omp.subagents.management.update.request", agentName, model },
+      responseType: "omp.subagents.management.update.response",
+      timeout: 30_000,
+    });
+  }
+
+  async getOmpMemorySettings(options?: {
+    requestId?: string;
+  }): Promise<OmpMemorySettingsGetResponseMessage["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "omp.memory.settings.get.request" },
+      responseType: "omp.memory.settings.get.response",
+      timeout: 30_000,
+    });
+  }
+
+  async updateOmpMemorySettings(
+    expectedRevision: string,
+    patch: OmpMemorySettingsPatch,
+    options?: { requestId?: string },
+  ): Promise<OmpMemorySettingsUpdateResponseMessage["payload"]> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: {
+        type: "omp.memory.settings.update.request",
+        expectedRevision,
+        patch,
+      },
+      responseType: "omp.memory.settings.update.response",
+      timeout: 30_000,
+    });
+  }
+
   async updateOmpModelContextWindowOverrides(
     providerId: string,
     overrides: Record<string, number | null>,

@@ -1662,6 +1662,10 @@ export class VoiceAssistantWebSocketServer {
         providersSnapshotCwd: true,
         // COMPAT(ompProviderManagement): added in v0.1.0, remove gate after 2027-03-13.
         ompProviderManagement: true,
+        // COMPAT(ompSubagentSettings): added in v0.2.8, remove gate after 2027-03-13.
+        ompSubagentSettings: true,
+        // COMPAT(ompMemoryManagement): added 2026-09-12, remove gate after 2027-03-12.
+        ompMemoryManagement: true,
         // COMPAT(ompInstall): added in v0.5.1, remove gate after 2027-03-13.
         ompInstall: true,
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.1.106, remove old

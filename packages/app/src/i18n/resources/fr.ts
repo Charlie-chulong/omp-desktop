@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const fr: TranslationResources = {
@@ -1721,6 +1722,7 @@ export const fr: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "En attente du daemon local OMP Desktop…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "Ajouter une connexion",
       direct: {
@@ -2032,6 +2034,7 @@ export const fr: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.fr,
     title: "Paramètres",
     loading: "Chargement des paramètres...",
     groups: {
@@ -2592,6 +2595,7 @@ export const fr: TranslationResources = {
         moveUp: "Déplacer vers le haut",
         moveDown: "Déplacer vers le bas",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "Modifier l'étiquette",
@@ -2625,6 +2629,7 @@ export const fr: TranslationResources = {
         update: {
           desktopManagedHint:
             "Ce daemon est géré par OMP Desktop Desktop. Mettez à jour OMP Desktop Desktop sur l’hôte.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",
