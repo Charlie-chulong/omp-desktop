@@ -64,6 +64,28 @@ export class OmpPluginSession {
             this.service.doctor({ fix: msg.fix }) as unknown as Promise<Record<string, unknown>>,
         );
       }
+      case "ompPlugins.marketplace.list.request": {
+        const requestId = msg.requestId;
+        return this.reply(
+          requestId,
+          "ompPlugins.marketplace.list.response",
+          () => this.service.marketplaceList() as unknown as Promise<Record<string, unknown>>,
+        );
+      }
+      case "ompPlugins.marketplace.add.request": {
+        const { requestId, source } = msg;
+        return this.reply(requestId, "ompPlugins.marketplace.add.response", async () => {
+          const result = await this.service.marketplaceAdd({ source });
+          return { ok: result.ok, marketplace: result.marketplace ?? null, output: result.output };
+        });
+      }
+      case "ompPlugins.marketplace.remove.request": {
+        const { requestId, name } = msg;
+        return this.reply(requestId, "ompPlugins.marketplace.remove.response", async () => {
+          const result = await this.service.marketplaceRemove({ name });
+          return { ok: result.ok, output: result.output };
+        });
+      }
       default:
         return undefined;
     }

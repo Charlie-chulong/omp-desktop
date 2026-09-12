@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 
-import type { OmpPluginDoctorCheck, OmpPluginInfo } from "@omp-desktop/protocol/messages";
+import type {
+  OmpPluginDoctorCheck,
+  OmpPluginInfo,
+  OmpPluginMarketplaceInfo,
+} from "@omp-desktop/protocol/messages";
 
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
@@ -38,6 +42,8 @@ function getDoctorStatusVariant(status: OmpPluginDoctorCheck["status"]): StatusB
   return "error";
 }
 
+type OmpMarketplaceCatalogEntry = NonNullable<OmpPluginMarketplaceInfo["plugins"]>[number];
+
 function DoctorCheckRow({ check }: DoctorCheckRowProps) {
   return (
     <View style={styles.checkRow}>
@@ -45,6 +51,114 @@ function DoctorCheckRow({ check }: DoctorCheckRowProps) {
         <StatusBadge label={check.name} variant={getDoctorStatusVariant(check.status)} />
       </View>
       <Text style={settingsStyles.rowHint}>{check.message}</Text>
+    </View>
+  );
+}
+
+interface MarketplaceCatalogRowProps {
+  plugin: OmpMarketplaceCatalogEntry;
+  marketplaceName: string;
+  busy: boolean;
+  onInstall: (plugin: OmpMarketplaceCatalogEntry, marketplaceName: string) => void;
+  installLabel: string;
+}
+
+function MarketplaceCatalogRow({
+  plugin,
+  marketplaceName,
+  busy,
+  onInstall,
+  installLabel,
+}: MarketplaceCatalogRowProps) {
+  const handleInstall = useCallback(
+    () => onInstall(plugin, marketplaceName),
+    [onInstall, plugin, marketplaceName],
+  );
+  return (
+    <View style={styles.pluginRow}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+          {plugin.name}
+          {plugin.version ? `  ${plugin.version}` : ""}
+        </Text>
+        {plugin.description ? (
+          <Text style={settingsStyles.rowHint} numberOfLines={2}>
+            {plugin.description}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.pluginActions}>
+        <Button size="sm" loading={busy} onPress={handleInstall}>
+          {installLabel}
+        </Button>
+      </View>
+    </View>
+  );
+}
+
+interface MarketplaceEntryCardProps {
+  marketplace: OmpPluginMarketplaceInfo;
+  expanded: boolean;
+  busy: boolean;
+  busyCatalogName: string | null;
+  hideLabel: string;
+  browseLabel: string;
+  removeLabel: string;
+  installLabel: string;
+  onToggle: (name: string) => void;
+  onRemove: (name: string) => void;
+  onInstall: (plugin: OmpMarketplaceCatalogEntry, marketplaceName: string) => void;
+}
+
+function MarketplaceEntryCard({
+  marketplace,
+  expanded,
+  busy,
+  busyCatalogName,
+  hideLabel,
+  browseLabel,
+  removeLabel,
+  installLabel,
+  onToggle,
+  onRemove,
+  onInstall,
+}: MarketplaceEntryCardProps) {
+  const handleToggle = useCallback(() => onToggle(marketplace.name), [onToggle, marketplace.name]);
+  const handleRemove = useCallback(() => onRemove(marketplace.name), [onRemove, marketplace.name]);
+  return (
+    <View style={styles.marketplaceEntry}>
+      <View style={[settingsStyles.row, styles.pluginRow]}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle} numberOfLines={1}>
+            {marketplace.name}
+          </Text>
+          {marketplace.source ? (
+            <Text style={styles.pluginPath} numberOfLines={1}>
+              {marketplace.source}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.pluginActions}>
+          <Button size="sm" variant="outline" onPress={handleToggle}>
+            {expanded ? hideLabel : browseLabel}
+          </Button>
+          <Button variant="destructive" size="sm" loading={busy} onPress={handleRemove}>
+            {removeLabel}
+          </Button>
+        </View>
+      </View>
+      {expanded
+        ? (marketplace.plugins ?? []).map((entry) => (
+            <MarketplaceCatalogRow
+              key={entry.name}
+              plugin={entry}
+              marketplaceName={marketplace.name}
+              busy={busyCatalogName === `${entry.name}@${marketplace.name}`}
+              onInstall={onInstall}
+              installLabel={installLabel}
+            />
+          ))
+        : null}
     </View>
   );
 }
@@ -91,6 +205,59 @@ function OmpPluginRow({
   );
 }
 
+interface FieldControlRowProps {
+  initialValue: string;
+  onChangeText: (value: string) => void;
+  onSubmitEditing: () => void;
+  placeholder: string;
+  editable: boolean;
+  buttonLabel: string;
+  buttonLoading: boolean;
+  buttonDisabled: boolean;
+  buttonTestID: string;
+  inputTestID: string;
+  onPress: () => void;
+}
+
+function FieldControlRow({
+  initialValue,
+  onChangeText,
+  onSubmitEditing,
+  placeholder,
+  editable,
+  buttonLabel,
+  buttonLoading,
+  buttonDisabled,
+  buttonTestID,
+  inputTestID,
+  onPress,
+}: FieldControlRowProps) {
+  return (
+    <View style={styles.installControlRow}>
+      <View style={styles.installInput}>
+        <FormTextInput
+          initialValue={initialValue}
+          onChangeText={onChangeText}
+          onSubmitEditing={onSubmitEditing}
+          placeholder={placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={editable}
+          testID={inputTestID}
+        />
+      </View>
+      <Button
+        onPress={onPress}
+        loading={buttonLoading}
+        disabled={buttonDisabled}
+        testID={buttonTestID}
+      >
+        {buttonLabel}
+      </Button>
+    </View>
+  );
+}
+
 /**
  * Management page for the OMP runtime's own plugin ecosystem (`omp plugin`).
  * Distinct from the daemon plugin runtime page (`plugins` slug): this talks to
@@ -112,23 +279,48 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
   const [installOutput, setInstallOutput] = useState<string | null>(null);
   const [doctorChecks, setDoctorChecks] = useState<OmpPluginDoctorCheck[] | null>(null);
   const [doctorRunning, setDoctorRunning] = useState(false);
+  const [marketplaces, setMarketplaces] = useState<OmpPluginMarketplaceInfo[]>([]);
+  const [expandedMarketplace, setExpandedMarketplace] = useState<string | null>(null);
+  const [mktSource, setMktSource] = useState("");
+  const [mktBusy, setMktBusy] = useState(false);
+  const [busyCatalog, setBusyCatalog] = useState<string | null>(null);
 
+  // The daemon serializes ompPlugins.* RPCs (one operation at a time); a
+  // concurrent second call throws OmpPluginOperationInProgressError. Share a
+  // single in-flight load so overlapping callers await the same request.
+  const loadRef = useRef<Promise<void> | null>(null);
   const load = useCallback(async () => {
     if (!client) {
       setPageState("offline");
       return;
     }
-    setPageState("loading");
-    setLoadError(null);
-    try {
-      const result = await client.listOmpPlugins();
-      setPlugins(result.plugins);
-      setRawOutput(result.rawOutput ?? null);
-      setPageState(result.plugins.length === 0 ? "empty" : "ready");
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : String(error));
-      setPageState("error");
+    if (loadRef.current) {
+      await loadRef.current;
+      return;
     }
+    const run = (async () => {
+      setPageState("loading");
+      setLoadError(null);
+      try {
+        const [pluginResult, marketplaceResult] = await Promise.all([
+          client.listOmpPlugins(),
+          client.listOmpPluginMarketplaces().catch(() => null),
+        ]);
+        setPlugins(pluginResult.plugins);
+        setRawOutput(pluginResult.rawOutput ?? null);
+        setPageState(pluginResult.plugins.length === 0 ? "empty" : "ready");
+        if (marketplaceResult) {
+          setMarketplaces(marketplaceResult.marketplaces);
+        }
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : String(error));
+        setPageState("error");
+      } finally {
+        loadRef.current = null;
+      }
+    })();
+    loadRef.current = run;
+    await run;
   }, [client]);
 
   useEffect(() => {
@@ -224,6 +416,94 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
     },
     [client],
   );
+
+  const handleMarketplaceAdd = useCallback(async () => {
+    if (!client || !mktSource.trim()) return;
+    setMktBusy(true);
+    setLoadError(null);
+    try {
+      const result = await client.addOmpPluginMarketplace(mktSource.trim());
+      if (result.ok) {
+        setMktSource("");
+        const refreshed = await client.listOmpPluginMarketplaces();
+        setMarketplaces(refreshed.marketplaces);
+        if (result.marketplace) {
+          setExpandedMarketplace(result.marketplace.name);
+        }
+      } else {
+        setLoadError(result.output ?? t("settings.host.ompPlugins.marketplace.feedback.addFailed"));
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMktBusy(false);
+    }
+  }, [client, mktSource, t]);
+
+  const handleMarketplaceRemove = useCallback(
+    async (name: string) => {
+      if (!client) return;
+      setMktBusy(true);
+      setLoadError(null);
+      try {
+        const result = await client.removeOmpPluginMarketplace(name);
+        if (result.ok) {
+          setMarketplaces((prev) => prev.filter((entry) => entry.name !== name));
+          setExpandedMarketplace((prev) => (prev === name ? null : prev));
+        } else {
+          setLoadError(
+            result.output ??
+              t("settings.host.ompPlugins.marketplace.feedback.removeFailed", { id: name }),
+          );
+        }
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setMktBusy(false);
+      }
+    },
+    [client, t],
+  );
+
+  const handleMarketplaceInstall = useCallback(
+    async (plugin: OmpMarketplaceCatalogEntry, marketplaceName: string) => {
+      if (!client) return;
+      const key = `${plugin.name}@${marketplaceName}`;
+      setBusyCatalog(key);
+      setLoadError(null);
+      try {
+        const result = await client.installOmpPlugin({ spec: key });
+        if (result.ok) {
+          await load();
+        } else {
+          setLoadError(
+            result.output ??
+              t("settings.host.ompPlugins.feedback.installFailed", { id: plugin.name }),
+          );
+        }
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusyCatalog(null);
+      }
+    },
+    [client, load, t],
+  );
+
+  const handleMarketplaceToggle = useCallback((name: string) => {
+    setExpandedMarketplace((prev) => (prev === name ? null : name));
+  }, []);
+
+  const onMarketplaceRemove = useCallback(
+    (name: string) => void handleMarketplaceRemove(name),
+    [handleMarketplaceRemove],
+  );
+  const onMarketplaceInstall = useCallback(
+    (plugin: OmpMarketplaceCatalogEntry, marketplaceName: string) =>
+      void handleMarketplaceInstall(plugin, marketplaceName),
+    [handleMarketplaceInstall],
+  );
+  const onMarketplaceAdd = useCallback(() => void handleMarketplaceAdd(), [handleMarketplaceAdd]);
 
   const handleRetry = useCallback(() => {
     void load();
@@ -338,30 +618,23 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                 hint={t("settings.host.ompPlugins.installPlaceholder")}
                 testID="omp-plugins-install-field"
               >
-                <View style={styles.installControlRow}>
-                  <View style={styles.installInput}>
-                    <FormTextInput
-                      initialValue={installSpec}
-                      onChangeText={setInstallSpec}
-                      onSubmitEditing={handleInstallPress}
-                      placeholder={t("settings.host.ompPlugins.installPlaceholder")}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!installing}
-                      testID="omp-plugins-install-input"
-                    />
-                  </View>
-                  <Button
-                    onPress={handleInstallPress}
-                    loading={installing}
-                    disabled={!installSpec.trim()}
-                    testID="omp-plugins-install-button"
-                  >
-                    {installDryRun
+                <FieldControlRow
+                  initialValue={installSpec}
+                  onChangeText={setInstallSpec}
+                  onSubmitEditing={handleInstallPress}
+                  placeholder={t("settings.host.ompPlugins.installPlaceholder")}
+                  editable={!installing}
+                  buttonLabel={
+                    installDryRun
                       ? t("settings.host.ompPlugins.actions.check")
-                      : t("settings.host.ompPlugins.actions.install")}
-                  </Button>
-                </View>
+                      : t("settings.host.ompPlugins.actions.install")
+                  }
+                  buttonLoading={installing}
+                  buttonDisabled={!installSpec.trim()}
+                  buttonTestID="omp-plugins-install-button"
+                  inputTestID="omp-plugins-install-input"
+                  onPress={handleInstallPress}
+                />
               </Field>
               <View style={styles.dryRunRow}>
                 <Switch
@@ -379,6 +652,50 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                   <Text style={styles.outputText}>{installOutput}</Text>
                 </View>
               ) : null}
+            </View>
+          </View>
+        </SettingsSection>
+
+        <SettingsSection title={t("settings.host.ompPlugins.marketplace.title")}>
+          <View style={settingsStyles.card} testID="omp-plugins-marketplace-card">
+            {marketplaces.map((marketplace) => (
+              <MarketplaceEntryCard
+                key={marketplace.name}
+                marketplace={marketplace}
+                expanded={expandedMarketplace === marketplace.name}
+                busy={mktBusy}
+                busyCatalogName={busyCatalog}
+                hideLabel={t("settings.host.ompPlugins.marketplace.actions.hide")}
+                browseLabel={t("settings.host.ompPlugins.marketplace.actions.browse", {
+                  count: marketplace.plugins?.length ?? 0,
+                })}
+                removeLabel={t("settings.host.ompPlugins.actions.remove")}
+                installLabel={t("settings.host.ompPlugins.actions.install")}
+                onToggle={handleMarketplaceToggle}
+                onRemove={onMarketplaceRemove}
+                onInstall={onMarketplaceInstall}
+              />
+            ))}
+            <View style={[settingsStyles.row, styles.installRow]}>
+              <Field
+                label={t("settings.host.ompPlugins.marketplace.addLabel")}
+                hint={t("settings.host.ompPlugins.marketplace.addPlaceholder")}
+                testID="omp-plugins-marketplace-field"
+              >
+                <FieldControlRow
+                  initialValue={mktSource}
+                  onChangeText={setMktSource}
+                  onSubmitEditing={onMarketplaceAdd}
+                  placeholder={t("settings.host.ompPlugins.marketplace.addPlaceholder")}
+                  editable={!mktBusy}
+                  buttonLabel={t("settings.host.ompPlugins.marketplace.actions.add")}
+                  buttonLoading={mktBusy}
+                  buttonDisabled={!mktSource.trim()}
+                  buttonTestID="omp-plugins-marketplace-add-button"
+                  inputTestID="omp-plugins-marketplace-input"
+                  onPress={onMarketplaceAdd}
+                />
+              </Field>
             </View>
           </View>
         </SettingsSection>
@@ -442,6 +759,10 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
 const styles = StyleSheet.create((theme) => ({
   container: {
     gap: theme.spacing[4],
+  },
+  marketplaceEntry: {
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
   centeredRow: {
     paddingVertical: theme.spacing[4],

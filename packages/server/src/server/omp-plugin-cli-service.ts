@@ -1,9 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { z } from "zod";
 
 import {
   OmpMarketplacePluginInfoSchema,
   OmpPluginDoctorCheckSchema,
   OmpPluginInfoSchema,
+  OmpPluginMarketplaceInfoSchema,
 } from "@omp-desktop/protocol/messages";
 
 import type { Logger } from "pino";
@@ -23,6 +28,7 @@ import { findExecutable } from "../executable-resolution/executable-resolution.j
 const INSTALL_TIMEOUT_MS = 15 * 60 * 1000;
 const ACTION_TIMEOUT_MS = 60 * 1000;
 const DOCTOR_TIMEOUT_MS = 120 * 1000;
+const MARKETPLACE_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_OUTPUT_CHARS = 8 * 1024;
 
 export type OmpPluginRunner = (
@@ -38,6 +44,11 @@ export interface OmpPluginCliServiceOptions {
   runner?: OmpPluginRunner;
   /** Defaults to resolving `omp` via OMP_COMMAND env or PATH lookup. */
   resolveOmpCommand?: () => Promise<string | null>;
+  /**
+   * Overrides the omp marketplaces registry location for tests. Defaults to
+   * `~/.omp/marketplaces.json` (the runtime's own config root).
+   */
+  marketplacesRegistryPath?: string;
 }
 
 const OmpPluginListJsonSchema = z
@@ -50,6 +61,42 @@ const OmpPluginListJsonSchema = z
   .passthrough();
 
 const OmpPluginDoctorJsonSchema = z.array(OmpPluginDoctorCheckSchema);
+
+/** `~/.omp/marketplaces.json` registry: entries with name + sourceUri + catalogPath. */
+const OmpMarketplaceRegistryJsonSchema = z
+  .object({
+    marketplaces: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            sourceUri: z.string().optional(),
+            catalogPath: z.string(),
+          })
+          .passthrough(),
+      )
+      .default([]),
+  })
+  .passthrough();
+
+/** Marketplace catalog file (cache copy): plugins array with catalog metadata. */
+const OmpPluginMarketplaceCatalogJsonSchema = z
+  .object({
+    plugins: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            description: z.string().optional(),
+            version: z.string().optional(),
+            category: z.string().optional(),
+            keywords: z.array(z.string()).optional(),
+          })
+          .passthrough(),
+      )
+      .default([]),
+  })
+  .passthrough();
 
 const TrailingJsonSchema = z.object({
   npm: z.array(OmpPluginInfoSchema),
@@ -113,6 +160,11 @@ export interface OmpPluginListResult {
   rawOutput?: string;
 }
 
+export interface OmpPluginMarketplaceListResult {
+  marketplaces: z.infer<typeof OmpPluginMarketplaceInfoSchema>[];
+  rawOutput?: string;
+}
+
 export interface OmpPluginDoctorResult {
   checks: z.infer<typeof OmpPluginDoctorCheckSchema>[];
   rawOutput?: string;
@@ -128,6 +180,7 @@ export class OmpPluginCliService {
   private readonly logger: Logger;
   private readonly runner: OmpPluginRunner;
   private readonly resolveOmpCommand: () => Promise<string | null>;
+  private readonly marketplacesRegistryPath: string;
   private inFlight: Promise<unknown> | null = null;
 
   constructor(options: OmpPluginCliServiceOptions) {
@@ -142,16 +195,37 @@ export class OmpPluginCliService {
     this.resolveOmpCommand =
       options.resolveOmpCommand ??
       (async () => process.env.OMP_COMMAND?.trim() || (await findExecutable("omp")) || null);
+    this.marketplacesRegistryPath =
+      options.marketplacesRegistryPath ?? join(homedir(), ".omp", "marketplaces.json");
   }
 
   private async runExclusive<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.inFlight) {
-      throw new OmpPluginOperationInProgressError();
-    }
-    this.inFlight = operation().finally(() => {
-      this.inFlight = null;
-    });
-    return this.inFlight as Promise<T>;
+    // Concurrent callers (e.g. list + marketplaceList fired together by the UI)
+    // queue instead of failing: the CLI and the marketplaces registry are
+    // shared mutable state, so serialize; overlapping is expected, not an error.
+    const previous = this.inFlight;
+    const run = previous
+      ? previous.then(
+          () => operation(),
+          () => operation(), // previous failure must not block queued operations
+        )
+      : operation();
+    // Track settlement without deriving a rejecting chain: cleanup must never
+    // turn into an unhandled rejection when a queued run fails with no waiter.
+    void run.then(
+      (value) => {
+        if (this.inFlight === run) this.inFlight = null;
+        return value;
+      },
+      () => {
+        if (this.inFlight === run) this.inFlight = null;
+        // Swallowed here on purpose: the caller's `run` promise carries the
+        // rejection; this derived chain only performs bookkeeping.
+        return null;
+      },
+    );
+    this.inFlight = run;
+    return run as Promise<T>;
   }
   private async runCli(args: string[], timeout: number): Promise<string> {
     const command = await this.resolveOmpCommand();
@@ -255,5 +329,117 @@ export class OmpPluginCliService {
       }
       return { checks: [], rawOutput: truncateOutput(output) };
     });
+  }
+
+  /**
+   * Reads the marketplace registry and catalogs directly: the omp CLI ignores
+   * `--json` for `plugin marketplace list` (plain text only), so shelling out
+   * would force brittle text parsing. Registry layout (verified against the
+   * runtime): `~/.omp/marketplaces.json` holds
+   * `{ marketplaces: [{ name, sourceType, sourceUri, catalogPath, ... }] }`,
+   * and each `catalogPath` file holds `{ plugins: [{ name, description,
+   * version, source, ... }] }`.
+   */
+  async marketplaceList(): Promise<OmpPluginMarketplaceListResult> {
+    return this.runExclusive(async () => {
+      const registry = await this.readJsonFile(this.marketplacesRegistryPath);
+      const entries = OmpMarketplaceRegistryJsonSchema.safeParse(registry);
+      if (!entries.success) {
+        const raw = registry === null ? undefined : JSON.stringify(registry);
+        if (raw) {
+          this.logger.warn(
+            { path: this.marketplacesRegistryPath },
+            "Unparseable marketplaces registry",
+          );
+        }
+        return { marketplaces: [], rawOutput: raw ? truncateOutput(raw) : undefined };
+      }
+      const marketplaces = await Promise.all(
+        entries.data.marketplaces.map(async (entry) => {
+          const catalog = await this.readJsonFile(entry.catalogPath);
+          const parsedCatalog = OmpPluginMarketplaceCatalogJsonSchema.safeParse(catalog);
+          const info: z.infer<typeof OmpPluginMarketplaceInfoSchema> = {
+            name: entry.name,
+            source: entry.sourceUri,
+            plugins: parsedCatalog.success ? parsedCatalog.data.plugins : [],
+          };
+          return info;
+        }),
+      );
+      return { marketplaces };
+    });
+  }
+
+  private async readJsonFile(path: string): Promise<unknown> {
+    try {
+      return await readFile(path, "utf8").then((content) => JSON.parse(content));
+    } catch {
+      return null;
+    }
+  }
+
+  async marketplaceAdd(input: { source: string }): Promise<{
+    ok: boolean;
+    marketplace?: OmpPluginMarketplaceListResult["marketplaces"][number] | null;
+    output?: string;
+  }> {
+    return this.runExclusive(async () => {
+      const beforeRegistry = await this.readJsonFile(this.marketplacesRegistryPath);
+      const beforeEntries = OmpMarketplaceRegistryJsonSchema.safeParse(beforeRegistry);
+      const beforeNames = new Set(
+        beforeEntries.success ? beforeEntries.data.marketplaces.map((entry) => entry.name) : [],
+      );
+      let output: string;
+      try {
+        output = await this.runCli(
+          ["marketplace", "add", input.source, "--json"],
+          MARKETPLACE_TIMEOUT_MS,
+        );
+      } catch (error) {
+        return { ok: false, output: truncateOutput((error as Error).message) };
+      }
+      return {
+        ok: true,
+        marketplace: await this.extractAddedMarketplace(beforeNames),
+        output: truncateOutput(output),
+      };
+    });
+  }
+
+  async marketplaceRemove(input: { name: string }): Promise<{ ok: boolean; output?: string }> {
+    return this.runExclusive(async () => {
+      try {
+        const output = await this.runCli(
+          ["marketplace", "remove", input.name, "--json"],
+          ACTION_TIMEOUT_MS,
+        );
+        return { ok: true, output: truncateOutput(output) };
+      } catch (error) {
+        return { ok: false, output: truncateOutput((error as Error).message) };
+      }
+    });
+  }
+
+  /**
+   * Best-effort extraction of the added marketplace. The CLI's `add` output is
+   * plain text (`--json` is ignored here too), so instead of parsing it we
+   * re-read the registry and pick the entry that was not present before.
+   */
+  private async extractAddedMarketplace(
+    beforeNames: ReadonlySet<string>,
+  ): Promise<OmpPluginMarketplaceListResult["marketplaces"][number] | null> {
+    const registry = await this.readJsonFile(this.marketplacesRegistryPath);
+    const entries = OmpMarketplaceRegistryJsonSchema.safeParse(registry);
+    if (!entries.success) return null;
+    const added = entries.data.marketplaces.filter((entry) => !beforeNames.has(entry.name));
+    const last = added[added.length - 1];
+    if (!last) return null;
+    const catalog = await this.readJsonFile(last.catalogPath);
+    const parsedCatalog = OmpPluginMarketplaceCatalogJsonSchema.safeParse(catalog);
+    return {
+      name: last.name,
+      source: last.sourceUri,
+      plugins: parsedCatalog.success ? parsedCatalog.data.plugins : [],
+    };
   }
 }

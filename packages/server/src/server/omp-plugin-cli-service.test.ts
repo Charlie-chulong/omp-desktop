@@ -1,9 +1,12 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { createTestLogger } from "../test-utils/test-logger.js";
 import {
   OmpPluginCliService,
-  OmpPluginOperationInProgressError,
   OmpPluginUnavailableError,
   type OmpPluginRunner,
 } from "./omp-plugin-cli-service.js";
@@ -64,21 +67,26 @@ describe("OmpPluginCliService", () => {
     expect(result.plugins).toHaveLength(2);
   });
 
-  it("rejects a second operation while one is in flight", async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
+  it("serializes a second operation queued while one is in flight", async () => {
+    const calls: string[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
     });
-    const slowRunner: OmpPluginRunner = async () => {
-      await gate;
+    const slowRunner: OmpPluginRunner = async (command, args) => {
+      calls.push(args.join(" "));
+      if (calls.length === 1) await firstGate;
       return { stdout: LIST_JSON, stderr: "" };
     };
     const service = makeService(slowRunner);
     const first = service.list();
-    await expect(service.list()).rejects.toBeInstanceOf(OmpPluginOperationInProgressError);
-    release();
-    await first;
-    // Serialization unlocks after completion.
+    const second = service.list();
+    releaseFirst();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult.plugins).toHaveLength(2);
+    expect(secondResult.plugins).toHaveLength(2);
+    // Serialization order preserved: both ran, one after the other.
+    expect(calls).toHaveLength(2);
     const third = await service.list();
     expect(third.plugins).toHaveLength(2);
   });
@@ -183,5 +191,181 @@ describe("OmpPluginCliService", () => {
 
     expect(runner.calls[0]?.args).toEqual(["plugin", "uninstall", "pi-memory"]);
     expect(result.ok).toBe(true);
+  });
+
+  describe("marketplaces", () => {
+    const REGISTRY_CATALOG_PATH = join(tmpdir(), "omp-mkt-registry-fixture", "probe-mkt.json");
+    const REGISTRY_JSON = JSON.stringify({
+      version: 1,
+      marketplaces: [
+        {
+          name: "probe-mkt",
+          sourceType: "local",
+          sourceUri: "D:/mp",
+          catalogPath: REGISTRY_CATALOG_PATH,
+          addedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const CATALOG_JSON = JSON.stringify({
+      name: "probe-mkt",
+      plugins: [{ name: "probe-plugin", description: "d", version: "1.0.0" }],
+    });
+
+    async function withRegistry(files: Record<string, string>) {
+      const dir = await mkdtemp(join(tmpdir(), "omp-mkt-"));
+      // REGISTRY_JSON points its catalogPath at a shared tmp location; seed it
+      // whenever the caller includes the cache-relative catalog file.
+      const catalogFile = files["cache/probe-mkt/marketplace.json"];
+      if (catalogFile !== undefined) {
+        await mkdir(dirname(REGISTRY_CATALOG_PATH), { recursive: true });
+        await writeFile(REGISTRY_CATALOG_PATH, catalogFile, "utf8");
+      }
+      for (const [relative, content] of Object.entries(files)) {
+        const target = join(dir, relative);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, content, "utf8");
+      }
+      const dispose = async () => {
+        await rm(dir, { recursive: true, force: true });
+        if (catalogFile !== undefined) {
+          await rm(REGISTRY_CATALOG_PATH, { force: true });
+        }
+      };
+      return { registryPath: join(dir, "marketplaces.json"), dispose };
+    }
+
+    function makeServiceWithRegistry(
+      runner: OmpPluginRunner,
+      registryPath: string,
+    ): OmpPluginCliService {
+      return new OmpPluginCliService({
+        logger: createTestLogger(),
+        runner,
+        resolveOmpCommand: async () => "C:/bin/omp.cmd",
+        marketplacesRegistryPath: registryPath,
+      });
+    }
+
+    it("reads marketplaces and catalogs from the registry instead of the CLI", async () => {
+      const { registryPath, dispose } = await withRegistry({
+        "marketplaces.json": REGISTRY_JSON,
+        "cache/probe-mkt/marketplace.json": CATALOG_JSON,
+      });
+      try {
+        const runner = makeRunner("");
+        const result = await makeServiceWithRegistry(runner, registryPath).marketplaceList();
+
+        expect(runner.calls).toHaveLength(0);
+        expect(result.marketplaces).toEqual([
+          {
+            name: "probe-mkt",
+            source: "D:/mp",
+            plugins: [{ name: "probe-plugin", description: "d", version: "1.0.0" }],
+          },
+        ]);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("returns empty list when the registry does not exist", async () => {
+      const { registryPath, dispose } = await withRegistry({});
+      try {
+        const runner = makeRunner("");
+        const result = await makeServiceWithRegistry(runner, registryPath).marketplaceList();
+
+        expect(result.marketplaces).toEqual([]);
+        expect(result.rawOutput).toBeUndefined();
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("adds a marketplace via CLI and extracts the new registry entry", async () => {
+      const { registryPath, dispose } = await withRegistry({ "marketplaces.json": REGISTRY_JSON });
+      try {
+        const runner = makeRunner("Added marketplace: ./x");
+        // Simulate the CLI writing the registry + cache catalog during add.
+        const runner2: OmpPluginRunner = async (command, args, options) => {
+          const result = await runner(command, args, options);
+          const updated = JSON.parse(REGISTRY_JSON) as {
+            marketplaces: Array<Record<string, string>>;
+          };
+          const catalogPath = join(dirname(registryPath), "cache/new-mkt/marketplace.json");
+          updated.marketplaces.push({
+            name: "new-mkt",
+            sourceType: "github",
+            sourceUri: "owner/repo",
+            catalogPath,
+            addedAt: "2026-01-02T00:00:00.000Z",
+          });
+          await mkdir(dirname(catalogPath), { recursive: true });
+          await writeFile(registryPath, JSON.stringify(updated), "utf8");
+          await writeFile(catalogPath, CATALOG_JSON, "utf8");
+          return result;
+        };
+        const service = new OmpPluginCliService({
+          logger: createTestLogger(),
+          runner: runner2,
+          resolveOmpCommand: async () => "C:/bin/omp.cmd",
+          marketplacesRegistryPath: registryPath,
+        });
+        const result = await service.marketplaceAdd({ source: "owner/repo" });
+
+        expect(runner.calls[0]?.args).toEqual([
+          "plugin",
+          "marketplace",
+          "add",
+          "owner/repo",
+          "--json",
+        ]);
+        expect(result.ok).toBe(true);
+        expect(result.marketplace?.name).toBe("new-mkt");
+        expect(result.marketplace?.plugins).toHaveLength(1);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("reports ok:false with CLI output when add fails", async () => {
+      const { registryPath, dispose } = await withRegistry({});
+      try {
+        const runner: OmpPluginRunner = async () => {
+          const error = new Error("clone failed") as Error & { stdout?: string };
+          error.stdout = "fatal: unable to access";
+          throw error;
+        };
+        const result = await makeServiceWithRegistry(runner, registryPath).marketplaceAdd({
+          source: "owner/repo",
+        });
+
+        expect(result.ok).toBe(false);
+        expect(result.output).toContain("unable to access");
+      } finally {
+        await dispose();
+      }
+    });
+
+    it("removes a marketplace via CLI", async () => {
+      const { registryPath, dispose } = await withRegistry({});
+      try {
+        const runner = makeRunner("Removed");
+        const result = await makeServiceWithRegistry(runner, registryPath).marketplaceRemove({
+          name: "probe-mkt",
+        });
+
+        expect(runner.calls[0]?.args).toEqual([
+          "plugin",
+          "marketplace",
+          "remove",
+          "probe-mkt",
+          "--json",
+        ]);
+        expect(result.ok).toBe(true);
+      } finally {
+        await dispose();
+      }
+    });
   });
 });
