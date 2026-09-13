@@ -63,7 +63,9 @@ export const ko: TranslationResources = {
       },
       browse: {
         label: "찾아보기",
-        description: "Finder에서 디렉터리 선택 또는 생성",
+        description: "{{host}}에서 디렉터리 선택",
+        title: "디렉터리 찾아보기",
+        selectCurrent: "이 디렉터리 선택",
       },
       github: {
         label: "GitHub에서 복제",
@@ -542,6 +544,8 @@ export const ko: TranslationResources = {
       confirmDelete: {
         fileTitle: "파일을 삭제할까요?",
         folderTitle: "폴더를 삭제할까요?",
+        selectionTitle: "{{count}}개 항목을 삭제할까요?",
+        selectionMessage: "선택한 항목이 영구적으로 삭제됩니다.",
         message: '"{{name}}"이(가) 영구적으로 삭제됩니다.',
         confirm: "삭제",
         cancel: "취소",
@@ -2017,6 +2021,7 @@ export const ko: TranslationResources = {
     groupInfo: "{{title}} 정보",
     sections: {
       general: "일반",
+      connections: "연결",
       appearance: "모양",
       editor: "편집기",
       shortcuts: "단축키",

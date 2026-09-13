@@ -77,7 +77,9 @@ export const en = {
       },
       browse: {
         label: "Browse",
-        description: "Choose or create a directory in Finder",
+        description: "Choose a directory on {{host}}",
+        title: "Browse directories",
+        selectCurrent: "Choose this directory",
       },
       github: {
         label: "Clone from GitHub",
@@ -566,6 +568,8 @@ export const en = {
       confirmDelete: {
         fileTitle: "Delete file?",
         folderTitle: "Delete folder?",
+        selectionTitle: "Delete {{count}} items?",
+        selectionMessage: "The selected items will be permanently deleted.",
         message: '"{{name}}" will be permanently deleted.',
         confirm: "Delete",
         cancel: "Cancel",
@@ -2076,6 +2080,7 @@ export const en = {
     groupInfo: "About {{title}}",
     sections: {
       general: "General",
+      connections: "Connections",
       appearance: "Appearance",
       editor: "Editor",
       shortcuts: "Shortcuts",

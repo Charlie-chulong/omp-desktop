@@ -63,7 +63,9 @@ export const ptBR: TranslationResources = {
       },
       browse: {
         label: "Procurar",
-        description: "Escolher ou criar um diretório no Finder",
+        description: "Escolher um diretório em {{host}}",
+        title: "Procurar diretórios",
+        selectCurrent: "Escolher este diretório",
       },
       github: {
         label: "Clonar do GitHub",
@@ -545,6 +547,8 @@ export const ptBR: TranslationResources = {
       confirmDelete: {
         fileTitle: "Excluir arquivo?",
         folderTitle: "Excluir pasta?",
+        selectionTitle: "Excluir {{count}} itens?",
+        selectionMessage: "Os itens selecionados serão excluídos permanentemente.",
         message: '"{{name}}" será excluído permanentemente.',
         confirm: "Excluir",
         cancel: "Cancelar",
@@ -2039,6 +2043,7 @@ export const ptBR: TranslationResources = {
     groupInfo: "Sobre {{title}}",
     sections: {
       general: "Geral",
+      connections: "Conexões",
       appearance: "Aparência",
       editor: "Editor",
       shortcuts: "Atalhos",

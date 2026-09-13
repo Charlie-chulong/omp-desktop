@@ -49,7 +49,7 @@ export function buildAddProjectMethods(
     options.push({
       id: "browse",
       label: t("addProjectFlow.methods.browse.label"),
-      description: t("addProjectFlow.methods.browse.description"),
+      description: t("addProjectFlow.methods.browse.description", { host: host.label }),
     });
   }
   options.push({
@@ -69,10 +69,7 @@ export function buildAddProjectMethods(
   return options;
 }
 
-export function addProjectMethodEmptyText(
-  host: AddProjectHost | null,
-  t: TFunction,
-): string {
+export function addProjectMethodEmptyText(host: AddProjectHost | null, t: TFunction): string {
   return host?.canAddProject === false
     ? t("addProjectFlow.updateHost")
     : t("addProjectFlow.noMatchingOptions");

@@ -63,7 +63,9 @@ export const ru: TranslationResources = {
       },
       browse: {
         label: "Обзор",
-        description: "Выбрать или создать каталог в Finder",
+        description: "Выбрать каталог на {{host}}",
+        title: "Обзор каталогов",
+        selectCurrent: "Выбрать этот каталог",
       },
       github: {
         label: "Клонировать с GitHub",
@@ -554,6 +556,8 @@ export const ru: TranslationResources = {
       confirmDelete: {
         fileTitle: "Удалить файл?",
         folderTitle: "Удалить папку?",
+        selectionTitle: "Удалить выбранные элементы ({{count}})?",
+        selectionMessage: "Выбранные элементы будут удалены безвозвратно.",
         message: "Элемент «{{name}}» будет удалён безвозвратно.",
         confirm: "Удалить",
         cancel: "Отмена",
@@ -2049,6 +2053,7 @@ export const ru: TranslationResources = {
     groupInfo: "О разделе «{{title}}»",
     sections: {
       general: "Основные",
+      connections: "Подключения",
       appearance: "Оформление",
       editor: "Редактор",
       shortcuts: "Сочетания клавиш",

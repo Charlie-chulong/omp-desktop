@@ -19,6 +19,7 @@ import {
   View,
   type NativeSyntheticEvent,
   type PressableStateCallbackType,
+  type GestureResponderEvent,
   type StyleProp,
   type TextInputKeyPressEventData,
   type ViewStyle,
@@ -88,10 +89,28 @@ import { useToast } from "@/contexts/toast-context";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import type { ExplorerEntryMoveRequest } from "@/file-explorer/entry-drag";
+import { deleteExplorerSelectionPaths, resolveExplorerSelection } from "@/file-explorer/selection";
 import { useExplorerEntryDrag } from "@/file-explorer/use-entry-drag";
 
 const FILE_EXPLORER_ROW_SELECTOR = '[data-testid^="file-explorer-row-"]';
 const FILE_EXPLORER_ROOT_DROP_BLOCKED_SELECTOR = '[data-testid="file-explorer-root-drop-blocker"]';
+
+interface ExplorerPressModifiers {
+  additive: boolean;
+  range: boolean;
+}
+
+function getExplorerPressModifiers(event: GestureResponderEvent): ExplorerPressModifiers {
+  const nativeEvent = event.nativeEvent as typeof event.nativeEvent & {
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+  };
+  return {
+    additive: nativeEvent.ctrlKey === true || nativeEvent.metaKey === true,
+    range: nativeEvent.shiftKey === true,
+  };
+}
 
 const SORT_OPTIONS: { value: SortOption }[] = [
   { value: "name" },
@@ -134,7 +153,7 @@ interface TreeRowItemProps {
   isExpanded: boolean;
   isSelected: boolean;
   loading: boolean;
-  onEntryPress: (entry: ExplorerEntry) => void;
+  onEntryPress: (entry: ExplorerEntry, event: GestureResponderEvent) => void;
   onSelectEntry: (entry: ExplorerEntry) => void;
   onCopyPath: (path: string) => void;
   onCopyRelativePath: (path: string) => void;
@@ -324,13 +343,16 @@ function TreeRowItem({
     target: dragTarget,
   });
 
-  const handlePress = useCallback(() => {
-    const selection = isWeb ? window.getSelection() : null;
-    if (selection && !selection.isCollapsed && selection.toString().length > 0) {
-      return;
-    }
-    onEntryPress(entry);
-  }, [onEntryPress, entry]);
+  const handlePress = useCallback(
+    (event: GestureResponderEvent) => {
+      const selection = isWeb ? window.getSelection() : null;
+      if (selection && !selection.isCollapsed && selection.toString().length > 0) {
+        return;
+      }
+      onEntryPress(entry, event);
+    },
+    [onEntryPress, entry],
+  );
 
   const handleSelect = useCallback(() => {
     onSelectEntry(entry);
@@ -550,6 +572,13 @@ export function FileExplorerPane({
     (state) => state.sessions[serverId]?.serverInfo?.features?.workspaceTextSearch === true,
   );
   const [pendingEdit, setPendingEdit] = useState<ExplorerPendingEdit | null>(null);
+  const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set());
+  const selectedEntryPathsRef = useRef(selectedEntryPaths);
+  const selectionAnchorPathRef = useRef<string | null>(null);
+  const commitSelectedEntryPaths = useCallback((next: Set<string>) => {
+    selectedEntryPathsRef.current = next;
+    setSelectedEntryPaths(next);
+  }, []);
   const downloadFile = useFileDownload({
     serverId,
     workspaceId,
@@ -573,6 +602,8 @@ export function FileExplorerPane({
   const explorerDerived = useMemo(() => deriveExplorerFields(explorerState), [explorerState]);
   const { directories, pendingRequest, isExplorerLoading, error, selectedEntryPath } =
     explorerDerived;
+  const selectedEntryPathRef = useRef(selectedEntryPath);
+  selectedEntryPathRef.current = selectedEntryPath;
 
   const isDirectoryLoading = useCallback(
     (path: string) => isPendingListForPath({ isExplorerLoading, pendingRequest, path }),
@@ -586,7 +617,20 @@ export function FileExplorerPane({
 
   useEffect(() => {
     hasInitializedRef.current = false;
-  }, [workspaceStateKey]);
+    const currentPath = selectedEntryPathRef.current;
+    const next = currentPath ? new Set([currentPath]) : new Set<string>();
+    selectionAnchorPathRef.current = currentPath;
+    commitSelectedEntryPaths(next);
+  }, [commitSelectedEntryPaths, workspaceStateKey]);
+
+  useEffect(() => {
+    if (selectedEntryPath ? selectedEntryPathsRef.current.has(selectedEntryPath) : false) {
+      return;
+    }
+    const next = selectedEntryPath ? new Set([selectedEntryPath]) : new Set<string>();
+    selectionAnchorPathRef.current = selectedEntryPath;
+    commitSelectedEntryPaths(next);
+  }, [commitSelectedEntryPaths, selectedEntryPath]);
 
   useEffect(() => {
     void initializeExplorer({
@@ -626,17 +670,6 @@ export function FileExplorerPane({
     ],
   );
 
-  // Selection is intentionally separate from opening/expansion so future keyboard actions
-  // (for example, pressing R to rename) have one stable file-or-folder target.
-  const handleSelectEntry = useCallback(
-    (entry: ExplorerEntry) => {
-      if (hasWorkspaceScope) {
-        selectExplorerEntry(entry.path);
-      }
-    },
-    [hasWorkspaceScope, selectExplorerEntry],
-  );
-
   const handleOpenFile = useCallback(
     (entry: ExplorerEntry) => {
       if (!hasWorkspaceScope) {
@@ -645,18 +678,6 @@ export function FileExplorerPane({
       onOpenFile?.({ path: entry.path });
     },
     [hasWorkspaceScope, onOpenFile],
-  );
-
-  const handleEntryPress = useCallback(
-    (entry: ExplorerEntry) => {
-      handleSelectEntry(entry);
-      if (entry.kind === "directory") {
-        handleToggleDirectory(entry);
-        return;
-      }
-      handleOpenFile(entry);
-    },
-    [handleOpenFile, handleSelectEntry, handleToggleDirectory],
   );
 
   const handleCollapseDirectory = useCallback(
@@ -820,6 +841,29 @@ export function FileExplorerPane({
           ),
         );
       }
+      let selectionChanged = false;
+      const relocatedPaths = new Set<string>();
+      for (const selectedPath of selectedEntryPathsRef.current) {
+        if (isExplorerPathWithin(selectedPath, entry.path)) {
+          relocatedPaths.add(replaceExplorerPathPrefix(selectedPath, entry.path, relocatedPath));
+          selectionChanged = true;
+        } else {
+          relocatedPaths.add(selectedPath);
+        }
+      }
+      if (selectionChanged) {
+        commitSelectedEntryPaths(relocatedPaths);
+      }
+      if (
+        selectionAnchorPathRef.current &&
+        isExplorerPathWithin(selectionAnchorPathRef.current, entry.path)
+      ) {
+        selectionAnchorPathRef.current = replaceExplorerPathPrefix(
+          selectionAnchorPathRef.current,
+          entry.path,
+          relocatedPath,
+        );
+      }
       if (selectedEntryPath && isExplorerPathWithin(selectedEntryPath, entry.path)) {
         const relocatedSelection = replaceExplorerPathPrefix(
           selectedEntryPath,
@@ -833,6 +877,7 @@ export function FileExplorerPane({
       }
     },
     [
+      commitSelectedEntryPaths,
       expandedPaths,
       onOpenFile,
       requestDirectoryListing,
@@ -928,36 +973,64 @@ export function FileExplorerPane({
 
   const handleDeleteEntry = useCallback(
     async (entry: ExplorerEntry) => {
+      const currentSelection = selectedEntryPathsRef.current;
+      const selectedPaths =
+        currentSelection.has(entry.path) && currentSelection.size > 1
+          ? [...currentSelection]
+          : [entry.path];
+      const isBatchDelete = selectedPaths.length > 1;
+      let confirmationTitle: string;
+      if (isBatchDelete) {
+        confirmationTitle = t("workspace.fileActions.confirmDelete.selectionTitle", {
+          count: selectedPaths.length,
+        });
+      } else if (entry.kind === "directory") {
+        confirmationTitle = t("workspace.fileActions.confirmDelete.folderTitle");
+      } else {
+        confirmationTitle = t("workspace.fileActions.confirmDelete.fileTitle");
+      }
       const confirmed = await confirmDialog({
-        title:
-          entry.kind === "directory"
-            ? t("workspace.fileActions.confirmDelete.folderTitle")
-            : t("workspace.fileActions.confirmDelete.fileTitle"),
-        message: t("workspace.fileActions.confirmDelete.message", { name: entry.name }),
+        title: confirmationTitle,
+        message: isBatchDelete
+          ? t("workspace.fileActions.confirmDelete.selectionMessage", {
+              count: selectedPaths.length,
+            })
+          : t("workspace.fileActions.confirmDelete.message", { name: entry.name }),
         confirmLabel: t("workspace.fileActions.confirmDelete.confirm"),
         cancelLabel: t("workspace.fileActions.confirmDelete.cancel"),
         destructive: true,
       });
-      if (!confirmed) {
-        return;
+      if (!confirmed) return;
+
+      const deletionResult = await deleteExplorerSelectionPaths(selectedPaths, deleteEntry);
+      if (deletionResult.failed) {
+        toast.error(deletionResult.firstError ?? t("workspace.fileExplorer.errors.deleteFailed"));
       }
-      try {
-        const payload = await deleteEntry(entry.path);
-        if (!payload) {
-          return;
-        }
-        if (!payload.success) {
-          toast.error(payload.error ?? t("workspace.fileExplorer.errors.deleteFailed"));
-          return;
-        }
-        if (selectedEntryPath === entry.path) {
-          selectExplorerEntry(null);
-        }
-      } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : String(cause));
+      const { deletedPaths } = deletionResult;
+      if (deletedPaths.length === 0) return;
+
+      const remainingSelection = new Set(
+        [...selectedEntryPathsRef.current].filter(
+          (selectedPath) =>
+            !deletedPaths.some((deletedPath) => isExplorerPathWithin(selectedPath, deletedPath)),
+        ),
+      );
+      commitSelectedEntryPaths(remainingSelection);
+      const selectionAnchorPath = selectionAnchorPathRef.current;
+      if (
+        selectionAnchorPath &&
+        deletedPaths.some((deletedPath) => isExplorerPathWithin(selectionAnchorPath, deletedPath))
+      ) {
+        selectionAnchorPathRef.current = null;
+      }
+      if (
+        selectedEntryPath &&
+        deletedPaths.some((deletedPath) => isExplorerPathWithin(selectedEntryPath, deletedPath))
+      ) {
+        selectExplorerEntry(remainingSelection.values().next().value ?? null);
       }
     },
-    [deleteEntry, selectExplorerEntry, selectedEntryPath, t, toast],
+    [commitSelectedEntryPaths, deleteEntry, selectExplorerEntry, selectedEntryPath, t, toast],
   );
 
   const handleSortCycle = useCallback(() => {
@@ -1038,6 +1111,56 @@ export function FileExplorerPane({
     () => flattenExplorerTree({ directories, expandedPaths, sortOption, showHiddenFiles }),
     [directories, expandedPaths, showHiddenFiles, sortOption],
   );
+  const visibleEntryPaths = useMemo(() => treeRows.map((row) => row.entry.path), [treeRows]);
+
+  const handleSelectEntry = useCallback(
+    (entry: ExplorerEntry) => {
+      if (!hasWorkspaceScope) return;
+      if (selectedEntryPathsRef.current.has(entry.path)) {
+        selectionAnchorPathRef.current = entry.path;
+        selectExplorerEntry(entry.path);
+        return;
+      }
+      const next = new Set([entry.path]);
+      selectionAnchorPathRef.current = entry.path;
+      commitSelectedEntryPaths(next);
+      selectExplorerEntry(entry.path);
+    },
+    [commitSelectedEntryPaths, hasWorkspaceScope, selectExplorerEntry],
+  );
+
+  const handleEntryPress = useCallback(
+    (entry: ExplorerEntry, event: GestureResponderEvent) => {
+      if (!hasWorkspaceScope) return;
+      const modifiers = getExplorerPressModifiers(event);
+      const result = resolveExplorerSelection({
+        path: entry.path,
+        visiblePaths: visibleEntryPaths,
+        selectedPaths: selectedEntryPathsRef.current,
+        anchorPath: selectionAnchorPathRef.current,
+        additive: modifiers.additive,
+        range: modifiers.range,
+      });
+      selectionAnchorPathRef.current = result.anchorPath;
+      commitSelectedEntryPaths(result.selectedPaths);
+      selectExplorerEntry(result.activePath);
+
+      if (modifiers.additive || modifiers.range) return;
+      if (entry.kind === "directory") {
+        handleToggleDirectory(entry);
+        return;
+      }
+      handleOpenFile(entry);
+    },
+    [
+      commitSelectedEntryPaths,
+      handleOpenFile,
+      handleToggleDirectory,
+      hasWorkspaceScope,
+      selectExplorerEntry,
+      visibleEntryPaths,
+    ],
+  );
 
   const listRows = useMemo<ExplorerListRow[]>(() => {
     const rows: ExplorerListRow[] = treeRows.map((row) =>
@@ -1104,7 +1227,7 @@ export function FileExplorerPane({
           row={info.item.row}
           index={info.index}
           expandedPaths={expandedPaths}
-          selectedEntryPath={selectedEntryPath}
+          selectedEntryPaths={selectedEntryPaths}
           isDirectoryLoading={isDirectoryLoading}
           onEntryPress={handleEntryPress}
           onSelectEntry={handleSelectEntry}
@@ -1147,7 +1270,7 @@ export function FileExplorerPane({
       handleSelectEntry,
       isDirectoryLoading,
       fileManagerTarget,
-      selectedEntryPath,
+      selectedEntryPaths,
       onAddToChat,
       onAddDirectoryToChat,
       serverId,
@@ -1665,7 +1788,7 @@ function TreeRowDispatcher({
   row,
   index,
   expandedPaths,
-  selectedEntryPath,
+  selectedEntryPaths,
   isDirectoryLoading,
   onEntryPress,
   onSelectEntry,
@@ -1688,9 +1811,9 @@ function TreeRowDispatcher({
   row: ExplorerTreeRow;
   index: number;
   expandedPaths: Set<string>;
-  selectedEntryPath: string | null;
+  selectedEntryPaths: ReadonlySet<string>;
   isDirectoryLoading: (path: string) => boolean;
-  onEntryPress: (entry: ExplorerEntry) => void;
+  onEntryPress: (entry: ExplorerEntry, event: GestureResponderEvent) => void;
   onSelectEntry: (entry: ExplorerEntry) => void;
   onCopyPath: (path: string) => void | Promise<void>;
   onCopyRelativePath: (path: string) => void | Promise<void>;
@@ -1710,7 +1833,7 @@ function TreeRowDispatcher({
   const depth = row.depth;
   const isDirectory = entry.kind === "directory";
   const isExpanded = isDirectory && expandedPaths.has(entry.path);
-  const isSelected = selectedEntryPath === entry.path;
+  const isSelected = selectedEntryPaths.has(entry.path);
   const loading = isDirectory && isDirectoryLoading(entry.path);
 
   return (

@@ -71,3 +71,32 @@ it("preserves generated body text and inserts newlines without submitting until 
     vi.unstubAllGlobals();
   }
 });
+
+it("grows with its content, caps at 300px, and shrinks after content is removed", async () => {
+  vi.stubGlobal("React", React);
+  const container = document.createElement("div");
+  container.style.width = "380px";
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(<CommitComposer serverId="server" cwd="/repo" branchName="main" hasChanges />),
+    );
+    const input = container.querySelector("textarea")!;
+    expect(Number.parseFloat(getComputedStyle(input).fontSize)).toBe(16);
+    expect(input.getBoundingClientRect().height).toBe(34);
+
+    await userEvent.fill(
+      input,
+      Array.from({ length: 40 }, (_, index) => `Commit message line ${index + 1}`).join("\n"),
+    );
+    await expect.poll(() => input.getBoundingClientRect().height).toBe(300);
+
+    await userEvent.fill(input, "Short message");
+    await expect.poll(() => input.getBoundingClientRect().height).toBe(34);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});

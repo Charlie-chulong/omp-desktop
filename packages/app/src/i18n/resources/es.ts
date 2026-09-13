@@ -63,7 +63,9 @@ export const es: TranslationResources = {
       },
       browse: {
         label: "Explorar",
-        description: "Elegir o crear un directorio en Finder",
+        description: "Elegir un directorio en {{host}}",
+        title: "Explorar directorios",
+        selectCurrent: "Elegir este directorio",
       },
       github: {
         label: "Clonar desde GitHub",
@@ -545,6 +547,8 @@ export const es: TranslationResources = {
       confirmDelete: {
         fileTitle: "¿Eliminar archivo?",
         folderTitle: "¿Eliminar carpeta?",
+        selectionTitle: "¿Eliminar {{count}} elementos?",
+        selectionMessage: "Los elementos seleccionados se eliminarán permanentemente.",
         message: '"{{name}}" se eliminará permanentemente.',
         confirm: "Eliminar",
         cancel: "Cancelar",
@@ -2053,6 +2057,7 @@ export const es: TranslationResources = {
     groupInfo: "Acerca de{{title}}",
     sections: {
       general: "General",
+      connections: "Conexiones",
       appearance: "Apariencia",
       editor: "Editor",
       shortcuts: "Atajos",

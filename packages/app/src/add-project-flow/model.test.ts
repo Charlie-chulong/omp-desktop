@@ -8,6 +8,7 @@ import {
   moveAddProjectSelection,
   openAddProjectFlow,
   openDirectorySearchPage,
+  openDirectoryBrowserPage,
   openGithubLocationPage,
   openNewDirectoryNamePage,
   openNewDirectoryParentPage,
@@ -68,6 +69,22 @@ describe("Add Project navigation", () => {
     });
   });
 
+  it("tracks remote directory browsing as navigable page history", () => {
+    let state = openAddProjectFlow({ hosts: [HOST] });
+    state = openDirectoryBrowserPage(state, HOST.serverId);
+    state = openDirectoryBrowserPage(state, HOST.serverId, "~/projects");
+
+    expect(currentAddProjectPage(state)).toMatchObject({
+      kind: "directory-browser",
+      path: "~/projects",
+    });
+    state = backAddProjectPage(state) ?? state;
+    expect(currentAddProjectPage(state)).toMatchObject({
+      kind: "directory-browser",
+      path: "~",
+    });
+  });
+
   it("wraps keyboard selection in both directions", () => {
     expect(moveAddProjectActiveIndex(2, 3, "next")).toBe(0);
     expect(moveAddProjectActiveIndex(0, 3, "previous")).toBe(2);
@@ -118,12 +135,10 @@ describe("Add Project options", () => {
     const outdatedHost = { ...HOST, canAddProject: false };
 
     expect(buildAddProjectMethods(outdatedHost, t)).toEqual([]);
-    expect(addProjectMethodEmptyText(outdatedHost, t)).toBe(
-      "Update the host to use Add Project.",
-    );
+    expect(addProjectMethodEmptyText(outdatedHost, t)).toBe("Update the host to use Add Project.");
   });
 
-  it("keeps host-upgrade methods discoverable while hiding local-only Browse", () => {
+  it("keeps host-upgrade methods discoverable while hiding unavailable Browse", () => {
     expect(
       buildAddProjectMethods(
         {
@@ -154,6 +169,25 @@ describe("Add Project options", () => {
         disabled: true,
       },
     ]);
+  });
+
+  it("offers Browse for a remote host without GitHub or directory creation support", () => {
+    expect(
+      buildAddProjectMethods(
+        {
+          ...HOST,
+          label: "Remote",
+          canCloneGithubRepositories: false,
+          canSearchGithubRepositories: false,
+          canCreateDirectory: false,
+        },
+        t,
+      ),
+    ).toContainEqual({
+      id: "browse",
+      label: "Browse",
+      description: "Choose a directory on Remote",
+    });
   });
 
   it("offers manual URL and protocol-specific owner/repo clone choices", () => {

@@ -491,6 +491,7 @@ export function resolveKnownHostRoute(input: {
 
 export const SETTINGS_SECTION_SLUGS = [
   "general",
+  "connections",
   "appearance",
   "editor",
   "shortcuts",
@@ -550,7 +551,7 @@ export function buildSettingsSectionRoute(section: SettingsSectionSlug) {
 }
 
 export function buildSettingsAddHostRoute(intentId: string | number = "1") {
-  return `/settings/general?addHost=${encodeURIComponent(String(intentId))}` as const;
+  return `/settings/connections?addHost=${encodeURIComponent(String(intentId))}` as const;
 }
 
 export function buildSettingsHostRoute(serverId: string) {
