@@ -2098,7 +2098,14 @@ export const ru: TranslationResources = {
     metadataGeneration: {
       title: "Генерация метаданных",
       description:
-        "Выберите модель, которую OMP Desktop будет использовать для названий рабочих пространств и веток, сообщений коммитов и черновиков PR",
+        "Выберите отдельные модели для метаданных, сообщений коммитов и быстрых вопросов",
+      defaultModel: "Прочие метаданные",
+      defaultModelHint: "Названия рабочих пространств и веток, а также черновики PR",
+      commitMessageModel: "Сообщения коммитов",
+      commitMessageModelHint: "Сообщения, созданные из подготовленных изменений Git",
+      quickAskModel: "Быстрый вопрос",
+      quickAskModelHint: "Ответы на вопросы о выделенном содержимом",
+      quickAskAutomaticHint: "Использует модель текущего диалога",
       selection: "Выбор модели",
       automatic: "Автоматически",
       preferred: "Вручную",

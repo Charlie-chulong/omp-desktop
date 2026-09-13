@@ -90,6 +90,11 @@ export { formatOmpVersionSupport, resolveOmpDiagnosticPaths } from "./provider-c
 import { OmpSubagentCardTracker, type OmpSubagentCardScheduler } from "./subagent-card-tracker.js";
 import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
 import { getUserMessageImages, getUserMessageText } from "./message-history.js";
+import {
+  buildOmpPlanTurnPrompt,
+  buildOmpStandardTurnPrompt,
+  getOmpWorkflowDisplayText,
+} from "./workflow-prompt.js";
 import { mapOmpIrcMessageToToolCall, mapOmpSystemNoticeToToolCall } from "./system-notice.js";
 import {
   readOmpSubagentSettings,
@@ -640,12 +645,6 @@ const OMP_ENHANCED_CONTINUATION_BY_LOCALE = {
   "zh-CN": "继续",
 } as const;
 type OmpWorkflowLocale = keyof typeof OMP_ENHANCED_CONTINUATION_BY_LOCALE;
-const OMP_PLAN_TURN_DIRECTIVE = `<system-directive>
-Plan mode active for this turn. The working tree and system are read-only: NEVER create, edit, delete, or rename files, and NEVER run state-changing commands. You may inspect with read-only tools. Produce or refine the requested plan only.
-</system-directive>`;
-const OMP_STANDARD_TURN_DIRECTIVE = `<system-directive>
-Plan mode is inactive for this turn. All earlier per-turn Plan mode directives have expired. Follow the current user request normally; working-tree changes are permitted subject to the active tool-approval policy.
-</system-directive>`;
 
 function normalizeOmpWorkflowSelection(value: unknown): OmpWorkflowSelection {
   return value === "enhanced" || value === "plan" || value === "goal" ? value : "standard";
@@ -653,14 +652,6 @@ function normalizeOmpWorkflowSelection(value: unknown): OmpWorkflowSelection {
 
 function isOmpNativeWorkflowMode(value: OmpWorkflowSelection): value is OmpWorkflowMode {
   return value === "plan" || value === "goal";
-}
-
-function buildOmpPlanTurnPrompt(prompt: string): string {
-  return `${OMP_PLAN_TURN_DIRECTIVE}\n\n${prompt}`;
-}
-
-function buildOmpStandardTurnPrompt(prompt: string): string {
-  return `${OMP_STANDARD_TURN_DIRECTIVE}\n\n${prompt}`;
 }
 
 function formatStoredOmpOAuthAccountLabel(account: StoredOmpOAuthAccount): string {
@@ -1834,7 +1825,7 @@ export class OmpAgentSession implements AgentSession {
     this.activeTurnHasUserMessage = false;
     this.activePromptRequestId = null;
     this.clearNoTurnBuffers();
-    this.activeNoTurnPromptText = payload.text;
+    this.activeNoTurnPromptText = displayPromptText;
     this.usagePoller.startTurn();
     this.startAutomaticCredentialResolution();
 
@@ -3511,7 +3502,9 @@ export class OmpAgentSession implements AgentSession {
         ? (this.activeClientMessageId ?? this.lastSubmittedPromptClientMessageId)
         : null;
     const displayText =
-      text === this.lastSubmittedPromptText ? (this.lastSubmittedPromptDisplayText ?? text) : text;
+      text === this.lastSubmittedPromptText
+        ? (this.lastSubmittedPromptDisplayText ?? getOmpWorkflowDisplayText(text))
+        : getOmpWorkflowDisplayText(text);
     const emitUserMessage = (resolvedMessageId?: string): void => {
       if (resolvedMessageId) {
         // OMP re-emits user message_end frames for entries it has already

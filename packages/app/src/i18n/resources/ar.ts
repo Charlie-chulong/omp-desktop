@@ -2053,8 +2053,14 @@ export const ar: TranslationResources = {
     plugins: pluginSettings.ar,
     metadataGeneration: {
       title: "إنشاء البيانات الوصفية",
-      description:
-        "اختر النموذج الذي يستخدمه OMP Desktop لعناوين مساحات العمل وأسماء الفروع ورسائل الالتزام ومسودات طلبات السحب",
+      description: "اختر نماذج منفصلة للبيانات الوصفية ورسائل الالتزام والسؤال السريع",
+      defaultModel: "البيانات الوصفية الأخرى",
+      defaultModelHint: "عناوين مساحات العمل وأسماء الفروع ومسودات طلبات السحب",
+      commitMessageModel: "رسائل الالتزام",
+      commitMessageModelHint: "رسائل تُنشأ من تغييرات Git المرحّلة",
+      quickAskModel: "السؤال السريع",
+      quickAskModelHint: "إجابات السؤال عن المحتوى المحدد",
+      quickAskAutomaticHint: "يستخدم نموذج المحادثة الحالية",
       selection: "اختيار النموذج",
       automatic: "تلقائي",
       preferred: "يدوي",

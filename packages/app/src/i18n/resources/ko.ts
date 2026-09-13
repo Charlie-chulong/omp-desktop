@@ -2065,8 +2065,14 @@ export const ko: TranslationResources = {
     plugins: pluginSettings.ko,
     metadataGeneration: {
       title: "메타데이터 생성",
-      description:
-        "워크스페이스 제목, 브랜치 이름, 커밋 메시지 및 풀 리퀘스트 초안에 사용할 모델을 선택하세요",
+      description: "메타데이터, 커밋 메시지, 빠른 질문에 사용할 모델을 각각 선택하세요",
+      defaultModel: "기타 메타데이터",
+      defaultModelHint: "워크스페이스 제목, 브랜치 이름 및 풀 리퀘스트 초안",
+      commitMessageModel: "커밋 메시지",
+      commitMessageModelHint: "스테이징된 Git 변경 사항에서 생성하는 메시지",
+      quickAskModel: "빠른 질문",
+      quickAskModelHint: "선택한 내용에 대한 질문의 답변",
+      quickAskAutomaticHint: "현재 대화 모델을 사용합니다",
       selection: "모델 선택",
       automatic: "자동",
       preferred: "수동",

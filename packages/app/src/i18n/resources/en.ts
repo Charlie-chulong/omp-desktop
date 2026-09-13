@@ -2179,8 +2179,14 @@ export const en = {
     },
     metadataGeneration: {
       title: "Metadata generation",
-      description:
-        "Choose the model OMP Desktop uses for workspace titles, branch names, commit messages, and pull request drafts",
+      description: "Choose separate models for generated metadata, commit messages, and Quick Ask",
+      defaultModel: "Other metadata",
+      defaultModelHint: "Workspace titles, branch names, and pull request drafts",
+      commitMessageModel: "Commit messages",
+      commitMessageModelHint: "Messages generated from staged Git changes",
+      quickAskModel: "Quick Ask",
+      quickAskModelHint: "Answers from Ask about selection",
+      quickAskAutomaticHint: "Uses the current conversation model",
       selection: "Model selection",
       automatic: "Automatic",
       preferred: "Manual",

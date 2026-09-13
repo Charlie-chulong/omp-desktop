@@ -127,6 +127,26 @@ const MutableStructuredGenerationProviderSchema = z
 const MutableMetadataGenerationConfigSchema = z
   .object({
     providers: z.array(MutableStructuredGenerationProviderSchema).default([]),
+    commitMessageProviders: z.array(MutableStructuredGenerationProviderSchema).optional(),
+  })
+  .passthrough();
+
+const MutableQuickAskConfigSchema = z
+  .object({
+    providers: z.array(MutableStructuredGenerationProviderSchema).default([]),
+  })
+  .passthrough();
+
+const MutableMetadataGenerationConfigPatchSchema = z
+  .object({
+    providers: z.array(MutableStructuredGenerationProviderSchema).optional(),
+    commitMessageProviders: z.array(MutableStructuredGenerationProviderSchema).optional(),
+  })
+  .passthrough();
+
+const MutableQuickAskConfigPatchSchema = z
+  .object({
+    providers: z.array(MutableStructuredGenerationProviderSchema).optional(),
   })
   .passthrough();
 
@@ -258,6 +278,7 @@ export const MutableDaemonConfigSchema = z
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
+    quickAsk: MutableQuickAskConfigSchema.optional(),
     imageGeneration: MutableImageGenerationConfigSchema.optional(),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
@@ -279,7 +300,8 @@ export const MutableDaemonConfigPatchSchema = z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
     removeProviders: z.array(z.string().min(1)).optional(),
-    metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
+    metadataGeneration: MutableMetadataGenerationConfigPatchSchema.optional(),
+    quickAsk: MutableQuickAskConfigPatchSchema.optional(),
     imageGeneration: MutableImageGenerationConfigPatchSchema.optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),

@@ -1265,6 +1265,31 @@ describe("OMP agent client and session", () => {
     });
     expect(omp.completedTurnCount()).toBe(1);
   });
+  test("keeps workflow directives out of local-only timeline messages", async () => {
+    const scheduler = new ManualNoTurnScheduler();
+    const omp = new OmpHarness({ noTurnScheduler: scheduler });
+    await omp.start({ featureValues: { workflow_mode: "plan" } });
+
+    const planPrompt = await omp.startPromptWithFalseLocalOnlyResult("draft locally");
+    scheduler.settle();
+    await planPrompt.completion;
+
+    await omp.setFeature("workflow_mode", "standard");
+    const standardPrompt = await omp.startPromptWithFalseLocalOnlyResult("implement locally");
+    scheduler.settle();
+    await standardPrompt.completion;
+
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual([
+      planTurnPrompt("draft locally"),
+      standardTurnPrompt("implement locally"),
+    ]);
+    expect(
+      omp
+        .timeline()
+        .filter((item) => item.type === "user_message")
+        .map((item) => item.text),
+    ).toEqual(["draft locally", "implement locally"]);
+  });
 
   test("waits for a delayed queued model turn after OMP's local-only result", async () => {
     const omp = new OmpHarness();
@@ -1398,6 +1423,10 @@ describe("OMP agent client and session", () => {
         assistant: { id: "assistant-stale-plan", text: "migration plan ready" },
       },
       { modeId: "ask" },
+    );
+
+    expect((await omp.history()).find((item) => item.type === "user_message")?.text).toBe(
+      "draft the migration",
     );
 
     await omp.runPrompt("implement the migration now", "implementation complete");

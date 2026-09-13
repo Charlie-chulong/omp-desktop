@@ -466,6 +466,18 @@ export interface PaseoDaemonConfig {
       model?: string;
       thinkingOptionId?: string;
     }>;
+    commitMessageProviders?: Array<{
+      provider: string;
+      model?: string;
+      thinkingOptionId?: string;
+    }>;
+  };
+  quickAsk?: {
+    providers?: Array<{
+      provider: string;
+      model?: string;
+      thinkingOptionId?: string;
+    }>;
   };
   providerOverrides?: Record<string, ProviderOverride>;
   log?: PersistedConfig["log"];
@@ -581,6 +593,18 @@ function createInitialRelayConfig(config: PaseoDaemonConfig): MutableDaemonConfi
   };
 }
 
+function createInitialTextGenerationConfig(
+  config: PaseoDaemonConfig,
+): Pick<MutableDaemonConfig, "metadataGeneration" | "quickAsk"> {
+  return {
+    metadataGeneration: {
+      providers: config.metadataGeneration?.providers ?? [],
+      commitMessageProviders: config.metadataGeneration?.commitMessageProviders ?? [],
+    },
+    quickAsk: { providers: config.quickAsk?.providers ?? [] },
+  };
+}
+
 function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDaemonConfig {
   const providers = config.providerOverrides ?? {};
   const imageGeneration = createInitialImageGenerationConfig(config);
@@ -601,9 +625,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
       : {}),
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     providers,
-    metadataGeneration: {
-      providers: config.metadataGeneration?.providers ?? [],
-    },
+    ...createInitialTextGenerationConfig(config),
     ...(imageGeneration ? { imageGeneration } : {}),
     autoArchiveAfterMerge: config.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: config.enableTerminalAgentHooks ?? false,

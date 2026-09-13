@@ -32,7 +32,8 @@ interface SupportedMutableConfigPatch {
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
-  metadataGeneration?: MutableDaemonConfig["metadataGeneration"];
+  metadataGeneration?: MutableDaemonConfigPatch["metadataGeneration"];
+  quickAsk?: MutableDaemonConfigPatch["quickAsk"];
   imageGeneration?: MutableDaemonConfigPatch["imageGeneration"];
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
@@ -133,27 +134,72 @@ function omitProvidersFromConfig<T extends { providers?: Record<string, unknown>
   return changed ? ({ ...config, providers: nextProviders } as T) : config;
 }
 
-function omitMetadataGenerationProvidersFromConfig<
-  T extends { metadataGeneration?: { providers?: Array<{ provider?: unknown }> } },
+interface ConfiguredProviderEntry {
+  provider?: unknown;
+}
+
+function omitRemovedProviderEntries<T extends ConfiguredProviderEntry>(
+  entries: T[] | undefined,
+  removedProviders: ReadonlySet<string>,
+): T[] | undefined {
+  if (!entries) {
+    return undefined;
+  }
+  const filtered = entries.filter(
+    (entry) => typeof entry.provider !== "string" || !removedProviders.has(entry.provider),
+  );
+  return filtered.length === entries.length ? entries : filtered;
+}
+
+function omitGenerationProvidersFromConfig<
+  T extends {
+    metadataGeneration?: {
+      providers?: ConfiguredProviderEntry[];
+      commitMessageProviders?: ConfiguredProviderEntry[];
+    };
+    quickAsk?: { providers?: ConfiguredProviderEntry[] };
+  },
 >(config: T, providers: readonly string[]): T {
-  if (providers.length === 0 || !config.metadataGeneration?.providers) {
+  if (providers.length === 0) {
     return config;
   }
 
-  const removedProviderIds = new Set(providers);
-  const nextProviders = config.metadataGeneration.providers.filter((entry) => {
-    return typeof entry.provider !== "string" || !removedProviderIds.has(entry.provider);
-  });
-  if (nextProviders.length === config.metadataGeneration.providers.length) {
+  const removedProviders = new Set(providers);
+  const metadataGeneration = config.metadataGeneration;
+  const quickAsk = config.quickAsk;
+  const metadataProviders = omitRemovedProviderEntries(
+    metadataGeneration?.providers,
+    removedProviders,
+  );
+  const commitMessageProviders = omitRemovedProviderEntries(
+    metadataGeneration?.commitMessageProviders,
+    removedProviders,
+  );
+  const quickAskProviders = omitRemovedProviderEntries(quickAsk?.providers, removedProviders);
+  if (
+    metadataProviders === metadataGeneration?.providers &&
+    commitMessageProviders === metadataGeneration?.commitMessageProviders &&
+    quickAskProviders === quickAsk?.providers
+  ) {
     return config;
   }
 
   return {
     ...config,
-    metadataGeneration: {
-      ...config.metadataGeneration,
-      providers: nextProviders,
-    },
+    ...(metadataGeneration
+      ? {
+          metadataGeneration: {
+            ...metadataGeneration,
+            ...(metadataProviders ? { providers: metadataProviders } : {}),
+            ...(commitMessageProviders ? { commitMessageProviders } : {}),
+          },
+        }
+      : {}),
+    ...(quickAsk
+      ? {
+          quickAsk: { ...quickAsk, ...(quickAskProviders ? { providers: quickAskProviders } : {}) },
+        }
+      : {}),
   } as T;
 }
 
@@ -188,11 +234,10 @@ function nonEmptyEnvironmentValue(value: string | undefined): string | undefined
   return trimmed ? trimmed : undefined;
 }
 
-function applyImageGenerationPatchToPublicConfig(
-  current: MutableDaemonConfig["imageGeneration"],
+function assertImageGenerationPatchMutable(
   patch: NonNullable<MutableDaemonConfigPatch["imageGeneration"]>,
   env: NodeJS.ProcessEnv,
-): NonNullable<MutableDaemonConfig["imageGeneration"]> {
+): void {
   if (patch.enabled !== undefined && env.PASEO_IMAGE_GENERATION_ENABLED !== undefined) {
     throw new Error(
       "Image generation enabled state is controlled by PASEO_IMAGE_GENERATION_ENABLED.",
@@ -207,11 +252,15 @@ function applyImageGenerationPatchToPublicConfig(
   if (patch.apiKey !== undefined && nonEmptyEnvironmentValue(env.OPENAI_API_KEY)) {
     throw new Error("Image generation API key is controlled by OPENAI_API_KEY.");
   }
+}
 
-  const next = {
+function createImageGenerationPublicConfig(
+  current: MutableDaemonConfig["imageGeneration"],
+): NonNullable<MutableDaemonConfig["imageGeneration"]> {
+  return {
     enabled: current?.enabled ?? false,
-    provider: "openai" as const,
-    backend: current?.backend ?? ("openai-api" as const),
+    provider: "openai",
+    backend: current?.backend ?? "openai-api",
     model: current?.model ?? "gpt-image-2",
     ...(current?.baseUrl ? { baseUrl: current.baseUrl } : {}),
     apiKeyConfigured: current?.apiKeyConfigured ?? false,
@@ -220,6 +269,15 @@ function applyImageGenerationPatchToPublicConfig(
       ? { subscriptionCredentialId: current.subscriptionCredentialId }
       : {}),
   };
+}
+
+function applyImageGenerationPatchToPublicConfig(
+  current: MutableDaemonConfig["imageGeneration"],
+  patch: NonNullable<MutableDaemonConfigPatch["imageGeneration"]>,
+  env: NodeJS.ProcessEnv,
+): NonNullable<MutableDaemonConfig["imageGeneration"]> {
+  assertImageGenerationPatchMutable(patch, env);
+  const next = createImageGenerationPublicConfig(current);
   if (patch.enabled !== undefined) next.enabled = patch.enabled;
   if (patch.backend !== undefined) next.backend = patch.backend;
   if (patch.model !== undefined) next.model = patch.model;
@@ -261,6 +319,7 @@ const RELOADABLE_PATHS = [
   "agents.providers",
   "agents.catalogRefreshTimeoutMs",
   "agents.metadataGeneration",
+  "agents.quickAsk",
   "agents.skills.selection",
   "pluginsEnabled",
   "providers.openai.image",
@@ -289,6 +348,7 @@ const PERSISTED_TO_MUTABLE_PATH: Record<string, string> = {
   "agents.providers": "providers",
   "agents.catalogRefreshTimeoutMs": "catalogRefreshTimeoutMs",
   "agents.metadataGeneration": "metadataGeneration",
+  "agents.quickAsk": "quickAsk",
   "agents.skills.selection": "skills.selection",
   pluginsEnabled: "pluginsEnabled",
   "providers.openai.image": "imageGeneration",
@@ -329,23 +389,31 @@ function compactOwnedPaths(paths: readonly string[], owners: readonly string[]):
   return Array.from(compacted).sort();
 }
 
+function pickRelayPatchField(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "relay"> {
+  if (patch.relay === undefined) return {};
+  const relay = patch.relay;
+  return {
+    relay: {
+      ...(relay.enabled !== undefined ? { enabled: relay.enabled } : {}),
+      ...(relay.endpoint !== undefined ? { endpoint: relay.endpoint } : {}),
+      ...(relay.useTls !== undefined ? { useTls: relay.useTls } : {}),
+      ...(relay.publicEndpoint !== undefined ? { publicEndpoint: relay.publicEndpoint } : {}),
+      ...(relay.publicUseTls !== undefined ? { publicUseTls: relay.publicUseTls } : {}),
+    },
+  };
+}
+
+function pickQuickAskPatchField(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "quickAsk"> {
+  return patch.quickAsk === undefined ? {} : { quickAsk: patch.quickAsk };
+}
+
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
-    ...(patch.relay !== undefined
-      ? {
-          relay: {
-            ...(patch.relay.enabled !== undefined ? { enabled: patch.relay.enabled } : {}),
-            ...(patch.relay.endpoint !== undefined ? { endpoint: patch.relay.endpoint } : {}),
-            ...(patch.relay.useTls !== undefined ? { useTls: patch.relay.useTls } : {}),
-            ...(patch.relay.publicEndpoint !== undefined
-              ? { publicEndpoint: patch.relay.publicEndpoint }
-              : {}),
-            ...(patch.relay.publicUseTls !== undefined
-              ? { publicUseTls: patch.relay.publicUseTls }
-              : {}),
-          },
-        }
-      : {}),
+    ...pickRelayPatchField(patch),
     ...(patch.mcp?.injectIntoAgents !== undefined
       ? { mcp: { injectIntoAgents: patch.mcp.injectIntoAgents } }
       : {}),
@@ -354,9 +422,10 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
       : {}),
     ...(patch.providers !== undefined ? { providers: patch.providers } : {}),
     ...(patch.removeProviders !== undefined ? { removeProviders: patch.removeProviders } : {}),
-    ...(patch.metadataGeneration?.providers !== undefined
-      ? { metadataGeneration: { providers: patch.metadataGeneration.providers } }
+    ...(patch.metadataGeneration !== undefined
+      ? { metadataGeneration: patch.metadataGeneration }
       : {}),
+    ...pickQuickAskPatchField(patch),
     ...(patch.imageGeneration !== undefined ? { imageGeneration: patch.imageGeneration } : {}),
     ...(patch.autoArchiveAfterMerge !== undefined
       ? { autoArchiveAfterMerge: patch.autoArchiveAfterMerge }
@@ -371,6 +440,42 @@ function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMut
     ...(patch.agentProfiles !== undefined ? { agentProfiles: patch.agentProfiles } : {}),
     ...(patch.pluginsEnabled !== undefined ? { pluginsEnabled: patch.pluginsEnabled } : {}),
     ...(patch.plugins !== undefined ? { plugins: patch.plugins } : {}),
+  };
+}
+
+function applyRelayAddressDefaults(
+  relay: NonNullable<MutableDaemonConfig["relay"]>,
+  patch: NonNullable<SupportedMutableConfigPatch["relay"]>,
+  persistedRelay: NonNullable<PersistedConfig["daemon"]>["relay"],
+  env: NodeJS.ProcessEnv,
+): NonNullable<MutableDaemonConfig["relay"]> {
+  const endpoint = relay.endpoint ?? DEFAULT_RELAY_ENDPOINT;
+  const useTls = relay.useTls ?? shouldUseTlsForDefaultHostedRelay(endpoint);
+  const publicEndpointExplicit =
+    patch.publicEndpoint !== undefined ||
+    persistedRelay?.publicEndpoint !== undefined ||
+    env.PASEO_RELAY_PUBLIC_ENDPOINT !== undefined;
+  const publicTlsExplicit =
+    patch.publicUseTls !== undefined ||
+    persistedRelay?.publicUseTls !== undefined ||
+    env.PASEO_RELAY_PUBLIC_USE_TLS !== undefined;
+  return {
+    ...relay,
+    endpoint,
+    useTls,
+    publicEndpoint: publicEndpointExplicit ? (relay.publicEndpoint ?? endpoint) : endpoint,
+    publicUseTls: publicTlsExplicit
+      ? (relay.publicUseTls ?? useTls)
+      : parseRelayAddress(
+          publicEndpointExplicit
+            ? (patch.publicEndpoint ??
+                env.PASEO_RELAY_PUBLIC_ENDPOINT ??
+                persistedRelay?.publicEndpoint ??
+                relay.publicEndpoint ??
+                endpoint)
+            : endpoint,
+          useTls,
+        ).useTls,
   };
 }
 
@@ -479,37 +584,16 @@ export class DaemonConfigStore {
     const { removeProviders = [], imageGeneration, ...configPatch } = parsedPatch;
     const removedProviders = Array.from(new Set(removeProviders));
     const merged = deepMerge(this.current, configPatch);
-    if (parsedPatch.relay && Object.keys(parsedPatch.relay).some((field) => field !== "enabled")) {
-      const persistedRelay = this.lastKnownPersisted.daemon?.relay;
-      const relay = merged.relay!;
-      const endpoint = relay.endpoint ?? DEFAULT_RELAY_ENDPOINT;
-      const useTls = relay.useTls ?? shouldUseTlsForDefaultHostedRelay(endpoint);
-      const publicEndpointExplicit =
-        parsedPatch.relay.publicEndpoint !== undefined ||
-        persistedRelay?.publicEndpoint !== undefined ||
-        this.env.PASEO_RELAY_PUBLIC_ENDPOINT !== undefined;
-      const publicTlsExplicit =
-        parsedPatch.relay.publicUseTls !== undefined ||
-        persistedRelay?.publicUseTls !== undefined ||
-        this.env.PASEO_RELAY_PUBLIC_USE_TLS !== undefined;
-      merged.relay = {
-        ...relay,
-        endpoint,
-        useTls,
-        publicEndpoint: publicEndpointExplicit ? (relay.publicEndpoint ?? endpoint) : endpoint,
-        publicUseTls: publicTlsExplicit
-          ? (relay.publicUseTls ?? useTls)
-          : parseRelayAddress(
-              publicEndpointExplicit
-                ? (parsedPatch.relay.publicEndpoint ??
-                    this.env.PASEO_RELAY_PUBLIC_ENDPOINT ??
-                    persistedRelay?.publicEndpoint ??
-                    relay.publicEndpoint ??
-                    endpoint)
-                : endpoint,
-              useTls,
-            ).useTls,
-      };
+    const relayAddressChanged =
+      parsedPatch.relay !== undefined &&
+      Object.keys(parsedPatch.relay).some((field) => field !== "enabled");
+    if (relayAddressChanged) {
+      merged.relay = applyRelayAddressDefaults(
+        merged.relay!,
+        parsedPatch.relay!,
+        this.lastKnownPersisted.daemon?.relay,
+        this.env,
+      );
     }
     if (imageGeneration !== undefined) {
       merged.imageGeneration = applyImageGenerationPatchToPublicConfig(
@@ -523,7 +607,7 @@ export class DaemonConfigStore {
     }
     if (parsedPatch.plugins !== undefined) merged.plugins = parsedPatch.plugins;
     const next = MutableDaemonConfigSchema.parse(
-      omitMetadataGenerationProvidersFromConfig(
+      omitGenerationProvidersFromConfig(
         omitProvidersFromConfig(merged, removedProviders),
         removedProviders,
       ),
@@ -531,9 +615,7 @@ export class DaemonConfigStore {
 
     const configChanged = !isEqualValue(this.current, next);
 
-    const hasRelayAddressPatch =
-      parsedPatch.relay && Object.keys(parsedPatch.relay).some((field) => field !== "enabled");
-    if (!configChanged && removedProviders.length === 0 && !hasRelayAddressPatch) {
+    if (!configChanged && removedProviders.length === 0 && !relayAddressChanged) {
       return this.current;
     }
 
@@ -816,6 +898,22 @@ function mergeMutableImageGenerationPatch(
   };
 }
 
+function applyMutableQuickAskPatch(
+  next: Record<string, unknown>,
+  persistedAgents: PersistedConfig["agents"],
+  patch: MutableDaemonConfigPatch["quickAsk"],
+  removeProviders: readonly string[],
+): void {
+  if (patch !== undefined) {
+    next["quickAsk"] = { ...persistedAgents?.quickAsk, ...patch };
+  } else if (removeProviders.length > 0 && persistedAgents?.quickAsk) {
+    next["quickAsk"] = omitGenerationProvidersFromConfig(
+      { quickAsk: persistedAgents.quickAsk },
+      removeProviders,
+    ).quickAsk;
+  }
+}
+
 function mergeMutableAgentPatch(
   persistedAgents: PersistedConfig["agents"],
   patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
@@ -824,6 +922,7 @@ function mergeMutableAgentPatch(
   if (
     patch.providers === undefined &&
     patch.metadataGeneration === undefined &&
+    patch.quickAsk === undefined &&
     patch.skills === undefined &&
     removeProviders.length === 0
   ) {
@@ -842,16 +941,19 @@ function mergeMutableAgentPatch(
   if (providerOverrides) next["providers"] = providerOverrides;
   else delete next["providers"];
 
-  if (patch.metadataGeneration?.providers !== undefined) {
-    next["metadataGeneration"] = { providers: patch.metadataGeneration.providers };
-  } else if (removeProviders.length > 0 && persistedAgents?.metadataGeneration?.providers) {
-    const removed = new Set(removeProviders);
+  if (patch.metadataGeneration !== undefined) {
     next["metadataGeneration"] = {
-      providers: persistedAgents.metadataGeneration.providers.filter(
-        (entry) => !removed.has(entry.provider),
-      ),
+      ...persistedAgents?.metadataGeneration,
+      ...patch.metadataGeneration,
     };
+  } else if (removeProviders.length > 0 && persistedAgents?.metadataGeneration) {
+    next["metadataGeneration"] = omitGenerationProvidersFromConfig(
+      { metadataGeneration: persistedAgents.metadataGeneration },
+      removeProviders,
+    ).metadataGeneration;
   }
+
+  applyMutableQuickAskPatch(next, persistedAgents, patch.quickAsk, removeProviders);
 
   if (patch.skills?.selection !== undefined) {
     next["skills"] = { selection: patch.skills.selection };

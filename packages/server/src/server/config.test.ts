@@ -137,7 +137,6 @@ describe("server config", () => {
       },
       {
         env: {
-          OPENAI_API_KEY: "test-api-key",
           PASEO_DICTATION_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
           PASEO_VOICE_LOCAL_STT_MODEL: "parakeet-tdt-0.6b-v2-int8",
           PASEO_VOICE_LOCAL_TTS_MODEL: "kokoro-en-v0_19",
