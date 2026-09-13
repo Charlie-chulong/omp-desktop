@@ -67,3 +67,46 @@ test("pair --home overrides an inherited OMP home and uses public relay TLS and 
   });
   expect(Buffer.from(offer.daemonPublicKeyB64, "base64").byteLength).toBe(32);
 });
+
+test("pair forwards and enables an explicit relay address without prompting", async () => {
+  const selectedHome = await mkdtemp(path.join(os.tmpdir(), "omp-pair-relay-address-"));
+  homes.push(selectedHome);
+  const resolveOffer = vi.fn(async () => ({
+    relayEnabled: true,
+    url: "https://app.example.test/#offer=encoded",
+    qr: null,
+  }));
+  const stdout: string[] = [];
+
+  await runPairCommand(
+    {
+      home: selectedHome,
+      json: true,
+      relayAddress: "wss://relay.example.test",
+    },
+    {
+      resolveOffer,
+      isInteractive: () => false,
+      output: {
+        columns: undefined,
+        writeStdout: (message) => stdout.push(message),
+        writeStderr: () => undefined,
+        setExitCode: (code) => {
+          throw new Error(`Unexpected exit ${code}`);
+        },
+        success: () => undefined,
+      },
+    },
+  );
+
+  expect(resolveOffer).toHaveBeenCalledOnce();
+  expect(resolveOffer).toHaveBeenCalledWith({
+    paseoHome: selectedHome,
+    enableRelay: true,
+    relayAddress: "wss://relay.example.test",
+  });
+  expect(JSON.parse(stdout.join(""))).toMatchObject({
+    relayEnabled: true,
+    url: "https://app.example.test/#offer=encoded",
+  });
+});

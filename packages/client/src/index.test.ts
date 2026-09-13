@@ -1218,6 +1218,82 @@ test("OMP provider actions use the native management RPCs", async () => {
     }),
   );
   await expect(savePromise).resolves.toMatchObject({ requestId: "omp-management-save" });
+  const subagentSettings = {
+    configPath: "/home/test/.omp/agent/config.yml",
+    enabled: true,
+    agents: [
+      {
+        name: "reviewer",
+        description: "Correctness and quality review.",
+        model: "openai/gpt-5.6-sol:high",
+      },
+    ],
+  };
+  const getSubagentsPromise = client.omp.getSubagentSettings({
+    requestId: "omp-subagents-get",
+  });
+  expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
+    type: "session",
+    message: {
+      type: "omp.subagents.management.get.request",
+      requestId: "omp-subagents-get",
+    },
+  });
+  ws.message(
+    sessionMessage({
+      type: "omp.subagents.management.get.response",
+      payload: { ...subagentSettings, requestId: "omp-subagents-get" },
+    }),
+  );
+  await expect(getSubagentsPromise).resolves.toMatchObject(subagentSettings);
+
+  const updateSubagentPromise = client.omp.updateSubagentModel(
+    "reviewer",
+    "openai/gpt-5.6-sol:high",
+    { requestId: "omp-subagents-update" },
+  );
+  expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
+    type: "session",
+    message: {
+      type: "omp.subagents.management.update.request",
+      agentName: "reviewer",
+      model: "openai/gpt-5.6-sol:high",
+      requestId: "omp-subagents-update",
+    },
+  });
+  ws.message(
+    sessionMessage({
+      type: "omp.subagents.management.update.response",
+      payload: { ...subagentSettings, requestId: "omp-subagents-update" },
+    }),
+  );
+  await expect(updateSubagentPromise).resolves.toMatchObject(subagentSettings);
+
+  const toggleSubagentsPromise = client.omp.updateSubagentSettingsEnabled(false, {
+    requestId: "omp-subagents-enabled-update",
+  });
+  expect(parseSentFrame(ws.sent.at(-1))).toMatchObject({
+    type: "session",
+    message: {
+      type: "omp.subagents.management.enabled.update.request",
+      enabled: false,
+      requestId: "omp-subagents-enabled-update",
+    },
+  });
+  ws.message(
+    sessionMessage({
+      type: "omp.subagents.management.enabled.update.response",
+      payload: {
+        ...subagentSettings,
+        enabled: false,
+        requestId: "omp-subagents-enabled-update",
+      },
+    }),
+  );
+  await expect(toggleSubagentsPromise).resolves.toMatchObject({
+    ...subagentSettings,
+    enabled: false,
+  });
 
   const contextWindowPromise = client.omp.updateModelContextWindowOverrides(
     "openai-codex",

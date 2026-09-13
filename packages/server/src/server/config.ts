@@ -513,13 +513,15 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
-function resolveImageGenerationConfig(
+function resolveImageGenerationCredentials(
   env: NodeJS.ProcessEnv,
-  persisted: PersistedConfig,
-): NonNullable<PaseoDaemonConfig["imageGeneration"]> {
-  const openai = persisted.providers?.openai;
+  openai: NonNullable<PersistedConfig["providers"]>["openai"],
+): {
+  apiKey: string | undefined;
+  apiKeySource: "environment" | "config" | null;
+  baseUrl: string | undefined;
+} {
   const image = openai?.image;
-  const backend = image?.backend ?? "openai-api";
   const environmentApiKey = nonEmptyEnv(env.OPENAI_API_KEY);
   const configuredApiKey = image?.apiKey ?? openai?.apiKey;
   const apiKey = environmentApiKey ?? configuredApiKey;
@@ -527,6 +529,23 @@ function resolveImageGenerationConfig(
   const baseUrl = configuredBaseUrl
     ? normalizeImageGenerationBaseUrl(configuredBaseUrl)
     : undefined;
+  let apiKeySource: "environment" | "config" | null = null;
+  if (environmentApiKey) {
+    apiKeySource = "environment";
+  } else if (configuredApiKey) {
+    apiKeySource = "config";
+  }
+  return { apiKey, apiKeySource, baseUrl };
+}
+
+function resolveImageGenerationConfig(
+  env: NodeJS.ProcessEnv,
+  persisted: PersistedConfig,
+): NonNullable<PaseoDaemonConfig["imageGeneration"]> {
+  const openai = persisted.providers?.openai;
+  const image = openai?.image;
+  const backend = image?.backend ?? "openai-api";
+  const { apiKey, apiKeySource, baseUrl } = resolveImageGenerationCredentials(env, openai);
   const model =
     nonEmptyEnv(env.PASEO_IMAGE_GENERATION_MODEL) ?? image?.model ?? DEFAULT_IMAGE_GENERATION_MODEL;
   const enabled =
@@ -542,7 +561,7 @@ function resolveImageGenerationConfig(
     ...(baseUrl ? { baseUrl } : {}),
     ...(apiKey ? { apiKey } : {}),
     apiKeyConfigured: Boolean(apiKey),
-    apiKeySource: environmentApiKey ? "environment" : configuredApiKey ? "config" : null,
+    apiKeySource,
     ...(image?.subscriptionCredentialId
       ? { subscriptionCredentialId: image.subscriptionCredentialId }
       : {}),
@@ -694,6 +713,7 @@ export function resolveConfigFromPersisted(
     agentProviderSettings: extractAgentProviderSettings(providerOverrides),
     providerCatalogRefreshTimeoutMs: persisted.agents?.catalogRefreshTimeoutMs,
     metadataGeneration: persisted.agents?.metadataGeneration,
+    quickAsk: persisted.agents?.quickAsk,
     providerOverrides,
     log: resolveLogConfigFromEnv(env, persisted),
     configReload: {

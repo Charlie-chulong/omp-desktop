@@ -303,6 +303,20 @@ export function toggleSidePanel(input: SidePanelInput): void {
     return;
   }
   showSidePanel(input);
+  openSupportingTab({
+    isCompact: input.isCompact,
+    supportsPaneSplits: input.supportsPaneSplits,
+    workspaceKey: input.workspaceKey,
+    target: SIDE_PANEL_VIEW_TARGETS.files,
+    background: true,
+  });
+  openSupportingTab({
+    isCompact: input.isCompact,
+    supportsPaneSplits: input.supportsPaneSplits,
+    workspaceKey: input.workspaceKey,
+    target: SIDE_PANEL_VIEW_TARGETS.changes,
+    background: true,
+  });
 }
 
 /** Reactive "is the side panel showing" for the surface this layout uses. */

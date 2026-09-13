@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ja: TranslationResources = {
@@ -62,7 +63,9 @@ export const ja: TranslationResources = {
       },
       browse: {
         label: "参照",
-        description: "Finder でディレクトリを選択または作成",
+        description: "{{host}} 上のディレクトリを選択",
+        title: "ディレクトリを参照",
+        selectCurrent: "このディレクトリを選択",
       },
       github: {
         label: "GitHub からクローン",
@@ -251,6 +254,7 @@ export const ja: TranslationResources = {
       workflow: {
         title: "ワークフロー",
         standard: "標準",
+        enhanced: "強化",
         plan: "計画",
         goal: "目標",
         goalPlaceholder: "目標を入力",
@@ -543,6 +547,8 @@ export const ja: TranslationResources = {
       confirmDelete: {
         fileTitle: "ファイルを削除しますか？",
         folderTitle: "フォルダを削除しますか？",
+        selectionTitle: "{{count}} 件の項目を削除しますか？",
+        selectionMessage: "選択した項目は完全に削除されます。",
         message: "「{{name}}」は完全に削除されます。",
         confirm: "削除",
         cancel: "キャンセル",
@@ -1688,6 +1694,7 @@ export const ja: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "ローカルの OMP Desktop デーモンを待機中…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "接続を追加",
       direct: {
@@ -1999,6 +2006,7 @@ export const ja: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ja,
     title: "設定",
     loading: "設定を読み込み中...",
     groups: {
@@ -2020,6 +2028,7 @@ export const ja: TranslationResources = {
     groupInfo: "{{title}}について",
     sections: {
       general: "一般",
+      connections: "接続",
       appearance: "外観",
       editor: "エディター",
       shortcuts: "ショートカット",
@@ -2064,8 +2073,14 @@ export const ja: TranslationResources = {
     plugins: pluginSettings.ja,
     metadataGeneration: {
       title: "メタデータ生成",
-      description:
-        "ワークスペースのタイトル、ブランチ名、コミットメッセージ、プルリクエストの下書きに使用するモデルを選択します",
+      description: "メタデータ、コミットメッセージ、クイック質問に使用するモデルを個別に選択します",
+      defaultModel: "その他のメタデータ",
+      defaultModelHint: "ワークスペースのタイトル、ブランチ名、プルリクエストの下書き",
+      commitMessageModel: "コミットメッセージ",
+      commitMessageModelHint: "ステージ済みの Git 変更から生成するメッセージ",
+      quickAskModel: "クイック質問",
+      quickAskModelHint: "選択した内容に関する質問への回答",
+      quickAskAutomaticHint: "現在の会話モデルを使用します",
       selection: "モデル選択",
       automatic: "自動",
       preferred: "手動",
@@ -2554,6 +2569,7 @@ export const ja: TranslationResources = {
         moveUp: "上に移動",
         moveDown: "下に移動",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "ラベルを編集",
@@ -2586,6 +2602,7 @@ export const ja: TranslationResources = {
         update: {
           desktopManagedHint:
             "このデーモンはOMP Desktop Desktopによって管理されています。ホスト上のOMP Desktop Desktopを更新してください。",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "デーモンを更新",
           hint: "デーモンを最新バージョンに更新して再起動します",
           confirm: "更新",

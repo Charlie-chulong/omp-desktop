@@ -59,6 +59,31 @@ function pruneSherpa(nodeModules, platform, arch) {
     }
   }
 }
+function keyringBindingPath(resourcesDir, arch) {
+  const bindingName = `win32-${arch}-msvc`;
+  return path.join(
+    resourcesDir,
+    "app.asar.unpacked",
+    "node_modules",
+    "@napi-rs",
+    `keyring-${bindingName}`,
+    `keyring.${bindingName}.node`,
+  );
+}
+
+function assertNativeKeyringBinding(resourcesDir, platform, arch) {
+  if (platform !== "win32") return;
+
+  const bindingPath = keyringBindingPath(resourcesDir, arch);
+  if (!fs.existsSync(bindingPath)) {
+    throw new Error(
+      `Packaged Windows keyring binding is missing for ${arch}: ${bindingPath}. ` +
+        "Build Windows artifacts with npm run build:windows.",
+    );
+  }
+}
+
+exports.assertNativeKeyringBinding = assertNativeKeyringBinding;
 
 function pruneNativeModules(appOutDir, platform, arch) {
   const resourcesDir =
@@ -153,6 +178,7 @@ exports.default = async function afterPack(context) {
   await copyRipgrep(resourcesDir, platform, arch);
   prepareBundledOmp(resourcesDir, platform, arch);
   assertBackgroundJobsExtension(resourcesDir);
+  assertNativeKeyringBinding(resourcesDir, platform, arch);
   pruneNativeModules(context.appOutDir, platform, arch);
 
   if (platform === "linux" || platform === "win32") {

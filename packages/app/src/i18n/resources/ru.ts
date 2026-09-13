@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ru: TranslationResources = {
@@ -62,7 +63,9 @@ export const ru: TranslationResources = {
       },
       browse: {
         label: "Обзор",
-        description: "Выбрать или создать каталог в Finder",
+        description: "Выбрать каталог на {{host}}",
+        title: "Обзор каталогов",
+        selectCurrent: "Выбрать этот каталог",
       },
       github: {
         label: "Клонировать с GitHub",
@@ -251,6 +254,7 @@ export const ru: TranslationResources = {
       workflow: {
         title: "Рабочий процесс",
         standard: "Стандартный",
+        enhanced: "Расширенный",
         plan: "План",
         goal: "Цель",
         goalPlaceholder: "Введите цель",
@@ -552,6 +556,8 @@ export const ru: TranslationResources = {
       confirmDelete: {
         fileTitle: "Удалить файл?",
         folderTitle: "Удалить папку?",
+        selectionTitle: "Удалить выбранные элементы ({{count}})?",
+        selectionMessage: "Выбранные элементы будут удалены безвозвратно.",
         message: "Элемент «{{name}}» будет удалён безвозвратно.",
         confirm: "Удалить",
         cancel: "Отмена",
@@ -1712,6 +1718,7 @@ export const ru: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "Ожидание локального демона OMP Desktop…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "Добавить подключение",
       direct: {
@@ -2024,6 +2031,7 @@ export const ru: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ru,
     title: "Настройки",
     loading: "Загрузка настроек...",
     groups: {
@@ -2045,6 +2053,7 @@ export const ru: TranslationResources = {
     groupInfo: "О разделе «{{title}}»",
     sections: {
       general: "Основные",
+      connections: "Подключения",
       appearance: "Оформление",
       editor: "Редактор",
       shortcuts: "Сочетания клавиш",
@@ -2090,7 +2099,14 @@ export const ru: TranslationResources = {
     metadataGeneration: {
       title: "Генерация метаданных",
       description:
-        "Выберите модель, которую OMP Desktop будет использовать для названий рабочих пространств и веток, сообщений коммитов и черновиков PR",
+        "Выберите отдельные модели для метаданных, сообщений коммитов и быстрых вопросов",
+      defaultModel: "Прочие метаданные",
+      defaultModelHint: "Названия рабочих пространств и веток, а также черновики PR",
+      commitMessageModel: "Сообщения коммитов",
+      commitMessageModelHint: "Сообщения, созданные из подготовленных изменений Git",
+      quickAskModel: "Быстрый вопрос",
+      quickAskModelHint: "Ответы на вопросы о выделенном содержимом",
+      quickAskAutomaticHint: "Использует модель текущего диалога",
       selection: "Выбор модели",
       automatic: "Автоматически",
       preferred: "Вручную",
@@ -2588,6 +2604,7 @@ export const ru: TranslationResources = {
         moveUp: "Переместить вверх",
         moveDown: "Переместить вниз",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "Изменить название",
@@ -2620,6 +2637,7 @@ export const ru: TranslationResources = {
         update: {
           desktopManagedHint:
             "Этот демон управляется OMP Desktop Desktop. Обновите OMP Desktop Desktop на хосте.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Обновить демон",
           hint: "Обновить демон до последней версии и перезапустить его",
           confirm: "Обновить",

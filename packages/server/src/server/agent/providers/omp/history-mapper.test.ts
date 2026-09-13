@@ -28,6 +28,39 @@ async function collectHistory(
 }
 
 describe("OMP history mapper", () => {
+  test("hides injected workflow directives in replayed user messages", async () => {
+    const planPrompt = [
+      "<system-directive>",
+      "Plan mode active for this turn. The working tree and system are read-only: NEVER create, edit, delete, or rename files, and NEVER run state-changing commands. You may inspect with read-only tools. Produce or refine the requested plan only.",
+      "</system-directive>",
+      "",
+      "draft the migration",
+    ].join("\n");
+    const standardPrompt = [
+      "<system-directive>",
+      "Plan mode is inactive for this turn. All earlier per-turn Plan mode directives have expired. Follow the current user request normally; working-tree changes are permitted subject to the active tool-approval policy.",
+      "</system-directive>",
+      "",
+      "implement the migration",
+    ].join("\n");
+
+    const events = await collectHistory(
+      [
+        { role: "user", content: planPrompt },
+        { role: "user", content: standardPrompt },
+      ],
+      [
+        { id: "entry-plan", text: planPrompt },
+        { id: "entry-standard", text: standardPrompt },
+      ],
+    );
+
+    expect(events.map((event) => event.item)).toEqual([
+      { type: "user_message", text: "draft the migration", messageId: "entry-plan" },
+      { type: "user_message", text: "implement the migration", messageId: "entry-standard" },
+    ]);
+  });
+
   test("coalesces replayed subagent poll calls by target set", async () => {
     const events = await collectHistory([
       {
@@ -714,243 +747,243 @@ describe("OMP history mapper", () => {
     ]);
   });
 
-  test.each([
-    { provider: "openai-codex", modelId: "gpt-5.5" },
-    { model: "openai-codex/gpt-5.5" },
-  ])("rehydrates batch and nested transcripts with child models from %j", async (modelEntry) => {
-    const dir = mkdtempSync(join(tmpdir(), "omp-subagent-history-"));
-    const parentFile = join(dir, "parent.jsonl");
-    const parentStem = parentFile.slice(0, -".jsonl".length);
-    const echoId = "EchoChild";
-    const echoFile = join(parentStem, `${echoId}.jsonl`);
-    const failedFile = join(parentStem, "FailedChild.jsonl");
-    const abortedFile = join(parentStem, "AbortedChild.jsonl");
-    const nestedFile = join(parentStem, echoId, "NestedChild.jsonl");
-    mkdirSync(join(parentStem, echoId), { recursive: true });
+  test.each([{ provider: "openai-codex", modelId: "gpt-5.5" }, { model: "openai-codex/gpt-5.5" }])(
+    "rehydrates batch and nested transcripts with child models from %j",
+    async (modelEntry) => {
+      const dir = mkdtempSync(join(tmpdir(), "omp-subagent-history-"));
+      const parentFile = join(dir, "parent.jsonl");
+      const parentStem = parentFile.slice(0, -".jsonl".length);
+      const echoId = "EchoChild";
+      const echoFile = join(parentStem, `${echoId}.jsonl`);
+      const failedFile = join(parentStem, "FailedChild.jsonl");
+      const abortedFile = join(parentStem, "AbortedChild.jsonl");
+      const nestedFile = join(parentStem, echoId, "NestedChild.jsonl");
+      mkdirSync(join(parentStem, echoId), { recursive: true });
 
-    const writeEntries = (file: string, entries: object[]): void => {
-      writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
-    };
-    writeEntries(nestedFile, [
-      {
-        type: "session",
-        id: "nested-root",
-        parentId: null,
-        timestamp: "2026-07-07T03:00:00Z",
-      },
-      {
-        type: "model_change",
-        id: "nested-model",
-        parentId: "nested-root",
-        model: "openai-codex/gpt-5.5",
-      },
-      {
-        type: "message",
-        id: "nested-answer",
-        parentId: "nested-model",
-        timestamp: "2026-07-07T03:00:01Z",
-        message: {
-          role: "assistant",
-          provider: "anthropic",
-          model: "claude-sonnet-5",
-          responseModel: "claude-sonnet-5-20260701",
-          content: [{ type: "text", text: "Nested answer" }],
+      const writeEntries = (file: string, entries: object[]): void => {
+        writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n"));
+      };
+      writeEntries(nestedFile, [
+        {
+          type: "session",
+          id: "nested-root",
+          parentId: null,
+          timestamp: "2026-07-07T03:00:00Z",
         },
-      },
-      {
-        type: "message",
-        id: "nested-followup",
-        parentId: "nested-answer",
-        message: { role: "assistant", content: [{ type: "text", text: "Done" }] },
-      },
-    ]);
-    writeEntries(echoFile, [
-      {
-        type: "session",
-        id: "echo-root",
-        parentId: null,
-        timestamp: "2026-07-07T02:00:00Z",
-      },
-      {
-        type: "model_change",
-        id: "echo-model",
-        parentId: "echo-root",
-        timestamp: "2026-07-07T02:00:00.500Z",
-        ...modelEntry,
-      },
-      {
-        type: "message",
-        id: "echo-answer",
-        parentId: "echo-model",
-        timestamp: "2026-07-07T02:00:01Z",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: "Found it" }],
+        {
+          type: "model_change",
+          id: "nested-model",
+          parentId: "nested-root",
+          model: "openai-codex/gpt-5.5",
         },
-      },
-      {
-        type: "message",
-        id: "nested-call",
-        parentId: "echo-answer",
-        timestamp: "2026-07-07T02:00:02Z",
-        message: {
-          role: "assistant",
-          content: [
-            {
-              type: "toolCall",
-              id: "nested-task",
-              name: "task",
-              arguments: { agent: "task" },
-            },
-          ],
+        {
+          type: "message",
+          id: "nested-answer",
+          parentId: "nested-model",
+          timestamp: "2026-07-07T03:00:01Z",
+          message: {
+            role: "assistant",
+            provider: "anthropic",
+            model: "claude-sonnet-5",
+            responseModel: "claude-sonnet-5-20260701",
+            content: [{ type: "text", text: "Nested answer" }],
+          },
         },
-      },
-      {
-        type: "message",
-        id: "nested-result",
-        parentId: "nested-call",
-        timestamp: "2026-07-07T02:00:03Z",
-        message: {
-          role: "toolResult",
-          toolCallId: "nested-task",
-          toolName: "task",
-          content: [{ type: "text", text: "nested done" }],
-          details: { results: [{ id: "NestedChild", exitCode: 0 }] },
+        {
+          type: "message",
+          id: "nested-followup",
+          parentId: "nested-answer",
+          message: { role: "assistant", content: [{ type: "text", text: "Done" }] },
         },
-      },
-    ]);
-    writeEntries(failedFile, [
-      {
-        type: "session",
-        id: "failed-root",
-        parentId: null,
-        timestamp: "2026-07-07T04:00:00Z",
-      },
-    ]);
-    writeEntries(abortedFile, [
-      {
-        type: "session",
-        id: "aborted-root",
-        parentId: null,
-        timestamp: 1_752_000_000,
-      },
-      {
-        type: "message",
-        id: "aborted-answer",
-        parentId: "aborted-root",
-        message: {
-          role: "assistant",
-          content: [],
-          provider: "anthropic",
-          model: "claude-sonnet-5",
-          responseModel: " ",
+      ]);
+      writeEntries(echoFile, [
+        {
+          type: "session",
+          id: "echo-root",
+          parentId: null,
+          timestamp: "2026-07-07T02:00:00Z",
         },
-      },
-    ]);
-    writeEntries(parentFile, [
-      {
-        type: "session",
-        id: "parent-root",
-        parentId: null,
-        timestamp: "2026-07-07T01:00:00Z",
-      },
-      {
-        type: "message",
-        id: "task-call",
-        parentId: "parent-root",
-        timestamp: "2026-07-07T01:00:01Z",
-        message: {
-          role: "assistant",
-          provider: "parent-provider",
-          model: "parent-model",
-          content: [
-            {
-              type: "toolCall",
-              id: "task-1",
-              name: "task",
-              arguments: { agent: "task", model: "default" },
-            },
-          ],
+        {
+          type: "model_change",
+          id: "echo-model",
+          parentId: "echo-root",
+          timestamp: "2026-07-07T02:00:00.500Z",
+          ...modelEntry,
         },
-      },
-      {
-        type: "message",
-        id: "task-result",
-        parentId: "task-call",
-        timestamp: "2026-07-07T01:00:02Z",
-        message: {
-          role: "toolResult",
-          toolCallId: "task-1",
-          toolName: "task",
-          content: [{ type: "text", text: "batch done" }],
-          details: {
-            results: [
-              { id: echoId, agent: "task", exitCode: 0 },
-              { id: "FailedChild", exitCode: 2, error: "boom" },
-              { id: "AbortedChild", aborted: true },
-              { id: "MissingChild", exitCode: 1 },
+        {
+          type: "message",
+          id: "echo-answer",
+          parentId: "echo-model",
+          timestamp: "2026-07-07T02:00:01Z",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Found it" }],
+          },
+        },
+        {
+          type: "message",
+          id: "nested-call",
+          parentId: "echo-answer",
+          timestamp: "2026-07-07T02:00:02Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "toolCall",
+                id: "nested-task",
+                name: "task",
+                arguments: { agent: "task" },
+              },
             ],
           },
         },
-      },
-    ]);
-
-    const events: AgentStreamEvent[] = [];
-    for await (const event of streamOmpHistory({
-      sessionFile: parentFile,
-      provider: "omp",
-    })) {
-      events.push(event);
-    }
-    const subagentEvents = events.flatMap((event) =>
-      event.type === "provider_subagent" ? [event.event] : [],
-    );
-    expect(subagentEvents).toContainEqual({
-      type: "timeline",
-      id: echoId,
-      timestamp: "2026-07-07T02:00:01Z",
-      item: {
-        type: "assistant_message",
-        text: "Found it",
-        messageId: "omp-history-assistant-1",
-      },
-    });
-    expect(subagentEvents).toContainEqual(
-      expect.objectContaining({
-        type: "timeline",
-        id: "NestedChild",
-        timestamp: "2026-07-07T03:00:01Z",
-      }),
-    );
-    expect(subagentEvents.filter((event) => event.type === "upsert")).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: echoId,
-          title: "task",
-          model: "openai-codex/gpt-5.5",
-          status: "running",
-          timestamp: "2026-07-07T02:00:00Z",
-        }),
-        expect.objectContaining({
-          id: echoId,
-          title: "task",
-          model: "openai-codex/gpt-5.5",
-          status: "completed",
+        {
+          type: "message",
+          id: "nested-result",
+          parentId: "nested-call",
           timestamp: "2026-07-07T02:00:03Z",
-        }),
-        expect.objectContaining({ id: "FailedChild", status: "failed", model: null }),
+          message: {
+            role: "toolResult",
+            toolCallId: "nested-task",
+            toolName: "task",
+            content: [{ type: "text", text: "nested done" }],
+            details: { results: [{ id: "NestedChild", exitCode: 0 }] },
+          },
+        },
+      ]);
+      writeEntries(failedFile, [
+        {
+          type: "session",
+          id: "failed-root",
+          parentId: null,
+          timestamp: "2026-07-07T04:00:00Z",
+        },
+      ]);
+      writeEntries(abortedFile, [
+        {
+          type: "session",
+          id: "aborted-root",
+          parentId: null,
+          timestamp: 1_752_000_000,
+        },
+        {
+          type: "message",
+          id: "aborted-answer",
+          parentId: "aborted-root",
+          message: {
+            role: "assistant",
+            content: [],
+            provider: "anthropic",
+            model: "claude-sonnet-5",
+            responseModel: " ",
+          },
+        },
+      ]);
+      writeEntries(parentFile, [
+        {
+          type: "session",
+          id: "parent-root",
+          parentId: null,
+          timestamp: "2026-07-07T01:00:00Z",
+        },
+        {
+          type: "message",
+          id: "task-call",
+          parentId: "parent-root",
+          timestamp: "2026-07-07T01:00:01Z",
+          message: {
+            role: "assistant",
+            provider: "parent-provider",
+            model: "parent-model",
+            content: [
+              {
+                type: "toolCall",
+                id: "task-1",
+                name: "task",
+                arguments: { agent: "task", model: "default" },
+              },
+            ],
+          },
+        },
+        {
+          type: "message",
+          id: "task-result",
+          parentId: "task-call",
+          timestamp: "2026-07-07T01:00:02Z",
+          message: {
+            role: "toolResult",
+            toolCallId: "task-1",
+            toolName: "task",
+            content: [{ type: "text", text: "batch done" }],
+            details: {
+              results: [
+                { id: echoId, agent: "task", exitCode: 0 },
+                { id: "FailedChild", exitCode: 2, error: "boom" },
+                { id: "AbortedChild", aborted: true },
+                { id: "MissingChild", exitCode: 1 },
+              ],
+            },
+          },
+        },
+      ]);
+
+      const events: AgentStreamEvent[] = [];
+      for await (const event of streamOmpHistory({
+        sessionFile: parentFile,
+        provider: "omp",
+      })) {
+        events.push(event);
+      }
+      const subagentEvents = events.flatMap((event) =>
+        event.type === "provider_subagent" ? [event.event] : [],
+      );
+      expect(subagentEvents).toContainEqual({
+        type: "timeline",
+        id: echoId,
+        timestamp: "2026-07-07T02:00:01Z",
+        item: {
+          type: "assistant_message",
+          text: "Found it",
+          messageId: "omp-history-assistant-1",
+        },
+      });
+      expect(subagentEvents).toContainEqual(
         expect.objectContaining({
-          id: "AbortedChild",
-          status: "canceled",
-          model: "anthropic/claude-sonnet-5",
-        }),
-        expect.objectContaining({ id: "MissingChild", status: "failed", model: null }),
-        expect.objectContaining({
+          type: "timeline",
           id: "NestedChild",
-          status: "completed",
-          model: "anthropic/claude-sonnet-5-20260701",
+          timestamp: "2026-07-07T03:00:01Z",
         }),
-      ]),
-    );
-  });
+      );
+      expect(subagentEvents.filter((event) => event.type === "upsert")).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: echoId,
+            title: "task",
+            model: "openai-codex/gpt-5.5",
+            status: "running",
+            timestamp: "2026-07-07T02:00:00Z",
+          }),
+          expect.objectContaining({
+            id: echoId,
+            title: "task",
+            model: "openai-codex/gpt-5.5",
+            status: "completed",
+            timestamp: "2026-07-07T02:00:03Z",
+          }),
+          expect.objectContaining({ id: "FailedChild", status: "failed", model: null }),
+          expect.objectContaining({
+            id: "AbortedChild",
+            status: "canceled",
+            model: "anthropic/claude-sonnet-5",
+          }),
+          expect.objectContaining({ id: "MissingChild", status: "failed", model: null }),
+          expect.objectContaining({
+            id: "NestedChild",
+            status: "completed",
+            model: "anthropic/claude-sonnet-5-20260701",
+          }),
+        ]),
+      );
+    },
+  );
 });

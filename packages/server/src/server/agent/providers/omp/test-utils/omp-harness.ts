@@ -227,6 +227,71 @@ export class OmpHarness {
     return await run;
   }
 
+  async runPromptWithTerminalAssistant(
+    input: string,
+    output: string,
+    terminalAssistant: Extract<OmpAgentMessage, { role: "assistant" }>,
+  ): Promise<unknown> {
+    const session = this.requireSession();
+    const promptStarted = this.omp.latestSession().nextPrompt();
+    const run = session.run(input);
+    await promptStarted;
+    const runtime = this.omp.latestSession();
+    runtime.beginTurn();
+    runtime.acceptPrompt(input, "user-1");
+    runtime.streamAssistantText(output, terminalAssistant.responseId);
+    runtime.finishTurn(terminalAssistant);
+    return await run;
+  }
+
+  async runPromptAfterLengthContinuations(
+    input: string,
+    interruptedOutputs: readonly string[],
+    completedOutput: string,
+  ): Promise<{ completedBeforeContinuation: boolean; result: unknown }> {
+    const session = this.requireSession();
+    const promptStarted = this.omp.latestSession().nextPrompt();
+    const run = session.run(input);
+    let completed = false;
+    void run.finally(() => {
+      completed = true;
+    });
+    await promptStarted;
+    const runtime = this.omp.latestSession();
+    for (const [index, interruptedOutput] of interruptedOutputs.entries()) {
+      runtime.beginTurn();
+      const submittedPrompt = index === 0 ? input : runtime.followUpRequests.at(-1)?.message;
+      if (!submittedPrompt) {
+        throw new Error("OMP did not request a continuation");
+      }
+      runtime.acceptPrompt(submittedPrompt, `user-${index + 1}`);
+      runtime.streamAssistantText(interruptedOutput, `omp-assistant-${index + 1}`);
+      runtime.finishTurn({
+        role: "assistant",
+        content: [{ type: "text", text: interruptedOutput }],
+        responseId: `omp-assistant-${index + 1}`,
+        stopReason: "length",
+      });
+      await waitForImmediate();
+    }
+    const completedBeforeContinuation = completed;
+    const completedIndex = interruptedOutputs.length + 1;
+    runtime.beginTurn();
+    const continuationPrompt = runtime.followUpRequests.at(-1)?.message;
+    if (!continuationPrompt) {
+      throw new Error("OMP did not request a continuation");
+    }
+    runtime.acceptPrompt(continuationPrompt, `user-${completedIndex}`);
+    runtime.streamAssistantText(completedOutput, `omp-assistant-${completedIndex}`);
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: completedOutput }],
+      responseId: `omp-assistant-${completedIndex}`,
+      stopReason: "stop",
+    });
+    return { completedBeforeContinuation, result: await run };
+  }
+
   async runPromptWithCustomMessage(
     input: string,
     customMessage: Extract<OmpAgentMessage, { role: "custom" }>,

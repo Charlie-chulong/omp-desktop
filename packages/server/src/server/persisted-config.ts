@@ -204,6 +204,13 @@ const StructuredGenerationProviderConfigSchema = z
 const AgentMetadataGenerationSchema = z
   .object({
     providers: z.array(StructuredGenerationProviderConfigSchema).optional(),
+    commitMessageProviders: z.array(StructuredGenerationProviderConfigSchema).optional(),
+  })
+  .strict();
+
+const AgentQuickAskSchema = z
+  .object({
+    providers: z.array(StructuredGenerationProviderConfigSchema).optional(),
   })
   .strict();
 
@@ -350,6 +357,7 @@ export const PersistedConfigSchema = z
         providers: z.preprocess(normalizeAgentProviders, ProviderOverridesSchema).optional(),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
+        quickAsk: AgentQuickAskSchema.optional(),
         skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
       })
       .strict()

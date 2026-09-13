@@ -113,11 +113,11 @@ describe("non-compact with splits", () => {
     checkout: CHECKOUT,
   };
 
-  it("reveals the tool pane with its default Files view", () => {
+  it("reveals the tool pane with Files and Changes tabs", () => {
     toggleSidePanel(wide);
 
     expect(isSidePanelOpen(wide)).toBe(true);
-    expect(tabKinds()).toEqual(["new_tab", "files"]);
+    expect(tabKinds()).toEqual(["new_tab", "files", "working_diff"]);
     expect(collectAllPanes(layout().root).length).toBeGreaterThan(1);
   });
 
@@ -140,6 +140,7 @@ describe("non-compact with splits", () => {
     toggleSidePanel(wide);
     expect(isSidePanelOpen(wide)).toBe(true);
     expect(tabKinds().filter((kind) => kind === "working_diff")).toHaveLength(1);
+    expect(tabKinds().filter((kind) => kind === "files")).toHaveLength(1);
   });
 
   it("leaves the compact overlay alone", () => {

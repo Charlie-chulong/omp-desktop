@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ar: TranslationResources = {
@@ -62,7 +63,9 @@ export const ar: TranslationResources = {
       },
       browse: {
         label: "استعراض",
-        description: "اختيار مجلد أو إنشاؤه في Finder",
+        description: "اختيار مجلد على {{host}}",
+        title: "استعراض المجلدات",
+        selectCurrent: "اختر هذا المجلد",
       },
       github: {
         label: "الاستنساخ من GitHub",
@@ -251,6 +254,7 @@ export const ar: TranslationResources = {
       workflow: {
         title: "سير العمل",
         standard: "قياسي",
+        enhanced: "معزز",
         plan: "تخطيط",
         goal: "هدف",
         goalPlaceholder: "أدخل هدفًا",
@@ -539,6 +543,8 @@ export const ar: TranslationResources = {
       confirmDelete: {
         fileTitle: "حذف الملف؟",
         folderTitle: "حذف المجلد؟",
+        selectionTitle: "حذف {{count}} عناصر؟",
+        selectionMessage: "سيتم حذف العناصر المحددة نهائيًا.",
         message: 'سيتم حذف "{{name}}" نهائيًا.',
         confirm: "حذف",
         cancel: "إلغاء",
@@ -1672,6 +1678,7 @@ export const ar: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "في انتظار خدمة OMP Desktop المحلية…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "إضافة اتصال",
       direct: {
@@ -1980,6 +1987,7 @@ export const ar: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ar,
     title: "إعدادات",
     loading: "جارٍ تحميل الإعدادات...",
     groups: {
@@ -2001,6 +2009,7 @@ export const ar: TranslationResources = {
     groupInfo: "حول{{title}}",
     sections: {
       general: "عام",
+      connections: "الاتصالات",
       appearance: "مظهر",
       editor: "المحرر",
       shortcuts: "الاختصارات",
@@ -2045,8 +2054,14 @@ export const ar: TranslationResources = {
     plugins: pluginSettings.ar,
     metadataGeneration: {
       title: "إنشاء البيانات الوصفية",
-      description:
-        "اختر النموذج الذي يستخدمه OMP Desktop لعناوين مساحات العمل وأسماء الفروع ورسائل الالتزام ومسودات طلبات السحب",
+      description: "اختر نماذج منفصلة للبيانات الوصفية ورسائل الالتزام والسؤال السريع",
+      defaultModel: "البيانات الوصفية الأخرى",
+      defaultModelHint: "عناوين مساحات العمل وأسماء الفروع ومسودات طلبات السحب",
+      commitMessageModel: "رسائل الالتزام",
+      commitMessageModelHint: "رسائل تُنشأ من تغييرات Git المرحّلة",
+      quickAskModel: "السؤال السريع",
+      quickAskModelHint: "إجابات السؤال عن المحتوى المحدد",
+      quickAskAutomaticHint: "يستخدم نموذج المحادثة الحالية",
       selection: "اختيار النموذج",
       automatic: "تلقائي",
       preferred: "يدوي",
@@ -2530,6 +2545,7 @@ export const ar: TranslationResources = {
         moveUp: "نقل لأعلى",
         moveDown: "نقل لأسفل",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "تحرير التسمية",
@@ -2561,6 +2577,7 @@ export const ar: TranslationResources = {
         update: {
           desktopManagedHint:
             "يدير OMP Desktop Desktop هذا البرنامج الخفي. حدّث OMP Desktop Desktop على المضيف.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",

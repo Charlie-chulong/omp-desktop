@@ -186,11 +186,11 @@ describe("workspace route parsing", () => {
 
 describe("projects settings routes", () => {
   it("buildSettingsAddHostRoute opens settings with the add-host flag", () => {
-    expect(buildSettingsAddHostRoute()).toBe("/settings/general?addHost=1");
+    expect(buildSettingsAddHostRoute()).toBe("/settings/connections?addHost=1");
   });
 
   it("buildSettingsAddHostRoute accepts a repeatable intent id", () => {
-    expect(buildSettingsAddHostRoute("retry 1")).toBe("/settings/general?addHost=retry%201");
+    expect(buildSettingsAddHostRoute("retry 1")).toBe("/settings/connections?addHost=retry%201");
   });
 
   it("buildProjectsSettingsRoute scopes the list to a host", () => {
@@ -252,6 +252,7 @@ describe("host settings section slugs", () => {
     expect(normalizeHostSectionSlug("metadata")).toBe("metadata");
     expect(normalizeHostSectionSlug("workspaces")).toBeNull();
     expect(normalizeHostSectionSlug("projects")).toBe("projects");
+    expect(normalizeHostSectionSlug("memory")).toBe("memory");
     expect(normalizeHostSectionSlug("providers")).toBe("providers");
     expect(normalizeHostSectionSlug("image-generation")).toBe("image-generation");
     expect(normalizeHostSectionSlug("usage")).toBe("usage");

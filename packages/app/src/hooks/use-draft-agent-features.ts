@@ -9,11 +9,13 @@ import {
   shouldPersistAgentFeatureValue,
 } from "@/create-agent-preferences/preferences";
 import {
+  applyEnhancedWorkflowLocale,
   applyFeatureValues,
   pruneFeatureValues,
   retainDraftWorkflowValues,
   resolveFeatureValues,
 } from "./feature-preferences";
+import type { SupportedLocale } from "@/i18n/locales";
 
 type DraftFeatureConfig = Pick<
   AgentSessionConfig,
@@ -29,7 +31,7 @@ export function useDraftAgentFeatures(input: {
   thinkingOptionId: string | null | undefined;
   initialFeatureValues?: Record<string, unknown>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { serverId, provider, cwd, modeId, modelId, thinkingOptionId, initialFeatureValues } =
     input;
   const [localFeatureValues, setLocalFeatureValues] = useState<Record<string, unknown>>(() =>
@@ -120,7 +122,16 @@ export function useDraftAgentFeatures(input: {
     }
   }, [availableFeatures, availableFeaturesRaw, localFeatureValues]);
 
-  const effectiveFeatureValues = Object.keys(featureValues).length > 0 ? featureValues : undefined;
+  const localizedFeatureValues = useMemo(
+    () =>
+      applyEnhancedWorkflowLocale(
+        featureValues,
+        (i18n.resolvedLanguage ?? i18n.language) as SupportedLocale,
+      ),
+    [featureValues, i18n.language, i18n.resolvedLanguage],
+  );
+  const effectiveFeatureValues =
+    Object.keys(localizedFeatureValues).length > 0 ? localizedFeatureValues : undefined;
   const setFeatureValue = useCallback(
     (featureId: string, value: unknown) => {
       setLocalFeatureValues((current) => {

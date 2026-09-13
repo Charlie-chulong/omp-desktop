@@ -308,6 +308,7 @@ interface SessionForTestOptions {
   getDaemonTcpPort?: () => number | null;
   getDaemonTcpHost?: () => string | null;
   providerSnapshotManager?: ProviderSnapshotManager;
+  daemonConfigStore?: { [K in keyof SessionOptions["daemonConfigStore"]]?: unknown };
   hubExecutionAgents?: SessionOptions["hubExecutionAgents"];
   stt?: SessionOptions["stt"];
   voice?: SessionOptions["voice"];
@@ -402,13 +403,15 @@ function createSessionForTest(options: SessionForTestOptions = {}): Session {
     checkoutDiffManager: asCheckoutDiffManager(checkoutDiffManager),
     github: asGitHubService(github),
     workspaceGitService: asWorkspaceGitService(workspaceGitService),
-    daemonConfigStore: asDaemonConfigStore({
-      get: vi.fn(() => ({
-        mcp: { injectIntoAgents: false },
-        providers: {},
-      })),
-      onChange: vi.fn(() => () => {}),
-    }),
+    daemonConfigStore:
+      options.daemonConfigStore ??
+      asDaemonConfigStore({
+        get: vi.fn(() => ({
+          mcp: { injectIntoAgents: false },
+          providers: {},
+        })),
+        onChange: vi.fn(() => () => {}),
+      }),
     pluginRuntime: options.pluginRuntime,
     orchestrationSkills: options.orchestrationSkills,
     stt: options.stt ?? null,
@@ -5676,5 +5679,85 @@ describe("agent config setters", () => {
         error: "thinking boom",
       },
     });
+  });
+});
+
+describe("Quick Ask model selection", () => {
+  test("uses its configured model instead of the source conversation model", async () => {
+    const messages: unknown[] = [];
+    const createAgent = vi.fn(async () => ({ id: "quick-ask-agent" }));
+    const runAgent = vi.fn(async () => ({ finalText: "Configured answer", timeline: [] }));
+    const closeAgent = vi.fn(async () => {});
+    const flush = vi.fn(async () => {});
+    const deleteAgentState = vi.fn(async () => {});
+    const remove = vi.fn(async () => {});
+    const snapshots = createProviderSnapshotManagerStub();
+    snapshots.listProviders.mockResolvedValue([
+      {
+        provider: "configured",
+        status: "ready",
+        enabled: true,
+        models: [{ provider: "configured", id: "quick-model", label: "Quick model" }],
+      },
+    ]);
+    const session = createSessionForTest({
+      messages,
+      providerSnapshotManager: snapshots.manager,
+      daemonConfigStore: {
+        get: vi.fn(() => ({
+          metadataGeneration: { providers: [] },
+          quickAsk: {
+            providers: [{ provider: "configured", model: "quick-model" }],
+          },
+        })),
+        onChange: vi.fn(() => () => {}),
+      },
+      agentManager: {
+        createAgent,
+        runAgent,
+        closeAgent,
+        flush,
+        deleteAgentState,
+      },
+      agentStorage: { remove },
+    });
+
+    await session.handleMessage({
+      type: "quick_ask_request",
+      requestId: "quick-ask-model",
+      config: {
+        provider: "conversation",
+        cwd: "/repo",
+        modeId: "plan",
+        model: "conversation-model",
+        thinkingOptionId: "medium",
+      },
+      selectedText: "const answer = 42;",
+      question: "What does this do?",
+    });
+
+    expect(createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "configured",
+        cwd: "/repo",
+        model: "quick-model",
+        title: "Quick ask",
+        internal: true,
+      }),
+      undefined,
+      { persistSession: false, workspaceId: undefined },
+    );
+    expect(createAgent.mock.calls[0]?.[0]).not.toHaveProperty("modeId");
+    expect(messages).toContainEqual({
+      type: "quick_ask_response",
+      payload: {
+        requestId: "quick-ask-model",
+        answer: "Configured answer",
+        error: null,
+      },
+    });
+    expect(closeAgent).toHaveBeenCalledWith("quick-ask-agent");
+    expect(remove).toHaveBeenCalledWith("quick-ask-agent");
+    expect(deleteAgentState).toHaveBeenCalledWith("quick-ask-agent");
   });
 });

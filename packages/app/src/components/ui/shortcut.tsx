@@ -1,5 +1,12 @@
 import React, { useMemo, type ReactElement } from "react";
-import { Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import {
+  Text,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+  StyleSheet as RNStyleSheet,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useKeyboardShortcutsAvailable } from "@/keyboard/availability";
 import { normalizeDisplayChord } from "@/components/ui/normalize-display-chord";
@@ -68,7 +75,7 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 0,
   },
   badgeBackground: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     borderRadius: theme.borderRadius.md,
     backgroundColor: theme.colors.surface3,
     opacity: theme.opacity[50],

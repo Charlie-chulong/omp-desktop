@@ -5,8 +5,10 @@ import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
 import { PairLinkModal } from "@/components/pair-link-modal";
+import { RemoteSshHostModal } from "@/components/remote-ssh-host-modal";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { isElectronRuntime } from "@/desktop/host";
 import { useAppSettings } from "@/hooks/use-settings";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import type { HostProfile } from "@/types/host-connection";
@@ -19,7 +21,8 @@ export function AddRemoteHostSection() {
   const { addHost } = useLocalSearchParams<{ addHost?: string }>();
   const { settings, isLoading: areSettingsLoading, updateSettings } = useAppSettings();
   const consumedIntent = useRef<string | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [pairVisible, setPairVisible] = useState(false);
+  const [sshVisible, setSshVisible] = useState(false);
   const [relayDraft, setRelayDraft] = useState(settings.relayServerAddress);
   const [relayResetVersion, setRelayResetVersion] = useState(0);
   const [isSavingRelay, setIsSavingRelay] = useState(false);
@@ -44,11 +47,13 @@ export function AddRemoteHostSection() {
   useEffect(() => {
     if (typeof addHost === "string" && addHost && consumedIntent.current !== addHost) {
       consumedIntent.current = addHost;
-      setVisible(true);
+      setPairVisible(true);
     }
   }, [addHost]);
-  const handleOpen = useCallback(() => setVisible(true), []);
-  const handleClose = useCallback(() => setVisible(false), []);
+  const handleOpenPair = useCallback(() => setPairVisible(true), []);
+  const handleClosePair = useCallback(() => setPairVisible(false), []);
+  const handleOpenSsh = useCallback(() => setSshVisible(true), []);
+  const handleCloseSsh = useCallback(() => setSshVisible(false), []);
   const handleRelayChange = useCallback((value: string) => {
     setRelayDraft(value);
     setRelaySaved(false);
@@ -149,10 +154,31 @@ export function AddRemoteHostSection() {
         </View>
       </SettingsSection>
       <SettingsSection title={t("settings.addHost")}>
-        <Button onPress={handleOpen} disabled={areSettingsLoading} testID="settings-add-host">
-          {t("pairing.connectionMethods.pasteLink.title")}
-        </Button>
-        {visible ? <PairLinkModal visible onClose={handleClose} onSaved={handleSaved} /> : null}
+        <View style={styles.actions}>
+          {isElectronRuntime() ? (
+            <Button
+              onPress={handleOpenSsh}
+              disabled={areSettingsLoading}
+              testID="settings-add-host-ssh"
+            >
+              {t("pairing.ssh.entry")}
+            </Button>
+          ) : null}
+          <Button
+            variant={isElectronRuntime() ? "outline" : "default"}
+            onPress={handleOpenPair}
+            disabled={areSettingsLoading}
+            testID="settings-add-host"
+          >
+            {t("pairing.connectionMethods.pasteLink.title")}
+          </Button>
+        </View>
+        {pairVisible ? (
+          <PairLinkModal visible onClose={handleClosePair} onSaved={handleSaved} />
+        ) : null}
+        {sshVisible ? (
+          <RemoteSshHostModal visible onClose={handleCloseSsh} onSaved={handleSaved} />
+        ) : null}
       </SettingsSection>
     </>
   );

@@ -1,6 +1,7 @@
-import { confirm, isCancel, log } from "@clack/prompts";
+import { confirm, log } from "@clack/prompts";
 import { Command } from "commander";
 import chalk from "chalk";
+import { parseRelayAddress } from "@omp-desktop/protocol/connection-offer";
 import {
   generateLocalPairingOffer,
   getOrCreateServerId,
@@ -16,6 +17,7 @@ interface PairOptions {
   home?: string;
   json?: boolean;
   relay?: boolean;
+  relayAddress?: string;
 }
 
 export interface PairCommandDependencies {
@@ -65,6 +67,7 @@ export function pairCommand(): Command {
   return addJsonOption(new Command("pair").description("Print the daemon pairing QR code and link"))
     .option("--home <path>", "OMP Desktop home directory (default: ~/.omp-desktop)")
     .option("--relay", "Enable relay without prompting")
+    .option("--relay-address <address>", "Persist the relay WebSocket address before pairing")
     .action(async (_options: PairOptions, command: Command) => {
       await runPairCommand(command.optsWithGlobals());
     });
@@ -73,10 +76,16 @@ export function pairCommand(): Command {
 export async function resolveLocalPairingOffer(options: {
   paseoHome: string;
   enableRelay?: boolean;
+  relayAddress?: string;
 }): Promise<PairingOffer> {
   const state = resolveLocalDaemonState({ home: options.paseoHome });
   const serverId = getOrCreateServerId(state.home);
-  const daemonOffer = await resolveDaemonPairingOffer(state.listen, serverId, options.enableRelay);
+  const daemonOffer = await resolveDaemonPairingOffer(
+    state.listen,
+    serverId,
+    options.enableRelay,
+    options.relayAddress,
+  );
   if (daemonOffer) return daemonOffer;
 
   if (state.running) {
@@ -86,6 +95,9 @@ export async function resolveLocalPairingOffer(options: {
   }
 
   const config = loadConfig(options.paseoHome);
+  if (options.relayAddress) {
+    throw new Error("Start the daemon before configuring its relay address for pairing.");
+  }
   if (options.enableRelay && !config.relayEnabled) {
     throw new Error("Start the daemon before enabling relay for pairing.");
   }
@@ -106,6 +118,7 @@ async function resolveDaemonPairingOffer(
   listen: string,
   expectedServerId: string,
   enableRelay: boolean | undefined,
+  relayAddress: string | undefined,
 ): Promise<PairingOffer | null> {
   const client = await tryConnectToDaemon({
     host: listen,
@@ -127,7 +140,26 @@ async function resolveDaemonPairingOffer(
     let offer = await client.getDaemonPairingOffer({
       timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
     });
-    if (!offer.relayEnabled && enableRelay) {
+    if (relayAddress) {
+      if (serverInfo.features.relayConfig !== true) {
+        throw new Error(
+          "Update the OMP Desktop daemon before configuring relay from this command.",
+        );
+      }
+      const relay = parseRelayAddress(relayAddress, true);
+      await client.patchDaemonConfig({
+        relay: {
+          enabled: true,
+          endpoint: relay.endpoint,
+          useTls: relay.useTls,
+          publicEndpoint: relay.endpoint,
+          publicUseTls: relay.useTls,
+        },
+      });
+      offer = await client.getDaemonPairingOffer({
+        timeout: PAIRING_DAEMON_RPC_TIMEOUT_MS,
+      });
+    } else if (!offer.relayEnabled && enableRelay) {
       if (serverInfo.features.relayConfig !== true) {
         throw new Error("Update the OMP Desktop daemon before enabling relay from this command.");
       }
@@ -155,7 +187,7 @@ export async function confirmRelayPairing(): Promise<boolean> {
     message: "Enable relay to pair a device?",
     initialValue: false,
   });
-  return !isCancel(answer) && answer;
+  return answer === true;
 }
 
 export function printDirectConnectionGuidance(): void {
@@ -181,9 +213,11 @@ export async function runPairCommand(
   };
 
   const paseoHome = resolvePaseoHome();
+  const relayRequested = options.relay === true || Boolean(options.relayAddress);
   let pairing = await dependencies.resolveOffer({
     paseoHome,
-    enableRelay: options.relay === true,
+    enableRelay: relayRequested,
+    relayAddress: options.relayAddress,
   });
 
   const canPrompt = dependencies.isInteractive() && options.json !== true;

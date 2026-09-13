@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ko: TranslationResources = {
@@ -62,7 +63,9 @@ export const ko: TranslationResources = {
       },
       browse: {
         label: "찾아보기",
-        description: "Finder에서 디렉터리 선택 또는 생성",
+        description: "{{host}}에서 디렉터리 선택",
+        title: "디렉터리 찾아보기",
+        selectCurrent: "이 디렉터리 선택",
       },
       github: {
         label: "GitHub에서 복제",
@@ -251,6 +254,7 @@ export const ko: TranslationResources = {
       workflow: {
         title: "워크플로",
         standard: "표준",
+        enhanced: "향상",
         plan: "계획",
         goal: "목표",
         goalPlaceholder: "목표를 입력하세요",
@@ -540,6 +544,8 @@ export const ko: TranslationResources = {
       confirmDelete: {
         fileTitle: "파일을 삭제할까요?",
         folderTitle: "폴더를 삭제할까요?",
+        selectionTitle: "{{count}}개 항목을 삭제할까요?",
+        selectionMessage: "선택한 항목이 영구적으로 삭제됩니다.",
         message: '"{{name}}"이(가) 영구적으로 삭제됩니다.',
         confirm: "삭제",
         cancel: "취소",
@@ -1684,6 +1690,7 @@ export const ko: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "로컬 OMP Desktop 데몬을 기다리는 중…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "연결 추가",
       direct: {
@@ -1992,6 +1999,7 @@ export const ko: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings.ko,
     title: "설정",
     loading: "설정 불러오는 중...",
     groups: {
@@ -2013,6 +2021,7 @@ export const ko: TranslationResources = {
     groupInfo: "{{title}} 정보",
     sections: {
       general: "일반",
+      connections: "연결",
       appearance: "모양",
       editor: "편집기",
       shortcuts: "단축키",
@@ -2057,8 +2066,14 @@ export const ko: TranslationResources = {
     plugins: pluginSettings.ko,
     metadataGeneration: {
       title: "메타데이터 생성",
-      description:
-        "워크스페이스 제목, 브랜치 이름, 커밋 메시지 및 풀 리퀘스트 초안에 사용할 모델을 선택하세요",
+      description: "메타데이터, 커밋 메시지, 빠른 질문에 사용할 모델을 각각 선택하세요",
+      defaultModel: "기타 메타데이터",
+      defaultModelHint: "워크스페이스 제목, 브랜치 이름 및 풀 리퀘스트 초안",
+      commitMessageModel: "커밋 메시지",
+      commitMessageModelHint: "스테이징된 Git 변경 사항에서 생성하는 메시지",
+      quickAskModel: "빠른 질문",
+      quickAskModelHint: "선택한 내용에 대한 질문의 답변",
+      quickAskAutomaticHint: "현재 대화 모델을 사용합니다",
       selection: "모델 선택",
       automatic: "자동",
       preferred: "수동",
@@ -2544,6 +2559,7 @@ export const ko: TranslationResources = {
         moveUp: "위로 이동",
         moveDown: "아래로 이동",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "레이블 편집",
@@ -2576,6 +2592,7 @@ export const ko: TranslationResources = {
         update: {
           desktopManagedHint:
             "이 데몬은 OMP Desktop Desktop에서 관리됩니다. 호스트에서 OMP Desktop 데스크톱을 업데이트합니다.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "데몬 업데이트",
           hint: "데몬을 최신 버전으로 업데이트하고 다시 시작하세요.",
           confirm: "업데이트",

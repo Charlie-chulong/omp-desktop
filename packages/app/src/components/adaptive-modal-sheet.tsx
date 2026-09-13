@@ -2,7 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  StyleSheet as RNStyleSheet,
+} from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -66,11 +74,11 @@ export interface SheetHeader {
   search?: SheetHeaderSearch;
 }
 
-const ABSOLUTE_FILL_STYLE = { ...StyleSheet.absoluteFillObject };
+const ABSOLUTE_FILL_STYLE = { ...RNStyleSheet.absoluteFillObject };
 
 const styles = StyleSheet.create((theme) => ({
   desktopOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",

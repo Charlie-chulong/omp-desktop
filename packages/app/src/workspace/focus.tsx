@@ -48,6 +48,10 @@ export function WorkspaceFocusProvider({
   return <WorkspaceFocusContext.Provider value={value}>{children}</WorkspaceFocusContext.Provider>;
 }
 
+export function useWorkspaceFocusKey(): string | null {
+  return useContext(WorkspaceFocusContext)?.workspaceKey ?? null;
+}
+
 export function useWorkspaceFocusRestoration(): WorkspaceFocusRestoration {
   const context = useContext(WorkspaceFocusContext);
   const tokenRef = useRef<string | null>(null);

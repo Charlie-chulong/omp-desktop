@@ -127,6 +127,26 @@ const MutableStructuredGenerationProviderSchema = z
 const MutableMetadataGenerationConfigSchema = z
   .object({
     providers: z.array(MutableStructuredGenerationProviderSchema).default([]),
+    commitMessageProviders: z.array(MutableStructuredGenerationProviderSchema).optional(),
+  })
+  .passthrough();
+
+const MutableQuickAskConfigSchema = z
+  .object({
+    providers: z.array(MutableStructuredGenerationProviderSchema).default([]),
+  })
+  .passthrough();
+
+const MutableMetadataGenerationConfigPatchSchema = z
+  .object({
+    providers: z.array(MutableStructuredGenerationProviderSchema).optional(),
+    commitMessageProviders: z.array(MutableStructuredGenerationProviderSchema).optional(),
+  })
+  .passthrough();
+
+const MutableQuickAskConfigPatchSchema = z
+  .object({
+    providers: z.array(MutableStructuredGenerationProviderSchema).optional(),
   })
   .passthrough();
 
@@ -258,6 +278,7 @@ export const MutableDaemonConfigSchema = z
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
+    quickAsk: MutableQuickAskConfigSchema.optional(),
     imageGeneration: MutableImageGenerationConfigSchema.optional(),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
@@ -279,7 +300,8 @@ export const MutableDaemonConfigPatchSchema = z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
     removeProviders: z.array(z.string().min(1)).optional(),
-    metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
+    metadataGeneration: MutableMetadataGenerationConfigPatchSchema.optional(),
+    quickAsk: MutableQuickAskConfigPatchSchema.optional(),
     imageGeneration: MutableImageGenerationConfigPatchSchema.optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
@@ -1740,6 +1762,115 @@ export const OmpProviderManagementSaveRequestMessageSchema = z.object({
   configYaml: z.string().max(1_000_000),
   requestId: z.string(),
 });
+export const OmpSubagentSettingsGetRequestMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.get.request"),
+  requestId: z.string(),
+});
+
+export const OmpSubagentSettingsUpdateRequestMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.update.request"),
+  agentName: z.string().trim().min(1),
+  model: z.string().trim().min(1).nullable(),
+  requestId: z.string(),
+});
+export const OmpSubagentSettingsEnabledUpdateRequestMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.enabled.update.request"),
+  enabled: z.boolean(),
+  requestId: z.string(),
+});
+
+export const OmpMemoryBackendSchema = z.enum([
+  "off",
+  "local",
+  "hindsight",
+  "mnemopi",
+  "sharpshooter",
+]);
+export const OmpMemoryScopingSchema = z.enum(["global", "per-project", "per-project-tagged"]);
+const OmpMemoryOptionalStringPatchSchema = z.string().trim().min(1).nullable().optional();
+const OmpMemoryHttpUrlPatchSchema = z
+  .string()
+  .trim()
+  .url()
+  .refine((value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  }, "URL must use http or https");
+const OmpMemoryOptionalHttpUrlPatchSchema = OmpMemoryHttpUrlPatchSchema.nullable().optional();
+export const OmpMemorySettingsPatchSchema = z
+  .object({
+    backend: OmpMemoryBackendSchema.optional(),
+    autolearn: z
+      .object({
+        enabled: z.boolean().optional(),
+        autoContinue: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    local: z
+      .object({
+        minRolloutIdleHours: z.number().min(0).optional(),
+        maxRolloutAgeDays: z.number().positive().optional(),
+        summaryInjectionTokenLimit: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
+    mnemopi: z
+      .object({
+        scoping: OmpMemoryScopingSchema.optional(),
+        autoRecall: z.boolean().optional(),
+        autoRetain: z.boolean().optional(),
+        retainEveryNTurns: z.number().int().positive().optional(),
+        recallLimit: z.number().int().positive().optional(),
+        recallContextTurns: z.number().int().nonnegative().optional(),
+        recallMaxQueryChars: z.number().int().positive().optional(),
+        injectionTokenLimit: z.number().int().positive().optional(),
+        polyphonicRecall: z.boolean().optional(),
+        enhancedRecall: z.boolean().optional(),
+        proactiveLinking: z.boolean().optional(),
+        noEmbeddings: z.boolean().optional(),
+        embeddingVariant: z.enum(["en", "multilingual"]).optional(),
+        llmMode: z.enum(["smol", "remote", "none"]).optional(),
+        dbPath: OmpMemoryOptionalStringPatchSchema,
+        embeddingModel: OmpMemoryOptionalStringPatchSchema,
+        embeddingApiUrl: OmpMemoryOptionalHttpUrlPatchSchema,
+        llmBaseUrl: OmpMemoryOptionalHttpUrlPatchSchema,
+        llmModel: OmpMemoryOptionalStringPatchSchema,
+      })
+      .strict()
+      .optional(),
+    hindsight: z
+      .object({
+        apiUrl: OmpMemoryHttpUrlPatchSchema.optional(),
+        scoping: OmpMemoryScopingSchema.optional(),
+        bankId: OmpMemoryOptionalStringPatchSchema,
+        autoRecall: z.boolean().optional(),
+        autoRetain: z.boolean().optional(),
+        retainEveryNTurns: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
+    secrets: z
+      .object({
+        hindsightApiToken: OmpMemoryOptionalStringPatchSchema,
+        mnemopiEmbeddingApiKey: OmpMemoryOptionalStringPatchSchema,
+        mnemopiLlmApiKey: OmpMemoryOptionalStringPatchSchema,
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export const OmpMemorySettingsGetRequestMessageSchema = z.object({
+  type: z.literal("omp.memory.settings.get.request"),
+  requestId: z.string(),
+});
+export const OmpMemorySettingsUpdateRequestMessageSchema = z.object({
+  type: z.literal("omp.memory.settings.update.request"),
+  expectedRevision: z.string().min(1),
+  patch: OmpMemorySettingsPatchSchema,
+  requestId: z.string(),
+});
+
 export const OmpProviderContextWindowOverridesUpdateRequestMessageSchema = z.object({
   type: z.literal("omp.provider.management.context_windows.update.request"),
   providerId: z.string().trim().min(1),
@@ -3426,6 +3557,11 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderDiagnosticRequestMessageSchema,
   OmpProviderManagementGetRequestMessageSchema,
   OmpProviderManagementSaveRequestMessageSchema,
+  OmpSubagentSettingsGetRequestMessageSchema,
+  OmpSubagentSettingsUpdateRequestMessageSchema,
+  OmpSubagentSettingsEnabledUpdateRequestMessageSchema,
+  OmpMemorySettingsGetRequestMessageSchema,
+  OmpMemorySettingsUpdateRequestMessageSchema,
   OmpProviderContextWindowOverridesUpdateRequestMessageSchema,
   OmpProviderAccountOrderUpdateRequestMessageSchema,
   OmpProviderManagementAddRequestMessageSchema,
@@ -3756,6 +3892,10 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceLabels: z.boolean().optional(),
         // COMPAT(ompProviderManagement): added in v0.1.0, remove gate after 2027-03-13.
         ompProviderManagement: z.boolean().optional(),
+        // COMPAT(ompSubagentSettings): added in v0.2.8, remove gate after 2027-03-13.
+        ompSubagentSettings: z.boolean().optional(),
+        // COMPAT(ompMemoryManagement): added 2026-09-12, remove gate after 2027-03-12.
+        ompMemoryManagement: z.boolean().optional(),
         // COMPAT(ompInstall): added in v0.5.1, remove gate after 2027-03-13.
         ompInstall: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.1.106, remove old
@@ -5808,7 +5948,6 @@ export const PullRequestTimelineResponseSchema = z.object({
       // Drop the boolean once the daemon floor >= v0.1.106.
       authState: ForgeAuthStateSchema,
     })
-    .optional()
     .prefault({}),
 });
 
@@ -6376,6 +6515,81 @@ export const OmpProviderManagementSchema = z.object({
     }),
   ),
 });
+export const OmpSubagentSettingsSchema = z.object({
+  configPath: z.string(),
+  enabled: z.boolean(),
+  agents: z.array(
+    z.object({
+      name: z.string(),
+      description: z.string(),
+      model: z.string().optional(),
+    }),
+  ),
+});
+
+const OmpMemorySecretStateSchema = z.object({
+  configured: z.boolean(),
+  source: z.enum(["config", "environment", "none"]),
+});
+export const OmpMemorySettingsSchema = z.object({
+  configPath: z.string(),
+  revision: z.string(),
+  backend: OmpMemoryBackendSchema,
+  supportedBackends: z.array(OmpMemoryBackendSchema),
+  autolearn: z.object({
+    enabled: z.boolean(),
+    autoContinue: z.boolean(),
+  }),
+  local: z.object({
+    minRolloutIdleHours: z.number().min(0),
+    maxRolloutAgeDays: z.number().positive(),
+    summaryInjectionTokenLimit: z.number().int().positive(),
+  }),
+  mnemopi: z.object({
+    scoping: OmpMemoryScopingSchema,
+    autoRecall: z.boolean(),
+    autoRetain: z.boolean(),
+    retainEveryNTurns: z.number().int().positive(),
+    recallLimit: z.number().int().positive(),
+    recallContextTurns: z.number().int().nonnegative(),
+    recallMaxQueryChars: z.number().int().positive(),
+    injectionTokenLimit: z.number().int().positive(),
+    polyphonicRecall: z.boolean(),
+    enhancedRecall: z.boolean(),
+    proactiveLinking: z.boolean(),
+    noEmbeddings: z.boolean(),
+    embeddingVariant: z.enum(["en", "multilingual"]),
+    llmMode: z.enum(["smol", "remote", "none"]),
+    dbPath: z.string().nullable(),
+    embeddingModel: z.string().nullable(),
+    embeddingApiUrl: z.string().nullable(),
+    llmBaseUrl: z.string().nullable(),
+    llmModel: z.string().nullable(),
+  }),
+  hindsight: z.object({
+    apiUrl: z.string(),
+    scoping: OmpMemoryScopingSchema,
+    bankId: z.string().nullable(),
+    autoRecall: z.boolean(),
+    autoRetain: z.boolean(),
+    retainEveryNTurns: z.number().int().positive(),
+  }),
+  secretState: z.object({
+    hindsightApiToken: OmpMemorySecretStateSchema,
+    mnemopiEmbeddingApiKey: OmpMemorySecretStateSchema,
+    mnemopiLlmApiKey: OmpMemorySecretStateSchema,
+  }),
+  environmentOverrides: z.array(z.string()),
+});
+export const OmpMemorySettingsGetResponseMessageSchema = z.object({
+  type: z.literal("omp.memory.settings.get.response"),
+  payload: OmpMemorySettingsSchema.extend({ requestId: z.string() }),
+});
+export const OmpMemorySettingsUpdateResponseMessageSchema = z.object({
+  type: z.literal("omp.memory.settings.update.response"),
+  payload: OmpMemorySettingsSchema.extend({ requestId: z.string() }),
+});
+
 export const OmpUpdatePhaseSchema = z.enum([
   "downloading",
   "waiting-for-agents",
@@ -6413,6 +6627,20 @@ export const OmpProviderManagementSaveResponseMessageSchema = z.object({
   type: z.literal("omp.provider.management.save.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
 });
+export const OmpSubagentSettingsGetResponseMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.get.response"),
+  payload: OmpSubagentSettingsSchema.extend({ requestId: z.string() }),
+});
+
+export const OmpSubagentSettingsUpdateResponseMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.update.response"),
+  payload: OmpSubagentSettingsSchema.extend({ requestId: z.string() }),
+});
+export const OmpSubagentSettingsEnabledUpdateResponseMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.enabled.update.response"),
+  payload: OmpSubagentSettingsSchema.extend({ requestId: z.string() }),
+});
+
 export const OmpProviderContextWindowOverridesUpdateResponseMessageSchema = z.object({
   type: z.literal("omp.provider.management.context_windows.update.response"),
   payload: OmpProviderManagementSchema.extend({ requestId: z.string() }),
@@ -7212,6 +7440,11 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderDiagnosticResponseMessageSchema,
   OmpProviderManagementGetResponseMessageSchema,
   OmpProviderManagementSaveResponseMessageSchema,
+  OmpSubagentSettingsGetResponseMessageSchema,
+  OmpSubagentSettingsUpdateResponseMessageSchema,
+  OmpSubagentSettingsEnabledUpdateResponseMessageSchema,
+  OmpMemorySettingsGetResponseMessageSchema,
+  OmpMemorySettingsUpdateResponseMessageSchema,
   OmpProviderContextWindowOverridesUpdateResponseMessageSchema,
   OmpProviderAccountOrderUpdateResponseMessageSchema,
   OmpProviderManagementAddResponseMessageSchema,
@@ -7420,6 +7653,25 @@ export type OmpProviderManagementGetResponseMessage = z.infer<
 export type OmpProviderManagementSaveResponseMessage = z.infer<
   typeof OmpProviderManagementSaveResponseMessageSchema
 >;
+export type OmpSubagentSettings = z.infer<typeof OmpSubagentSettingsSchema>;
+export type OmpSubagentSettingsGetResponseMessage = z.infer<
+  typeof OmpSubagentSettingsGetResponseMessageSchema
+>;
+export type OmpSubagentSettingsUpdateResponseMessage = z.infer<
+  typeof OmpSubagentSettingsUpdateResponseMessageSchema
+>;
+export type OmpSubagentSettingsEnabledUpdateResponseMessage = z.infer<
+  typeof OmpSubagentSettingsEnabledUpdateResponseMessageSchema
+>;
+export type OmpMemoryBackend = z.infer<typeof OmpMemoryBackendSchema>;
+export type OmpMemorySettings = z.infer<typeof OmpMemorySettingsSchema>;
+export type OmpMemorySettingsPatch = z.infer<typeof OmpMemorySettingsPatchSchema>;
+export type OmpMemorySettingsGetResponseMessage = z.infer<
+  typeof OmpMemorySettingsGetResponseMessageSchema
+>;
+export type OmpMemorySettingsUpdateResponseMessage = z.infer<
+  typeof OmpMemorySettingsUpdateResponseMessageSchema
+>;
 export type OmpProviderContextWindowOverridesUpdateResponseMessage = z.infer<
   typeof OmpProviderContextWindowOverridesUpdateResponseMessageSchema
 >;
@@ -7535,6 +7787,21 @@ export type OmpProviderManagementGetRequestMessage = z.infer<
 >;
 export type OmpProviderManagementSaveRequestMessage = z.infer<
   typeof OmpProviderManagementSaveRequestMessageSchema
+>;
+export type OmpSubagentSettingsGetRequestMessage = z.infer<
+  typeof OmpSubagentSettingsGetRequestMessageSchema
+>;
+export type OmpSubagentSettingsUpdateRequestMessage = z.infer<
+  typeof OmpSubagentSettingsUpdateRequestMessageSchema
+>;
+export type OmpSubagentSettingsEnabledUpdateRequestMessage = z.infer<
+  typeof OmpSubagentSettingsEnabledUpdateRequestMessageSchema
+>;
+export type OmpMemorySettingsGetRequestMessage = z.infer<
+  typeof OmpMemorySettingsGetRequestMessageSchema
+>;
+export type OmpMemorySettingsUpdateRequestMessage = z.infer<
+  typeof OmpMemorySettingsUpdateRequestMessageSchema
 >;
 export type OmpProviderContextWindowOverridesUpdateRequestMessage = z.infer<
   typeof OmpProviderContextWindowOverridesUpdateRequestMessageSchema

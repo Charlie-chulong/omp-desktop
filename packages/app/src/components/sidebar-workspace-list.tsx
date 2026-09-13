@@ -1,9 +1,10 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
-  View,
-  Text,
   Pressable,
   ScrollView,
+  StyleSheet as RNStyleSheet,
+  Text,
+  View,
   type GestureResponderEvent,
   type PressableStateCallbackType,
   type StyleProp,
@@ -2683,7 +2684,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   workspaceArchivingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     borderRadius: theme.borderRadius.lg,
     backgroundColor: `${theme.colors.surface0}cc`,
     alignItems: "center",

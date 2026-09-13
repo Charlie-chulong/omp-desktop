@@ -566,6 +566,137 @@ export class ProviderCatalogSession {
       });
     }
   }
+  async handleOmpSubagentSettingsGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.subagents.management.get.request" }>,
+  ): Promise<void> {
+    try {
+      const settings = await this.providerSnapshotManager.getOmpSubagentSettings();
+      this.host.emit({
+        type: "omp.subagents.management.get.response",
+        payload: { ...settings, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to load OMP subagent settings");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to load OMP subagent settings: ${err.message}`,
+          code: "omp_subagent_settings_failed",
+        },
+      });
+    }
+  }
+
+  async handleOmpSubagentSettingsUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.subagents.management.update.request" }>,
+  ): Promise<void> {
+    try {
+      const settings = await this.providerSnapshotManager.updateOmpSubagentModel(
+        msg.agentName,
+        msg.model,
+      );
+      this.host.emit({
+        type: "omp.subagents.management.update.response",
+        payload: { ...settings, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to update OMP subagent settings");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to update OMP subagent settings: ${err.message}`,
+          code: "omp_subagent_settings_update_failed",
+        },
+      });
+    }
+  }
+  async handleOmpSubagentSettingsEnabledUpdateRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      { type: "omp.subagents.management.enabled.update.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const settings = await this.providerSnapshotManager.updateOmpSubagentSettingsEnabled(
+        msg.enabled,
+      );
+      this.host.emit({
+        type: "omp.subagents.management.enabled.update.response",
+        payload: { ...settings, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to update OMP subagent override state");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to update OMP subagent override state: ${err.message}`,
+          code: "omp_subagent_settings_enabled_update_failed",
+        },
+      });
+    }
+  }
+
+  async handleOmpMemorySettingsGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.memory.settings.get.request" }>,
+  ): Promise<void> {
+    try {
+      const settings = await this.providerSnapshotManager.getOmpMemorySettings();
+      this.host.emit({
+        type: "omp.memory.settings.get.response",
+        payload: { ...settings, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to load OMP memory settings");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to load OMP memory settings: ${err.message}`,
+          code: "omp_memory_settings_failed",
+        },
+      });
+    }
+  }
+
+  async handleOmpMemorySettingsUpdateRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.memory.settings.update.request" }>,
+  ): Promise<void> {
+    try {
+      const settings = await this.providerSnapshotManager.updateOmpMemorySettings(
+        msg.expectedRevision,
+        msg.patch,
+      );
+      this.host.emit({
+        type: "omp.memory.settings.update.response",
+        payload: { ...settings, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const conflict = err.name === "OmpMemorySettingsConflictError";
+      this.logger.error({ err }, "Failed to update OMP memory settings");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to update OMP memory settings: ${err.message}`,
+          code: conflict ? "omp_memory_settings_conflict" : "omp_memory_settings_update_failed",
+        },
+      });
+    }
+  }
+
   async handleOmpProviderContextWindowOverridesUpdateRequest(
     msg: Extract<
       SessionInboundMessage,

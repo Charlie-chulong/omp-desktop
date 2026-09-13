@@ -2,6 +2,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  StyleSheet as RNStyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
@@ -820,7 +821,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingTop: theme.spacing[12],
   },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0, 0, 0, 0.5)" },
+  backdrop: { ...RNStyleSheet.absoluteFillObject, backgroundColor: "rgba(0, 0, 0, 0.5)" },
   panel: {
     width: 640,
     height: 560,
