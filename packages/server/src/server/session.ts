@@ -936,7 +936,10 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.ompPluginSession = new OmpPluginSession({
-      service: new OmpPluginCliService({ logger: this.sessionLogger }),
+      service: new OmpPluginCliService({
+        logger: this.sessionLogger,
+        getProxyUrl: () => daemonConfigStore.get().providers.omp?.env?.PI_PROXY,
+      }),
       emit: (msg) => this.emit(msg),
       logger: this.sessionLogger,
     });

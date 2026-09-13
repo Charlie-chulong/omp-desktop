@@ -49,6 +49,14 @@ export interface OmpPluginCliServiceOptions {
    * `~/.omp/marketplaces.json` (the runtime's own config root).
    */
   marketplacesRegistryPath?: string;
+  /**
+   * Returns the proxy URL configured via the host settings UI (PI_PROXY).
+   * When set, HTTPS_PROXY/HTTP_PROXY are injected into the spawned omp CLI
+   * process so that plugin marketplace git clones and npm installs respect
+   * the user's proxy — the omp binary's native git clone does not read
+   * PI_PROXY directly.
+   */
+  getProxyUrl?: () => string | undefined;
 }
 
 const OmpPluginListJsonSchema = z
@@ -181,22 +189,31 @@ export class OmpPluginCliService {
   private readonly runner: OmpPluginRunner;
   private readonly resolveOmpCommand: () => Promise<string | null>;
   private readonly marketplacesRegistryPath: string;
+  private readonly getProxyUrl: (() => string | undefined) | undefined;
   private inFlight: Promise<unknown> | null = null;
 
   constructor(options: OmpPluginCliServiceOptions) {
     this.logger = options.logger.child({ module: "omp-plugin-cli" });
+    this.getProxyUrl = options.getProxyUrl;
     this.runner =
       options.runner ??
       (async (command, args, runnerOptions) =>
         await execCommand(command, args, {
           timeout: runnerOptions.timeout,
           envMode: "internal",
+          envOverlay: this.buildProxyEnv(),
         }));
     this.resolveOmpCommand =
       options.resolveOmpCommand ??
       (async () => process.env.OMP_COMMAND?.trim() || (await findExecutable("omp")) || null);
     this.marketplacesRegistryPath =
       options.marketplacesRegistryPath ?? join(homedir(), ".omp", "marketplaces.json");
+  }
+
+  private buildProxyEnv(): Record<string, string> | undefined {
+    const proxyUrl = this.getProxyUrl?.();
+    if (!proxyUrl) return undefined;
+    return { HTTPS_PROXY: proxyUrl, HTTP_PROXY: proxyUrl };
   }
 
   private async runExclusive<T>(operation: () => Promise<T>): Promise<T> {
