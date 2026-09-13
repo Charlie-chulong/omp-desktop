@@ -63,7 +63,9 @@ export const ar: TranslationResources = {
       },
       browse: {
         label: "استعراض",
-        description: "اختيار مجلد أو إنشاؤه في Finder",
+        description: "اختيار مجلد على {{host}}",
+        title: "استعراض المجلدات",
+        selectCurrent: "اختر هذا المجلد",
       },
       github: {
         label: "الاستنساخ من GitHub",
@@ -541,6 +543,8 @@ export const ar: TranslationResources = {
       confirmDelete: {
         fileTitle: "حذف الملف؟",
         folderTitle: "حذف المجلد؟",
+        selectionTitle: "حذف {{count}} عناصر؟",
+        selectionMessage: "سيتم حذف العناصر المحددة نهائيًا.",
         message: 'سيتم حذف "{{name}}" نهائيًا.',
         confirm: "حذف",
         cancel: "إلغاء",
@@ -2005,6 +2009,7 @@ export const ar: TranslationResources = {
     groupInfo: "حول{{title}}",
     sections: {
       general: "عام",
+      connections: "الاتصالات",
       appearance: "مظهر",
       editor: "المحرر",
       shortcuts: "الاختصارات",

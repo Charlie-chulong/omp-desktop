@@ -64,7 +64,9 @@ export const fr: TranslationResources = {
       },
       browse: {
         label: "Parcourir",
-        description: "Choisir ou créer un dossier dans le Finder",
+        description: "Choisir un dossier sur {{host}}",
+        title: "Parcourir les dossiers",
+        selectCurrent: "Choisir ce dossier",
       },
       github: {
         label: "Cloner depuis GitHub",
@@ -545,6 +547,8 @@ export const fr: TranslationResources = {
       confirmDelete: {
         fileTitle: "Supprimer le fichier ?",
         folderTitle: "Supprimer le dossier ?",
+        selectionTitle: "Supprimer {{count}} éléments ?",
+        selectionMessage: "Les éléments sélectionnés seront définitivement supprimés.",
         message: "« {{name}} » sera définitivement supprimé.",
         confirm: "Supprimer",
         cancel: "Annuler",
@@ -2057,6 +2061,7 @@ export const fr: TranslationResources = {
     groupInfo: "À propos de{{title}}",
     sections: {
       general: "Général",
+      connections: "Connexions",
       appearance: "Apparence",
       editor: "Éditeur",
       shortcuts: "Raccourcis",

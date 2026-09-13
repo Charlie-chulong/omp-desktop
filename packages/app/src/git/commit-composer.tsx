@@ -19,6 +19,13 @@ interface CommitComposerProps {
   branchName: string | null;
   hasChanges: boolean;
 }
+const MIN_MESSAGE_INPUT_HEIGHT = 34;
+const MAX_MESSAGE_INPUT_HEIGHT = 300;
+
+interface WebResizableInput {
+  scrollHeight?: number;
+  style?: { height: string };
+}
 
 export function CommitComposer({ serverId, cwd, branchName, hasChanges }: CommitComposerProps) {
   const { t } = useTranslation();
@@ -27,6 +34,7 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
   const [message, setMessage] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [inputHeight, setInputHeight] = useState(MIN_MESSAGE_INPUT_HEIGHT);
   const handleInputFocus = useCallback(() => setIsInputFocused(true), []);
   const handleInputBlur = useCallback(() => setIsInputFocused(false), []);
   const client = useSessionStore((state) => state.sessions[serverId]?.client);
@@ -43,13 +51,47 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
   const canCommit = hasChanges && trimmedMessage.length > 0 && !isCommitting && !isGenerating;
   const canGenerate = hasChanges && generationSupported && Boolean(client) && !isGenerating;
 
-  const replaceMessage = useCallback((nextMessage: string) => {
-    setMessage(nextMessage);
-    inputRef.current?.replaceText(nextMessage, {
-      start: nextMessage.length,
-      end: nextMessage.length,
-    });
+  const resizeInput = useCallback((reportedHeight?: number) => {
+    let nextHeight = reportedHeight ?? MIN_MESSAGE_INPUT_HEIGHT;
+    if (isWeb) {
+      const input = inputRef.current?.getNativeRef() as WebResizableInput | null;
+      if (input?.style && typeof input.scrollHeight === "number") {
+        input.style.height = `${MIN_MESSAGE_INPUT_HEIGHT}px`;
+        nextHeight = input.scrollHeight;
+      }
+    }
+    const clampedHeight = Math.min(
+      MAX_MESSAGE_INPUT_HEIGHT,
+      Math.max(MIN_MESSAGE_INPUT_HEIGHT, nextHeight),
+    );
+    if (isWeb) {
+      const input = inputRef.current?.getNativeRef() as WebResizableInput | null;
+      if (input?.style) input.style.height = `${clampedHeight}px`;
+    }
+    setInputHeight(clampedHeight);
   }, []);
+  const handleContentSizeChange = useCallback(
+    (event: { nativeEvent: { contentSize: { height: number } } }) => {
+      resizeInput(event.nativeEvent.contentSize.height);
+    },
+    [resizeInput],
+  );
+
+  const replaceMessage = useCallback(
+    (nextMessage: string) => {
+      setMessage(nextMessage);
+      inputRef.current?.replaceText(nextMessage, {
+        start: nextMessage.length,
+        end: nextMessage.length,
+      });
+      if (nextMessage.length === 0) {
+        setInputHeight(MIN_MESSAGE_INPUT_HEIGHT);
+      } else if (isWeb) {
+        requestAnimationFrame(() => resizeInput());
+      }
+    },
+    [resizeInput],
+  );
 
   const handleGenerate = useCallback(async () => {
     if (!client || !canGenerate) return;
@@ -104,7 +146,12 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
           multiline
           submitBehavior="newline"
           textAlignVertical="top"
-          style={[styles.messageInput, isInputFocused && styles.messageInputFocused]}
+          onContentSizeChange={handleContentSizeChange}
+          style={[
+            styles.messageInput,
+            { height: inputHeight },
+            isInputFocused && styles.messageInputFocused,
+          ]}
           testID="changes-commit-message"
         />
         <Tooltip delayDuration={300}>
@@ -152,13 +199,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   messageRow: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "flex-start",
     gap: theme.spacing[2],
   },
   messageInput: {
     flex: 1,
     minWidth: 0,
-    height: 34,
+    height: MIN_MESSAGE_INPUT_HEIGHT,
+    maxHeight: MAX_MESSAGE_INPUT_HEIGHT,
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
     borderWidth: 1,
@@ -168,13 +216,14 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.md,
     backgroundColor: theme.colors.surface1,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
   },
   messageInputFocused: {
     borderColor: theme.colors.borderAccent,
   },
   generateButton: {
     width: 34,
+    height: MIN_MESSAGE_INPUT_HEIGHT,
     paddingHorizontal: 0,
     flexShrink: 0,
   },

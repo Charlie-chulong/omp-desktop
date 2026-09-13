@@ -135,6 +135,7 @@ interface SidebarSectionItem {
 
 const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "general", labelKey: "settings.sections.general", icon: Settings },
+  { id: "connections", labelKey: "settings.sections.connections", icon: Network },
   { id: "appearance", labelKey: "settings.sections.appearance", icon: Palette },
   { id: "editor", labelKey: "settings.sections.editor", icon: Code2, webOnly: true },
   { id: "shortcuts", labelKey: "settings.sections.shortcuts", icon: Keyboard, desktopOnly: true },
@@ -1172,7 +1173,6 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
         case "general":
           return (
             <>
-              <AddRemoteHostSection />
               <GeneralSection
                 settings={settings}
                 isDesktopApp={isDesktopApp}
@@ -1189,6 +1189,8 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
               ) : null}
             </>
           );
+        case "connections":
+          return <AddRemoteHostSection />;
         case "appearance":
           return <AppearanceSection />;
         case "editor":

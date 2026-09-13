@@ -78,7 +78,9 @@ export const zhCN: TranslationResources = {
       },
       browse: {
         label: "浏览",
-        description: "在访达中选择或创建目录",
+        description: "在 {{host}} 上选择目录",
+        title: "浏览目录",
+        selectCurrent: "选择此目录",
       },
       github: {
         label: "从 GitHub 克隆",
@@ -566,6 +568,8 @@ export const zhCN: TranslationResources = {
       confirmDelete: {
         fileTitle: "删除文件？",
         folderTitle: "删除文件夹？",
+        selectionTitle: "删除 {{count}} 个项目？",
+        selectionMessage: "所选项目将被永久删除。",
         message: "“{{name}}”将被永久删除。",
         confirm: "删除",
         cancel: "取消",
@@ -2043,6 +2047,7 @@ export const zhCN: TranslationResources = {
     groupInfo: "关于 {{title}}",
     sections: {
       general: "通用",
+      connections: "连接",
       appearance: "外观",
       editor: "编辑器",
       shortcuts: "快捷键",

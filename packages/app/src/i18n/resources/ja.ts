@@ -63,7 +63,9 @@ export const ja: TranslationResources = {
       },
       browse: {
         label: "参照",
-        description: "Finder でディレクトリを選択または作成",
+        description: "{{host}} 上のディレクトリを選択",
+        title: "ディレクトリを参照",
+        selectCurrent: "このディレクトリを選択",
       },
       github: {
         label: "GitHub からクローン",
@@ -545,6 +547,8 @@ export const ja: TranslationResources = {
       confirmDelete: {
         fileTitle: "ファイルを削除しますか？",
         folderTitle: "フォルダを削除しますか？",
+        selectionTitle: "{{count}} 件の項目を削除しますか？",
+        selectionMessage: "選択した項目は完全に削除されます。",
         message: "「{{name}}」は完全に削除されます。",
         confirm: "削除",
         cancel: "キャンセル",
@@ -2024,6 +2028,7 @@ export const ja: TranslationResources = {
     groupInfo: "{{title}}について",
     sections: {
       general: "一般",
+      connections: "接続",
       appearance: "外観",
       editor: "エディター",
       shortcuts: "ショートカット",
