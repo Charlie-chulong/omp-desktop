@@ -1860,6 +1860,19 @@ export const OmpMarketplacePluginInfoSchema = z
     version: z.string().optional(),
     scope: z.string().optional(),
     shadowed: z.boolean().optional(),
+    entries: z
+      .array(
+        z
+          .object({
+            scope: z.string().optional(),
+            version: z.string().optional(),
+            installPath: z.string().optional(),
+            installedAt: z.string().optional(),
+            lastUpdated: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 export type OmpMarketplacePluginInfo = z.infer<typeof OmpMarketplacePluginInfoSchema>;

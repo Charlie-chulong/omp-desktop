@@ -247,7 +247,30 @@ export class OmpPluginCliService {
       const output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS);
       const parsed = OmpPluginListJsonSchema.safeParse(parseTrailingJson(output));
       if (parsed.success) {
-        return { plugins: parsed.data.npm, marketplace: parsed.data.marketplace };
+        // Marketplace-installed plugins have a different CLI shape ({id,
+        // scope, entries:[{version, installPath}]}). Map them into the same
+        // OmpPluginInfo format as npm plugins so the UI's "installed" list
+        // shows them alongside npm-installed ones.
+        const fromMarketplace = parsed.data.marketplace.map((m) => {
+          const shortName = m.id.split("@")[0] ?? m.id;
+          const entries = m.entries as
+            | Array<{ version?: string; installPath?: string }>
+            | undefined;
+          const entry = entries?.[0];
+          return {
+            name: shortName,
+            version: entry?.version ?? m.version ?? "",
+            path: entry?.installPath,
+            // The CLI does not report an enabled flag for marketplace plugins;
+            // treat presence in the list as enabled.
+            enabled: true,
+            description: undefined,
+          };
+        });
+        return {
+          plugins: [...parsed.data.npm, ...fromMarketplace],
+          marketplace: parsed.data.marketplace,
+        };
       }
       this.logger.warn({ output: output.slice(0, 500) }, "Unparseable omp plugin list output");
       return { plugins: [], marketplace: [], rawOutput: truncateOutput(output) };
