@@ -1563,6 +1563,9 @@ function reduceTimelineEvent(
       };
       return finalizeActiveThoughts(appendActivityLog(state, activity));
     }
+    case "extension_notification":
+      // Toast-only item; not rendered in the timeline stream.
+      return state;
     case "compaction":
       return finalizeActiveThoughts(
         reduceTimelineCompaction(state, item, timestamp, timelineCursor),
