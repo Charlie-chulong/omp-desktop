@@ -2723,7 +2723,8 @@ export const en = {
         marketplace: {
           title: "Marketplaces",
           addLabel: "Add marketplace",
-          addPlaceholder: "owner/repo, git URL, or local path",
+          searchPlaceholder: "Search plugins…",
+          searchClear: "Clear search",
           actions: {
             add: "Add",
             browse: "Browse ({{count}})",

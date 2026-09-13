@@ -2624,7 +2624,8 @@ export const zhCN: TranslationResources = {
         marketplace: {
           title: "插件市场",
           addLabel: "添加插件市场",
-          addPlaceholder: "owner/repo、git 地址或本地路径",
+          searchPlaceholder: "搜索插件…",
+          searchClear: "清除搜索",
           actions: {
             add: "添加",
             browse: "浏览({{count}})",

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Field, FormTextInput } from "@/components/ui/form-field";
+import { SearchField } from "@/components/ui/search-field";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import type { PluginPageState } from "@/screens/settings/plugins-page-state";
@@ -95,7 +96,6 @@ function MarketplaceCatalogRow({
     </View>
   );
 }
-
 interface MarketplaceEntryCardProps {
   marketplace: OmpPluginMarketplaceInfo;
   expanded: boolean;
@@ -105,6 +105,8 @@ interface MarketplaceEntryCardProps {
   browseLabel: string;
   removeLabel: string;
   installLabel: string;
+  searchPlaceholder: string;
+  searchClearLabel: string;
   onToggle: (name: string) => void;
   onRemove: (name: string) => void;
   onInstall: (plugin: OmpMarketplaceCatalogEntry, marketplaceName: string) => void;
@@ -119,12 +121,24 @@ function MarketplaceEntryCard({
   browseLabel,
   removeLabel,
   installLabel,
+  searchPlaceholder,
+  searchClearLabel,
   onToggle,
   onRemove,
   onInstall,
 }: MarketplaceEntryCardProps) {
   const handleToggle = useCallback(() => onToggle(marketplace.name), [onToggle, marketplace.name]);
   const handleRemove = useCallback(() => onRemove(marketplace.name), [onRemove, marketplace.name]);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const visiblePlugins = useMemo(() => {
+    const all = marketplace.plugins ?? [];
+    const q = catalogQuery.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) || (p.description?.toLowerCase().includes(q) ?? false),
+    );
+  }, [marketplace.plugins, catalogQuery]);
   return (
     <View style={styles.marketplaceEntry}>
       <View style={[settingsStyles.row, styles.pluginRow]}>
@@ -147,8 +161,17 @@ function MarketplaceEntryCard({
           </Button>
         </View>
       </View>
-      {expanded
-        ? (marketplace.plugins ?? []).map((entry) => (
+      {expanded ? (
+        <View style={styles.catalogSearchRow}>
+          <SearchField
+            value={catalogQuery}
+            onChangeText={setCatalogQuery}
+            placeholder={searchPlaceholder}
+            clearAccessibilityLabel={searchClearLabel}
+            testID={`omp-plugins-marketplace-search-${marketplace.name}`}
+            clearTestID={`omp-plugins-marketplace-search-clear-${marketplace.name}`}
+          />
+          {visiblePlugins.map((entry) => (
             <MarketplaceCatalogRow
               key={entry.name}
               plugin={entry}
@@ -157,8 +180,9 @@ function MarketplaceEntryCard({
               onInstall={onInstall}
               installLabel={installLabel}
             />
-          ))
-        : null}
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -671,6 +695,8 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                 })}
                 removeLabel={t("settings.host.ompPlugins.actions.remove")}
                 installLabel={t("settings.host.ompPlugins.actions.install")}
+                searchPlaceholder={t("settings.host.ompPlugins.marketplace.searchPlaceholder")}
+                searchClearLabel={t("settings.host.ompPlugins.marketplace.searchClear")}
                 onToggle={handleMarketplaceToggle}
                 onRemove={onMarketplaceRemove}
                 onInstall={onMarketplaceInstall}
@@ -763,6 +789,11 @@ const styles = StyleSheet.create((theme) => ({
   marketplaceEntry: {
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+  },
+  catalogSearchRow: {
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
+    gap: 0,
   },
   centeredRow: {
     paddingVertical: theme.spacing[4],
