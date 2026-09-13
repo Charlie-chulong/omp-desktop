@@ -2703,7 +2703,13 @@ export class OmpAgentSession implements AgentSession {
   ): void {
     const message = optionalString(event.message);
     if (event.method === "notify" && message) {
-      this.bufferNoTurnOutput(message);
+      const level = event.notifyType ?? "info";
+      this.emit({
+        type: "timeline",
+        provider: this.provider,
+        turnId: this.currentTurnIdForEvent(),
+        item: { type: "extension_notification", message, level },
+      });
     }
 
     const sideEffectItem = this.mapExtensionUiSideEffect(event);

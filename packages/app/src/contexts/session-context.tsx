@@ -834,6 +834,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         epoch,
         timestamp: parsedTimestamp,
       });
+      // Extension notifications (e.g. pi-hermes-memory "💾 Memory auto-reviewed")
+      // are toast-only: they surface as popups, not timeline rows.
+      if (event.type === "timeline" && event.item.type === "extension_notification") {
+        const { message: notifyText, level } = event.item;
+        toast.show(notifyText, { variant: level });
+      }
 
       // NOTE: We don't update lastActivityAt on every stream event to prevent
       // cascading rerenders. The agent_update handler updates agent.lastActivityAt

@@ -473,6 +473,7 @@ const OmpExtensionUiRequestSchema = z
     method: z.string(),
     title: z.string().optional(),
     message: z.string().optional(),
+    notifyType: z.enum(["info", "warning", "error"]).optional(),
     options: z.array(z.string()).optional(),
     placeholder: z.string().optional(),
     url: z.string().optional(),

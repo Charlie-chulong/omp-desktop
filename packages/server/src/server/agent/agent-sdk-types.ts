@@ -419,6 +419,7 @@ export type AgentTimelineItem =
   | ToolCallTimelineItem
   | { type: "todo"; items: AgentTaskItem[] }
   | { type: "error"; message: string }
+  | { type: "extension_notification"; message: string; level: "info" | "warning" | "error" }
   | CompactionTimelineItem;
 
 export type AgentStreamEvent =
