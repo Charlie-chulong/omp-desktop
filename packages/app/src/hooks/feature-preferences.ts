@@ -1,7 +1,13 @@
 import type { AgentFeature } from "@omp-desktop/protocol/agent-types";
+import type { SupportedLocale } from "@/i18n/locales";
+
+export const WORKFLOW_MODE_FEATURE_ID = "workflow_mode";
+export const WORKFLOW_LOCALE_FEATURE_ID = "workflow_locale";
+export const ENHANCED_WORKFLOW_MODE = "enhanced";
 
 const DRAFT_FEATURE_COMPANION_IDS: Record<string, true> = {
-  workflow_mode: true,
+  [WORKFLOW_MODE_FEATURE_ID]: true,
+  [WORKFLOW_LOCALE_FEATURE_ID]: true,
   goal_objective: true,
   goal_status: true,
 };
@@ -35,6 +41,19 @@ export function pruneFeatureValues(
   }
 
   return changed ? next : featureValues;
+}
+
+export function applyEnhancedWorkflowLocale(
+  featureValues: Record<string, unknown>,
+  locale: SupportedLocale,
+): Record<string, unknown> {
+  if (featureValues[WORKFLOW_MODE_FEATURE_ID] !== ENHANCED_WORKFLOW_MODE) {
+    return featureValues;
+  }
+  return {
+    ...featureValues,
+    [WORKFLOW_LOCALE_FEATURE_ID]: locale,
+  };
 }
 
 export function applyFeatureValues(

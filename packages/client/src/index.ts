@@ -22,6 +22,12 @@ import type {
   OmpInstallationStatus,
   OmpProviderManagementGetResponseMessage,
   OmpProviderManagementSaveResponseMessage,
+  OmpSubagentSettingsGetResponseMessage,
+  OmpSubagentSettingsUpdateResponseMessage,
+  OmpSubagentSettingsEnabledUpdateResponseMessage,
+  OmpMemorySettingsGetResponseMessage,
+  OmpMemorySettingsUpdateResponseMessage,
+  OmpMemorySettingsPatch,
   OmpProviderContextWindowOverridesUpdateResponseMessage,
   OmpProviderManagementAddResponseMessage,
   OmpProviderManagementRemoveResponseMessage,
@@ -375,6 +381,26 @@ export interface OmpProviderActions {
     configYaml: string,
     options?: { requestId?: string },
   ): Promise<OmpProviderManagementSaveResponseMessage["payload"]>;
+  getSubagentSettings(options?: {
+    requestId?: string;
+  }): Promise<OmpSubagentSettingsGetResponseMessage["payload"]>;
+  updateSubagentModel(
+    agentName: string,
+    model: string | null,
+    options?: { requestId?: string },
+  ): Promise<OmpSubagentSettingsUpdateResponseMessage["payload"]>;
+  updateSubagentSettingsEnabled(
+    enabled: boolean,
+    options?: { requestId?: string },
+  ): Promise<OmpSubagentSettingsEnabledUpdateResponseMessage["payload"]>;
+  getMemorySettings(options?: {
+    requestId?: string;
+  }): Promise<OmpMemorySettingsGetResponseMessage["payload"]>;
+  updateMemorySettings(
+    expectedRevision: string,
+    patch: OmpMemorySettingsPatch,
+    options?: { requestId?: string },
+  ): Promise<OmpMemorySettingsUpdateResponseMessage["payload"]>;
   updateModelContextWindowOverrides(
     providerId: string,
     overrides: Record<string, number | null>,
@@ -538,6 +564,14 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
       getProviderManagement: (options) => daemonClient.getOmpProviderManagement(options),
       saveProviderConfig: (configYaml, options) =>
         daemonClient.saveOmpProviderConfig(configYaml, options),
+      getSubagentSettings: (options) => daemonClient.getOmpSubagentSettings(options),
+      updateSubagentModel: (agentName, model, options) =>
+        daemonClient.updateOmpSubagentModel(agentName, model, options),
+      updateSubagentSettingsEnabled: (enabled, options) =>
+        daemonClient.updateOmpSubagentSettingsEnabled(enabled, options),
+      getMemorySettings: (options) => daemonClient.getOmpMemorySettings(options),
+      updateMemorySettings: (expectedRevision, patch, options) =>
+        daemonClient.updateOmpMemorySettings(expectedRevision, patch, options),
       updateModelContextWindowOverrides: (providerId, overrides, options) =>
         daemonClient.updateOmpModelContextWindowOverrides(providerId, overrides, options),
       addProvider: (provider, options) => daemonClient.addOmpProvider(provider, options),

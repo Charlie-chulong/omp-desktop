@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   Pressable,
   ScrollView,
+  StyleSheet as RNStyleSheet,
   Text,
   View,
   type NativeSyntheticEvent,
@@ -353,7 +354,7 @@ export function QuickAskPopover({
 
 const styles = StyleSheet.create((theme) => ({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     pointerEvents: "box-none",
   },
   body: {

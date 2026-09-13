@@ -1,4 +1,5 @@
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 import { backgroundProcesses } from "./background-processes";
 
@@ -76,7 +77,9 @@ export const en = {
       },
       browse: {
         label: "Browse",
-        description: "Choose or create a directory in Finder",
+        description: "Choose a directory on {{host}}",
+        title: "Browse directories",
+        selectCurrent: "Choose this directory",
       },
       github: {
         label: "Clone from GitHub",
@@ -265,6 +268,7 @@ export const en = {
       workflow: {
         title: "Workflow",
         standard: "Standard",
+        enhanced: "Enhanced",
         plan: "Plan",
         goal: "Goal",
         goalPlaceholder: "Enter a goal",
@@ -564,6 +568,8 @@ export const en = {
       confirmDelete: {
         fileTitle: "Delete file?",
         folderTitle: "Delete folder?",
+        selectionTitle: "Delete {{count}} items?",
+        selectionMessage: "The selected items will be permanently deleted.",
         message: '"{{name}}" will be permanently deleted.',
         confirm: "Delete",
         cancel: "Cancel",
@@ -1712,6 +1718,38 @@ export const en = {
   },
   pairing: {
     desktopWaiting: "Waiting for the local OMP Desktop daemon…",
+    ssh: {
+      entry: "Connect via SSH",
+      title: "Connect a remote host via SSH",
+      helper:
+        "OMP Desktop uses your system SSH configuration to install and pair the remote daemon. The ongoing connection uses the encrypted relay.",
+      host: "SSH host or config alias",
+      username: "Username (optional)",
+      port: "Port (optional)",
+      identityFile: "Identity file (optional)",
+      identityFileDefault: "Use SSH configuration or agent",
+      choose: "Choose",
+      authenticationInput: "Password, passphrase, MFA code, or yes/no",
+      send: "Send",
+      connectAndDeploy: "Connect and deploy",
+      update: "Update via SSH",
+      phases: {
+        connecting: "Connecting with SSH…",
+        inspecting: "Inspecting the remote host…",
+        "preparing-runtime": "Preparing the managed runtime…",
+        uploading: "Uploading the backend…",
+        uploadingProgress: "Uploading the backend… {{percent}}%",
+        installing: "Installing backend dependencies…",
+        starting: "Starting the remote daemon…",
+        pairing: "Verifying the encrypted relay…",
+        complete: "Remote host connected",
+      },
+      errors: {
+        desktopOnly: "SSH deployment is available in OMP Desktop.",
+        hostRequired: "SSH host is required.",
+        invalidPort: "Port must be between 1 and 65535.",
+      },
+    },
     connectionMethods: {
       title: "Add connection",
       direct: {
@@ -2020,6 +2058,7 @@ export const en = {
     },
   },
   settings: {
+    memory: ompMemorySettings.en,
     title: "Settings",
     loading: "Loading settings...",
     groups: {
@@ -2041,6 +2080,7 @@ export const en = {
     groupInfo: "About {{title}}",
     sections: {
       general: "General",
+      connections: "Connections",
       appearance: "Appearance",
       editor: "Editor",
       shortcuts: "Shortcuts",
@@ -2140,8 +2180,14 @@ export const en = {
     },
     metadataGeneration: {
       title: "Metadata generation",
-      description:
-        "Choose the model OMP Desktop uses for workspace titles, branch names, commit messages, and pull request drafts",
+      description: "Choose separate models for generated metadata, commit messages, and Quick Ask",
+      defaultModel: "Other metadata",
+      defaultModelHint: "Workspace titles, branch names, and pull request drafts",
+      commitMessageModel: "Commit messages",
+      commitMessageModelHint: "Messages generated from staged Git changes",
+      quickAskModel: "Quick Ask",
+      quickAskModelHint: "Answers from Ask about selection",
+      quickAskAutomaticHint: "Uses the current conversation model",
       selection: "Model selection",
       automatic: "Automatic",
       preferred: "Manual",
@@ -2592,14 +2638,15 @@ export const en = {
         emptyState: "No profiles yet. Add one to launch terminals with a specific command.",
       },
       agentProfiles: {
-        sectionTitle: "Agent profiles",
-        unavailable: "Connect to this host to manage agent profiles",
-        unsupported: "This host runs a daemon that does not support agent profiles yet",
-        emptyState: "No profiles yet. Add one to start agents from a saved provider and model.",
-        addProfileTitle: "Add agent profile",
-        newProfile: "New profile",
-        editProfile: "Edit profile",
-        editProfileTitle: "Edit agent profile",
+        sectionTitle: "Agent launch presets",
+        unavailable: "Connect to this host to manage agent launch presets",
+        unsupported: "This host runs a daemon that does not support agent launch presets yet",
+        emptyState:
+          "No presets yet. Add one to launch an agent from saved provider and model settings.",
+        addProfileTitle: "Add agent launch preset",
+        newProfile: "New preset",
+        editProfile: "Edit preset",
+        editProfileTitle: "Edit agent launch preset",
         nameLabel: "Name",
         namePlaceholder: "UI work",
         iconLabel: "Icon",
@@ -2616,9 +2663,9 @@ export const en = {
         featuresLabel: "Features",
         featureCount: "{{count}} features",
         featureCountOne: "{{count}} feature",
-        notesLabel: "When to use",
+        notesLabel: "Delegation guidance",
         notesPlaceholder: "Use for UI work — components, layout and design tokens.",
-        notesHint: "Helps agents choose this profile when starting another agent.",
+        notesHint: "Used by agents to choose this preset when delegating through create_agent.",
         save: "Save",
         saving: "Saving...",
         remove: "Remove",
@@ -2626,6 +2673,28 @@ export const en = {
         removeConfirmMessage: 'Remove "{{name}}"?',
         moveUp: "Move up",
         moveDown: "Move down",
+      },
+      ompSubagents: {
+        sectionTitle: "OMP subagents",
+        unavailable: "Connect to this host to manage OMP subagents",
+        unsupported: "Update this host to manage OMP subagent models",
+        loading: "Loading OMP subagent settings...",
+        overrideEnabled: "Override built-in subagent models",
+        overrideEnabledHint:
+          "Write task.agentModelOverrides for scout, task, sonic, reviewer, and security-reviewer. Turning this off removes the entire mapping.",
+        inherit: "Inherit parent agent",
+        inheritHint: "Use the parent agent's active or default model.",
+        modelLabel: "Model",
+        noModels: "No OMP models are available on this host",
+        selectModelTitle: "Select a model for {{name}}",
+        configPath: "User configuration: {{path}}",
+        descriptions: {
+          scout: "Read-only codebase research and analysis.",
+          task: "General-purpose implementation work.",
+          sonic: "Lightweight mechanical updates.",
+          reviewer: "Correctness and quality review.",
+          "security-reviewer": "Security-focused review.",
+        },
       },
       daemon: {
         rename: {
@@ -2659,6 +2728,7 @@ export const en = {
         update: {
           desktopManagedHint:
             "This daemon is managed by OMP Desktop Desktop. Update OMP Desktop Desktop on the host.",
+          sshManagedHint: "This daemon was deployed by SSH. Reconnect with SSH to update it.",
           title: "Update daemon",
           hint: "Update the daemon to the latest version and restart it",
           confirm: "Update",

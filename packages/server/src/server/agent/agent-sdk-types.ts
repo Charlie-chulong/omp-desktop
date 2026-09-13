@@ -13,6 +13,9 @@ import type {
   OmpCustomProviderInput,
   OmpInstallationStatus,
   OmpProviderAccountQuota,
+  OmpSubagentSettings,
+  OmpMemorySettings,
+  OmpMemorySettingsPatch,
 } from "@omp-desktop/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
 
@@ -820,6 +823,14 @@ export interface AgentClient {
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   getOmpProviderManagement?(): Promise<OmpProviderManagement>;
   saveOmpProviderConfig?(configYaml: string): Promise<OmpProviderManagement>;
+  getOmpSubagentSettings?(): Promise<OmpSubagentSettings>;
+  updateOmpSubagentModel?(agentName: string, model: string | null): Promise<OmpSubagentSettings>;
+  updateOmpSubagentSettingsEnabled?(enabled: boolean): Promise<OmpSubagentSettings>;
+  getOmpMemorySettings?(): Promise<OmpMemorySettings>;
+  updateOmpMemorySettings?(
+    expectedRevision: string,
+    patch: OmpMemorySettingsPatch,
+  ): Promise<OmpMemorySettings>;
   updateOmpModelContextWindowOverrides?(
     providerId: string,
     overrides: Record<string, number | null>,

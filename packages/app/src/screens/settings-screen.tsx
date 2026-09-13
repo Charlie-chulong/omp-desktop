@@ -23,6 +23,7 @@ import {
   Server,
   Network,
   Bot,
+  Brain,
   Boxes,
   Gauge,
   Image,
@@ -99,6 +100,7 @@ import {
   HostUsagePage,
   HostTerminalsPage,
 } from "@/screens/settings/host-page";
+import { HostMemoryPage } from "@/screens/settings/omp-memory-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import { OmpPluginsPage } from "@/screens/settings/omp-plugins-page";
 import ProjectsScreen from "@/screens/projects-screen";
@@ -134,6 +136,7 @@ interface SidebarSectionItem {
 
 const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "general", labelKey: "settings.sections.general", icon: Settings },
+  { id: "connections", labelKey: "settings.sections.connections", icon: Network },
   { id: "appearance", labelKey: "settings.sections.appearance", icon: Palette },
   { id: "editor", labelKey: "settings.sections.editor", icon: Code2, webOnly: true },
   { id: "shortcuts", labelKey: "settings.sections.shortcuts", icon: Keyboard, desktopOnly: true },
@@ -170,6 +173,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "projects", labelKey: "settings.hostSections.projects", icon: FolderGit2 },
   { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
+  { id: "memory", labelKey: "settings.memory.title", icon: Brain },
   { id: "proxy", labelKey: "settings.hostSections.proxy", icon: Globe2 },
   { id: "metadata", labelKey: "settings.hostSections.metadata", icon: Sparkles },
   { id: "providers", labelKey: "settings.providers.title", icon: Boxes },
@@ -194,6 +198,8 @@ function renderHostSettingsContent(
       return <HostConnectionsPage serverId={view.serverId} />;
     case "agents":
       return <HostAgentsPage serverId={view.serverId} />;
+    case "memory":
+      return <HostMemoryPage serverId={view.serverId} />;
     case "proxy":
       return <HostProxyPage serverId={view.serverId} />;
     case "metadata":
@@ -1175,7 +1181,6 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
         case "general":
           return (
             <>
-              <AddRemoteHostSection />
               <GeneralSection
                 settings={settings}
                 isDesktopApp={isDesktopApp}
@@ -1192,6 +1197,8 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
               ) : null}
             </>
           );
+        case "connections":
+          return <AddRemoteHostSection />;
         case "appearance":
           return <AppearanceSection />;
         case "editor":

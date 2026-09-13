@@ -116,6 +116,8 @@ export function formatAgentFeatureOptionLabel(
   switch (option.id) {
     case "standard":
       return i18n.t("agentControls.features.workflow.standard");
+    case "enhanced":
+      return i18n.t("agentControls.features.workflow.enhanced");
     case "plan":
       return i18n.t("agentControls.features.workflow.plan");
     case "goal":

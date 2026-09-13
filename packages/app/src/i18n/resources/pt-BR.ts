@@ -1,6 +1,7 @@
 import { en, type TranslationResources } from "./en";
 import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
+import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 
 export const ptBR: TranslationResources = {
@@ -62,7 +63,9 @@ export const ptBR: TranslationResources = {
       },
       browse: {
         label: "Procurar",
-        description: "Escolher ou criar um diretório no Finder",
+        description: "Escolher um diretório em {{host}}",
+        title: "Procurar diretórios",
+        selectCurrent: "Escolher este diretório",
       },
       github: {
         label: "Clonar do GitHub",
@@ -251,6 +254,7 @@ export const ptBR: TranslationResources = {
       workflow: {
         title: "Fluxo de trabalho",
         standard: "Padrão",
+        enhanced: "Aprimorado",
         plan: "Plano",
         goal: "Objetivo",
         goalPlaceholder: "Digite um objetivo",
@@ -543,6 +547,8 @@ export const ptBR: TranslationResources = {
       confirmDelete: {
         fileTitle: "Excluir arquivo?",
         folderTitle: "Excluir pasta?",
+        selectionTitle: "Excluir {{count}} itens?",
+        selectionMessage: "Os itens selecionados serão excluídos permanentemente.",
         message: '"{{name}}" será excluído permanentemente.',
         confirm: "Excluir",
         cancel: "Cancelar",
@@ -1704,6 +1710,7 @@ export const ptBR: TranslationResources = {
   },
   pairing: {
     desktopWaiting: "Aguardando o daemon local do OMP Desktop…",
+    ssh: en.pairing.ssh,
     connectionMethods: {
       title: "Adicionar conexão",
       direct: {
@@ -2014,6 +2021,7 @@ export const ptBR: TranslationResources = {
     },
   },
   settings: {
+    memory: ompMemorySettings["pt-BR"],
     title: "Configurações",
     loading: "Carregando configurações...",
     groups: {
@@ -2035,6 +2043,7 @@ export const ptBR: TranslationResources = {
     groupInfo: "Sobre {{title}}",
     sections: {
       general: "Geral",
+      connections: "Conexões",
       appearance: "Aparência",
       editor: "Editor",
       shortcuts: "Atalhos",
@@ -2080,7 +2089,14 @@ export const ptBR: TranslationResources = {
     metadataGeneration: {
       title: "Geração de metadados",
       description:
-        "Escolha o modelo usado pelo OMP Desktop para títulos de espaços de trabalho, nomes de branches, mensagens de commit e rascunhos de pull request",
+        "Escolha modelos separados para metadados, mensagens de commit e perguntas rápidas",
+      defaultModel: "Outros metadados",
+      defaultModelHint: "Títulos de espaços de trabalho, branches e rascunhos de pull request",
+      commitMessageModel: "Mensagens de commit",
+      commitMessageModelHint: "Mensagens geradas a partir de alterações Git preparadas",
+      quickAskModel: "Pergunta rápida",
+      quickAskModelHint: "Respostas sobre o conteúdo selecionado",
+      quickAskAutomaticHint: "Usa o modelo da conversa atual",
       selection: "Seleção de modelo",
       automatic: "Automática",
       preferred: "Manual",
@@ -2571,6 +2587,7 @@ export const ptBR: TranslationResources = {
         moveUp: "Mover para cima",
         moveDown: "Mover para baixo",
       },
+      ompSubagents: en.settings.host.ompSubagents,
       daemon: {
         rename: {
           editLabel: "Editar rótulo",
@@ -2603,6 +2620,7 @@ export const ptBR: TranslationResources = {
         update: {
           desktopManagedHint:
             "Este daemon é gerenciado pelo OMP Desktop Desktop. Atualize o OMP Desktop Desktop no host.",
+          sshManagedHint: en.settings.host.daemon.update.sshManagedHint,
           title: "Atualizar daemon",
           hint: "Atualiza o daemon para a versão mais recente e o reinicia",
           confirm: "Atualizar",

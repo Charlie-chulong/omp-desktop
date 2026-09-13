@@ -31,6 +31,19 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
         agentId: string;
       } | null>,
   },
+  remoteSsh: {
+    start: (input: Record<string, unknown>) => ipcRenderer.invoke("paseo:remote-ssh:start", input),
+    writeInput: (input: { operationId: string; input: string }) =>
+      ipcRenderer.invoke("paseo:remote-ssh:write-input", input),
+    cancel: (input: { operationId: string }) =>
+      ipcRenderer.invoke("paseo:remote-ssh:cancel", input),
+    getProfile: (serverId: string) =>
+      ipcRenderer.invoke("paseo:remote-ssh:profile:get", { serverId }),
+    saveProfile: (input: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:remote-ssh:profile:save", input),
+    removeProfile: (serverId: string) =>
+      ipcRenderer.invoke("paseo:remote-ssh:profile:remove", { serverId }),
+  },
   events: {
     on: (event: string, handler: EventHandler): Promise<() => void> => {
       const listener = (_ipcEvent: Electron.IpcRendererEvent, payload: unknown) => {

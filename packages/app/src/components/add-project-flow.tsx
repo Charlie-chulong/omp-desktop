@@ -27,6 +27,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  StyleSheet as RNStyleSheet,
   Text,
   View,
   type PressableStateCallbackType,
@@ -44,6 +45,7 @@ import {
   moveAddProjectSelection,
   openAddProjectFlow,
   openDirectorySearchPage,
+  openDirectoryBrowserPage,
   openGithubLocationPage,
   openGithubSearchPage,
   openNewDirectoryNamePage,
@@ -79,7 +81,7 @@ import { isNative, isWeb } from "@/constants/platform";
 import { pickDirectory } from "@/desktop/pick-directory";
 import { useFetchQuery } from "@/data/query";
 import { getOpenProjectFailureReason, registerProjectDescriptor } from "@/hooks/open-project";
-import { useIsLocalDaemon, useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useCloneGithubProject, useOpenProject } from "@/hooks/use-open-project";
 import {
   getOverlayRoot,
@@ -188,18 +190,21 @@ function emptyText(page: AddProjectPage, host: AddProjectHost | null, t: TFuncti
   if (page.kind === "host") return "No connected hosts";
   if (page.kind === "github-search") return "Enter a GitHub URL or owner/repo";
   if (page.kind === "method") return addProjectMethodEmptyText(host, t);
+  if (page.kind === "directory-browser") return "No directories in this folder";
   return "No matching options";
 }
 
 interface QueryErrorInput {
   searchesDirectories: boolean;
   directoryFailed: boolean;
+  browserFailed: boolean;
   githubFailed: boolean;
   githubAvailable: boolean | null;
   githubError: string | null;
 }
 
 function queryErrorText(input: QueryErrorInput): string | null {
+  if (input.browserFailed) return "Unable to browse this directory";
   if (input.searchesDirectories && input.directoryFailed) return "Unable to search directories";
   if (input.githubFailed) return "Unable to search GitHub repositories";
   if (input.githubError) return input.githubError;
@@ -219,6 +224,8 @@ function pageTitle(page: AddProjectPage, t: TFunction): string {
       return t("addProjectFlow.title");
     case "directory-search":
       return "Search for directory";
+    case "directory-browser":
+      return t("addProjectFlow.methods.browse.title");
     case "github-search":
       return "Clone from GitHub";
     case "github-location":
@@ -230,7 +237,10 @@ function pageTitle(page: AddProjectPage, t: TFunction): string {
   }
 }
 
-type AddProjectInputPage = Exclude<AddProjectPage, { kind: "method" }>;
+type AddProjectInputPage = Exclude<
+  AddProjectPage,
+  { kind: "method" } | { kind: "directory-browser" }
+>;
 
 function pagePlaceholder(page: AddProjectInputPage): string {
   switch (page.kind) {
@@ -335,7 +345,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const githubOAuthConfiguredByHost = useHostFeatureMap(hostIds, "githubOAuthConfigured");
   // COMPAT(projectCreateDirectory): added in v0.1.108, remove gate after 2027-01-15.
   const createDirectoryByHost = useHostFeatureMap(hostIds, "projectCreateDirectory");
-  const localServerId = useLocalDaemonServerId();
+
   const availableHosts = useMemo<AddProjectHost[]>(
     () =>
       hosts.flatMap((host) => {
@@ -348,7 +358,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
             serverId: host.serverId,
             label: host.label,
             canAddProject,
-            canBrowse: canAddProject && getIsElectronRuntime() && localServerId === host.serverId,
+            canBrowse: canAddProject,
             canCloneGithubRepositories: githubCloneByHost.get(host.serverId) === true,
             canSearchGithubRepositories: githubSearchByHost.get(host.serverId) === true,
             canCreateDirectory: createDirectoryByHost.get(host.serverId) === true,
@@ -361,7 +371,6 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       githubCloneByHost,
       githubSearchByHost,
       hosts,
-      localServerId,
       projectAddByHost,
       stableProjectIdentityByHost,
     ],
@@ -385,9 +394,18 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const inputRef = useRef<EditingTextInputHandle>(null);
   const submissionInFlightRef = useRef(false);
   const browseInFlightRef = useRef(false);
-  const query = page.kind === "new-directory-name" || page.kind === "method" ? "" : page.query;
-  const pageInputValueRef = useRef(page.kind === "method" ? "" : pageInput(page));
-  pageInputValueRef.current = page.kind === "method" ? "" : pageInput(page);
+  const browserPath = page.kind === "directory-browser" ? page.path : null;
+  const query =
+    page.kind === "new-directory-name" ||
+    page.kind === "method" ||
+    page.kind === "directory-browser"
+      ? ""
+      : page.query;
+  const pageInputValueRef = useRef(
+    page.kind === "method" || page.kind === "directory-browser" ? "" : pageInput(page),
+  );
+  pageInputValueRef.current =
+    page.kind === "method" || page.kind === "directory-browser" ? "" : pageInput(page);
   const [debouncedQuery, setDebouncedQuery] = useState(query);
 
   useEffect(() => {
@@ -402,9 +420,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   }, [query]);
 
   useEffect(() => {
-    inputRef.current?.replaceText(pageInputValueRef.current);
-    const timer = setTimeout(() => inputRef.current?.focus(), 0);
-    return () => clearTimeout(timer);
+    if (page.kind !== "method" && page.kind !== "directory-browser") {
+      inputRef.current?.replaceText(pageInputValueRef.current);
+      const timer = setTimeout(() => inputRef.current?.focus(), 0);
+      return () => clearTimeout(timer);
+    }
   }, [page.kind]);
 
   const searchesDirectories =
@@ -432,6 +452,30 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     dataShape: "value",
     retry: false,
     staleTimeMs: 15_000,
+  });
+  const directoryBrowserQuery = useFetchQuery({
+    queryKey: ["add-project-flow-directory-browser", hostId, browserPath],
+    queryFn: async () => {
+      if (!client || !browserPath) return { path: browserPath, directories: [] as string[] };
+      const payload = await client.getDirectorySuggestions({
+        cwd: browserPath,
+        query: "",
+        includeDirectories: true,
+        includeFiles: false,
+        limit: 100,
+      });
+      if (payload.error) throw new Error(payload.error);
+      return {
+        path: browserPath,
+        directories: payload.entries.flatMap((entry) =>
+          entry.kind === "directory" ? [joinDirectoryPath(browserPath, entry.path)] : [],
+        ),
+      };
+    },
+    enabled: Boolean(client && browserPath),
+    dataShape: "value",
+    retry: false,
+    staleTimeMs: 8_000,
   });
   const githubQuery = useFetchQuery({
     queryKey: ["add-project-flow-github", hostId, debouncedQuery],
@@ -471,7 +515,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   );
 
   const openAddedProject = useCallback(
-    async (path: string, sourceKind: "directory-search" | "method") => {
+    async (path: string, sourceKind: "directory-search" | "directory-browser" | "method") => {
       if (!hostId || submissionInFlightRef.current) return;
       submissionInFlightRef.current = true;
       setState((current) =>
@@ -504,7 +548,11 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   );
 
   const browse = useCallback(async () => {
-    if (!hostId || !isLocalDaemon || browseInFlightRef.current) return;
+    if (!hostId || browseInFlightRef.current) return;
+    if (!isLocalDaemon || !getIsElectronRuntime()) {
+      setState((current) => openDirectoryBrowserPage(current, hostId));
+      return;
+    }
     browseInFlightRef.current = true;
     try {
       const path = await pickDirectory();
@@ -537,6 +585,13 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const directoryPaths = useMemo(
     () => (directoryQuery.data?.query === query ? directoryQuery.data.paths : EMPTY_PATHS),
     [directoryQuery.data, query],
+  );
+  const directoryBrowserPaths = useMemo(
+    () =>
+      directoryBrowserQuery.data?.path === browserPath
+        ? directoryBrowserQuery.data.directories
+        : EMPTY_PATHS,
+    [browserPath, directoryBrowserQuery.data],
   );
   const pathOptions = useMemo(
     () =>
@@ -636,6 +691,26 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         };
       });
     }
+    if (page.kind === "directory-browser") {
+      return [
+        {
+          id: `select:${page.path}`,
+          title: t("addProjectFlow.methods.browse.selectCurrent"),
+          subtitle: shortenPath(page.path),
+          icon: FolderOpen,
+          testID: "add-project-flow-browser-select-current",
+          select: () => void openAddedProject(page.path, "directory-browser"),
+        },
+        ...directoryBrowserPaths.map((path) => ({
+          id: path,
+          title: pathBaseName(path),
+          subtitle: shortenPath(path),
+          icon: Folder,
+          testID: pathTestId(path),
+          select: () => setState((current) => openDirectoryBrowserPage(current, page.hostId, path)),
+        })),
+      ];
+    }
     if (page.kind === "github-search") {
       const search = githubQuery.data?.query === page.query ? githubQuery.data.payload : null;
       const repositories = search?.repositories ?? [];
@@ -702,6 +777,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   }, [
     cloneRepository,
     directoryPaths,
+    directoryBrowserPaths,
     githubQuery.data,
     host,
     onClose,
@@ -830,6 +906,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       ? githubQuery.data.payload
       : null;
   const loading =
+    (page.kind === "directory-browser" && directoryBrowserQuery.isFetching) ||
     (searchesDirectories && (query !== debouncedQuery || directoryQuery.isFetching)) ||
     (page.kind === "github-search" &&
       host?.canSearchGithubRepositories === true &&
@@ -837,6 +914,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   const queryError = queryErrorText({
     searchesDirectories,
     directoryFailed: directoryQuery.isError,
+    browserFailed: page.kind === "directory-browser" && directoryBrowserQuery.isError,
     githubFailed: page.kind === "github-search" && githubQuery.isError,
     githubAvailable: currentGithubSearch?.available ?? null,
     githubError: currentGithubSearch?.error ?? null,
@@ -899,7 +977,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
                 ) : null}
               </View>
             </View>
-            {page.kind === "method" && isNative ? (
+            {(page.kind === "method" || page.kind === "directory-browser") && isNative ? (
               // Native hardware-keyboard events need a focused responder even without a visible field.
               <TextInput
                 ref={inputRef}
@@ -916,7 +994,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
                 testID="add-project-flow-keyboard-capture"
               />
             ) : null}
-            {page.kind !== "method" ? (
+            {page.kind !== "method" && page.kind !== "directory-browser" ? (
               <ThemedTextInput
                 ref={inputRef}
                 initialValue={pageInput(page)}
@@ -1026,11 +1104,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[12],
   },
   overlayWeb: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     pointerEvents: "auto" as const,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   panel: {

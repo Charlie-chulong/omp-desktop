@@ -233,4 +233,68 @@ describe("resolveStructuredGenerationProviders", () => {
     ]);
     expect(snapshots.calls).toEqual([{ cwd: "/tmp/repo", wait: true }]);
   });
+  test("uses the commit-specific provider without changing other metadata generation", async () => {
+    const snapshots = new ProviderSnapshots([
+      {
+        provider: "configured",
+        status: READY,
+        enabled: true,
+        models: [
+          { provider: "configured", id: "general", label: "General" },
+          { provider: "configured", id: "commit", label: "Commit" },
+        ],
+      },
+    ]);
+
+    const providers = await resolveStructuredGenerationProviders({
+      cwd: "/tmp/repo",
+      providerSnapshotManager: snapshots,
+      daemonConfig: {
+        metadataGeneration: {
+          providers: [{ provider: "configured", model: "general" }],
+          commitMessageProviders: [{ provider: "configured", model: "commit" }],
+        },
+      },
+      purpose: "commitMessage",
+    });
+
+    expect(providers[0]).toEqual({ provider: "configured", model: "commit" });
+    expect(providers).not.toContainEqual({ provider: "configured", model: "general" });
+  });
+
+  test("uses the configured Quick Ask model then the conversation model without metadata defaults", async () => {
+    const snapshots = new ProviderSnapshots([
+      {
+        provider: "configured",
+        status: READY,
+        enabled: true,
+        models: [{ provider: "configured", id: "quick", label: "Quick" }],
+      },
+    ]);
+
+    const providers = await resolveStructuredGenerationProviders({
+      cwd: "/tmp/repo",
+      providerSnapshotManager: snapshots,
+      daemonConfig: {
+        metadataGeneration: {
+          providers: [{ provider: "metadata", model: "general" }],
+        },
+        quickAsk: {
+          providers: [{ provider: "configured", model: "quick" }],
+        },
+      },
+      currentSelection: {
+        provider: "conversation",
+        model: "current",
+        thinkingOptionId: "medium",
+      },
+      purpose: "quickAsk",
+      includeDefaultProviders: false,
+    });
+
+    expect(providers).toEqual([
+      { provider: "configured", model: "quick" },
+      { provider: "conversation", model: "current", thinkingOptionId: "medium" },
+    ]);
+  });
 });

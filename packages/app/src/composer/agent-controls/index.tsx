@@ -46,6 +46,12 @@ import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { resolveProviderDefinition } from "@/utils/provider-definitions";
 import { mergeProviderPreferences, useFormPreferences } from "@/hooks/use-form-preferences";
 import { shouldPersistAgentFeatureValue } from "@/create-agent-preferences/preferences";
+import {
+  ENHANCED_WORKFLOW_MODE,
+  WORKFLOW_LOCALE_FEATURE_ID,
+  WORKFLOW_MODE_FEATURE_ID,
+} from "@/hooks/feature-preferences";
+import type { SupportedLocale } from "@/i18n/locales";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import {
   AgentModeControl,
@@ -519,6 +525,8 @@ function buildOpenChangeHandler(
   };
 }
 
+// This component resolves responsive presentation across provider, model, mode, and feature controls.
+// eslint-disable-next-line complexity
 function ControlledAgentControls({
   provider,
   providerOptions,
@@ -587,7 +595,7 @@ function ControlledAgentControls({
   );
   const formattedThinkingOptions = useMemo(
     () => toThinkingControlOptions(thinkingOptions),
-    [thinkingOptions, t],
+    [thinkingOptions],
   );
   const displayThinking = findOptionLabel(
     formattedThinkingOptions,
@@ -615,7 +623,7 @@ function ControlledAgentControls({
             : formatAgentFeatureLabel(feature),
         };
       }),
-    [partitionedFeatures.remaining, t, workflowQuotaAccounts],
+    [partitionedFeatures.remaining, workflowQuotaAccounts],
   );
   const controlPresence = useMemo(
     () => ({
@@ -779,6 +787,8 @@ function ControlledAgentControls({
     canSelectThinking ||
     partitionedFeatures.fastMode !== null ||
     normalizedSelectedModelId.length > 0;
+  /* Memoized panels are intentionally passed through the shared model-selector shell. */
+  /* eslint-disable react-perf/jsx-no-jsx-as-prop */
   const desktopModelSettings = hasModelSettings ? (
     <ModelSettingsPanel
       thinkingOptions={formattedThinkingOptions}
@@ -823,6 +833,7 @@ function ControlledAgentControls({
       compact
     />
   ) : null;
+  /* eslint-enable react-perf/jsx-no-jsx-as-prop */
 
   if (!hasAnyControl) {
     return null;
@@ -1015,7 +1026,6 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     activeSheet,
     handleOpenSheet,
     handleCloseSheet,
-    modelSelectorServerId,
     workflowQuotaAccounts,
   } = props;
   const visibleFeatures = useMemo(() => features?.filter(isComposerFeatureVisible), [features]);
@@ -1224,7 +1234,6 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     handleOpenChange,
     modeControl,
     glyphSize,
-    modelSelectorServerId,
     canSwitchProvider,
   } = props;
   const visibleFeatures = useMemo(() => features?.filter(isComposerFeatureVisible), [features]);
@@ -1332,7 +1341,6 @@ function DesktopFeatureItem({
   onActionComplete?: () => void;
 }) {
   const { theme } = useUnistyles();
-  const { t } = useTranslation();
   const featureSelector: AgentControlSelector = `feature-${feature.id}`;
   const featureAnchorRef = useRef<View>(null);
   const featureLabel = formatAgentFeatureLabel(feature);
@@ -1367,7 +1375,7 @@ function DesktopFeatureItem({
             label: formatFeatureOptionLabel(feature.id, option, oauthAccounts),
           }))
         : [],
-    [feature, oauthAccounts, t],
+    [feature, oauthAccounts],
   );
   const renderSelectOption = useCallback(
     (args: {
@@ -1637,13 +1645,15 @@ function SheetFeatureItem({
   return null;
 }
 
+// This component coordinates persisted and live agent-control state across all providers.
+// eslint-disable-next-line complexity
 export const AgentControls = memo(function AgentControls({
   agentId,
   serverId,
   onDropdownClose,
   isCompactLayout,
 }: AgentControlsProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { updatePreferences } = useFormPreferences();
   const agent = useSessionStore(
     useShallow((state) => selectAgentControlsSlice(state, serverId, agentId)),
@@ -1714,6 +1724,20 @@ export const AgentControls = memo(function AgentControls({
     agentProvider,
     activeModelId,
   );
+  const workflowMode = agent?.features?.find(
+    (feature) => feature.id === WORKFLOW_MODE_FEATURE_ID,
+  )?.value;
+  const workflowLocale = (i18n.resolvedLanguage ?? i18n.language) as SupportedLocale;
+  useEffect(() => {
+    if (!client || agentProvider !== "omp" || workflowMode !== ENHANCED_WORKFLOW_MODE) {
+      return;
+    }
+    void client
+      .setAgentFeature(agentId, WORKFLOW_LOCALE_FEATURE_ID, workflowLocale)
+      .catch((error) => {
+        console.warn("[AgentControls] sync enhanced workflow locale failed", error);
+      });
+  }, [agentId, agentProvider, client, workflowLocale, workflowMode]);
 
   const handleSelectModel = useCallback(
     async (modelId: string) => {
@@ -1794,7 +1818,7 @@ export const AgentControls = memo(function AgentControls({
   );
 
   const handleSetFeature = useCallback(
-    (featureId: string, value: unknown) => {
+    async (featureId: string, value: unknown) => {
       if (!client || !agentProvider) {
         return;
       }
@@ -1802,32 +1826,35 @@ export const AgentControls = memo(function AgentControls({
         toast.error(t("agentControls.quota.switchAfterTurn"));
         return;
       }
-      void client
-        .setAgentFeature(agentId, featureId, value)
-        .then(() => {
-          if (!shouldPersistAgentFeatureValue(featureId)) {
-            return;
-          }
-          void updatePreferences((current) =>
-            mergeProviderPreferences({
-              preferences: current,
-              provider: agentProvider,
-              updates: {
-                featureValues: {
-                  [featureId]: value,
-                },
+      try {
+        if (
+          agentProvider === "omp" &&
+          featureId === WORKFLOW_MODE_FEATURE_ID &&
+          value === ENHANCED_WORKFLOW_MODE
+        ) {
+          await client.setAgentFeature(agentId, WORKFLOW_LOCALE_FEATURE_ID, workflowLocale);
+        }
+        await client.setAgentFeature(agentId, featureId, value);
+        if (!shouldPersistAgentFeatureValue(featureId)) {
+          return;
+        }
+        await updatePreferences((current) =>
+          mergeProviderPreferences({
+            preferences: current,
+            provider: agentProvider,
+            updates: {
+              featureValues: {
+                [featureId]: value,
               },
-            }),
-          ).catch((error) => {
-            console.warn("[AgentControls] persist feature preference failed", error);
-          });
-        })
-        .catch((error) => {
-          console.warn("[AgentControls] setAgentFeature failed", error);
-          toast.error(toErrorMessage(error));
-        });
+            },
+          }),
+        );
+      } catch (error) {
+        console.warn("[AgentControls] setAgentFeature failed", error);
+        toast.error(toErrorMessage(error));
+      }
     },
-    [agent?.status, agentId, agentProvider, client, t, toast, updatePreferences],
+    [agent?.status, agentId, agentProvider, client, t, toast, updatePreferences, workflowLocale],
   );
 
   const commandCenterControls = useMemo<AgentControlCommandCenterSource>(
@@ -1958,12 +1985,11 @@ export function DraftAgentControls({
   modelSelectorServerId = null,
   isCompactLayout,
 }: DraftAgentControlsProps) {
-  const { t } = useTranslation();
   const activeControlSourceId = useId();
   const { isActiveComposer } = useComposerKeyboardScope();
   const mappedThinkingOptions = useMemo<AgentControlOption[]>(
     () => toThinkingControlOptions(thinkingOptions),
-    [thinkingOptions, t],
+    [thinkingOptions],
   );
 
   const effectiveSelectedThinkingOption =
