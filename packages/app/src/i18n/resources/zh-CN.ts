@@ -2604,7 +2604,7 @@ export const zhCN: TranslationResources = {
         listTitle: "已安装",
         installTitle: "安装",
         installSpecLabel: "插件标识",
-        installPlaceholder: "npm 包名或路径,例如 @scope/omp-plugin-memory",
+        browsePackages: "在 pi.dev 浏览更多插件 ↗",
         dryRunLabel: "仅检查",
         toggleLabel: "切换 {{id}}",
         doctorTitle: "健康检查",
