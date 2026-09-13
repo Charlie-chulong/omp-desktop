@@ -272,6 +272,10 @@ describe("PersistedConfigSchema agent provider runtime settings", () => {
             { provider: "claude", model: "haiku" },
             { provider: "codex", model: "gpt-5.4-mini", thinkingOptionId: "low" },
           ],
+          commitMessageProviders: [{ provider: "cursor", model: "composer" }],
+        },
+        quickAsk: {
+          providers: [{ provider: "claude", model: "sonnet" }],
         },
       },
     });
@@ -281,6 +285,10 @@ describe("PersistedConfigSchema agent provider runtime settings", () => {
         { provider: "claude", model: "haiku" },
         { provider: "codex", model: "gpt-5.4-mini", thinkingOptionId: "low" },
       ],
+      commitMessageProviders: [{ provider: "cursor", model: "composer" }],
+    });
+    expect(parsed.agents?.quickAsk).toEqual({
+      providers: [{ provider: "claude", model: "sonnet" }],
     });
   });
 

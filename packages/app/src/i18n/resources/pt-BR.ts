@@ -2088,7 +2088,14 @@ export const ptBR: TranslationResources = {
     metadataGeneration: {
       title: "Geração de metadados",
       description:
-        "Escolha o modelo usado pelo OMP Desktop para títulos de espaços de trabalho, nomes de branches, mensagens de commit e rascunhos de pull request",
+        "Escolha modelos separados para metadados, mensagens de commit e perguntas rápidas",
+      defaultModel: "Outros metadados",
+      defaultModelHint: "Títulos de espaços de trabalho, branches e rascunhos de pull request",
+      commitMessageModel: "Mensagens de commit",
+      commitMessageModelHint: "Mensagens geradas a partir de alterações Git preparadas",
+      quickAskModel: "Pergunta rápida",
+      quickAskModelHint: "Respostas sobre o conteúdo selecionado",
+      quickAskAutomaticHint: "Usa o modelo da conversa atual",
       selection: "Seleção de modelo",
       automatic: "Automática",
       preferred: "Manual",

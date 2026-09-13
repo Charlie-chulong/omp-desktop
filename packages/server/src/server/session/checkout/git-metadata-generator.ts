@@ -50,6 +50,7 @@ export interface StructuredTextGenerationRequest<T> {
   schema: z.ZodType<T>;
   schemaName: string;
   agentTitle: string;
+  providerPurpose?: ResolveStructuredGenerationProvidersOptions["purpose"];
   maxRetries?: number;
 }
 
@@ -146,14 +147,15 @@ export function createGitMetadataGenerator(deps: {
           diffOptions: { mode: "staged", includeStructured: true },
           maxPatchChars: MAX_COMMIT_PATCH_CHARS,
           contract:
-            "Write a git commit message for the changes below. Base every claim on the provided diff; do not invent motivation, documentation changes, translations, or test results. If the diff is truncated, describe only changes supported by the visible content.",
+            "Write a Git commit message that explains the intent and observable effect of the staged changes. Use only facts supported by the diff.",
           styleConfigKey: "commitMessage",
           styleDefault: [
-            "Use a concise, imperative subject (aim for at most 72 characters, no trailing period) that summarizes the main behavioral change rather than listing implementation keywords.",
-            "Match the language, prefix/scope pattern, and capitalization of recent commit subjects when available; otherwise use Conventional Commits.",
-            "Follow the subject with a blank line and a body of '- ' bullet points describing the substantive changes. Group related edits, name important components when useful, and explain concrete behavior rather than saying 'improve UI' or 'ensure reliability'.",
-            "Usually include 2–6 bullets, but use fewer for small changes and omit the body for a truly trivial change. Do not pad the message or repeat the subject.",
-            "Recent examples show subject style only, not a requirement to omit the body.",
+            "Write a Conventional Commit subject in imperative mood. Prefer the user-visible purpose over implementation mechanics; keep it concise and omit the trailing period.",
+            "Add 2–5 '- ' bullets when the change is not trivial. Write each bullet as one short past-tense sentence ending in a period.",
+            "Describe what changed at the feature or component level. Mention low-level APIs, setters, events, state flags, and exact assertions only when they are essential to understanding the behavior.",
+            "Combine related implementation edits into one outcome. Describe tests as coverage of behavior, not assertion mechanics.",
+            "Do not repeat the subject, pad the body, speculate about motivation, or claim documentation, translations, or tests that are absent from the diff.",
+            "Match the language, prefix/scope pattern, and capitalization of recent commit subjects when available.",
           ].join("\n"),
           jsonFieldsHint:
             "Return JSON only with a single field 'message' containing the complete subject and body, with newlines encoded as \\n.",
@@ -168,6 +170,7 @@ export function createGitMetadataGenerator(deps: {
           schema: COMMIT_MESSAGE_SCHEMA,
           schemaName: "CommitMessage",
           agentTitle: "Commit generator",
+          providerPurpose: "commitMessage",
           maxRetries: 0,
         });
         return result.message;
@@ -221,12 +224,13 @@ export function createAgentStructuredTextGeneration(deps: {
   ) => ResolveStructuredGenerationProvidersOptions["currentSelection"];
 }): StructuredTextGeneration {
   return {
-    async generate({ cwd, prompt, schema, schemaName, agentTitle, maxRetries }) {
+    async generate({ cwd, prompt, schema, schemaName, agentTitle, maxRetries, providerPurpose }) {
       const providers = await resolveStructuredGenerationProviders({
         cwd,
         providerSnapshotManager: deps.providerSnapshotManager,
         daemonConfig: deps.readDaemonConfig(),
         currentSelection: deps.getFocusedSelection(cwd),
+        purpose: providerPurpose,
       });
       return generateStructuredAgentResponseWithFallback({
         manager: deps.agentManager,

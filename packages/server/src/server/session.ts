@@ -119,7 +119,10 @@ import {
 } from "./agent/timeline-projection.js";
 import { buildAgentForkContextAttachment } from "./agent/activity-curator.js";
 import { buildAgentPrompt } from "./agent/prompt-attachments.js";
-import type { StructuredGenerationDaemonConfig } from "./agent/structured-generation-providers.js";
+import {
+  resolveStructuredGenerationProviders,
+  type StructuredGenerationDaemonConfig,
+} from "./agent/structured-generation-providers.js";
 import {
   getAgentStreamEventTurnId,
   type AgentPersistenceHandle,
@@ -1391,8 +1394,10 @@ export class Session {
   }
 
   private readStructuredGenerationDaemonConfig(): StructuredGenerationDaemonConfig {
+    const config = this.daemonConfigStore.get();
     return {
-      metadataGeneration: this.daemonConfigStore.get().metadataGeneration,
+      metadataGeneration: config.metadataGeneration,
+      quickAsk: config.quickAsk,
     };
   }
 
@@ -7774,28 +7779,47 @@ export class Session {
     }
   }
 
-  private async handleQuickAskRequest(msg: QuickAskRequestMessage): Promise<void> {
+  private async buildQuickAskPrompt(msg: QuickAskRequestMessage): Promise<string> {
+    let context = "";
+    if (msg.sourceAgentId) {
+      const rows = await this.agentManager.getTimelineRows(msg.sourceAgentId);
+      const messages: string[] = [];
+      // Bound the attached history, keeping the most recent conversation text.
+      let remaining = 60_000;
+      for (let index = rows.length - 1; index >= 0 && remaining > 0; index -= 1) {
+        const { item } = rows[index]!;
+        if (item.type !== "user_message" && item.type !== "assistant_message") continue;
+        if (!item.text.trim()) continue;
+        const text = item.text.slice(-remaining);
+        messages.push(`${item.type === "user_message" ? "User" : "Assistant"}: ${text}`);
+        remaining -= text.length;
+      }
+      context = messages.toReversed().join("\n\n");
+    }
+
+    return (
+      (context ? `Conversation context (most recent messages):\n\n${context}\n\n` : "") +
+      `Selected content:\n\n---\n${msg.selectedText}\n---\n\nQuestion: ${msg.question}`
+    );
+  }
+
+  private async runQuickAskCandidate(
+    msg: QuickAskRequestMessage,
+    candidate: Pick<AgentSessionConfig, "provider" | "model" | "thinkingOptionId">,
+    prompt: string,
+  ): Promise<string> {
     let agentId: string | null = null;
     try {
-      let context = "";
-      if (msg.sourceAgentId) {
-        const rows = await this.agentManager.getTimelineRows(msg.sourceAgentId);
-        const messages: string[] = [];
-        // Bound the attached history, keeping the most recent conversation text.
-        let remaining = 60_000;
-        for (let index = rows.length - 1; index >= 0 && remaining > 0; index -= 1) {
-          const { item } = rows[index]!;
-          if (item.type !== "user_message" && item.type !== "assistant_message") continue;
-          if (!item.text.trim()) continue;
-          const text = item.text.slice(-remaining);
-          messages.push(`${item.type === "user_message" ? "User" : "Assistant"}: ${text}`);
-          remaining -= text.length;
-        }
-        context = messages.toReversed().join("\n\n");
-      }
+      const usesSourceModel =
+        candidate.provider === msg.config.provider &&
+        candidate.model === msg.config.model &&
+        candidate.thinkingOptionId === msg.config.thinkingOptionId;
       const agent = await this.agentManager.createAgent(
         {
-          ...msg.config,
+          ...(usesSourceModel ? msg.config : { cwd: msg.config.cwd }),
+          provider: candidate.provider,
+          ...(candidate.model ? { model: candidate.model } : {}),
+          ...(candidate.thinkingOptionId ? { thinkingOptionId: candidate.thinkingOptionId } : {}),
           title: "Quick ask",
           internal: true,
           systemPrompt:
@@ -7807,17 +7831,50 @@ export class Session {
         { persistSession: false, workspaceId: undefined },
       );
       agentId = agent.id;
-      const result = await this.agentManager.runAgent(
-        agent.id,
-        (context ? `Conversation context (most recent messages):\n\n${context}\n\n` : "") +
-          `Selected content:\n\n---\n${msg.selectedText}\n---\n\nQuestion: ${msg.question}`,
-      );
+      const result = await this.agentManager.runAgent(agent.id, prompt);
       const answer =
         result.finalText?.trim() ||
         result.timeline.findLast((item) => item.type === "assistant_message")?.text.trim() ||
         null;
       if (!answer) {
         throw new Error("AI returned an empty answer");
+      }
+      return answer;
+    } finally {
+      if (agentId) {
+        await this.agentManager.closeAgent(agentId).catch(() => undefined);
+        await this.agentManager.flush();
+        await this.agentStorage.remove(agentId).catch(() => undefined);
+        await this.agentManager.deleteAgentState(agentId).catch(() => undefined);
+      }
+    }
+  }
+
+  private async handleQuickAskRequest(msg: QuickAskRequestMessage): Promise<void> {
+    try {
+      const prompt = await this.buildQuickAskPrompt(msg);
+      const candidates = await resolveStructuredGenerationProviders({
+        cwd: msg.config.cwd,
+        providerSnapshotManager: this.providerSnapshotManager,
+        daemonConfig: this.readStructuredGenerationDaemonConfig(),
+        currentSelection: msg.config,
+        purpose: "quickAsk",
+        includeDefaultProviders: false,
+      });
+      let answer: string | null = null;
+      let lastError: unknown = new Error("No model is available for Quick Ask");
+
+      for (const candidate of candidates) {
+        try {
+          answer = await this.runQuickAskCandidate(msg, candidate, prompt);
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (!answer) {
+        throw lastError;
       }
       this.emit({
         type: "quick_ask_response",
@@ -7832,13 +7889,6 @@ export class Session {
           error: errorToFriendlyMessage(error),
         },
       });
-    } finally {
-      if (agentId) {
-        await this.agentManager.closeAgent(agentId).catch(() => undefined);
-        await this.agentManager.flush();
-        await this.agentStorage.remove(agentId).catch(() => undefined);
-        await this.agentManager.deleteAgentState(agentId).catch(() => undefined);
-      }
     }
   }
 

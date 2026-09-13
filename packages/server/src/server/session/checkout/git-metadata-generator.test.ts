@@ -94,11 +94,14 @@ describe("createGitMetadataGenerator", () => {
       cwd: "/repo",
       schemaName: "CommitMessage",
       agentTitle: "Commit generator",
+      providerPurpose: "commitMessage",
     });
     expect(generateCalls[0].maxRetries).toBe(0);
     expect(generateCalls[0].prompt).toContain("M\tsrc/foo.ts\t(+3 -1)");
     expect(generateCalls[0].prompt).toContain("diff --git a/src/foo.ts");
     expect(generateCalls[0].prompt).toContain("feat: add repository browser");
+    expect(generateCalls[0].prompt).toContain("Prefer the user-visible purpose");
+    expect(generateCalls[0].prompt).toContain("one short past-tense sentence");
   });
 
   it("accepts a complete multiline commit message longer than 72 characters", async () => {

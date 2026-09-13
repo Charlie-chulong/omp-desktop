@@ -91,6 +91,7 @@ import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { DiffTooLargeState } from "@/git/diff-too-large-state";
 import { CommitComposer } from "@/git/commit-composer";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
+import { useWorkspaceFocusKey } from "@/workspace/focus";
 
 export type { GitActionId, GitAction, GitActions } from "@/git/policy";
 
@@ -1342,10 +1343,12 @@ function useDiffTabNavigation({
   serverId,
   workspaceId,
   cwd,
+  layoutWorkspaceKey,
 }: {
   serverId: string;
   workspaceId?: string | null;
   cwd: string;
+  layoutWorkspaceKey?: string | null;
 }) {
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
   const openWorkspaceTabInFocusedPane = useCallback(
@@ -1355,11 +1358,12 @@ function useDiffTabNavigation({
   );
   const persistenceKey = useMemo(
     () =>
+      layoutWorkspaceKey ??
       buildWorkspaceTabPersistenceKey({
         serverId,
         workspaceId: workspaceId ?? cwd,
       }),
-    [cwd, serverId, workspaceId],
+    [cwd, layoutWorkspaceKey, serverId, workspaceId],
   );
   const changesTabOpen = false;
   const openChanges = useCallback(
@@ -1785,12 +1789,16 @@ export function ChangesSurface({
     isLocalExecution: isLocalDaemon,
   });
   const fileManagerTarget = desktopOpenTargets.find((target) => target.kind === "file-manager");
+  // Tool panels may follow a conversation whose workspace differs from the
+  // route that owns the visible tab layout. Diff documents must use that host
+  // layout or they are opened successfully into an invisible workspace.
+  const layoutWorkspaceKey = useWorkspaceFocusKey();
   const {
     changesTabOpen: workspaceChangesTabOpen,
     toggleChanges: handleToggleChangesTab,
     openCommit: handleCommitPress,
     onChangesFilePress: workspaceOnChangesFilePress,
-  } = useDiffTabNavigation({ serverId, workspaceId, cwd });
+  } = useDiffTabNavigation({ serverId, workspaceId, cwd, layoutWorkspaceKey });
   const changesTabOpen = resolveChangesTabOpen(host, workspaceChangesTabOpen);
   const onChangesFilePress = resolveChangesFilePress(host, workspaceOnChangesFilePress);
   const refreshSupported = useSessionStore(

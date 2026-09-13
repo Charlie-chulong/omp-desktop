@@ -2072,8 +2072,14 @@ export const ja: TranslationResources = {
     plugins: pluginSettings.ja,
     metadataGeneration: {
       title: "メタデータ生成",
-      description:
-        "ワークスペースのタイトル、ブランチ名、コミットメッセージ、プルリクエストの下書きに使用するモデルを選択します",
+      description: "メタデータ、コミットメッセージ、クイック質問に使用するモデルを個別に選択します",
+      defaultModel: "その他のメタデータ",
+      defaultModelHint: "ワークスペースのタイトル、ブランチ名、プルリクエストの下書き",
+      commitMessageModel: "コミットメッセージ",
+      commitMessageModelHint: "ステージ済みの Git 変更から生成するメッセージ",
+      quickAskModel: "クイック質問",
+      quickAskModelHint: "選択した内容に関する質問への回答",
+      quickAskAutomaticHint: "現在の会話モデルを使用します",
       selection: "モデル選択",
       automatic: "自動",
       preferred: "手動",

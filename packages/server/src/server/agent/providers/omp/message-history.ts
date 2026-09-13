@@ -1,6 +1,7 @@
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import type { OmpAgentMessage, OmpImageContent, OmpTextContent } from "./rpc-types.js";
 import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
+import { getOmpWorkflowDisplayText } from "./workflow-prompt.js";
 import {
   extractTextFromToolResult,
   mapToolDetail,
@@ -122,7 +123,7 @@ export class OmpHistoryMapper {
   }
 
   private mapUserMessage(message: Extract<OmpAgentMessage, { role: "user" }>): AgentStreamEvent[] {
-    const text = getUserMessageText(message.content);
+    const text = getOmpWorkflowDisplayText(getUserMessageText(message.content));
     const images = getUserMessageImages(message.content);
     this.userIndex += 1;
     if (!text && !images) {

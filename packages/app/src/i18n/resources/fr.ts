@@ -2106,7 +2106,14 @@ export const fr: TranslationResources = {
     metadataGeneration: {
       title: "Génération de métadonnées",
       description:
-        "Choisissez le modèle utilisé par OMP Desktop pour les titres d’espaces de travail, les noms de branches, les messages de commit et les brouillons de pull request",
+        "Choisissez des modèles distincts pour les métadonnées, les messages de commit et Quick Ask",
+      defaultModel: "Autres métadonnées",
+      defaultModelHint: "Titres d’espaces de travail, branches et brouillons de pull request",
+      commitMessageModel: "Messages de commit",
+      commitMessageModelHint: "Messages générés à partir des changements Git indexés",
+      quickAskModel: "Question rapide",
+      quickAskModelHint: "Réponses concernant le contenu sélectionné",
+      quickAskAutomaticHint: "Utilise le modèle de la conversation actuelle",
       selection: "Sélection du modèle",
       automatic: "Automatique",
       preferred: "Manuel",

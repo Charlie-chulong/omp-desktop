@@ -5,6 +5,7 @@ import type { EditingTextInputHandle, EditingTextInputProps } from "./types";
 interface WebTextInputElement extends TextInput {
   value?: string;
   setSelectionRange?: (start: number, end: number) => void;
+  dispatchEvent(event: Event): boolean;
   addEventListener(type: "compositionstart" | "compositionend", listener: EventListener): void;
   removeEventListener(type: "compositionstart" | "compositionend", listener: EventListener): void;
 }
@@ -25,6 +26,7 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     const initialTextRef = useRef(initialValue);
     const textRef = useRef(initialTextRef.current);
     const isComposingRef = useRef(false);
+    const isReplacingTextRef = useRef(false);
     const onChangeTextRef = useRef(onChangeText);
     onChangeTextRef.current = onChangeText;
 
@@ -54,7 +56,9 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
     const handleChangeText = useCallback((nextText: string) => {
       if (isComposingRef.current || nextText === textRef.current) return;
       textRef.current = nextText;
-      onChangeTextRef.current?.(nextText);
+      if (!isReplacingTextRef.current) {
+        onChangeTextRef.current?.(nextText);
+      }
     }, []);
 
     useImperativeHandle(ref, () => ({
@@ -70,7 +74,23 @@ export const EditingTextInput = forwardRef<EditingTextInputHandle, EditingTextIn
       replaceText: (nextText, selection) => {
         textRef.current = nextText;
         const input = inputRef.current as WebTextInputElement | null;
-        if (input && "value" in input) input.value = nextText;
+        if (input && "value" in input) {
+          const valueSetter = Object.getOwnPropertyDescriptor(
+            Object.getPrototypeOf(input) as object,
+            "value",
+          )?.set;
+          isReplacingTextRef.current = true;
+          try {
+            if (valueSetter) {
+              valueSetter.call(input, nextText);
+            } else {
+              input.value = nextText;
+            }
+            input.dispatchEvent(new InputEvent("input", { bubbles: true, data: nextText }));
+          } finally {
+            isReplacingTextRef.current = false;
+          }
+        }
         if (selection && typeof input?.setSelectionRange === "function") {
           input.setSelectionRange(selection.start, selection.end);
         }

@@ -50,6 +50,7 @@ it("preserves generated body text and inserts newlines without submitting until 
     const input = container.querySelector("textarea")!;
     const generated = await generate.mock.results[0].value;
     await expect.poll(() => input.value).toBe(generated);
+    await expect.poll(() => input.getBoundingClientRect().height).toBeGreaterThan(34);
     await userEvent.click(input);
     input.setSelectionRange(input.value.length, input.value.length);
     await userEvent.keyboard("{Enter}");
@@ -65,6 +66,7 @@ it("preserves generated body text and inserts newlines without submitting until 
       message: completeMessage,
     });
     await expect.poll(() => input.value).toBe("");
+    await expect.poll(() => input.getBoundingClientRect().height).toBe(34);
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -6,8 +6,22 @@ import type {
 import type { StructuredGenerationProvider } from "./agent-response-loop.js";
 import type { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
 
+export type StructuredGenerationProviderPurpose = "metadata" | "commitMessage" | "quickAsk";
+
 export interface StructuredGenerationDaemonConfig {
   metadataGeneration?: {
+    providers?: Array<{
+      provider: string;
+      model?: string;
+      thinkingOptionId?: string;
+    }>;
+    commitMessageProviders?: Array<{
+      provider: string;
+      model?: string;
+      thinkingOptionId?: string;
+    }>;
+  };
+  quickAsk?: {
     providers?: Array<{
       provider: string;
       model?: string;
@@ -38,12 +52,14 @@ export interface ResolveStructuredGenerationProvidersOptions {
     model?: string | null;
     thinkingOptionId?: string | null;
   };
+  purpose?: StructuredGenerationProviderPurpose;
+  includeDefaultProviders?: boolean;
 }
 
 export async function resolveStructuredGenerationProviders(
   options: ResolveStructuredGenerationProvidersOptions,
 ): Promise<StructuredGenerationProvider[]> {
-  const configuredProviders = readConfiguredProviders(options.daemonConfig);
+  const configuredProviders = readConfiguredProviders(options.daemonConfig, options.purpose);
   const providerEntries = await options.providerSnapshotManager.listProviders({
     cwd: options.cwd,
     wait: true,
@@ -65,10 +81,12 @@ export async function resolveStructuredGenerationProviders(
     providers.push(resolvedConfigured);
   }
 
-  for (const identifier of DEFAULT_STRUCTURED_GENERATION_PROVIDERS) {
-    const resolved = resolveByModelSubstring(modelEntries, identifier);
-    if (resolved) {
-      providers.push(resolved);
+  if (options.includeDefaultProviders !== false) {
+    for (const identifier of DEFAULT_STRUCTURED_GENERATION_PROVIDERS) {
+      const resolved = resolveByModelSubstring(modelEntries, identifier);
+      if (resolved) {
+        providers.push(resolved);
+      }
     }
   }
 
@@ -244,13 +262,17 @@ function resolveByModelSubstring(
 
 function readConfiguredProviders(
   daemonConfig: ResolveStructuredGenerationProvidersOptions["daemonConfig"],
+  purpose: StructuredGenerationProviderPurpose = "metadata",
 ): Array<{ provider: string; model?: string; thinkingOptionId?: string }> {
-  const metadataGeneration = daemonConfig?.metadataGeneration;
-  if (!metadataGeneration || typeof metadataGeneration !== "object") {
-    return [];
+  let configured;
+  if (purpose === "quickAsk") {
+    configured = daemonConfig?.quickAsk?.providers;
+  } else if (purpose === "commitMessage") {
+    configured = daemonConfig?.metadataGeneration?.commitMessageProviders;
+  } else {
+    configured = daemonConfig?.metadataGeneration?.providers;
   }
-  const providers = "providers" in metadataGeneration ? metadataGeneration.providers : undefined;
-  return Array.isArray(providers) ? providers : [];
+  return Array.isArray(configured) ? configured : [];
 }
 
 function selectDefaultModel(models: readonly AgentModelDefinition[]): AgentModelDefinition | null {

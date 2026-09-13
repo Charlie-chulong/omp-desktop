@@ -2101,8 +2101,14 @@ export const es: TranslationResources = {
     plugins: pluginSettings.es,
     metadataGeneration: {
       title: "Generación de metadatos",
-      description:
-        "Elige el modelo que OMP Desktop usa para títulos de espacios de trabajo, nombres de ramas, mensajes de commit y borradores de pull requests",
+      description: "Elige modelos separados para metadatos, mensajes de commit y preguntas rápidas",
+      defaultModel: "Otros metadatos",
+      defaultModelHint: "Títulos de espacios de trabajo, ramas y borradores de pull requests",
+      commitMessageModel: "Mensajes de commit",
+      commitMessageModelHint: "Mensajes generados a partir de cambios de Git preparados",
+      quickAskModel: "Pregunta rápida",
+      quickAskModelHint: "Respuestas sobre el contenido seleccionado",
+      quickAskAutomaticHint: "Usa el modelo de la conversación actual",
       selection: "Selección de modelo",
       automatic: "Automática",
       preferred: "Manual",

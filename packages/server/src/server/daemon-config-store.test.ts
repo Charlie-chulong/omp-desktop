@@ -700,6 +700,65 @@ describe("DaemonConfigStore", () => {
     expect(persisted.agents?.providers).toBeUndefined();
   });
 
+  test("persists independent commit-message and Quick Ask model selections", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    writeFileSync(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        version: 1,
+        agents: {
+          metadataGeneration: {
+            providers: [{ provider: "claude", model: "haiku" }],
+          },
+        },
+      }),
+    );
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        providers: {},
+        metadataGeneration: {
+          providers: [{ provider: "claude", model: "haiku" }],
+        },
+        autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
+        appendSystemPrompt: "",
+      },
+      undefined,
+    );
+
+    store.patch({
+      metadataGeneration: {
+        commitMessageProviders: [{ provider: "codex", model: "fast" }],
+      },
+    });
+    const next = store.patch({
+      quickAsk: {
+        providers: [{ provider: "claude", model: "sonnet" }],
+      },
+    });
+
+    expect(next.metadataGeneration).toEqual({
+      providers: [{ provider: "claude", model: "haiku" }],
+      commitMessageProviders: [{ provider: "codex", model: "fast" }],
+    });
+    expect(next.quickAsk).toEqual({
+      providers: [{ provider: "claude", model: "sonnet" }],
+    });
+    expect(loadPersistedConfig(paseoHome).agents).toMatchObject({
+      metadataGeneration: {
+        providers: [{ provider: "claude", model: "haiku" }],
+        commitMessageProviders: [{ provider: "codex", model: "fast" }],
+      },
+      quickAsk: {
+        providers: [{ provider: "claude", model: "sonnet" }],
+      },
+    });
+  });
+
   test("patch removes deleted providers from metadata generation", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);
