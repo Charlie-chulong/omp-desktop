@@ -10,10 +10,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const require = createRequire(import.meta.url);
+const { assertNativeKeyringBinding } = require("../../scripts/after-pack.js") as {
+  assertNativeKeyringBinding: (resourcesDir: string, platform: string, arch: string) => void;
+};
 
 function writeExecutable(filePath: string, contents: string): void {
   writeFileSync(filePath, contents, "utf8");
@@ -119,6 +124,37 @@ describe("desktop packaging", () => {
 
     for (const required of ["@omp-desktop/cli", "@omp-desktop/server"]) {
       expect(deps[required], `${required} must be declared in dependencies`).toBe("*");
+    }
+  });
+
+  it("rejects Windows packages without the target keyring binding", () => {
+    const resourcesDir = mkdtempSync(join(tmpdir(), "omp-keyring-package-test-"));
+    try {
+      expect(() => assertNativeKeyringBinding(resourcesDir, "win32", "x64")).toThrow(
+        "Packaged Windows keyring binding is missing for x64",
+      );
+    } finally {
+      rmSync(resourcesDir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts Windows packages containing the target keyring binding", () => {
+    const resourcesDir = mkdtempSync(join(tmpdir(), "omp-keyring-package-test-"));
+    const bindingPath = join(
+      resourcesDir,
+      "app.asar.unpacked",
+      "node_modules",
+      "@napi-rs",
+      "keyring-win32-arm64-msvc",
+      "keyring.win32-arm64-msvc.node",
+    );
+    try {
+      mkdirSync(dirname(bindingPath), { recursive: true });
+      writeFileSync(bindingPath, "");
+
+      expect(() => assertNativeKeyringBinding(resourcesDir, "win32", "arm64")).not.toThrow();
+    } finally {
+      rmSync(resourcesDir, { recursive: true, force: true });
     }
   });
 

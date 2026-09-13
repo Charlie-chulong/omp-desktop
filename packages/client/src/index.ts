@@ -24,6 +24,7 @@ import type {
   OmpProviderManagementSaveResponseMessage,
   OmpSubagentSettingsGetResponseMessage,
   OmpSubagentSettingsUpdateResponseMessage,
+  OmpSubagentSettingsEnabledUpdateResponseMessage,
   OmpMemorySettingsGetResponseMessage,
   OmpMemorySettingsUpdateResponseMessage,
   OmpMemorySettingsPatch,
@@ -388,6 +389,10 @@ export interface OmpProviderActions {
     model: string | null,
     options?: { requestId?: string },
   ): Promise<OmpSubagentSettingsUpdateResponseMessage["payload"]>;
+  updateSubagentSettingsEnabled(
+    enabled: boolean,
+    options?: { requestId?: string },
+  ): Promise<OmpSubagentSettingsEnabledUpdateResponseMessage["payload"]>;
   getMemorySettings(options?: {
     requestId?: string;
   }): Promise<OmpMemorySettingsGetResponseMessage["payload"]>;
@@ -562,6 +567,8 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
       getSubagentSettings: (options) => daemonClient.getOmpSubagentSettings(options),
       updateSubagentModel: (agentName, model, options) =>
         daemonClient.updateOmpSubagentModel(agentName, model, options),
+      updateSubagentSettingsEnabled: (enabled, options) =>
+        daemonClient.updateOmpSubagentSettingsEnabled(enabled, options),
       getMemorySettings: (options) => daemonClient.getOmpMemorySettings(options),
       updateMemorySettings: (expectedRevision, patch, options) =>
         daemonClient.updateOmpMemorySettings(expectedRevision, patch, options),

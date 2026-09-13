@@ -267,6 +267,7 @@ export const zhCN: TranslationResources = {
       workflow: {
         title: "工作流",
         standard: "标准",
+        enhanced: "增强",
         plan: "计划",
         goal: "目标",
         goalPlaceholder: "请输入目标",
@@ -1705,6 +1706,7 @@ export const zhCN: TranslationResources = {
         inspecting: "正在检查远端 Host…",
         "preparing-runtime": "正在准备托管 Runtime…",
         uploading: "正在上传后端…",
+        uploadingProgress: "正在上传后端… {{percent}}%",
         installing: "正在安装后端依赖…",
         starting: "正在启动远端 Daemon…",
         pairing: "正在验证加密 Relay…",
@@ -2569,6 +2571,9 @@ export const zhCN: TranslationResources = {
         unavailable: "连接到这个 Host 以管理 OMP 子智能体",
         unsupported: "更新此 Host 后即可管理 OMP 子智能体模型",
         loading: "正在加载 OMP 子智能体配置...",
+        overrideEnabled: "复写内置子智能体模型",
+        overrideEnabledHint:
+          "通过 task.agentModelOverrides 管理 scout、task、sonic、reviewer 和 security-reviewer。关闭后会删除整个映射。",
         inherit: "继承父 Agent",
         inheritHint: "使用父 Agent 当前或默认的模型。",
         modelLabel: "模型",

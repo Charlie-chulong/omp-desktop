@@ -252,6 +252,7 @@ export const es: TranslationResources = {
       workflow: {
         title: "Flujo de trabajo",
         standard: "Estándar",
+        enhanced: "Mejorado",
         plan: "Plan",
         goal: "Objetivo",
         goalPlaceholder: "Introduce un objetivo",

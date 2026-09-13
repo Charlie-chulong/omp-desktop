@@ -8,6 +8,7 @@ const ManifestSchema = z.object({
   schemaVersion: z.literal(1),
   backendVersion: z.string().min(1),
   nodeVersion: z.string().regex(/^\d+\.\d+\.\d+$/u),
+  bundleHash: z.string().regex(/^[a-f0-9]{64}$/u),
   supportedTargets: z.array(z.string()),
   files: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/u)),
 });
@@ -20,6 +21,7 @@ export interface RemoteBackendFile {
 export interface RemoteBackendBundle {
   backendVersion: string;
   nodeVersion: string;
+  bundleHash: string;
   supportedTargets: readonly string[];
   files: readonly RemoteBackendFile[];
 }
@@ -44,6 +46,7 @@ export async function loadRemoteBackendBundle(): Promise<RemoteBackendBundle> {
   } catch (error) {
     throw new Error(
       `Remote backend bundle is unavailable. Run npm run build:remote-backend. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 
@@ -62,6 +65,7 @@ export async function loadRemoteBackendBundle(): Promise<RemoteBackendBundle> {
   }
 
   return {
+    bundleHash: manifest.bundleHash,
     backendVersion: manifest.backendVersion,
     nodeVersion: manifest.nodeVersion,
     supportedTargets: manifest.supportedTargets,

@@ -2,7 +2,13 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import {
+  Pressable,
+  Text,
+  View,
+  type PressableStateCallbackType,
+  StyleSheet as RNStyleSheet,
+} from "react-native";
 import Animated, { runOnJS, useAnimatedReaction } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Keyboard as KeyboardIcon, KeyboardOff as KeyboardOffIcon } from "lucide-react-native";
@@ -1141,7 +1147,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[2],
   },
   attachOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0, 0, 0, 0.16)",

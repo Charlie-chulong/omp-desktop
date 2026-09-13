@@ -616,6 +616,34 @@ export class ProviderCatalogSession {
       });
     }
   }
+  async handleOmpSubagentSettingsEnabledUpdateRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      { type: "omp.subagents.management.enabled.update.request" }
+    >,
+  ): Promise<void> {
+    try {
+      const settings = await this.providerSnapshotManager.updateOmpSubagentSettingsEnabled(
+        msg.enabled,
+      );
+      this.host.emit({
+        type: "omp.subagents.management.enabled.update.response",
+        payload: { ...settings, requestId: msg.requestId },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to update OMP subagent override state");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to update OMP subagent override state: ${err.message}`,
+          code: "omp_subagent_settings_enabled_update_failed",
+        },
+      });
+    }
+  }
 
   async handleOmpMemorySettingsGetRequest(
     msg: Extract<SessionInboundMessage, { type: "omp.memory.settings.get.request" }>,
@@ -663,9 +691,7 @@ export class ProviderCatalogSession {
           requestId: msg.requestId,
           requestType: msg.type,
           error: `Failed to update OMP memory settings: ${err.message}`,
-          code: conflict
-            ? "omp_memory_settings_conflict"
-            : "omp_memory_settings_update_failed",
+          code: conflict ? "omp_memory_settings_conflict" : "omp_memory_settings_update_failed",
         },
       });
     }

@@ -1,4 +1,4 @@
-import { confirm, isCancel, log } from "@clack/prompts";
+import { confirm, log } from "@clack/prompts";
 import { Command } from "commander";
 import chalk from "chalk";
 import { parseRelayAddress } from "@omp-desktop/protocol/connection-offer";
@@ -187,7 +187,7 @@ export async function confirmRelayPairing(): Promise<boolean> {
     message: "Enable relay to pair a device?",
     initialValue: false,
   });
-  return !isCancel(answer) && answer;
+  return answer === true;
 }
 
 export function printDirectConnectionGuidance(): void {

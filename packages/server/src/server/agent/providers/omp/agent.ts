@@ -91,7 +91,11 @@ import { OmpSubagentCardTracker, type OmpSubagentCardScheduler } from "./subagen
 import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
 import { getUserMessageImages, getUserMessageText } from "./message-history.js";
 import { mapOmpIrcMessageToToolCall, mapOmpSystemNoticeToToolCall } from "./system-notice.js";
-import { readOmpSubagentSettings, updateOmpSubagentModel } from "./subagent-settings.js";
+import {
+  readOmpSubagentSettings,
+  updateOmpSubagentModel,
+  updateOmpSubagentSettingsEnabled,
+} from "./subagent-settings.js";
 import {
   readOmpMemorySettings,
   updateOmpMemorySettings as updateMemorySettings,
@@ -616,13 +620,26 @@ interface OmpSlashCommandInvocation {
   args?: string;
 }
 const OMP_WORKFLOW_FEATURE_ID = "workflow_mode";
+const OMP_WORKFLOW_LOCALE_FEATURE_ID = "workflow_locale";
 const OMP_OAUTH_ACCOUNT_FEATURE_ID = "oauth_account_credential";
 const OMP_OAUTH_ACCOUNT_AUTOMATIC_VALUE = "automatic";
 const OMP_FAST_MODE_FEATURE_ID = "fast_mode";
 const OMP_PLAN_APPROVAL_REQUEST_ID = "omp-plan-approval";
 const OMP_PLAN_APPROVAL_REQUEST_NAME = "OmpPlanApproval";
 type OmpWorkflowMode = "plan" | "goal";
-type OmpWorkflowSelection = "standard" | OmpWorkflowMode;
+type OmpWorkflowSelection = "standard" | "enhanced" | OmpWorkflowMode;
+const OMP_ENHANCED_CONTINUATION_BY_LOCALE = {
+  ar: "تابع",
+  en: "Continue",
+  es: "Continúa",
+  fr: "Continue",
+  ja: "続けて",
+  ko: "계속해",
+  "pt-BR": "Continue",
+  ru: "Продолжай",
+  "zh-CN": "继续",
+} as const;
+type OmpWorkflowLocale = keyof typeof OMP_ENHANCED_CONTINUATION_BY_LOCALE;
 const OMP_PLAN_TURN_DIRECTIVE = `<system-directive>
 Plan mode active for this turn. The working tree and system are read-only: NEVER create, edit, delete, or rename files, and NEVER run state-changing commands. You may inspect with read-only tools. Produce or refine the requested plan only.
 </system-directive>`;
@@ -631,7 +648,11 @@ Plan mode is inactive for this turn. All earlier per-turn Plan mode directives h
 </system-directive>`;
 
 function normalizeOmpWorkflowSelection(value: unknown): OmpWorkflowSelection {
-  return value === "plan" || value === "goal" ? value : "standard";
+  return value === "enhanced" || value === "plan" || value === "goal" ? value : "standard";
+}
+
+function isOmpNativeWorkflowMode(value: OmpWorkflowSelection): value is OmpWorkflowMode {
+  return value === "plan" || value === "goal";
 }
 
 function buildOmpPlanTurnPrompt(prompt: string): string {
@@ -678,6 +699,7 @@ function createOmpFeatures(
       value: normalizeOmpWorkflowSelection(config.featureValues?.[OMP_WORKFLOW_FEATURE_ID]),
       options: [
         { id: "standard", label: "Standard" },
+        { id: "enhanced", label: "Enhanced" },
         { id: "plan", label: "Plan" },
         { id: "goal", label: "Goal" },
       ],
@@ -1629,14 +1651,15 @@ export class OmpAgentSession implements AgentSession {
       options.initialState.activeCredential,
     );
     this.activeWorkflowMode =
-      options.live === false && configuredWorkflowMode !== "standard"
+      options.live === false && isOmpNativeWorkflowMode(configuredWorkflowMode)
         ? configuredWorkflowMode
         : null;
     this.workflowModePending =
       (options.live ?? true) && configuredWorkflowMode !== "standard"
         ? configuredWorkflowMode
         : null;
-    this.planContextResetPending = options.live === false && configuredWorkflowMode === "standard";
+    this.planContextResetPending =
+      options.live === false && !isOmpNativeWorkflowMode(configuredWorkflowMode);
     this.logger = options.logger;
     this.paseoTools = options.paseoTools;
     this.live = options.live ?? true;
@@ -1778,7 +1801,7 @@ export class OmpAgentSession implements AgentSession {
     const selectedWorkflowMode = normalizeOmpWorkflowSelection(this.features[0]?.value);
     const workflowMode =
       selectedWorkflowMode === "plan" ? selectedWorkflowMode : this.workflowModePending;
-    if (workflowMode === "standard") {
+    if (workflowMode === "standard" || workflowMode === "enhanced") {
       await this.disableActiveWorkflowMode();
       this.workflowModePending = null;
     } else if (workflowMode) {
@@ -1792,7 +1815,7 @@ export class OmpAgentSession implements AgentSession {
       this.activeWorkflowMode = workflowMode;
       this.workflowModePending = null;
     }
-    if (selectedWorkflowMode === "standard" && this.planContextResetPending) {
+    if (!isOmpNativeWorkflowMode(selectedWorkflowMode) && this.planContextResetPending) {
       payload.text = buildOmpStandardTurnPrompt(payload.text);
       this.planContextResetPending = false;
     }
@@ -2000,10 +2023,23 @@ export class OmpAgentSession implements AgentSession {
       this.refreshFeatures();
       return;
     }
+    if (featureId === OMP_WORKFLOW_LOCALE_FEATURE_ID) {
+      if (
+        typeof value !== "string" ||
+        !Object.prototype.hasOwnProperty.call(OMP_ENHANCED_CONTINUATION_BY_LOCALE, value)
+      ) {
+        throw new Error(`Invalid OMP workflow locale '${String(value)}'`);
+      }
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        [OMP_WORKFLOW_LOCALE_FEATURE_ID]: value,
+      };
+      return;
+    }
     if (featureId !== OMP_WORKFLOW_FEATURE_ID) {
       throw new Error(`Unsupported OMP feature '${featureId}'`);
     }
-    if (value !== "standard" && value !== "plan" && value !== "goal") {
+    if (value !== "standard" && value !== "enhanced" && value !== "plan" && value !== "goal") {
       throw new Error(`Invalid OMP workflow '${String(value)}'`);
     }
     const feature = this.features[0];
@@ -2846,7 +2882,8 @@ export class OmpAgentSession implements AgentSession {
         : this.config.featureValues?.[OMP_WORKFLOW_FEATURE_ID],
     );
     const wasPlanMode = this.activeWorkflowMode === "plan";
-    const nextSelection = mode ?? "standard";
+    const nextSelection =
+      mode ?? (previousSelection === "enhanced" ? previousSelection : "standard");
     this.activeWorkflowMode = mode;
     if (wasPlanMode && mode !== "plan") {
       this.planContextResetPending = true;
@@ -3188,6 +3225,8 @@ export class OmpAgentSession implements AgentSession {
     });
   }
 
+  // Session events intentionally share one exhaustive state-transition dispatcher.
+  // eslint-disable-next-line complexity
   private handleSessionEvent(event: OmpAgentSessionEvent): void {
     this.refreshAutomaticCredential();
     const turnId = this.currentTurnIdForEvent();
@@ -3276,6 +3315,30 @@ export class OmpAgentSession implements AgentSession {
         // model turn for the same prompt. Ignore only cycles where neither the
         // terminal payload nor the live stream contained an assistant message.
         if (!terminalMessages) {
+          return;
+        }
+        const terminalAssistant = terminalMessages.findLast(
+          (message): message is Extract<OmpAgentMessage, { role: "assistant" }> =>
+            message.role === "assistant",
+        );
+        const selectedWorkflowMode = normalizeOmpWorkflowSelection(this.features[0]?.value);
+        if (
+          selectedWorkflowMode === "enhanced" &&
+          terminalAssistant?.stopReason === "length" &&
+          !terminalAssistant.errorMessage?.trim()
+        ) {
+          this.activeAssistantMessageId = null;
+          this.activeTurnTerminalAssistantMessage = null;
+          const configuredLocale = this.config.featureValues?.[OMP_WORKFLOW_LOCALE_FEATURE_ID];
+          const locale: OmpWorkflowLocale =
+            typeof configuredLocale === "string" &&
+            Object.prototype.hasOwnProperty.call(
+              OMP_ENHANCED_CONTINUATION_BY_LOCALE,
+              configuredLocale,
+            )
+              ? (configuredLocale as OmpWorkflowLocale)
+              : "en";
+          this.runtimeSession.followUp(OMP_ENHANCED_CONTINUATION_BY_LOCALE[locale]);
           return;
         }
         // A state request is processed after OMP's RPC loop becomes promptable,
@@ -4323,6 +4386,12 @@ export class OmpAgentClient implements AgentClient {
     model: string | null,
   ): Promise<OmpSubagentSettings> {
     return updateOmpSubagentModel(agentName, model, {
+      ...process.env,
+      ...this.runtimeSettings?.env,
+    });
+  }
+  async updateOmpSubagentSettingsEnabled(enabled: boolean): Promise<OmpSubagentSettings> {
+    return updateOmpSubagentSettingsEnabled(enabled, {
       ...process.env,
       ...this.runtimeSettings?.env,
     });

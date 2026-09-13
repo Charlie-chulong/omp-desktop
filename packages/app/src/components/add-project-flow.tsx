@@ -27,6 +27,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  StyleSheet as RNStyleSheet,
   Text,
   View,
   type PressableStateCallbackType,
@@ -1026,11 +1027,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[12],
   },
   overlayWeb: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     pointerEvents: "auto" as const,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   panel: {

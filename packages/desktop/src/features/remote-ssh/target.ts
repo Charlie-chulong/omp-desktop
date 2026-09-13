@@ -1,7 +1,17 @@
 import type { RemoteSshTarget } from "./types.js";
 import { RemoteSshTargetSchema } from "./types.js";
 
-export function buildSshArguments(input: RemoteSshTarget): string[] {
+export interface SshArgumentOptions {
+  tty?: boolean;
+  controlPath?: string;
+  controlMaster?: boolean;
+  batchMode?: boolean;
+}
+
+export function buildSshArguments(
+  input: RemoteSshTarget,
+  options: SshArgumentOptions = {},
+): string[] {
   const target = RemoteSshTargetSchema.parse(input);
   const args = [
     "-o",
@@ -11,8 +21,14 @@ export function buildSshArguments(input: RemoteSshTarget): string[] {
     "-o",
     "ServerAliveCountMax=4",
   ];
+  if (options.controlPath) args.push("-S", options.controlPath);
+  if (options.controlMaster) args.push("-M", "-o", "ControlPersist=no");
+  if (options.batchMode) args.push("-o", "BatchMode=yes");
   if (target.port !== undefined) args.push("-p", String(target.port));
   if (target.identityFile) args.push("-i", target.identityFile);
-  args.push("-tt", target.username ? `${target.username}@${target.host}` : target.host);
+  args.push(
+    options.tty === false ? "-T" : "-tt",
+    target.username ? `${target.username}@${target.host}` : target.host,
+  );
   return args;
 }

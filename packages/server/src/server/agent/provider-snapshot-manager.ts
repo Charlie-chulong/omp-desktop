@@ -514,6 +514,15 @@ export class ProviderSnapshotManager {
     }
     return await client.updateOmpSubagentModel(agentName, model);
   }
+  async updateOmpSubagentSettingsEnabled(enabled: boolean) {
+    const definition = this.providerRegistry.omp;
+    if (!definition) throw new Error("OMP provider is not configured");
+    const client = this.ensureClient("omp", definition);
+    if (!client.updateOmpSubagentSettingsEnabled) {
+      throw new Error("OMP subagent configuration is read-only");
+    }
+    return await client.updateOmpSubagentSettingsEnabled(enabled);
+  }
 
   async getOmpMemorySettings() {
     const definition = this.providerRegistry.omp;

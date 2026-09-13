@@ -2,10 +2,13 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { parseConnectionOfferFromUrl } from "@omp-desktop/protocol/connection-offer";
 import { buildRemoteInstallScript } from "./bootstrap-script.js";
-import { loadRemoteBackendBundle, type RemoteBackendFile } from "./bundle.js";
+import {
+  loadRemoteBackendBundle,
+  type RemoteBackendBundle,
+  type RemoteBackendFile,
+} from "./bundle.js";
 import { SshPtySession } from "./pty-session.js";
 import type { RemoteSshDeployResult, RemoteSshEvent, RemoteSshStartInput } from "./types.js";
-const FILE_CHUNK_BYTES = 512;
 const INSTALL_TIMEOUT_MS = 15 * 60_000;
 
 interface RemoteTargetInfo {
@@ -18,11 +21,34 @@ function decodeBase64(value: string): string {
   return Buffer.from(value, "base64").toString("utf8");
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+function parseRemotePairingResult(
+  encodedResult: string,
+  expectedServerId?: string,
+): { offerUrl: string; hostname: string } {
+  const [encodedPair, encodedHostname] = encodedResult.trim().split("|");
+  if (!encodedPair || !encodedHostname) throw new Error("Remote pairing result was incomplete");
+  const pairing = JSON.parse(decodeBase64(encodedPair)) as { url?: unknown };
+  if (typeof pairing.url !== "string") throw new Error("Remote pairing result has no URL");
+  const offer = parseConnectionOfferFromUrl(pairing.url);
+  if (!offer) throw new Error("Remote pairing URL has no offer");
+  if (expectedServerId && offer.serverId !== expectedServerId) {
+    throw new Error("The SSH target returned a different server ID than the managed host");
+  }
+  return { offerUrl: pairing.url, hostname: decodeBase64(encodedHostname) };
+}
+
 function parseTargetInfo(value: string): RemoteTargetInfo {
   const [system, machine, encodedHome] = value.split("|");
-  const platform = system === "Linux" ? "linux" : system === "Darwin" ? "darwin" : null;
-  const arch =
-    machine === "x86_64" ? "x64" : machine === "arm64" || machine === "aarch64" ? "arm64" : null;
+  let platform: RemoteTargetInfo["platform"] | null = null;
+  if (system === "Linux") platform = "linux";
+  if (system === "Darwin") platform = "darwin";
+  let arch: RemoteTargetInfo["arch"] | null = null;
+  if (machine === "x86_64") arch = "x64";
+  if (machine === "arm64" || machine === "aarch64") arch = "arm64";
   if (!platform || !arch || !encodedHome) {
     throw new Error(
       `Unsupported SSH host platform: ${system || "unknown"} ${machine || "unknown"}`,
@@ -57,7 +83,7 @@ export class RemoteSshDeployment {
     this.emit({ operationId, type: "interactive", enabled: true });
 
     try {
-      const bootstrapCommand = `stty -echo; umask 077; OMP_ROOT="$HOME/.omp-desktop/remote-runtime"; OMP_UPLOAD="$OMP_ROOT/uploads/${token}"; mkdir -p "$OMP_UPLOAD"; if printf dGVzdA== | base64 --decode >/dev/null 2>&1; then OMP_B64_DECODE='base64 --decode'; else OMP_B64_DECODE='base64 -D'; fi; export OMP_ROOT OMP_UPLOAD OMP_B64_DECODE; printf '\\n__OMP_READY_%s__%s|%s|%s\\n' '${token}' "$(uname -s)" "$(uname -m)" "$(printf '%s' "$HOME" | base64 | tr -d '\\n')"; exec /bin/sh -i`;
+      const bootstrapCommand = `stty -echo; umask 077; OMP_ROOT="$HOME/.omp-desktop/remote-runtime"; OMP_UPLOAD="$OMP_ROOT/uploads/${token}"; export OMP_ROOT OMP_UPLOAD; printf '\\n__OMP_READY_%s__%s|%s|%s\\n' '${token}' "$(uname -s)" "$(uname -m)" "$(printf '%s' "$HOME" | base64 | tr -d '\\n')"; exec /bin/sh -i`;
       const bundle = await loadRemoteBackendBundle();
       this.session = new SshPtySession({
         target: this.input.target,
@@ -79,32 +105,51 @@ export class RemoteSshDeployment {
         throw new Error(`The packaged backend does not support ${targetKey}`);
       }
 
-      this.emit({
-        operationId,
-        type: "phase",
-        phase: "uploading",
-        message: "Uploading verified backend bundle",
-      });
-      for (const file of bundle.files) {
-        this.assertNotCancelled();
-        await this.uploadFile(file, token);
-      }
-      const installScript = Buffer.from(
-        buildRemoteInstallScript({
-          token,
-          backendVersion: bundle.backendVersion,
-          nodeVersion: bundle.nodeVersion,
-          relayAddress: this.input.relayAddress,
-        }),
-        "utf8",
-      );
-      await this.uploadFile(
-        {
-          relativePath: "install.sh",
-          contents: installScript,
-        },
+      const reused = await this.tryReuseDeployment(bundle, target);
+      if (reused) return reused;
+
+      const installScriptFile: RemoteBackendFile = {
+        relativePath: "install.sh",
+        contents: Buffer.from(
+          buildRemoteInstallScript({
+            token,
+            backendVersion: bundle.backendVersion,
+            nodeVersion: bundle.nodeVersion,
+            bundleHash: bundle.bundleHash,
+            relayAddress: this.input.relayAddress,
+          }),
+          "utf8",
+        ),
+      };
+      const uploadFiles = [...bundle.files, installScriptFile];
+      const totalBytes = uploadFiles.reduce((total, file) => total + file.contents.byteLength, 0);
+      let completedBytes = 0;
+      let lastProgress = -5;
+      const reportProgress = (chunkBytes: number): void => {
+        completedBytes += chunkBytes;
+        const progress = Math.floor((completedBytes / totalBytes) * 100);
+        if (progress < lastProgress + 5 && progress !== 100) return;
+        lastProgress = progress;
+        this.emit({
+          operationId,
+          type: "phase",
+          phase: "uploading",
+          message: `Uploading verified backend bundle (${progress}%)`,
+          progress,
+        });
+      };
+      reportProgress(0);
+      const uploadRoot = path.posix.join(
+        target.home,
+        ".omp-desktop",
+        "remote-runtime",
+        "uploads",
         token,
       );
+      for (const file of uploadFiles) {
+        this.assertNotCancelled();
+        await this.uploadFile(file, uploadRoot, reportProgress);
+      }
 
       this.emit({
         operationId,
@@ -136,26 +181,9 @@ export class RemoteSshDeployment {
       await waitForPhase(startingMarker, "starting", "Starting the remote daemon");
       await waitForPhase(pairingMarker, "pairing", "Generating the encrypted pairing offer");
       const encodedResult = await Promise.race([result, errorResult]);
-      const [encodedPair, encodedHostname] = encodedResult.split("|");
-      if (!encodedPair || !encodedHostname) throw new Error("Remote pairing result was incomplete");
-      const pairing = JSON.parse(decodeBase64(encodedPair)) as { url?: unknown };
-      if (typeof pairing.url !== "string") throw new Error("Remote pairing result has no URL");
-      const offer = parseConnectionOfferFromUrl(pairing.url);
-      if (!offer) throw new Error("Remote pairing URL has no offer");
-      if (this.input.expectedServerId && offer.serverId !== this.input.expectedServerId) {
-        throw new Error("The SSH target returned a different server ID than the managed host");
-      }
+      const paired = parseRemotePairingResult(encodedResult, this.input.expectedServerId);
       this.emit({ operationId, type: "phase", phase: "complete", message: "Remote daemon ready" });
-      return {
-        operationId,
-        offerUrl: pairing.url,
-        hostname: decodeBase64(encodedHostname),
-        platform: target.platform,
-        arch: target.arch,
-        runtimeRoot: path.posix.join(target.home, ".omp-desktop", "remote-runtime"),
-        deployedVersion: bundle.backendVersion,
-        target: this.input.target,
-      };
+      return this.buildResult(bundle, target, paired);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.emit({ operationId, type: "failed", message });
@@ -166,39 +194,79 @@ export class RemoteSshDeployment {
     }
   }
 
+  private async tryReuseDeployment(
+    bundle: RemoteBackendBundle,
+    target: RemoteTargetInfo,
+  ): Promise<RemoteSshDeployResult | null> {
+    const session = this.session;
+    if (!session) throw new Error("SSH session is unavailable");
+    const runtimeRoot = path.posix.join(target.home, ".omp-desktop", "remote-runtime");
+    const paseoHome = path.posix.join(target.home, ".omp-desktop");
+    const relayArguments = this.input.relayAddress
+      ? `--relay-address ${shellQuote(this.input.relayAddress)}`
+      : "";
+    const metadataCheck =
+      "const fs=require('fs');const x=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.exit(x.bundleHash===process.argv[2]&&x.nodeVersion===process.argv[3]?0:1)";
+    const compactPairing =
+      "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);process.stdout.write(JSON.stringify({url:x.url}))})";
+    const command = `RUNTIME_ROOT=${shellQuote(runtimeRoot)}; CURRENT="$RUNTIME_ROOT/current"; MANAGED="$RUNTIME_ROOT/managed.json"; NODE="$RUNTIME_ROOT/node/v${bundle.nodeVersion}/bin/node"; CLI="$CURRENT/node_modules/@omp-desktop/cli/bin/omp-desktop"; [ -f "$MANAGED" ] && [ -x "$NODE" ] && [ -f "$CLI" ] || exit 20; "$NODE" -e ${shellQuote(metadataCheck)} "$MANAGED" ${shellQuote(bundle.bundleHash)} ${shellQuote(bundle.nodeVersion)} || exit 21; running_pid=$("$NODE" -e "try{const x=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));if(Number.isInteger(x.pid))process.stdout.write(String(x.pid))}catch{}" ${shellQuote(path.posix.join(paseoHome, "omp-desktop.pid"))}); [ -n "$running_pid" ] && kill -0 "$running_pid" 2>/dev/null || exit 22; pair_json=$(PATH="$RUNTIME_ROOT/node/v${bundle.nodeVersion}/bin:$PATH" "$NODE" "$CLI" daemon pair --home ${shellQuote(paseoHome)} --relay ${relayArguments} --json 2>/dev/null) || exit 23; pair_json=$(printf '%s' "$pair_json" | "$NODE" -e ${shellQuote(compactPairing)}) || exit 24; encoded_pair=$(printf '%s' "$pair_json" | base64 | tr -d '\\n'); hostname_value=$(hostname 2>/dev/null || uname -n); encoded_hostname=$(printf '%s' "$hostname_value" | base64 | tr -d '\\n'); printf '%s|%s\\n' "$encoded_pair" "$encoded_hostname"`;
+    try {
+      const encodedResult = await session.executeCommand(command);
+      const paired = parseRemotePairingResult(encodedResult, this.input.expectedServerId);
+      this.emit({
+        operationId: this.input.operationId,
+        type: "phase",
+        phase: "pairing",
+        message: "Reusing the matching remote backend",
+      });
+      this.emit({
+        operationId: this.input.operationId,
+        type: "phase",
+        phase: "complete",
+        message: "Remote daemon ready",
+      });
+      return this.buildResult(bundle, target, paired);
+    } catch {
+      this.assertNotCancelled();
+      return null;
+    }
+  }
+
+  private buildResult(
+    bundle: RemoteBackendBundle,
+    target: RemoteTargetInfo,
+    paired: { offerUrl: string; hostname: string },
+  ): RemoteSshDeployResult {
+    return {
+      operationId: this.input.operationId,
+      offerUrl: paired.offerUrl,
+      hostname: paired.hostname,
+      platform: target.platform,
+      arch: target.arch,
+      runtimeRoot: path.posix.join(target.home, ".omp-desktop", "remote-runtime"),
+      deployedVersion: bundle.backendVersion,
+      target: this.input.target,
+    };
+  }
+
   private assertNotCancelled(): void {
     if (this.cancelled) throw new Error("SSH deployment was cancelled");
   }
 
-  private async uploadFile(file: RemoteBackendFile, token: string): Promise<void> {
+  private async uploadFile(
+    file: RemoteBackendFile,
+    uploadRoot: string,
+    onProgress: (chunkBytes: number) => void,
+  ): Promise<void> {
     const session = this.session;
     if (!session) throw new Error("SSH session is unavailable");
     const relativePath = file.relativePath.replaceAll("\\", "/");
     if (relativePath.startsWith("/") || relativePath.split("/").includes("..")) {
       throw new Error(`Unsafe deployment path: ${relativePath}`);
     }
-    const fileToken = createHash("sha256").update(relativePath).digest("hex").slice(0, 16);
-    const readyMarker = `__OMP_FILE_READY_${token}_${fileToken}__`;
-    const ackMarker = `__OMP_FILE_ACK_${token}_${fileToken}__`;
-    const doneMarker = `__OMP_FILE_DONE_${token}_${fileToken}__`;
-    const endMarker = `__OMP_FILE_END_${token}_${fileToken}__`;
     const expectedHash = createHash("sha256").update(file.contents).digest("hex");
-    const remotePath = `$OMP_UPLOAD/${relativePath}`;
-    const directory = path.posix.dirname(remotePath);
-    const command = `mkdir -p "${directory}"; : > "${remotePath}"; printf '\\n${readyMarker}\\n'; while IFS= read -r OMP_LINE; do [ "$OMP_LINE" = "${endMarker}" ] && break; printf '%s' "$OMP_LINE" | eval "$OMP_B64_DECODE" >> "${remotePath}" || exit 72; printf '\\n${ackMarker}\\n'; done; if command -v sha256sum >/dev/null 2>&1; then OMP_HASH=$(sha256sum "${remotePath}" | awk '{print $1}'); else OMP_HASH=$(shasum -a 256 "${remotePath}" | awk '{print $1}'); fi; [ "$OMP_HASH" = "${expectedHash}" ] || exit 73; printf '\\n${doneMarker}\\n'`;
-    const ready = session.waitForLine(readyMarker);
-    session.writeCommand(command);
-    await ready;
-    for (let offset = 0; offset < file.contents.length; offset += FILE_CHUNK_BYTES) {
-      this.assertNotCancelled();
-      const ack = session.waitForLine(ackMarker);
-      session.writeCommand(
-        file.contents.subarray(offset, offset + FILE_CHUNK_BYTES).toString("base64"),
-      );
-      await ack;
-    }
-    const done = session.waitForLine(doneMarker);
-    session.writeCommand(endMarker);
-    await done;
+    const remotePath = path.posix.join(uploadRoot, relativePath);
+    await session.uploadFile(remotePath, file.contents, expectedHash);
+    onProgress(file.contents.length);
   }
 }

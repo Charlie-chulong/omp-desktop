@@ -9,13 +9,14 @@ import {
 } from "react";
 import type { ReactElement, ReactNode } from "react";
 import {
-  View,
-  Text,
-  Pressable,
   Modal,
-  ScrollView,
   Platform,
+  Pressable,
+  ScrollView,
   StatusBar,
+  StyleSheet as RNStyleSheet,
+  Text,
+  View,
   useWindowDimensions,
   type LayoutChangeEvent,
   type PressableStateCallbackType,
@@ -1767,7 +1768,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   desktopOverlayWeb: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     pointerEvents: "auto" as const,
   },
   desktopBackdrop: {

@@ -668,6 +668,104 @@ describe("OMP agent client and session", () => {
     },
   );
 
+  test("starts enhanced workflow without sending a native workflow command", async () => {
+    const omp = new OmpHarness();
+    await omp.start({
+      modeId: "ask",
+      featureValues: { workflow_mode: "enhanced" },
+    });
+
+    await omp.runPrompt("implement the change", "done");
+
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["implement the change"]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode", value: "enhanced" }),
+    ]);
+    expect(omp.runtime().followUpRequests).toEqual([]);
+  });
+
+  test("keeps enhanced selected when leaving plan workflow", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ featureValues: { workflow_mode: "plan" } });
+    await omp.runPrompt("draft a plan", "ready");
+
+    await omp.setFeature("workflow_mode", "enhanced");
+    await omp.runPrompt("implement it", "done");
+
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual([
+      planTurnPrompt("draft a plan"),
+      standardTurnPrompt("implement it"),
+    ]);
+    expect(omp.features()).toEqual([
+      expect.objectContaining({ id: "workflow_mode", value: "enhanced" }),
+    ]);
+  });
+
+  test("automatically continues length-limited responses in enhanced workflow", async () => {
+    const omp = new OmpHarness();
+    await omp.start({
+      featureValues: { workflow_mode: "enhanced", workflow_locale: "zh-CN" },
+    });
+
+    const { completedBeforeContinuation, result } = await omp.runPromptAfterLengthContinuations(
+      "finish the task",
+      ["partial output", " more output"],
+      " completed output",
+    );
+
+    expect(completedBeforeContinuation).toBe(false);
+    expect(result).toMatchObject({
+      finalText: "partial output more output completed output",
+    });
+    expect(omp.runtime().followUpRequests).toEqual([
+      { message: "继续", imageCount: 0 },
+      { message: "继续", imageCount: 0 },
+    ]);
+    expect(
+      omp
+        .timeline()
+        .filter((item) => item.type === "user_message")
+        .map((item) => item.text),
+    ).toEqual(["finish the task", "继续"]);
+    expect(omp.completedTurnCount()).toBe(1);
+  });
+
+  test.each([
+    ["ar", "تابع"],
+    ["en", "Continue"],
+    ["es", "Continúa"],
+    ["fr", "Continue"],
+    ["ja", "続けて"],
+    ["ko", "계속해"],
+    ["pt-BR", "Continue"],
+    ["ru", "Продолжай"],
+    ["zh-CN", "继续"],
+  ] as const)("uses the selected %s locale for enhanced continuation", async (locale, expected) => {
+    const omp = new OmpHarness();
+    await omp.start({ featureValues: { workflow_mode: "enhanced" } });
+    await omp.setFeature("workflow_locale", locale);
+
+    await omp.runPromptAfterLengthContinuations("finish the task", ["partial"], "done");
+
+    expect(omp.runtime().followUpRequests).toEqual([{ message: expected, imageCount: 0 }]);
+  });
+
+  test("does not automatically continue failed responses in enhanced workflow", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ featureValues: { workflow_mode: "enhanced" } });
+
+    await expect(
+      omp.runPromptWithTerminalAssistant("finish the task", "partial output", {
+        role: "assistant",
+        content: [{ type: "text", text: "partial output" }],
+        responseId: "omp-assistant-1",
+        stopReason: "error",
+        errorMessage: "provider request failed",
+      }),
+    ).rejects.toThrow("provider request failed");
+    expect(omp.runtime().followUpRequests).toEqual([]);
+  });
+
   test("applies a selected plan workflow to every planning message", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask" });
@@ -1413,6 +1511,12 @@ describe("OMP agent client and session", () => {
       expect.objectContaining({
         id: "workflow_mode",
         type: "select",
+        options: [
+          { id: "standard", label: "Standard" },
+          { id: "enhanced", label: "Enhanced" },
+          { id: "plan", label: "Plan" },
+          { id: "goal", label: "Goal" },
+        ],
         value: "standard",
       }),
     ]);

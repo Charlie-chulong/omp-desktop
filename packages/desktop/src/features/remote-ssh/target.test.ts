@@ -26,6 +26,28 @@ describe("buildSshArguments", () => {
     ]);
   });
 
+  it("builds a non-interactive multiplexed connection", () => {
+    expect(
+      buildSshArguments(
+        { host: "build-server", username: "deploy" },
+        { tty: false, controlPath: "/tmp/omp.sock", batchMode: true },
+      ),
+    ).toEqual([
+      "-o",
+      "ConnectTimeout=30",
+      "-o",
+      "ServerAliveInterval=15",
+      "-o",
+      "ServerAliveCountMax=4",
+      "-S",
+      "/tmp/omp.sock",
+      "-o",
+      "BatchMode=yes",
+      "-T",
+      "deploy@build-server",
+    ]);
+  });
+
   it.each(["-oProxyCommand=evil", "host\ncommand", "host with-space"])(
     "rejects unsafe host %j",
     (host) => {

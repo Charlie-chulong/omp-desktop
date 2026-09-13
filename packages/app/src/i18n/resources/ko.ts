@@ -252,6 +252,7 @@ export const ko: TranslationResources = {
       workflow: {
         title: "워크플로",
         standard: "표준",
+        enhanced: "향상",
         plan: "계획",
         goal: "목표",
         goalPlaceholder: "목표를 입력하세요",

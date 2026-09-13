@@ -2,6 +2,7 @@ interface RemoteInstallScriptInput {
   token: string;
   backendVersion: string;
   nodeVersion: string;
+  bundleHash: string;
   relayAddress?: string;
 }
 
@@ -81,7 +82,8 @@ NPM="$NODE_HOME/bin/npm"
 
 printf '\\n__OMP_PHASE_${token}__installing\\n'
 PATH="$NODE_HOME/bin:$PATH" "$NPM" ci --prefix "$UPLOAD" --omit=dev --include=optional >"$UPLOAD/npm-install.log" 2>&1 || fail "Backend dependency installation failed"
-[ -f "$UPLOAD/node_modules/@omp-desktop/cli/bin/omp-desktop" ] || fail "Installed backend CLI is missing"
+STAGED_CLI="$UPLOAD/node_modules/@omp-desktop/cli/bin/omp-desktop"
+[ -f "$STAGED_CLI" ] || fail "Installed backend CLI is missing"
 
 running_pid=""
 if [ -f "$PASEO_HOME/omp-desktop.pid" ]; then
@@ -89,54 +91,69 @@ if [ -f "$PASEO_HOME/omp-desktop.pid" ]; then
 fi
 old_release=""
 if [ -n "$running_pid" ] && kill -0 "$running_pid" 2>/dev/null; then
-  if [ ! -f "$RUNTIME_ROOT/managed.json" ] || [ ! -L "$CURRENT" ]; then
-    fail "A daemon not managed by SSH deployment is already running"
+  [ -f "$RUNTIME_ROOT/managed.json" ] || fail "A daemon not managed by SSH deployment is already running"
+  if [ -L "$CURRENT" ] && [ -f "$CURRENT/node_modules/@omp-desktop/cli/bin/omp-desktop" ]; then
+    old_release=$(readlink "$CURRENT")
   fi
-  old_release=$(readlink "$CURRENT")
-  old_cli="$CURRENT/node_modules/@omp-desktop/cli/bin/omp-desktop"
-  PATH="$NODE_HOME/bin:$PATH" "$NODE" "$old_cli" daemon stop --home "$PASEO_HOME" >/dev/null 2>&1 || fail "Failed to stop the existing managed daemon"
+  STOP_ERROR="$UPLOAD/stop-error.log"
+  if ! PATH="$NODE_HOME/bin:$PATH" "$NODE" "$STAGED_CLI" daemon stop --home "$PASEO_HOME" --force >"$UPLOAD/stop-output.log" 2>"$STOP_ERROR"; then
+    stop_failure=$(tail -c 1024 "$STOP_ERROR" 2>/dev/null | tr '\\n' ' ')
+    fail "Failed to stop the existing managed daemon: \${stop_failure:-unknown stop error}"
+  fi
 fi
 
+if [ "$old_release" = "$RELEASE" ]; then
+  old_release=""
+fi
+rm -rf "$RELEASE" || fail "Failed to clear an incomplete backend release"
 mv "$UPLOAD" "$RELEASE" || fail "Failed to activate backend release"
 next_link="$RUNTIME_ROOT/.current-$TOKEN"
+rm -f "$next_link"
 ln -s "$RELEASE" "$next_link" || fail "Failed to prepare backend release link"
+rm -f "$CURRENT" || fail "Failed to replace the backend release link"
 mv -f "$next_link" "$CURRENT" || fail "Failed to switch backend release"
 CLI="$CURRENT/node_modules/@omp-desktop/cli/bin/omp-desktop"
 
 printf '\\n__OMP_PHASE_${token}__starting\\n'
-PATH="$NODE_HOME/bin:$PATH" PASEO_DESKTOP_MANAGED=1 "$NODE" "$CLI" daemon start --home "$PASEO_HOME" --listen 127.0.0.1:6770 --relay --no-web-ui >/dev/null 2>&1 || start_failed=1
+PATH="$NODE_HOME/bin:$PATH" PASEO_DESKTOP_MANAGED=1 "$NODE" "$CLI" daemon start --home "$PASEO_HOME" --listen 127.0.0.1:6770 --no-web-ui >/dev/null 2>&1 || start_failed=1
 if [ "\${start_failed:-0}" = "1" ]; then
-  if [ -n "$old_release" ]; then
+  if [ -n "$old_release" ] && [ -f "$old_release/node_modules/@omp-desktop/cli/bin/omp-desktop" ]; then
     rollback_link="$RUNTIME_ROOT/.rollback-$TOKEN"
-    ln -s "$old_release" "$rollback_link" && mv -f "$rollback_link" "$CURRENT"
+    rm -f "$rollback_link"
+    ln -s "$old_release" "$rollback_link" || fail "Failed to prepare backend rollback link"
+    rm -f "$CURRENT"
+    mv -f "$rollback_link" "$CURRENT" || fail "Failed to restore the previous backend release"
     old_cli="$CURRENT/node_modules/@omp-desktop/cli/bin/omp-desktop"
-    PATH="$NODE_HOME/bin:$PATH" PASEO_DESKTOP_MANAGED=1 "$NODE" "$old_cli" daemon start --home "$PASEO_HOME" --listen 127.0.0.1:6770 --relay --no-web-ui >/dev/null 2>&1 || true
+    PATH="$NODE_HOME/bin:$PATH" PASEO_DESKTOP_MANAGED=1 "$NODE" "$old_cli" daemon start --home "$PASEO_HOME" --listen 127.0.0.1:6770 --no-web-ui >/dev/null 2>&1 || true
   fi
   fail "Failed to start the deployed daemon"
 fi
 
 printf '\\n__OMP_PHASE_${token}__pairing\\n'
+PAIR_ERROR="$RELEASE/pair-error.log"
 pair_json=""
 attempt=0
 while [ "$attempt" -lt 30 ]; do
-  pair_json=$(PATH="$NODE_HOME/bin:$PATH" "$NODE" "$CLI" daemon pair --home "$PASEO_HOME" --relay ${relayArguments} --json 2>/dev/null) && break
+  pair_json=$(PATH="$NODE_HOME/bin:$PATH" "$NODE" "$CLI" daemon pair --home "$PASEO_HOME" --relay ${relayArguments} --json 2>"$PAIR_ERROR") && break
   attempt=$((attempt + 1))
   sleep 1
 done
 if [ -z "$pair_json" ]; then
-  PATH="$NODE_HOME/bin:$PATH" "$NODE" "$CLI" daemon stop --home "$PASEO_HOME" >/dev/null 2>&1 || true
-  if [ -n "$old_release" ]; then
+  PATH="$NODE_HOME/bin:$PATH" "$NODE" "$CLI" daemon stop --home "$PASEO_HOME" --force >/dev/null 2>&1 || true
+  if [ -n "$old_release" ] && [ -f "$old_release/node_modules/@omp-desktop/cli/bin/omp-desktop" ]; then
     rollback_link="$RUNTIME_ROOT/.rollback-$TOKEN"
-    ln -s "$old_release" "$rollback_link" && mv -f "$rollback_link" "$CURRENT"
+    rm -f "$rollback_link"
+    ln -s "$old_release" "$rollback_link" || fail "Failed to prepare backend rollback link"
+    rm -f "$CURRENT"
+    mv -f "$rollback_link" "$CURRENT" || fail "Failed to restore the previous backend release"
     old_cli="$CURRENT/node_modules/@omp-desktop/cli/bin/omp-desktop"
-    PATH="$NODE_HOME/bin:$PATH" PASEO_DESKTOP_MANAGED=1 "$NODE" "$old_cli" daemon start --home "$PASEO_HOME" --listen 127.0.0.1:6770 --relay --no-web-ui >/dev/null 2>&1 || true
+    PATH="$NODE_HOME/bin:$PATH" PASEO_DESKTOP_MANAGED=1 "$NODE" "$old_cli" daemon start --home "$PASEO_HOME" --listen 127.0.0.1:6770 --no-web-ui >/dev/null 2>&1 || true
   fi
-  fail "The deployed daemon did not become ready"
+  pair_failure=$(tail -c 1024 "$PAIR_ERROR" 2>/dev/null | tr '\\n' ' ')
+  fail "The deployed daemon did not become ready: \${pair_failure:-unknown pairing error}"
 fi
 server_id=$(printf '%s' "$pair_json" | "$NODE" -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);const u=new URL(x.url);const raw=u.hash.slice('#offer='.length).replace(/-/g,'+').replace(/_/g,'/');const o=JSON.parse(Buffer.from(raw,'base64url'));process.stdout.write(o.serverId)})") || fail "Pairing result was invalid"
-if [ -n ${shellQuote(input.backendVersion)} ]; then
-  printf '{"version":1,"serverId":"%s","backendVersion":"%s"}\\n' "$server_id" ${shellQuote(input.backendVersion)} >"$RUNTIME_ROOT/managed.json"
-fi
+printf '{"version":2,"serverId":"%s","backendVersion":"%s","bundleHash":"%s","nodeVersion":"%s"}\\n' "$server_id" ${shellQuote(input.backendVersion)} ${shellQuote(input.bundleHash)} "$NODE_VERSION" >"$RUNTIME_ROOT/managed.json"
 hostname_value=$(hostname 2>/dev/null || uname -n)
 encoded_pair=$(printf '%s' "$pair_json" | base64 | tr -d '\\n')
 encoded_hostname=$(printf '%s' "$hostname_value" | base64 | tr -d '\\n')

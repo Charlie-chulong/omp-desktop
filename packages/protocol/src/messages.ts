@@ -1746,6 +1746,11 @@ export const OmpSubagentSettingsUpdateRequestMessageSchema = z.object({
   model: z.string().trim().min(1).nullable(),
   requestId: z.string(),
 });
+export const OmpSubagentSettingsEnabledUpdateRequestMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.enabled.update.request"),
+  enabled: z.boolean(),
+  requestId: z.string(),
+});
 
 export const OmpMemoryBackendSchema = z.enum([
   "off",
@@ -3408,6 +3413,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OmpProviderManagementSaveRequestMessageSchema,
   OmpSubagentSettingsGetRequestMessageSchema,
   OmpSubagentSettingsUpdateRequestMessageSchema,
+  OmpSubagentSettingsEnabledUpdateRequestMessageSchema,
   OmpMemorySettingsGetRequestMessageSchema,
   OmpMemorySettingsUpdateRequestMessageSchema,
   OmpProviderContextWindowOverridesUpdateRequestMessageSchema,
@@ -5788,7 +5794,6 @@ export const PullRequestTimelineResponseSchema = z.object({
       // Drop the boolean once the daemon floor >= v0.1.106.
       authState: ForgeAuthStateSchema,
     })
-    .optional()
     .prefault({}),
 });
 
@@ -6358,6 +6363,7 @@ export const OmpProviderManagementSchema = z.object({
 });
 export const OmpSubagentSettingsSchema = z.object({
   configPath: z.string(),
+  enabled: z.boolean(),
   agents: z.array(
     z.object({
       name: z.string(),
@@ -6474,6 +6480,10 @@ export const OmpSubagentSettingsGetResponseMessageSchema = z.object({
 
 export const OmpSubagentSettingsUpdateResponseMessageSchema = z.object({
   type: z.literal("omp.subagents.management.update.response"),
+  payload: OmpSubagentSettingsSchema.extend({ requestId: z.string() }),
+});
+export const OmpSubagentSettingsEnabledUpdateResponseMessageSchema = z.object({
+  type: z.literal("omp.subagents.management.enabled.update.response"),
   payload: OmpSubagentSettingsSchema.extend({ requestId: z.string() }),
 });
 
@@ -7190,6 +7200,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   OmpProviderManagementSaveResponseMessageSchema,
   OmpSubagentSettingsGetResponseMessageSchema,
   OmpSubagentSettingsUpdateResponseMessageSchema,
+  OmpSubagentSettingsEnabledUpdateResponseMessageSchema,
   OmpMemorySettingsGetResponseMessageSchema,
   OmpMemorySettingsUpdateResponseMessageSchema,
   OmpProviderContextWindowOverridesUpdateResponseMessageSchema,
@@ -7399,6 +7410,9 @@ export type OmpSubagentSettingsGetResponseMessage = z.infer<
 export type OmpSubagentSettingsUpdateResponseMessage = z.infer<
   typeof OmpSubagentSettingsUpdateResponseMessageSchema
 >;
+export type OmpSubagentSettingsEnabledUpdateResponseMessage = z.infer<
+  typeof OmpSubagentSettingsEnabledUpdateResponseMessageSchema
+>;
 export type OmpMemoryBackend = z.infer<typeof OmpMemoryBackendSchema>;
 export type OmpMemorySettings = z.infer<typeof OmpMemorySettingsSchema>;
 export type OmpMemorySettingsPatch = z.infer<typeof OmpMemorySettingsPatchSchema>;
@@ -7529,6 +7543,9 @@ export type OmpSubagentSettingsGetRequestMessage = z.infer<
 >;
 export type OmpSubagentSettingsUpdateRequestMessage = z.infer<
   typeof OmpSubagentSettingsUpdateRequestMessageSchema
+>;
+export type OmpSubagentSettingsEnabledUpdateRequestMessage = z.infer<
+  typeof OmpSubagentSettingsEnabledUpdateRequestMessageSchema
 >;
 export type OmpMemorySettingsGetRequestMessage = z.infer<
   typeof OmpMemorySettingsGetRequestMessageSchema
