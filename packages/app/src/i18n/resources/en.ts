@@ -2703,7 +2703,7 @@ export const en = {
         listTitle: "Installed",
         installTitle: "Install",
         installSpecLabel: "Plugin spec",
-        installPlaceholder: "npm package or path, e.g. @scope/omp-plugin-memory",
+        browsePackages: "Browse packages on pi.dev ↗",
         dryRunLabel: "Dry run",
         toggleLabel: "Toggle {{id}}",
         doctorTitle: "Health check",

@@ -15,6 +15,7 @@ import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-bad
 import { Switch } from "@/components/ui/switch";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { SearchField } from "@/components/ui/search-field";
+import { ExternalLink } from "@/components/ui/external-link";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import type { PluginPageState } from "@/screens/settings/plugins-page-state";
@@ -677,6 +678,13 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                 </View>
               ) : null}
             </View>
+            <View style={styles.browseLinkRow}>
+              <ExternalLink
+                href="https://pi.dev/packages"
+                label={t("settings.host.ompPlugins.browsePackages")}
+                testID="omp-plugins-browse-packages-link"
+              />
+            </View>
           </View>
         </SettingsSection>
 
@@ -794,6 +802,12 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],
     gap: 0,
+  },
+  browseLinkRow: {
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[2],
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
   },
   centeredRow: {
     paddingVertical: theme.spacing[4],
