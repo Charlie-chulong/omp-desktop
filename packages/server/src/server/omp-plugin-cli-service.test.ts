@@ -46,8 +46,11 @@ describe("OmpPluginCliService", () => {
     const result = await makeService(runner).list();
 
     expect(runner.calls[0]?.args).toEqual(["plugin", "list", "--json"]);
-    expect(result.plugins).toHaveLength(2);
+    expect(result.plugins).toHaveLength(3);
     expect(result.plugins[0]?.name).toBe("pi-memory");
+    expect(result.plugins[2]?.name).toBe("mkt-plugin");
+    expect(result.plugins[2]?.version).toBe("2.0.0");
+    expect(result.plugins[2]?.enabled).toBe(true);
     expect(result.marketplace[0]?.id).toBe("mkt-plugin");
     expect(result.rawOutput).toBeUndefined();
   });
@@ -64,7 +67,7 @@ describe("OmpPluginCliService", () => {
     const runner = makeRunner(`resolving...\n${LIST_JSON}`);
     const result = await makeService(runner).list();
 
-    expect(result.plugins).toHaveLength(2);
+    expect(result.plugins).toHaveLength(3);
   });
 
   it("serializes a second operation queued while one is in flight", async () => {
@@ -83,12 +86,12 @@ describe("OmpPluginCliService", () => {
     const second = service.list();
     releaseFirst();
     const [firstResult, secondResult] = await Promise.all([first, second]);
-    expect(firstResult.plugins).toHaveLength(2);
-    expect(secondResult.plugins).toHaveLength(2);
+    expect(firstResult.plugins).toHaveLength(3);
+    expect(secondResult.plugins).toHaveLength(3);
     // Serialization order preserved: both ran, one after the other.
     expect(calls).toHaveLength(2);
     const third = await service.list();
-    expect(third.plugins).toHaveLength(2);
+    expect(third.plugins).toHaveLength(3);
   });
 
   it("reports ok:false with the CLI error message when install fails", async () => {
