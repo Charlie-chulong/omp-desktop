@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+function isWhitespaceOrControl(character: string): boolean {
+  const codePoint = character.codePointAt(0);
+  return (
+    /\s/u.test(character) || codePoint === undefined || codePoint <= 0x1f || codePoint === 0x7f
+  );
+}
+
 const SafeSshTokenSchema = z
   .string()
   .trim()
@@ -7,7 +14,7 @@ const SafeSshTokenSchema = z
   .max(255)
   .refine((value) => !value.startsWith("-"), "SSH values cannot begin with '-'")
   .refine(
-    (value) => !/[\s\u0000-\u001f\u007f]/u.test(value),
+    (value) => !Array.from(value).some(isWhitespaceOrControl),
     "SSH values cannot contain whitespace or control characters",
   );
 
@@ -20,7 +27,10 @@ export const RemoteSshTargetSchema = z.object({
     .trim()
     .min(1)
     .max(4096)
-    .refine((value) => !/[\u0000\r\n]/u.test(value), "Identity path contains invalid characters")
+    .refine(
+      (value) => !value.includes("\0") && !value.includes("\r") && !value.includes("\n"),
+      "Identity path contains invalid characters",
+    )
     .optional(),
 });
 
@@ -65,7 +75,13 @@ export type RemoteSshPhase =
   | "complete";
 
 export type RemoteSshEvent =
-  | { operationId: string; type: "phase"; phase: RemoteSshPhase; message: string }
+  | {
+      operationId: string;
+      type: "phase";
+      phase: RemoteSshPhase;
+      message: string;
+      progress?: number;
+    }
   | { operationId: string; type: "terminal"; data: string }
   | { operationId: string; type: "interactive"; enabled: boolean }
   | { operationId: string; type: "failed"; message: string };

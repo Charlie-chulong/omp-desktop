@@ -252,6 +252,7 @@ export const ru: TranslationResources = {
       workflow: {
         title: "Рабочий процесс",
         standard: "Стандартный",
+        enhanced: "Расширенный",
         plan: "План",
         goal: "Цель",
         goalPlaceholder: "Введите цель",

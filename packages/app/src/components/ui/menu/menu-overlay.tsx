@@ -15,6 +15,7 @@ import {
   Platform,
   Pressable,
   StatusBar,
+  StyleSheet as RNStyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
@@ -522,7 +523,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   overlayWeb: {
-    ...StyleSheet.absoluteFillObject,
+    ...RNStyleSheet.absoluteFillObject,
     pointerEvents: "auto" as const,
   },
   backdrop: {

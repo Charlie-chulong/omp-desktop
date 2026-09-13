@@ -39,6 +39,56 @@ async function sha256(filePath) {
   return createHash("sha256").update(contents).digest("hex");
 }
 
+async function collectSourceFiles(directory, relativeRoot, files) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (
+      entry.name === "dist" ||
+      entry.name === "node_modules" ||
+      entry.name === "coverage" ||
+      entry.name === ".DS_Store"
+    ) {
+      continue;
+    }
+    const absolutePath = path.join(directory, entry.name);
+    const relativePath = path.posix.join(relativeRoot, entry.name);
+    if (entry.isDirectory()) {
+      await collectSourceFiles(absolutePath, relativePath, files);
+    } else if (entry.isFile()) {
+      files.push({ absolutePath, relativePath });
+    }
+  }
+}
+
+async function calculateBundleHash() {
+  const files = [
+    {
+      absolutePath: path.join(rootDir, ".tool-versions"),
+      relativePath: ".tool-versions",
+    },
+    {
+      absolutePath: path.join(rootDir, "package-lock.json"),
+      relativePath: "package-lock.json",
+    },
+  ];
+  for (const [, directoryName] of workspacePackages) {
+    await collectSourceFiles(
+      path.join(rootDir, "packages", directoryName),
+      `packages/${directoryName}`,
+      files,
+    );
+  }
+  await collectSourceFiles(path.join(rootDir, "skills"), "skills", files);
+  const hash = createHash("sha256");
+  for (const file of files.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  )) {
+    hash.update(file.relativePath).update("\0");
+    hash.update(await readFile(file.absolutePath)).update("\n");
+  }
+  return hash.digest("hex");
+}
+
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(packageDir, { recursive: true });
 
@@ -86,6 +136,7 @@ const hashes = {};
 for (const relativePath of files.sort()) {
   hashes[relativePath] = await sha256(path.join(outputDir, relativePath));
 }
+const bundleHash = await calculateBundleHash();
 
 const rootPackage = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
 await writeFile(
@@ -95,6 +146,7 @@ await writeFile(
       schemaVersion: 1,
       backendVersion: rootPackage.version,
       nodeVersion,
+      bundleHash,
       supportedTargets: ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"],
       files: hashes,
     },

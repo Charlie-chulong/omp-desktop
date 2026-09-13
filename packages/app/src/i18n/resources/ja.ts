@@ -252,6 +252,7 @@ export const ja: TranslationResources = {
       workflow: {
         title: "ワークフロー",
         standard: "標準",
+        enhanced: "強化",
         plan: "計画",
         goal: "目標",
         goalPlaceholder: "目標を入力",

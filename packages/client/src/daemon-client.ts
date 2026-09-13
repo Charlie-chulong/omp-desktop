@@ -95,6 +95,7 @@ import type {
   OmpProviderManagementSaveResponseMessage,
   OmpSubagentSettingsGetResponseMessage,
   OmpSubagentSettingsUpdateResponseMessage,
+  OmpSubagentSettingsEnabledUpdateResponseMessage,
   OmpMemorySettingsGetResponseMessage,
   OmpMemorySettingsUpdateResponseMessage,
   OmpMemorySettingsPatch,
@@ -493,6 +494,8 @@ type OmpProviderManagementGetPayload = OmpProviderManagementGetResponseMessage["
 type OmpProviderManagementSavePayload = OmpProviderManagementSaveResponseMessage["payload"];
 type OmpSubagentSettingsGetPayload = OmpSubagentSettingsGetResponseMessage["payload"];
 type OmpSubagentSettingsUpdatePayload = OmpSubagentSettingsUpdateResponseMessage["payload"];
+type OmpSubagentSettingsEnabledUpdatePayload =
+  OmpSubagentSettingsEnabledUpdateResponseMessage["payload"];
 type OmpProviderContextWindowOverridesUpdatePayload =
   OmpProviderContextWindowOverridesUpdateResponseMessage["payload"];
 type OmpProviderAccountOrderUpdatePayload = OmpProviderAccountOrderUpdateResponseMessage["payload"];
@@ -910,6 +913,7 @@ type SetDaemonConfigResponse = Extract<
 type CorrelatedResponseMessage =
   | Extract<SessionOutboundMessage, { payload: { requestId: string } }>
   | GetDaemonConfigResponse
+  | PullRequestTimelineResponse
   | SetDaemonConfigResponse;
 type CorrelatedResponseType = CorrelatedResponseMessage["type"];
 type CorrelatedResponsePayload<TType extends CorrelatedResponseType> = Extract<
@@ -5145,6 +5149,17 @@ export class DaemonClient {
       requestId: options?.requestId,
       message: { type: "omp.subagents.management.update.request", agentName, model },
       responseType: "omp.subagents.management.update.response",
+      timeout: 30_000,
+    });
+  }
+  async updateOmpSubagentSettingsEnabled(
+    enabled: boolean,
+    options?: { requestId?: string },
+  ): Promise<OmpSubagentSettingsEnabledUpdatePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "omp.subagents.management.enabled.update.request", enabled },
+      responseType: "omp.subagents.management.enabled.update.response",
       timeout: 30_000,
     });
   }

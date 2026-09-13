@@ -266,6 +266,7 @@ export const en = {
       workflow: {
         title: "Workflow",
         standard: "Standard",
+        enhanced: "Enhanced",
         plan: "Plan",
         goal: "Goal",
         goalPlaceholder: "Enter a goal",
@@ -1733,6 +1734,7 @@ export const en = {
         inspecting: "Inspecting the remote host…",
         "preparing-runtime": "Preparing the managed runtime…",
         uploading: "Uploading the backend…",
+        uploadingProgress: "Uploading the backend… {{percent}}%",
         installing: "Installing backend dependencies…",
         starting: "Starting the remote daemon…",
         pairing: "Verifying the encrypted relay…",
@@ -2665,6 +2667,9 @@ export const en = {
         unavailable: "Connect to this host to manage OMP subagents",
         unsupported: "Update this host to manage OMP subagent models",
         loading: "Loading OMP subagent settings...",
+        overrideEnabled: "Override built-in subagent models",
+        overrideEnabledHint:
+          "Write task.agentModelOverrides for scout, task, sonic, reviewer, and security-reviewer. Turning this off removes the entire mapping.",
         inherit: "Inherit parent agent",
         inheritHint: "Use the parent agent's active or default model.",
         modelLabel: "Model",

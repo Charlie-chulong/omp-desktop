@@ -57,6 +57,12 @@ describe("localized agent control labels", () => {
           label: "Standard",
         }),
       ).toBe("标准");
+      expect(
+        formatAgentFeatureOptionLabel("workflow_mode", {
+          id: "enhanced",
+          label: "Enhanced",
+        }),
+      ).toBe("增强");
     } finally {
       await i18n.changeLanguage("en");
     }

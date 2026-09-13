@@ -252,6 +252,7 @@ export const ar: TranslationResources = {
       workflow: {
         title: "سير العمل",
         standard: "قياسي",
+        enhanced: "معزز",
         plan: "تخطيط",
         goal: "هدف",
         goalPlaceholder: "أدخل هدفًا",

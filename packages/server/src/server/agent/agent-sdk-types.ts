@@ -824,6 +824,7 @@ export interface AgentClient {
   saveOmpProviderConfig?(configYaml: string): Promise<OmpProviderManagement>;
   getOmpSubagentSettings?(): Promise<OmpSubagentSettings>;
   updateOmpSubagentModel?(agentName: string, model: string | null): Promise<OmpSubagentSettings>;
+  updateOmpSubagentSettingsEnabled?(enabled: boolean): Promise<OmpSubagentSettings>;
   getOmpMemorySettings?(): Promise<OmpMemorySettings>;
   updateOmpMemorySettings?(
     expectedRevision: string,

@@ -2590,6 +2590,8 @@ export class Session {
         return this.providerCatalogSession.handleOmpSubagentSettingsGetRequest(msg);
       case "omp.subagents.management.update.request":
         return this.providerCatalogSession.handleOmpSubagentSettingsUpdateRequest(msg);
+      case "omp.subagents.management.enabled.update.request":
+        return this.providerCatalogSession.handleOmpSubagentSettingsEnabledUpdateRequest(msg);
       case "omp.memory.settings.get.request":
         return this.providerCatalogSession.handleOmpMemorySettingsGetRequest(msg);
       case "omp.memory.settings.update.request":

@@ -252,6 +252,7 @@ export const ptBR: TranslationResources = {
       workflow: {
         title: "Fluxo de trabalho",
         standard: "Padrão",
+        enhanced: "Aprimorado",
         plan: "Plano",
         goal: "Objetivo",
         goalPlaceholder: "Digite um objetivo",

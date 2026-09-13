@@ -27,6 +27,8 @@ type DeploymentState =
   | { status: "running"; phase: string }
   | { status: "failed"; message: string };
 
+// Terminal output can contain ANSI escape and OSC sequences by design.
+// eslint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\x1B(?:[@-_][0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\x1B\\))/gu;
 const MAX_TERMINAL_CHARS = 20_000;
 
@@ -63,10 +65,11 @@ export function RemoteSshHostModal({
       } else if (event.type === "interactive") {
         setInteractive(event.enabled);
       } else if (event.type === "phase") {
-        setState({
-          status: "running",
-          phase: t(`pairing.ssh.phases.${event.phase}`),
-        });
+        const phase =
+          event.phase === "uploading" && event.progress !== undefined
+            ? t("pairing.ssh.phases.uploadingProgress", { percent: event.progress })
+            : t(`pairing.ssh.phases.${event.phase}`);
+        setState({ status: "running", phase });
       } else if (event.type === "failed") {
         setState({ status: "failed", message: event.message });
       }
@@ -74,6 +77,8 @@ export function RemoteSshHostModal({
     [t],
   );
 
+  // The deployment callback owns one linear lifecycle: validate, deploy, pair, persist, and clean up.
+  // eslint-disable-next-line complexity
   const handleDeploy = useCallback(async () => {
     const desktop = getDesktopHost();
     const bridge = desktop?.remoteSsh;
@@ -270,7 +275,7 @@ export function RemoteSshHostModal({
           {t("common.actions.cancel")}
         </Button>
         {!isRunning ? (
-          <Button onPress={() => void handleDeploy()} testID="remote-ssh-deploy">
+          <Button onPress={handleDeploy} testID="remote-ssh-deploy">
             {managedProfile ? t("pairing.ssh.update") : t("pairing.ssh.connectAndDeploy")}
           </Button>
         ) : null}

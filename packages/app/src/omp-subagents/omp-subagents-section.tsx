@@ -12,6 +12,7 @@ import { StyleSheet } from "react-native-unistyles";
 import type { OmpSubagentSettings } from "@omp-desktop/protocol/messages";
 
 import { SelectField, type SelectFieldOption } from "@/components/ui/select-field";
+import { Switch } from "@/components/ui/switch";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
@@ -23,7 +24,6 @@ type SubagentEntry = OmpSubagentSettings["agents"][number];
 
 interface OmpSubagentRowProps {
   agent: SubagentEntry;
-  index: number;
   modelOptions: SelectFieldOption<string>[];
   catalogLoading: boolean;
   disabled: boolean;
@@ -32,7 +32,6 @@ interface OmpSubagentRowProps {
 
 function OmpSubagentRow({
   agent,
-  index,
   modelOptions,
   catalogLoading,
   disabled,
@@ -55,7 +54,7 @@ function OmpSubagentRow({
 
   return (
     <View
-      style={[settingsStyles.row, index > 0 && settingsStyles.rowBorder, styles.agentRow]}
+      style={[settingsStyles.row, settingsStyles.rowBorder, styles.agentRow]}
       testID={`omp-subagent-row-${agent.name}`}
     >
       <View style={styles.agentIdentity}>
@@ -99,6 +98,7 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
   const [settings, setSettings] = useState<OmpSubagentSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [savingAgent, setSavingAgent] = useState<string | null>(null);
+  const [savingEnabled, setSavingEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -168,6 +168,22 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
     [client],
   );
 
+  const updateEnabled = useCallback(
+    async (enabled: boolean) => {
+      if (!client) return;
+      setSavingEnabled(true);
+      setError(null);
+      try {
+        setSettings(await client.updateOmpSubagentSettingsEnabled(enabled));
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setSavingEnabled(false);
+      }
+    },
+    [client],
+  );
+
   let content: ReactNode;
   if (!isConnected) {
     content = (
@@ -194,17 +210,36 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
       </View>
     );
   } else {
-    content = settings?.agents.map((agent, index) => (
-      <OmpSubagentRow
-        key={agent.name}
-        agent={agent}
-        index={index}
-        modelOptions={modelOptions}
-        catalogLoading={catalogLoading}
-        disabled={savingAgent !== null}
-        onChange={updateModel}
-      />
-    ));
+    content = settings ? (
+      <>
+        <View style={settingsStyles.row} testID="omp-subagent-overrides-toggle-row">
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>
+              {t("settings.host.ompSubagents.overrideEnabled")}
+            </Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.host.ompSubagents.overrideEnabledHint")}
+            </Text>
+          </View>
+          <Switch
+            value={settings.enabled}
+            onValueChange={updateEnabled}
+            disabled={savingEnabled || savingAgent !== null}
+            accessibilityLabel={t("settings.host.ompSubagents.overrideEnabled")}
+          />
+        </View>
+        {settings.agents.map((agent) => (
+          <OmpSubagentRow
+            key={agent.name}
+            agent={agent}
+            modelOptions={modelOptions}
+            catalogLoading={catalogLoading}
+            disabled={!settings.enabled || savingEnabled || savingAgent !== null}
+            onChange={updateModel}
+          />
+        ))}
+      </>
+    ) : null;
   }
 
   return (

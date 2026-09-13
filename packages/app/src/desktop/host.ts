@@ -197,6 +197,7 @@ export type DesktopRemoteSshEvent =
         | "pairing"
         | "complete";
       message: string;
+      progress?: number;
     }
   | { operationId: string; type: "terminal"; data: string }
   | { operationId: string; type: "interactive"; enabled: boolean }

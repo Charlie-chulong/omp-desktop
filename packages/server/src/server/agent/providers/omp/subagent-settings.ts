@@ -57,6 +57,7 @@ function toSettings(configPath: string, document: Document.Parsed): OmpSubagentS
   const overrides = readModelOverrides(document);
   return {
     configPath,
+    enabled: isMap(document.getIn(["task", "agentModelOverrides"], true)),
     agents: BUNDLED_SUBAGENTS.map((agent) => ({
       ...agent,
       ...(overrides[agent.name] ? { model: overrides[agent.name] } : {}),
@@ -90,11 +91,7 @@ function assertEditableMappings(document: Document.Parsed): void {
   }
 }
 
-function removeEmptyMappings(document: Document.Parsed): void {
-  const overrides = document.getIn(["task", "agentModelOverrides"], true);
-  if (isMap(overrides) && overrides.items.length === 0) {
-    document.deleteIn(["task", "agentModelOverrides"]);
-  }
+function removeEmptyTaskMapping(document: Document.Parsed): void {
   const task = document.getIn(["task"], true);
   if (isMap(task) && task.items.length === 0) {
     document.deleteIn(["task"]);
@@ -118,12 +115,41 @@ export async function updateOmpSubagentModel(
     );
   const document = parseConfig(raw);
   assertEditableMappings(document);
+  if (!isMap(document.getIn(["task", "agentModelOverrides"], true))) {
+    throw new Error("Enable OMP subagent model overrides before changing a model");
+  }
 
   if (normalizedModel) {
     document.setIn(["task", "agentModelOverrides", agentName], normalizedModel);
   } else {
     document.deleteIn(["task", "agentModelOverrides", agentName]);
-    removeEmptyMappings(document);
+  }
+
+  await fs.mkdir(dirname(configPath), { recursive: true });
+  await writeFileAtomic(configPath, document.toString());
+  return toSettings(configPath, document);
+}
+
+export async function updateOmpSubagentSettingsEnabled(
+  enabled: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<OmpSubagentSettings> {
+  const configPath = resolveConfigPath(env);
+  const raw = await fs
+    .readFile(configPath, "utf8")
+    .catch((error: NodeJS.ErrnoException) =>
+      error.code === "ENOENT" ? "{}\n" : Promise.reject(error),
+    );
+  const document = parseConfig(raw);
+  assertEditableMappings(document);
+
+  if (enabled) {
+    if (!isMap(document.getIn(["task", "agentModelOverrides"], true))) {
+      document.setIn(["task", "agentModelOverrides"], document.createNode({}));
+    }
+  } else {
+    document.deleteIn(["task", "agentModelOverrides"]);
+    removeEmptyTaskMapping(document);
   }
 
   await fs.mkdir(dirname(configPath), { recursive: true });
