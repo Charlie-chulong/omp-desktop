@@ -5,11 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { createTestLogger } from "../test-utils/test-logger.js";
-import {
-  OmpPluginCliService,
-  OmpPluginUnavailableError,
-  type OmpPluginRunner,
-} from "./omp-plugin-cli-service.js";
+import { OmpPluginCliService, type OmpPluginRunner } from "./omp-plugin-cli-service.js";
 
 function makeRunner(
   stdout: string,
@@ -37,7 +33,20 @@ const LIST_JSON = JSON.stringify({
     { name: "pi-memory", version: "0.4.2", enabled: true, path: "C:/plugins/pi-memory" },
     { name: "other", version: "1.0.0", enabled: false, path: "C:/plugins/other" },
   ],
-  marketplace: [{ id: "mkt-plugin", scope: "user", version: "2.0.0" }],
+  marketplace: [
+    {
+      id: "mkt-plugin@probe-mkt",
+      scope: "project",
+      entries: [
+        {
+          scope: "project",
+          version: "2.0.0",
+          installPath: "C:/plugins/mkt-plugin",
+          enabled: false,
+        },
+      ],
+    },
+  ],
 });
 
 describe("OmpPluginCliService", () => {
@@ -48,10 +57,14 @@ describe("OmpPluginCliService", () => {
     expect(runner.calls[0]?.args).toEqual(["plugin", "list", "--json"]);
     expect(result.plugins).toHaveLength(3);
     expect(result.plugins[0]?.name).toBe("pi-memory");
-    expect(result.plugins[2]?.name).toBe("mkt-plugin");
-    expect(result.plugins[2]?.version).toBe("2.0.0");
-    expect(result.plugins[2]?.enabled).toBe(true);
-    expect(result.marketplace[0]?.id).toBe("mkt-plugin");
+    expect(result.plugins[2]).toMatchObject({
+      name: "mkt-plugin",
+      id: "mkt-plugin@probe-mkt",
+      version: "2.0.0",
+      scope: "project",
+      enabled: false,
+    });
+    expect(result.marketplace[0]?.id).toBe("mkt-plugin@probe-mkt");
     expect(result.rawOutput).toBeUndefined();
   });
 
@@ -167,6 +180,35 @@ describe("OmpPluginCliService", () => {
     expect(retry.ok).toBe(true);
   });
 
+  it("targets and verifies marketplace plugins by exact ID and scope", async () => {
+    const runner = makeRunner("", (_command, args) => {
+      if (args[1] === "list") {
+        return JSON.stringify({
+          npm: [],
+          marketplace: [
+            {
+              id: "probe@catalog",
+              scope: "project",
+              entries: [{ scope: "project", version: "1", enabled: false }],
+            },
+          ],
+        });
+      }
+      return "";
+    });
+
+    const result = await makeService(runner).setEnabled("probe@catalog", false, "project");
+
+    expect(runner.calls[0]?.args).toEqual([
+      "plugin",
+      "disable",
+      "probe@catalog",
+      "--scope",
+      "project",
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
   it("returns doctor checks parsed from CLI output", async () => {
     const checks = [{ name: "plugins_directory", status: "ok", message: "Found" }];
     const runner = makeRunner(JSON.stringify(checks));
@@ -176,7 +218,7 @@ describe("OmpPluginCliService", () => {
     expect(result.checks).toEqual(checks);
   });
 
-  it("raises OmpPluginUnavailableError when omp cannot be resolved", async () => {
+  it("returns an immediate diagnostic when omp cannot be resolved", async () => {
     const runner = makeRunner("");
     const service = new OmpPluginCliService({
       logger: createTestLogger(),
@@ -184,7 +226,9 @@ describe("OmpPluginCliService", () => {
       resolveOmpCommand: async () => null,
     });
 
-    await expect(service.list()).rejects.toBeInstanceOf(OmpPluginUnavailableError);
+    const result = await service.list();
+    expect(result.plugins).toEqual([]);
+    expect(result.rawOutput).toContain("OMP CLI is not available");
     expect(runner.calls).toHaveLength(0);
   });
 
@@ -193,6 +237,20 @@ describe("OmpPluginCliService", () => {
     const result = await makeService(runner).remove("pi-memory");
 
     expect(runner.calls[0]?.args).toEqual(["plugin", "uninstall", "pi-memory"]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("passes marketplace scope to uninstall", async () => {
+    const runner = makeRunner("removed");
+    const result = await makeService(runner).remove("probe@catalog", "project");
+
+    expect(runner.calls[0]?.args).toEqual([
+      "plugin",
+      "uninstall",
+      "probe@catalog",
+      "--scope",
+      "project",
+    ]);
     expect(result.ok).toBe(true);
   });
 

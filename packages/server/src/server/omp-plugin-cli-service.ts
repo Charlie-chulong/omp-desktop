@@ -148,13 +148,6 @@ function extractPluginName(spec: string): string {
   return versionAt === -1 ? spec : spec.slice(0, versionAt);
 }
 
-export class OmpPluginOperationInProgressError extends Error {
-  constructor() {
-    super("Another OMP plugin operation is already in progress");
-    this.name = "OmpPluginOperationInProgressError";
-  }
-}
-
 export class OmpPluginUnavailableError extends Error {
   constructor(detail?: string) {
     super(detail ?? "OMP CLI is not available on this host");
@@ -261,26 +254,36 @@ export class OmpPluginCliService {
 
   async list(): Promise<OmpPluginListResult> {
     return this.runExclusive(async () => {
-      const output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS);
+      let output: string;
+      try {
+        output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS);
+      } catch (error) {
+        return {
+          plugins: [],
+          marketplace: [],
+          rawOutput: truncateOutput((error as Error).message),
+        };
+      }
       const parsed = OmpPluginListJsonSchema.safeParse(parseTrailingJson(output));
       if (parsed.success) {
-        // Marketplace-installed plugins have a different CLI shape ({id,
-        // scope, entries:[{version, installPath}]}). Map them into the same
-        // OmpPluginInfo format as npm plugins so the UI's "installed" list
-        // shows them alongside npm-installed ones.
-        const fromMarketplace = parsed.data.marketplace.map((m) => {
-          const shortName = m.id.split("@")[0] ?? m.id;
-          const entries = m.entries as
-            | Array<{ version?: string; installPath?: string }>
-            | undefined;
-          const entry = entries?.[0];
+        // Marketplace-installed plugins have a different CLI shape. Preserve
+        // their exact ID and scope: lifecycle commands need both when the same
+        // catalog plugin is installed from multiple marketplaces or scopes.
+        const fromMarketplace = parsed.data.marketplace.map((marketplacePlugin) => {
+          const separator = marketplacePlugin.id.lastIndexOf("@");
+          const name =
+            separator > 0 ? marketplacePlugin.id.slice(0, separator) : marketplacePlugin.id;
+          const entry =
+            marketplacePlugin.entries?.find(
+              (candidate) => candidate.scope === marketplacePlugin.scope,
+            ) ?? marketplacePlugin.entries?.[0];
           return {
-            name: shortName,
-            version: entry?.version ?? m.version ?? "",
+            name,
+            id: marketplacePlugin.id,
+            version: entry?.version ?? marketplacePlugin.version ?? "",
             path: entry?.installPath,
-            // The CLI does not report an enabled flag for marketplace plugins;
-            // treat presence in the list as enabled.
-            enabled: true,
+            scope: marketplacePlugin.scope,
+            enabled: entry?.enabled !== false,
             description: undefined,
           };
         });
@@ -325,10 +328,15 @@ export class OmpPluginCliService {
     });
   }
 
-  async remove(name: string): Promise<{ ok: boolean; output?: string }> {
+  async remove(
+    name: string,
+    scope?: "user" | "project",
+  ): Promise<{ ok: boolean; output?: string }> {
     return this.runExclusive(async () => {
       try {
-        const output = await this.runCli(["uninstall", name], ACTION_TIMEOUT_MS);
+        const args = ["uninstall", name];
+        if (scope) args.push("--scope", scope);
+        const output = await this.runCli(args, ACTION_TIMEOUT_MS);
         return { ok: true, output: truncateOutput(output) };
       } catch (error) {
         return { ok: false, output: truncateOutput((error as Error).message) };
@@ -336,22 +344,34 @@ export class OmpPluginCliService {
     });
   }
 
-  async setEnabled(name: string, enabled: boolean): Promise<{ ok: boolean }> {
+  async setEnabled(
+    name: string,
+    enabled: boolean,
+    scope?: "user" | "project",
+  ): Promise<{ ok: boolean }> {
     return this.runExclusive(async () => {
       try {
-        await this.runCli([enabled ? "enable" : "disable", name], ACTION_TIMEOUT_MS);
+        const args = [enabled ? "enable" : "disable", name];
+        if (scope) args.push("--scope", scope);
+        await this.runCli(args, ACTION_TIMEOUT_MS);
       } catch (error) {
-        this.logger.warn({ err: error, name, enabled }, "omp plugin enable/disable failed");
+        this.logger.warn({ err: error, name, enabled, scope }, "omp plugin enable/disable failed");
         return { ok: false };
       }
-      // Verify the lockfile actually changed: the CLI can exit 0 silently.
+      // Verify the registry actually changed: the CLI can exit 0 silently.
       try {
         const output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS);
         const parsed = OmpPluginListJsonSchema.safeParse(parseTrailingJson(output));
-        const entry = parsed.success
-          ? parsed.data.npm.find((item) => item.name === name)
-          : undefined;
-        return { ok: entry?.enabled === enabled };
+        if (!parsed.success) return { ok: false };
+        const npmEntry = parsed.data.npm.find((item) => item.name === name);
+        if (npmEntry) return { ok: npmEntry.enabled === enabled };
+        const marketplaceEntry = parsed.data.marketplace.find(
+          (item) => item.id === name && (!scope || item.scope === scope),
+        );
+        const entry =
+          marketplaceEntry?.entries?.find((item) => !scope || item.scope === scope) ??
+          marketplaceEntry?.entries?.[0];
+        return { ok: entry !== undefined && (entry.enabled ?? true) === enabled };
       } catch {
         return { ok: false };
       }
@@ -362,7 +382,12 @@ export class OmpPluginCliService {
     return this.runExclusive(async () => {
       const args = ["doctor", "--json"];
       if (input?.fix) args.push("--fix");
-      const output = await this.runCli(args, DOCTOR_TIMEOUT_MS);
+      let output: string;
+      try {
+        output = await this.runCli(args, DOCTOR_TIMEOUT_MS);
+      } catch (error) {
+        return { checks: [], rawOutput: truncateOutput((error as Error).message) };
+      }
       const parsed = OmpPluginDoctorJsonSchema.safeParse(parseTrailingJson(output));
       if (parsed.success) {
         return { checks: parsed.data };

@@ -5464,11 +5464,12 @@ export class DaemonClient {
 
   async removeOmpPlugin(
     name: string,
+    scope?: "user" | "project",
   ): Promise<{ requestId: string; ok: boolean; output?: string }> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.remove.request", name },
+      message: { type: "ompPlugins.remove.request", name, scope },
       responseType: "ompPlugins.remove.response",
     });
   }
@@ -5476,11 +5477,12 @@ export class DaemonClient {
   async setOmpPluginEnabled(
     name: string,
     enabled: boolean,
+    scope?: "user" | "project",
   ): Promise<{ requestId: string; ok: boolean; name: string; enabled: boolean }> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.setEnabled.request", name, enabled },
+      message: { type: "ompPlugins.setEnabled.request", name, enabled, scope },
       responseType: "ompPlugins.setEnabled.response",
     });
   }

@@ -189,10 +189,15 @@ describe("plugin protocol compatibility", () => {
       SessionInboundMessageSchema.parse({
         type: "ompPlugins.setEnabled.request",
         requestId: "r3",
-        name: "pi-memory",
+        name: "context7@official",
+        scope: "project",
         enabled: false,
-      }).type,
-    ).toBe("ompPlugins.setEnabled.request");
+      }),
+    ).toMatchObject({
+      type: "ompPlugins.setEnabled.request",
+      name: "context7@official",
+      scope: "project",
+    });
     expect(
       SessionInboundMessageSchema.parse({
         type: "ompPlugins.doctor.request",
@@ -204,13 +209,30 @@ describe("plugin protocol compatibility", () => {
         type: "ompPlugins.list.response",
         payload: {
           requestId: "r1",
-          plugins: [{ name: "pi-memory", version: "0.4.2", enabled: true }],
-          marketplace: [{ id: "mkt-plugin", scope: "user" }],
+          plugins: [
+            {
+              name: "context7",
+              id: "context7@official",
+              version: "0.4.2",
+              scope: "project",
+              enabled: false,
+            },
+          ],
+          marketplace: [
+            {
+              id: "context7@official",
+              scope: "project",
+              entries: [{ scope: "project", enabled: false }],
+            },
+          ],
         },
       }),
     ).toMatchObject({
       type: "ompPlugins.list.response",
-      payload: { plugins: [{ name: "pi-memory" }], marketplace: [{ id: "mkt-plugin" }] },
+      payload: {
+        plugins: [{ name: "context7", id: "context7@official", scope: "project" }],
+        marketplace: [{ id: "context7@official", entries: [{ enabled: false }] }],
+      },
     });
     expect(
       SessionOutboundMessageSchema.parse({
