@@ -1543,6 +1543,11 @@ export const ru: TranslationResources = {
         statusFailed: "Не удалось проверить состояние установки CLI.",
         installFailed: "Не удалось установить OMP Desktop CLI.",
       },
+      ompShortcut: {
+        statusFailed: "Не удалось проверить состояние команды OMP.",
+        installFailed: "Не удалось установить команду OMP.",
+        uninstallFailed: "Не удалось удалить команду OMP.",
+      },
     },
   },
   rootError: {
@@ -2391,10 +2396,16 @@ export const ru: TranslationResources = {
         title: "Командная строка",
         description: "Управляйте агентами и автоматизируйте их работу из терминала",
       },
+      ompShortcut: {
+        title: "Команда OMP",
+        description: "Запускает встроенный OMP через текущий прокси этого хоста",
+      },
       actions: {
         install: "Установить",
         installing: "Установка...",
         installed: "Установлено",
+        uninstall: "Удалить",
+        uninstalling: "Удаление...",
       },
     },
     permissions: {

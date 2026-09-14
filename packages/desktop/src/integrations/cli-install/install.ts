@@ -1,8 +1,20 @@
 import { promises as fs } from "node:fs";
 import { app } from "electron";
 import log from "electron-log/main";
+import { loadPersistedConfig, resolvePaseoHome } from "@omp-desktop/server";
 import { resolveCliInstallSourcePath } from "./path.js";
-import { getBundledCliShimPath, getCliTargetPath, getLocalBinDir } from "./paths.js";
+import {
+  getBundledCliShimPath,
+  getBundledOmpExecutablePath,
+  getCliTargetPath,
+  getLocalBinDir,
+  getOmpShortcutTargetPath,
+} from "./paths.js";
+import {
+  installOmpShortcutAtPaths,
+  isManagedOmpShortcut,
+  uninstallOmpShortcutAtPaths,
+} from "./omp-shortcut-files.js";
 import { ensurePathInShellRc } from "./shell-rc.js";
 
 interface InstallStatus {
@@ -68,4 +80,47 @@ export async function installCli(): Promise<InstallStatus> {
 export async function getCliInstallStatus(): Promise<InstallStatus> {
   const targetPath = getCliTargetPath();
   return { installed: await pathOrSymlinkExists(targetPath) };
+}
+
+function readCurrentOmpProxyUrl(): string | undefined {
+  const configuredProxy =
+    loadPersistedConfig(resolvePaseoHome()).agents?.providers?.omp?.env?.PI_PROXY;
+  for (const value of [
+    configuredProxy,
+    process.env.PI_PROXY,
+    process.env.HTTPS_PROXY,
+    process.env.HTTP_PROXY,
+  ]) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function getOmpShortcutPaths() {
+  return {
+    targetPath: getOmpShortcutTargetPath(),
+    sourcePath: getBundledOmpExecutablePath(),
+    platform: process.platform,
+    proxyUrl: readCurrentOmpProxyUrl(),
+  };
+}
+
+export async function getOmpShortcutInstallStatus(): Promise<InstallStatus> {
+  return { installed: await isManagedOmpShortcut(getOmpShortcutPaths()) };
+}
+
+export async function installOmpShortcut(): Promise<InstallStatus> {
+  await installOmpShortcutAtPaths(getOmpShortcutPaths());
+  const { shellUpdated } = await ensurePathInShellRc();
+  if (shellUpdated) {
+    log.info("[integrations] Updated shell rc with ~/.local/bin PATH");
+  }
+  return getOmpShortcutInstallStatus();
+}
+
+export async function uninstallOmpShortcut(): Promise<InstallStatus> {
+  await uninstallOmpShortcutAtPaths(getOmpShortcutPaths());
+  return getOmpShortcutInstallStatus();
 }

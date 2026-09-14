@@ -1518,6 +1518,11 @@ export const zhCN: TranslationResources = {
         statusFailed: "无法检查 CLI 安装状态。",
         installFailed: "无法安装 OMP Desktop CLI。",
       },
+      ompShortcut: {
+        statusFailed: "无法检查 omp 快捷命令状态。",
+        installFailed: "无法安装 omp 快捷命令。",
+        uninstallFailed: "无法卸载 omp 快捷命令。",
+      },
     },
   },
   rootError: {
@@ -2373,10 +2378,16 @@ export const zhCN: TranslationResources = {
         title: "命令行",
         description: "从终端控制 Agent 并运行脚本",
       },
+      ompShortcut: {
+        title: "OMP 快捷命令",
+        description: "创建 `omp` 命令，并使用当前 Host 配置的代理运行内置 OMP",
+      },
       actions: {
         install: "安装",
         installing: "正在安装...",
         installed: "已安装",
+        uninstall: "卸载",
+        uninstalling: "正在卸载...",
       },
     },
     permissions: {
@@ -2716,6 +2727,7 @@ export const zhCN: TranslationResources = {
         listTitle: "已安装",
         installTitle: "安装",
         installSpecLabel: "插件标识",
+        installPlaceholder: "包名、路径或 Git URL",
         browsePackages: "在 pi.dev 浏览更多插件 ↗",
         dryRunLabel: "仅检查",
         toggleLabel: "切换 {{id}}",
@@ -2736,6 +2748,7 @@ export const zhCN: TranslationResources = {
         marketplace: {
           title: "插件市场",
           addLabel: "添加插件市场",
+          addPlaceholder: "owner/repo、Git URL 或本地路径",
           searchPlaceholder: "搜索插件…",
           searchClear: "清除搜索",
           actions: {

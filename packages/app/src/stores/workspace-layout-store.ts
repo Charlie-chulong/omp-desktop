@@ -470,12 +470,16 @@ function getPaneWorkspaceTabZone(input: {
   }
 
   const tabsById = new Map(collectAllTabs(input.layout.root).map((tab) => [tab.tabId, tab]));
-  return pane.tabIds.some((tabId) => {
-    const tab = tabsById.get(tabId);
-    return tab ? getWorkspaceTabZone(tab.target) === "terminal" : false;
-  })
-    ? "terminal"
-    : "workspace";
+  const tabZones = new Set(
+    pane.tabIds.flatMap((tabId) => {
+      const tab = tabsById.get(tabId);
+      return tab && tab.target.kind !== "new_tab" ? [getWorkspaceTabZone(tab.target)] : [];
+    }),
+  );
+  if (tabZones.has("workspace")) {
+    return "workspace";
+  }
+  return tabZones.has("terminal") ? "terminal" : "workspace";
 }
 
 function findMainWorkspacePaneId(

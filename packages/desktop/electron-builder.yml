@@ -91,14 +91,8 @@ win:
     - from: bin/omp-desktop.cmd
       to: bin/omp-desktop.cmd
   target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
-    - target: zip
-      arch:
-        - x64
-        - arm64
+    - nsis
+    - zip
 nsis:
   oneClick: false
   perMachine: false
