@@ -785,35 +785,31 @@ describe("workspace-layout-store actions", () => {
     expect(collectTabIds(layout.root)).not.toContain(initialMainTabId);
   });
 
-  it("replaces a new bottom pane with only the created terminal", () => {
+  it("creates a dedicated bottom pane containing only the terminal", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     workspaceLayoutStore.setState({
       layoutByWorkspace: { [workspaceKey]: createWorkspaceLayoutWithSidePanel() },
     });
     useWorkspaceLayoutIds("bottom-pane", "bottom-group");
-    const paneId = store.splitPaneEmpty(workspaceKey, {
-      targetPaneId: "main",
-      position: "bottom",
-    }) as string;
 
     const terminalTabId = store.openTab({
       workspaceKey,
       target: { kind: "terminal", terminalId: "terminal-below" },
       intent: "reveal",
-      placement: { mode: "pane", paneId },
     });
 
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
-    const bottomPane = findPaneById(layout.root, paneId);
-    expect(bottomPane?.tabIds).toEqual([terminalTabId]);
+    const paneId = findPaneContainingTab(layout.root, terminalTabId!)?.id;
+    expect(paneId).toBe("pane_bottom-pane");
+    expect(findPaneById(layout.root, paneId)?.tabIds).toEqual([terminalTabId]);
     expect(collectAllTabs(layout.root).find((tab) => tab.tabId === terminalTabId)?.target).toEqual({
       kind: "terminal",
       terminalId: "terminal-below",
     });
   });
 
-  it("keeps a New tab's random identity when its launcher selects content", () => {
+  it("moves a New tab's selected tool to the side panel without changing identity", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     const initialLayout = createWorkspaceLayoutWithSidePanel();
@@ -824,10 +820,14 @@ describe("workspace-layout-store actions", () => {
 
     expect(resultTabId).toBe(newTabId);
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
-    expect(findPaneById(layout.root, "main")?.tabIds).toEqual([newTabId]);
+    expect(findPaneContainingTab(layout.root, newTabId)?.id).toBe("explorer");
     expect(collectAllTabs(layout.root).find((tab) => tab.tabId === newTabId)?.target).toEqual({
       kind: "files",
     });
+    const mainTabId = findPaneById(layout.root, "main")?.focusedTabId;
+    expect(collectAllTabs(layout.root).find((tab) => tab.tabId === mainTabId)?.target.kind).toBe(
+      "new_tab",
+    );
   });
 
   it("closes a split through its sole New tab but keeps the final visible split", () => {
@@ -1425,6 +1425,41 @@ describe("workspace-layout-store actions", () => {
     expect(layout.focusedPaneId).toBe("explorer");
   });
 
+  it("keeps two agent conversations in side-by-side center panes through reconciliation", () => {
+    useWorkspaceLayoutIds("23232323-2323-2323-2323-232323232323");
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    const firstTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    });
+    const secondTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-2" },
+      intent: "reveal",
+    });
+    const secondPaneId = store.splitPane(workspaceKey, {
+      tabId: secondTabId!,
+      targetPaneId: "main",
+      position: "right",
+    });
+
+    store.reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: ["agent-1", "agent-2"],
+      autoOpenAgentIds: ["agent-1", "agent-2"],
+      knownAgentIds: ["agent-1", "agent-2"],
+      standaloneTerminalIds: [],
+    });
+
+    const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(secondPaneId).toBe("pane_23232323-2323-2323-2323-232323232323");
+    expect(findPaneContainingTab(layout.root, firstTabId!)?.id).toBe("main");
+    expect(findPaneContainingTab(layout.root, secondTabId!)?.id).toBe(secondPaneId);
+  });
+
   it("creates a center pane when the side panel is the only pane", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
@@ -1949,13 +1984,13 @@ describe("workspace-layout-store actions", () => {
     ]);
   });
 
-  it("keeps a generated draft in the center after an empty side split", () => {
+  it("opens a generated draft in the focused center split", () => {
     useWorkspaceLayoutIds("77777777-7777-7777-7777-777777777777");
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
 
-    store.openTab({
-      workspaceKey: workspaceKey,
+    const fileTabId = store.openTab({
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/a.ts" },
       intent: "reveal",
     });
@@ -1964,7 +1999,7 @@ describe("workspace-layout-store actions", () => {
       position: "right",
     });
     const draftTabId = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: {
         kind: "draft",
         draftId: "draft-split",
@@ -1975,13 +2010,9 @@ describe("workspace-layout-store actions", () => {
 
     expect(newPaneId).toBe("pane_77777777-7777-7777-7777-777777777777");
     expect(draftTabId).toBe("draft-split");
-    expect(layout.focusedPaneId).toBe("main");
-    expect(findPaneById(layout.root, "main")?.tabIds).toEqual([
-      "file_/repo/worktree/a.ts",
-      draftTabId!,
-    ]);
-    expect(findPaneContainingTab(layout.root, draftTabId!)?.id).toBe("main");
-    expect(findPaneById(layout.root, newPaneId)?.tabIds).toEqual([expect.any(String)]);
+    expect(layout.focusedPaneId).toBe(newPaneId);
+    expect(findPaneById(layout.root, "main")?.tabIds).toEqual([fileTabId]);
+    expect(findPaneById(layout.root, newPaneId)?.tabIds).toEqual([draftTabId]);
   });
 
   it("hides and shows the side panel without changing its tabs or split sizes", () => {
@@ -2099,7 +2130,7 @@ describe("workspace-layout-store actions", () => {
     expect(state.splitSizesByWorkspace[workspaceKey]).toBe(splitSizes);
   });
 
-  it("convertDraftToAgent moves the canonical agent tab back to the center pane", () => {
+  it("convertDraftToAgent keeps the conversation in its center split", () => {
     useWorkspaceLayoutIds("12121212-1212-1212-1212-121212121212");
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
@@ -2126,8 +2157,8 @@ describe("workspace-layout-store actions", () => {
 
     expect(splitPaneId).toBe("pane_12121212-1212-1212-1212-121212121212");
     expect(nextTabId).toBe("agent_agent-1");
-    expect(findPaneContainingTab(layout.root, "agent_agent-1")?.id).toBe("main");
-    expect(findPaneById(layout.root, splitPaneId)).toBeNull();
+    expect(findPaneContainingTab(layout.root, "agent_agent-1")?.id).toBe(splitPaneId);
+    expect(findPaneById(layout.root, splitPaneId)).toBeTruthy();
     expect(convertedTab).toEqual({
       tabId: "agent_agent-1",
       target: { kind: "agent", agentId: "agent-1" },
@@ -2517,42 +2548,37 @@ describe("workspace-layout-store actions", () => {
     expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual(["main"]);
   });
 
-  it("splitPane preserves four user-created levels beneath the explorer split", () => {
+  it("allows parallel center panes and rejects stacked workspace panes", () => {
     useWorkspaceLayoutIds(
       "11111111-1111-1111-1111-111111111111",
       "22222222-2222-2222-2222-222222222222",
       "33333333-3333-3333-3333-333333333333",
-      "44444444-4444-4444-4444-444444444444",
-      "55555555-5555-5555-5555-555555555555",
-      "66666666-6666-6666-6666-666666666666",
-      "77777777-7777-7777-7777-777777777777",
-      "88888888-8888-8888-8888-888888888888",
     );
 
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     const a = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/a.ts" },
       intent: "reveal",
     });
     const b = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/b.ts" },
       intent: "reveal",
     });
     const c = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/c.ts" },
       intent: "reveal",
     });
     const d = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/d.ts" },
       intent: "reveal",
     });
     const e = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/e.ts" },
       intent: "reveal",
     });
@@ -2566,27 +2592,31 @@ describe("workspace-layout-store actions", () => {
     const pane2 = store.splitPane(workspaceKey, {
       tabId: c!,
       targetPaneId: pane1!,
-      position: "bottom",
+      position: "right",
     });
     const pane3 = store.splitPane(workspaceKey, {
       tabId: d!,
       targetPaneId: pane2!,
       position: "right",
     });
-    const pane4 = store.splitPane(workspaceKey, {
+    const stackedPane = store.splitPane(workspaceKey, {
       tabId: e!,
       targetPaneId: pane3!,
       position: "bottom",
     });
 
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
-    // The first split joins the root group instead of nesting under it, so it spends a pane id and
-    // no group id, and the four user splits all fit inside the depth cap.
     expect(pane1).toBe("pane_11111111-1111-1111-1111-111111111111");
     expect(pane2).toBe("pane_22222222-2222-2222-2222-222222222222");
-    expect(pane3).toBe("pane_44444444-4444-4444-4444-444444444444");
-    expect(pane4).toBe("pane_66666666-6666-6666-6666-666666666666");
-    expect(getTreeDepth(layout.root)).toBe(5);
+    expect(pane3).toBe("pane_33333333-3333-3333-3333-333333333333");
+    expect(stackedPane).toBeNull();
+    expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual([
+      "main",
+      pane1,
+      pane2,
+      pane3,
+    ]);
+    expect(getTreeDepth(layout.root)).toBe(2);
   });
 
   it("moveTabToPane collapses the source pane when its last tab moves out", () => {
@@ -2673,7 +2703,32 @@ describe("workspace-layout-store actions", () => {
     });
   });
 
-  it("closeTab cascades group unwrapping when an inner split collapses to a single pane", () => {
+  it("prevents workspace and terminal tabs from crossing their zones", () => {
+    useWorkspaceLayoutIds("terminal-pane", "terminal-group");
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    const agentTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    }) as string;
+    const terminalTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-1" },
+      intent: "reveal",
+    }) as string;
+    let layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const terminalPaneId = findPaneContainingTab(layout.root, terminalTabId)?.id as string;
+
+    store.moveTabToPane(workspaceKey, agentTabId, terminalPaneId);
+    store.moveTabToPane(workspaceKey, terminalTabId, "main");
+
+    layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneContainingTab(layout.root, agentTabId)?.id).toBe("main");
+    expect(findPaneContainingTab(layout.root, terminalTabId)?.id).toBe(terminalPaneId);
+  });
+
+  it("closeTab removes an emptied side-by-side pane", () => {
     useWorkspaceLayoutIds(
       "78787878-7878-7878-7878-787878787878",
       "89898989-8989-8989-8989-898989898989",
@@ -2712,7 +2767,7 @@ describe("workspace-layout-store actions", () => {
     const paneCId = store.splitPane(workspaceKey, {
       tabId: thirdTabId!,
       targetPaneId: paneBId!,
-      position: "bottom",
+      position: "right",
     });
 
     store.closeTab(workspaceKey, secondTabId!);
@@ -2866,28 +2921,26 @@ describe("workspace-layout-store actions", () => {
     ).toMatchObject({ baseRef: "main", treeWidth: 300, collapsedFolderPaths: ["src"] });
   });
 
-  it("resizeSplit keeps sizes normalized while enforcing the minimum proportion", () => {
+  it("resizeSplit keeps side-by-side sizes normalized above the minimum", () => {
     useWorkspaceLayoutIds(
       "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
       "ffffffff-ffff-ffff-ffff-ffffffffffff",
-      "11111111-1111-1111-1111-111111111111",
     );
 
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
-
     const a = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/a.ts" },
       intent: "reveal",
     });
     const b = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/b.ts" },
       intent: "reveal",
     });
     const c = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "file", path: "/repo/worktree/c.ts" },
       intent: "reveal",
     });
@@ -2901,27 +2954,20 @@ describe("workspace-layout-store actions", () => {
     const farRightPaneId = store.splitPane(workspaceKey, {
       tabId: c!,
       targetPaneId: rightPaneId!,
-      position: "bottom",
+      position: "right",
     });
 
     const splitRoot = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey].root;
     const splitGroup = expectGroup(splitRoot);
-    const nestedGroup = expectGroup(
-      splitGroup.group.children.find((child) => child.kind === "group")!,
-    );
-    store.resizeSplit(workspaceKey, nestedGroup.group.id, [0.01, 0.99]);
+    store.resizeSplit(workspaceKey, splitGroup.group.id, [0.01, 0.29, 0.3, 0.4]);
 
     const resizedRoot = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey].root;
     const resizedGroup = expectGroup(resizedRoot);
-    const resizedNestedGroup = expectGroup(
-      resizedGroup.group.children.find((child) => child.kind === "group")!,
-    );
-    const total = resizedNestedGroup.group.sizes.reduce((sum, size) => sum + size, 0);
+    const total = resizedGroup.group.sizes.reduce((sum, size) => sum + size, 0);
 
     expect(rightPaneId).toBe("pane_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
     expect(farRightPaneId).toBe("pane_ffffffff-ffff-ffff-ffff-ffffffffffff");
-    expect(resizedNestedGroup.group.sizes[0]).toBeGreaterThanOrEqual(0.1);
-    expect(resizedNestedGroup.group.sizes[1]).toBeGreaterThanOrEqual(0.1);
+    expect(resizedGroup.group.sizes.every((size) => size >= 0.1)).toBe(true);
     expect(total).toBeCloseTo(1, 10);
   });
 
@@ -3019,7 +3065,7 @@ describe("workspace-layout-store actions", () => {
     });
   });
 
-  it("convertDraftToAgent removes the draft and focuses the existing canonical agent tab", () => {
+  it("convertDraftToAgent removes the draft and focuses the existing split conversation", () => {
     useWorkspaceLayoutIds("67676767-6767-6767-6767-676767676767");
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
@@ -3049,8 +3095,8 @@ describe("workspace-layout-store actions", () => {
     expect(splitPaneId).toBe("pane_67676767-6767-6767-6767-676767676767");
     expect(nextTabId).toBe("agent_agent-1");
     expect(collectContentTabs(layout.root).map((tab) => tab.tabId)).toEqual(["agent_agent-1"]);
-    expect(layout.focusedPaneId).toBe("main");
-    expect(findPaneContainingTab(layout.root, "agent_agent-1")?.id).toBe("main");
+    expect(layout.focusedPaneId).toBe(splitPaneId);
+    expect(findPaneContainingTab(layout.root, "agent_agent-1")?.id).toBe(splitPaneId);
   });
 
   it("reconcileTabs canonicalizes duplicates and prunes stale entity tabs from hydrated snapshots", () => {
@@ -3221,7 +3267,7 @@ describe("workspace-layout-store actions", () => {
   it("reconcileTabs lands on a draft when the hydrated workspace is empty", () => {
     const workspaceKey = createWorkspaceKey();
 
-    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, {
+    const snapshot = {
       agentsHydrated: true,
       terminalsHydrated: true,
       activeAgentIds: [],
@@ -3230,7 +3276,8 @@ describe("workspace-layout-store actions", () => {
       knownTerminalIds: [],
       standaloneTerminalIds: [],
       hasActivePendingDraftCreate: false,
-    });
+    };
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, snapshot);
 
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
     const mainTab = collectAllTabs(layout.root).find(
@@ -3238,6 +3285,9 @@ describe("workspace-layout-store actions", () => {
     );
     expect(mainTab?.target.kind).toBe("draft");
     expect(findPaneById(layout.root, "main")?.focusedTabId).toBe(mainTab?.tabId);
+
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, snapshot);
+    expect(workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey]).toBe(layout);
   });
 
   it("reconcileTabs does not auto-open subagents omitted from autoOpenAgentIds", () => {
@@ -3718,7 +3768,7 @@ describe("workspace-layout-store actions", () => {
     expect(findPaneById(layout.root, paneId)?.hidden).toBeUndefined();
   });
 
-  it("an explicit pane-local open moves an existing tab into that pane", () => {
+  it("keeps a side-panel tool in its zone despite an explicit workspace placement", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     store.openTab({
@@ -3744,9 +3794,9 @@ describe("workspace-layout-store actions", () => {
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
     expect(reopened).toBe(changesTabId);
     expect(collectAllTabs(layout.root).filter((tab) => tab.tabId === changesTabId)).toHaveLength(1);
-    expect(findPaneContainingTab(layout.root, changesTabId as string)?.id).toBe("main");
-    expect(layout.focusedPaneId).toBe("main");
-    expect(findPaneById(layout.root, "main")?.focusedTabId).toBe(changesTabId);
+    expect(findPaneContainingTab(layout.root, changesTabId as string)?.id).toBe(sidePanelPaneId);
+    expect(layout.focusedPaneId).toBe(sidePanelPaneId);
+    expect(findPaneById(layout.root, sidePanelPaneId)?.focusedTabId).toBe(changesTabId);
   });
 
   it("a preferred open focuses an existing tab where the user left it", () => {
@@ -3778,7 +3828,7 @@ describe("workspace-layout-store actions", () => {
     expect(findPaneContainingTab(layout.root, fileTabId)?.id).toBe("main");
     expect(layout.focusedPaneId).toBe("main");
   });
-  it("leaves the default Files tool in the Side panel when its content is claimed elsewhere", () => {
+  it("keeps Files and Changes together in the tool-only side panel", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     store.openTab({
@@ -3802,12 +3852,13 @@ describe("workspace-layout-store actions", () => {
     });
 
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
-    expect(findPaneContainingTab(layout.root, changesTabId)?.id).toBe("main");
+    const tabsById = new Map(collectAllTabs(layout.root).map((tab) => [tab.tabId, tab]));
+    expect(findPaneContainingTab(layout.root, changesTabId)?.id).toBe(paneId);
     const sidePane = findPaneById(layout.root, paneId);
-    expect(sidePane?.tabIds).toHaveLength(1);
-    expect(
-      collectAllTabs(layout.root).find((tab) => tab.tabId === sidePane?.focusedTabId)?.target,
-    ).toEqual({ kind: "files" });
+    expect(sidePane?.tabIds.map((tabId) => tabsById.get(tabId)?.target.kind)).toEqual([
+      "files",
+      "working_diff",
+    ]);
     expect(findPaneById(layout.root, paneId)?.hidden).toBeUndefined();
   });
   it("closePane refuses to hide the side panel once it is the only visible pane", () => {
@@ -3896,26 +3947,28 @@ describe("workspace-layout-store actions", () => {
     expect(canDismissPaneInLayout(sidePanelAlone, paneId)).toBe(false);
   });
 
-  it("closePane on a loaded final pane keeps the pane and every tab in it", () => {
+  it("closePane keeps the final visible workspace pane and its tabs", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();
     const agentTabId = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "agent", agentId: "only" },
       intent: "reveal",
     });
     const filesTabId = store.openTab({
-      workspaceKey: workspaceKey,
+      workspaceKey,
       target: { kind: "files" },
       intent: "reveal",
     });
+    store.hideSidePanel(workspaceKey);
     const before = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
 
     store.closePane(workspaceKey, "main");
 
     const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
     expect(layout).toBe(before);
-    expect(findPaneById(layout.root, "main")?.tabIds).toEqual([agentTabId, filesTabId]);
+    expect(findPaneById(layout.root, "main")?.tabIds).toEqual([agentTabId]);
+    expect(findPaneContainingTab(layout.root, filesTabId!)?.id).toBe("explorer");
     expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual(["main"]);
   });
 });

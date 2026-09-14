@@ -65,6 +65,8 @@ linux:
   maintainer: "OMP Desktop contributors"
   vendor: "OMP Desktop"
   extraResources:
+    - from: ../../bin/omp-linux-${arch}
+      to: bin/omp
     - from: bin/omp-desktop
       to: bin/omp-desktop
     - from: assets/icon.png

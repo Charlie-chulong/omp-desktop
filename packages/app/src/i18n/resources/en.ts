@@ -2418,7 +2418,7 @@ export const en = {
         previousTab: "Previous tab",
         nextTab: "Next tab",
         splitPaneRight: "Split pane right",
-        splitPaneDown: "Split pane down",
+        splitPaneDown: "Toggle terminal panel",
         focusPaneLeft: "Focus pane left",
         focusPaneRight: "Focus pane right",
         focusPaneUp: "Focus pane up",

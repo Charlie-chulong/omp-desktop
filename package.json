@@ -66,6 +66,7 @@
     "dev:win:desktop": "npm run dev:win --workspace=@omp-desktop/desktop",
     "build:desktop": "npm run build:app-deps:clean && npm run clean --workspace=@omp-desktop/app && cd packages/app && cross-env PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build --workspace=@omp-desktop/desktop --",
     "build:windows": "./build-windows.sh",
+    "download:omp": "node scripts/download-omp-binaries.mjs",
     "db:query": "npm run db:query --workspace=@omp-desktop/server --",
     "cli": "./scripts/dev-home.sh npx tsx packages/cli/src/index.js"
   },

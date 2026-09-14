@@ -2346,7 +2346,7 @@ export const ru: TranslationResources = {
         previousTab: "Предыдущая вкладка",
         nextTab: "Следующая вкладка",
         splitPaneRight: "Разделить панель справа",
-        splitPaneDown: "Разделить панель вниз",
+        splitPaneDown: "Переключить панель терминала",
         focusPaneLeft: "Перейти на панель слева",
         focusPaneRight: "Перейти на панель справа",
         focusPaneUp: "Перейти на панель выше",

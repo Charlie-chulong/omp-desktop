@@ -3057,10 +3057,7 @@ function WorkspaceScreenContent({
       }
 
       if (action.id === "workspace.pane.split.down") {
-        handleCreateEmptySplit({
-          targetPaneId: focusedPane.id,
-          position: "bottom",
-        });
+        handleToggleTerminalBelowFocusedPane();
         return true;
       }
 
@@ -3102,6 +3099,7 @@ function WorkspaceScreenContent({
       focusWorkspacePane,
       handleClosePane,
       handleCreateEmptySplit,
+      handleToggleTerminalBelowFocusedPane,
       moveWorkspaceTabToPane,
       persistenceKey,
       focusedPaneTabState.activeTabId,

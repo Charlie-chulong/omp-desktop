@@ -2347,7 +2347,7 @@ export const es: TranslationResources = {
         previousTab: "Pestaña anterior",
         nextTab: "Pestaña siguiente",
         splitPaneRight: "Panel dividido a la derecha",
-        splitPaneDown: "Dividir panel hacia abajo",
+        splitPaneDown: "Alternar panel de terminal",
         focusPaneLeft: "Panel de enfoque a la izquierda",
         focusPaneRight: "Panel de enfoque a la derecha",
         focusPaneUp: "Panel de enfoque arriba",

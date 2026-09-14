@@ -76,6 +76,13 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
     },
     [resizeInput],
   );
+  const handleMessageChange = useCallback(
+    (nextMessage: string) => {
+      setMessage(nextMessage);
+      if (isWeb) resizeInput();
+    },
+    [resizeInput],
+  );
 
   const replaceMessage = useCallback(
     (nextMessage: string) => {
@@ -134,7 +141,7 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
         <AdaptiveTextInput
           ref={inputRef}
           initialValue=""
-          onChangeText={setMessage}
+          onChangeText={handleMessageChange}
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder={t("workspace.git.commitComposer.placeholder", {
@@ -146,7 +153,7 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
           multiline
           submitBehavior="newline"
           textAlignVertical="top"
-          onContentSizeChange={handleContentSizeChange}
+          onContentSizeChange={isWeb ? undefined : handleContentSizeChange}
           style={[
             styles.messageInput,
             { height: inputHeight },

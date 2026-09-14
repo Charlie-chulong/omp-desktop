@@ -2294,7 +2294,7 @@ export const ar: TranslationResources = {
         previousTab: "علامة التبويب السابقة",
         nextTab: "علامة التبويب التالية",
         splitPaneRight: "تقسيم الجزء الأيمن",
-        splitPaneDown: "تقسيم الجزء لأسفل",
+        splitPaneDown: "تبديل لوحة المحطة الطرفية",
         focusPaneLeft: "جزء التركيز على اليسار",
         focusPaneRight: "جزء التركيز إلى اليمين",
         focusPaneUp: "جزء التركيز لأعلى",

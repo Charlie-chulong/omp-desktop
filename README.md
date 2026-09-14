@@ -8,7 +8,7 @@ An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). 
 - `omp >= 16.3.9` on `PATH` for development and standalone daemon runs
 - A configured OMP model provider
 
-Packaged macOS arm64 and Windows x64/arm64 applications include OMP and do not require a system OMP installation.
+Packaged macOS, Linux, and Windows applications include OMP and do not require a system OMP installation.
 
 ## File drag and drop
 
@@ -81,13 +81,28 @@ The macOS arm64 application is written to:
 packages/desktop/release/mac-arm64/OMP Desktop.app
 ```
 
-Desktop packaging reads the architecture-specific OMP executables from the repository-root `bin/` directory:
+Download and checksum-verify the latest supported OMP binaries:
+
+```bash
+npm run download:omp
+```
+
+Specific targets can be refreshed without downloading every architecture:
+
+```bash
+npm run download:omp -- linux-x64 linux-arm64
+```
+
+The script writes these release assets to the repository-root `bin/` directory:
 
 - `omp-darwin-arm64`
-- `omp-windows-x64.exe`
+- `omp-darwin-x64`
+- `omp-linux-arm64`
+- `omp-linux-x64`
 - `omp-windows-arm64.exe`
+- `omp-windows-x64.exe`
 
-electron-builder installs the selected executable as `Resources/bin/omp` on macOS or `resources/bin/omp.exe` on Windows. Linux packages still require `omp` on `PATH` until a matching Linux binary is added to the packaging configuration.
+electron-builder selects the target architecture and installs the executable as `Resources/bin/omp` on macOS, `resources/bin/omp` on Linux, or `resources/bin/omp.exe` on Windows.
 
 ### Bundled skills
 

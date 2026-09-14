@@ -94,6 +94,13 @@ it("grows with its content, caps at 300px, and shrinks after content is removed"
     );
     await expect.poll(() => input.getBoundingClientRect().height).toBe(300);
 
+    for (let index = 0; index < 3; index += 1) {
+      await act(async () => input.blur());
+      await act(async () => input.focus());
+    }
+    expect(input.value).toContain("Commit message line 40");
+    expect(input.getBoundingClientRect().height).toBe(300);
+
     await userEvent.fill(input, "Short message");
     await expect.poll(() => input.getBoundingClientRect().height).toBe(34);
   } finally {
