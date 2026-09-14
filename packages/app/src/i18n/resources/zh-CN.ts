@@ -2491,8 +2491,50 @@ export const zhCN: TranslationResources = {
         unavailable: "连接到这个 Host 以管理编排",
         enableTools: {
           title: "启用 OMP Desktop tools",
-          hint: "Agent 将能够管理 worktree、Agent 和计划",
+          hint: "将 OMP Desktop 提供的 MCP 工具注入 Agent，使其除了操作当前代码目录外，还能直接调度 Desktop 中的资源。",
           accessibilityLabel: "注入 OMP Desktop tools",
+          showDetails: "查看能力和安全影响",
+          hideDetails: "收起能力说明",
+          capabilities: {
+            workspace: {
+              title: "Workspace / worktree",
+              body: "创建、列出、重命名和归档 workspace；使用现有目录；新建 Git worktree 和分支；checkout 已有分支或 GitHub PR。归档时会清理 workspace 中的 Agent 和受管理目录。",
+            },
+            agents: {
+              title: "Agent 编排",
+              body: "创建子 Agent 或独立 Agent 并立即分配任务；继续给已有 Agent 发送任务；查看列表、状态和活动；修改名称、标签、模型、思考配置和运行模式；取消运行、归档或终止 Agent；支持后台执行和完成通知。",
+            },
+            permissions: {
+              title: "权限处理",
+              body: "查看所有 Agent 待处理的权限请求，并批准或拒绝，包括子 Agent 请求执行命令或修改文件的授权。",
+            },
+            schedules: {
+              title: "计划任务",
+              body: "创建、查看、修改、暂停、恢复、删除或立即运行 cron 任务；支持时区、最大运行次数、过期时间和历史运行日志。",
+            },
+            heartbeat: {
+              title: "Heartbeat",
+              body: "让当前 Agent 按 cron 周期重新收到提示，适合定期检查、提醒或持续巡检。",
+            },
+            terminals: {
+              title: "终端",
+              body: "创建、列出和关闭 Desktop 管理的终端；读取输出并发送文字、Enter、方向键等输入，使 Agent 能启动服务并继续观察或操作。",
+            },
+            scripts: {
+              title: "Workspace scripts",
+              body: "查询 paseo.json 中配置的脚本并启动或停止；查看生命周期、端口、代理地址、健康状态和关联终端。",
+            },
+            providers: {
+              title: "Provider / 模型",
+              body: "查询已配置的模型提供方及可用状态；列出模型和 provider 支持的模式或功能；读取 Agent Profiles，为任务选择合适的模型组合。",
+            },
+          },
+          optional: {
+            title: "其他宿主能力",
+            body: "根据其他设置和宿主能力，还可能注入浏览器自动化、图片生成和语音输出。",
+          },
+          warning:
+            "高权限访问：Agent 可以创建其他 Agent、操作 worktree、启动终端和定时任务。实际操作仍受会话模式、权限审批、工作目录限制和宿主配置约束。关闭此开关不会禁用 Agent 原本自带的文件或命令工具，只会移除 OMP Desktop 编排工具。",
         },
         proxy: {
           title: "代理",

@@ -35,8 +35,8 @@ export async function resolveCreateAgentIntent(input: {
     ...(parentAgentId ? { [PARENT_AGENT_ID_LABEL]: parentAgentId } : {}),
   };
 
-  // Detached roots must not inherit parentage from caller defaults or input labels.
-  if (input.detached) {
+  // Any root must reject parentage forged through caller defaults or input labels.
+  if (!parentAgentId) {
     delete labels[PARENT_AGENT_ID_LABEL];
   }
 

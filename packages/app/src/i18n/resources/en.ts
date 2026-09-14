@@ -2585,8 +2585,50 @@ export const en = {
         unavailable: "Connect to this host to manage orchestration",
         enableTools: {
           title: "Enable OMP Desktop tools",
-          hint: "Agents will be able to manage worktrees, agents and schedules",
+          hint: "Inject OMP Desktop MCP tools into agents so they can orchestrate Desktop resources in addition to working in the current directory.",
           accessibilityLabel: "Inject OMP Desktop tools",
+          showDetails: "View capabilities and security impact",
+          hideDetails: "Hide capabilities",
+          capabilities: {
+            workspace: {
+              title: "Workspace and worktree",
+              body: "Create, list, rename, and archive workspaces; use an existing directory; create Git worktrees and branches; check out an existing branch or GitHub PR. Archiving cleans up the workspace's agents and managed directory.",
+            },
+            agents: {
+              title: "Agent orchestration",
+              body: "Create child or independent agents with an initial task; send more work to existing agents; inspect lists, status, and activity; change names, labels, models, thinking, and modes; cancel runs, archive, or terminate agents; run in the background with completion notifications.",
+            },
+            permissions: {
+              title: "Permissions",
+              body: "List pending permission requests across agents and approve or deny them, including requests to run commands or modify files.",
+            },
+            schedules: {
+              title: "Scheduled agents",
+              body: "Create, inspect, edit, pause, resume, delete, or immediately run cron schedules. Configure time zones, maximum runs, expiry, and inspect run history.",
+            },
+            heartbeat: {
+              title: "Heartbeat",
+              body: "Send the current agent a prompt on a cron cadence for recurring checks, reminders, or continuous inspection.",
+            },
+            terminals: {
+              title: "Terminals",
+              body: "Create, list, and close Desktop-managed terminals; read output and send text, Enter, arrow keys, and other input so agents can keep observing or operating services.",
+            },
+            scripts: {
+              title: "Workspace scripts",
+              body: "Inspect scripts configured in paseo.json; start and stop them; view lifecycle, port, proxy URL, health, and linked terminal.",
+            },
+            providers: {
+              title: "Providers and models",
+              body: "Inspect configured providers and availability; list models and supported modes or features; read Agent Profiles to choose an appropriate model configuration.",
+            },
+          },
+          optional: {
+            title: "Additional host capabilities",
+            body: "Other enabled settings and host support may also expose browser automation, image generation, and voice output.",
+          },
+          warning:
+            "High-privilege access: agents can create other agents, modify worktrees, start terminals, and create schedules. Session mode, permission approval, working-directory restrictions, and host configuration still apply. Turning this off does not remove an agent's built-in file or command tools; it only removes OMP Desktop orchestration tools.",
         },
         proxy: {
           title: "Proxy",

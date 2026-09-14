@@ -2517,9 +2517,51 @@ export const fr: TranslationResources = {
         title: "Orchestration",
         unavailable: "Connectez-vous à cet hôte pour gérer l'orchestration",
         enableTools: {
-          title: "Activer les outilsOMP Desktop",
-          hint: "Les agents pourront gérer les arbres de travail, les agents et les horaires",
-          accessibilityLabel: "Injecter les outilsOMP Desktop",
+          title: "Activer les outils OMP Desktop",
+          hint: "Injecte les outils MCP d’OMP Desktop dans les agents afin qu’ils puissent orchestrer les ressources de Desktop en plus du répertoire courant.",
+          accessibilityLabel: "Injecter les outils OMP Desktop",
+          showDetails: "Voir les capacités et l’impact de sécurité",
+          hideDetails: "Masquer les capacités",
+          capabilities: {
+            workspace: {
+              title: "Workspace et worktree",
+              body: "Créer, lister, renommer et archiver des workspaces ; utiliser un répertoire existant ; créer des worktrees et branches Git ; extraire une branche existante ou une PR GitHub. L’archivage nettoie les agents et le répertoire géré.",
+            },
+            agents: {
+              title: "Orchestration des agents",
+              body: "Créer des agents enfants ou indépendants avec une tâche initiale ; envoyer du travail aux agents existants ; consulter listes, état et activité ; modifier noms, étiquettes, modèles, réflexion et modes ; annuler, archiver ou arrêter ; exécuter en arrière-plan avec notifications.",
+            },
+            permissions: {
+              title: "Autorisations",
+              body: "Afficher toutes les demandes d’autorisation en attente et les accepter ou refuser, notamment pour exécuter des commandes ou modifier des fichiers.",
+            },
+            schedules: {
+              title: "Tâches planifiées",
+              body: "Créer, consulter, modifier, suspendre, reprendre, supprimer ou lancer immédiatement des tâches cron. Configurer fuseau horaire, nombre maximal d’exécutions, expiration et historique.",
+            },
+            heartbeat: {
+              title: "Heartbeat",
+              body: "Envoyer périodiquement une invite à l’agent actuel via cron pour les contrôles, rappels ou inspections continues.",
+            },
+            terminals: {
+              title: "Terminaux",
+              body: "Créer, lister et fermer les terminaux gérés par Desktop ; lire leur sortie et envoyer du texte, Entrée, les flèches et d’autres saisies pour observer ou piloter des services.",
+            },
+            scripts: {
+              title: "Scripts du workspace",
+              body: "Consulter les scripts configurés dans paseo.json ; les démarrer ou arrêter ; voir leur cycle de vie, port, URL de proxy, état de santé et terminal associé.",
+            },
+            providers: {
+              title: "Fournisseurs et modèles",
+              body: "Consulter les fournisseurs configurés et leur disponibilité ; lister les modèles, modes et fonctions ; lire les profils d’agent pour choisir une configuration adaptée.",
+            },
+          },
+          optional: {
+            title: "Capacités supplémentaires de l’hôte",
+            body: "D’autres réglages et capacités de l’hôte peuvent aussi exposer l’automatisation du navigateur, la génération d’images et la sortie vocale.",
+          },
+          warning:
+            "Accès à privilèges élevés : les agents peuvent créer d’autres agents, modifier des worktrees, démarrer des terminaux et créer des tâches planifiées. Le mode de session, l’approbation des autorisations, les limites du répertoire de travail et la configuration de l’hôte restent applicables. Désactiver cette option ne retire pas les outils de fichiers ou de commandes intégrés, seulement l’orchestration OMP Desktop.",
         },
         proxy: {
           title: "Proxy",

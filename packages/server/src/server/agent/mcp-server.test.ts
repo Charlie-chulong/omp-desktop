@@ -3258,9 +3258,9 @@ describe("create_agent MCP tool", () => {
       isChild: false,
     },
     {
-      name: "accepts canonical detached creation without a caller",
+      name: "keeps top-level creation a root without advertising detached",
       scoped: false,
-      placement: { workspaceId: "wks_parent", detached: true },
+      placement: { workspaceId: "wks_parent" },
       isChild: false,
     },
     {
@@ -3269,7 +3269,7 @@ describe("create_agent MCP tool", () => {
       placement: detachedCurrentWorkspace(),
       isChild: false,
     },
-  ])("$name and ignores forged parent labels", async ({ scoped, placement, isChild }) => {
+  ])("$name and enforces trusted parent labels", async ({ scoped, placement, isChild }) => {
     const workdir = await mkdtemp(join(tmpdir(), "mcp-workspace-inherit-"));
     const storage = new AgentStorage(join(workdir, "agents"), logger);
     const agentManager = new AgentManager({
@@ -3297,8 +3297,12 @@ describe("create_agent MCP tool", () => {
     try {
       const listedTools = await client.listTools();
       const createTool = listedTools.tools.find((tool) => tool.name === "create_agent");
-      expect(createTool?.inputSchema.properties?.detached).toMatchObject({ type: "boolean" });
-      expect(createTool?.inputSchema.required).not.toContain("detached");
+      if (scoped) {
+        expect(createTool?.inputSchema.properties?.detached).toMatchObject({ type: "boolean" });
+        expect(createTool?.inputSchema.required).not.toContain("detached");
+      } else {
+        expect(createTool?.inputSchema.properties?.detached).toBeUndefined();
+      }
 
       const result = await client.callTool({
         name: "create_agent",

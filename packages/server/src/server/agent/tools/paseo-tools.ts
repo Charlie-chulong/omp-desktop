@@ -1018,15 +1018,15 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       .describe(
         "Existing workspace id. Agent-scoped calls default to the caller workspace; top-level calls create a new local workspace when omitted.",
       ),
+  };
+  const agentToAgentInputSchema = {
+    ...canonicalCreateAgentFields,
     detached: z
       .boolean()
       .optional()
       .describe(
-        "Create an independent root instead of your subagent. Defaults to false. Does not change workspace selection; top-level calls always create roots.",
+        "Create an independent root instead of a caller-owned subagent. Defaults to false. Use only when the conversation must outlive its creator or be managed separately; parallel or background work alone should remain a subagent. This does not isolate concurrent file edits or change workspace selection.",
       ),
-  };
-  const agentToAgentInputSchema = {
-    ...canonicalCreateAgentFields,
     notifyOnFinish: z
       .boolean()
       .optional()
@@ -1498,7 +1498,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create agent",
       description:
-        "Create an OMP agent. Agent-scoped creation defaults to your workspace and creates your subagent; set detached=true to create an independent root in the selected workspace. Top-level creation always creates a root and without workspaceId creates a new local workspace. Requires omp/model and an initial prompt. Call list_models before choosing a model.",
+        "Create an OMP agent. Agent-scoped creation defaults to a caller-owned subagent in the caller's workspace; use detached=true only for a conversation that must outlive its creator or be managed separately. Top-level creation always creates a root and without workspaceId creates a new local workspace. Requires omp/model and an initial prompt. Call list_models before choosing a model.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),
@@ -1703,7 +1703,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return {
       kind: "top-level",
       parsedArgs,
-      detached: parsedArgs.detached ?? false,
+      detached: false,
       cwd,
       workspaceId,
       worktree: undefined,
