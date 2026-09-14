@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
+import { PARENT_AGENT_ID_LABEL } from "@omp-desktop/protocol/agent-labels";
 
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 import { createTestAgentClients } from "../../test-utils/fake-agent-client.js";
@@ -11,6 +12,7 @@ import { AgentStorage } from "../agent-storage.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../../worktree-session.js";
 import { createAgentCommand } from "./create.js";
 import type { ManagedAgent } from "../agent-manager.js";
+import type { AgentPromptInput } from "../agent-sdk-types.js";
 
 const logger = createTestLogger();
 
@@ -226,6 +228,132 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     }),
   );
 });
+
+test.each([
+  {
+    scenario: "notifies the caller of an independent root",
+    detached: true,
+    notifyOnFinish: true,
+    beforeFinish: "none",
+    receivesNotification: true,
+  },
+  {
+    scenario: "honors disabled notifications for an independent root",
+    detached: true,
+    notifyOnFinish: false,
+    beforeFinish: "none",
+    receivesNotification: false,
+  },
+  {
+    scenario: "notifies the owning parent of a regular child",
+    detached: undefined,
+    notifyOnFinish: true,
+    beforeFinish: "none",
+    receivesNotification: true,
+  },
+  {
+    scenario: "stops parent-owned notifications after a child is detached",
+    detached: undefined,
+    notifyOnFinish: true,
+    beforeFinish: "detach",
+    receivesNotification: false,
+  },
+  {
+    scenario: "does not revive an archived caller when an independent root finishes",
+    detached: true,
+    notifyOnFinish: true,
+    beforeFinish: "archive-caller",
+    receivesNotification: false,
+  },
+])(
+  "mcp create $scenario",
+  async ({ detached, notifyOnFinish, beforeFinish, receivesNotification }) => {
+    const workdir = mkdtempSync(join(tmpdir(), "create-agent-notification-test-"));
+    const storage = new AgentStorage(join(workdir, "agents"), logger);
+    const callerPrompts: AgentPromptInput[] = [];
+    const clients = createTestAgentClients();
+    clients.claude = createTestAgentClients({
+      onStartTurn: (prompt) => callerPrompts.push(prompt),
+    }).claude!;
+
+    // Hold only the provider's completion event, letting the real manager start
+    // the run and install its notification subscription before it can finish.
+    const childClient = clients.codex!;
+    const createSession = childClient.createSession.bind(childClient);
+    const childCompletionReady = new Promise<() => void>((resolve) => {
+      childClient.createSession = async (...args) => {
+        const session = await createSession(...args);
+        const subscribe = session.subscribe.bind(session);
+        session.subscribe = (callback) =>
+          subscribe((event) => {
+            if (event.type === "turn_completed") {
+              resolve(() => callback(event));
+            } else {
+              callback(event);
+            }
+          });
+        return session;
+      };
+    });
+    const agentManager = new AgentManager({ clients, registry: storage, logger });
+    const dependencies = {
+      agentManager,
+      agentStorage: storage,
+      logger,
+      providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+    };
+
+    try {
+      const caller = await agentManager.createAgent(
+        { provider: "claude", cwd: workdir },
+        undefined,
+        { workspaceId: "ws-caller" },
+      );
+      const { snapshot: created, initialPromptStarted } = await createAgentCommand(dependencies, {
+        kind: "mcp",
+        provider: "codex/gpt-5.4",
+        title: "Created agent",
+        initialPrompt: "respond with exactly: creation-notification-result",
+        callerAgentId: caller.id,
+        detached,
+        background: true,
+        notifyOnFinish,
+      });
+      expect(initialPromptStarted).toBe(true);
+      const storedCreated = await storage.get(created.id);
+      expect(storedCreated?.workspaceId).toBe("ws-caller");
+      expect(storedCreated?.labels?.[PARENT_AGENT_ID_LABEL]).toBe(detached ? undefined : caller.id);
+      const completeChild = await childCompletionReady;
+      expect(agentManager.getAgent(created.id)?.lifecycle).toBe("running");
+      expect(callerPrompts).toEqual([]);
+
+      if (beforeFinish === "detach") {
+        await agentManager.detachAgent(created.id);
+      } else if (beforeFinish === "archive-caller") {
+        await agentManager.archiveAgent(caller.id);
+      }
+
+      completeChild();
+      await agentManager.waitForAgentEvent(created.id, { waitForActive: true });
+      // Ownership/archive guards read the loaded storage cache asynchronously.
+      // Drain those microtasks before checking that a suppressed notification stayed absent.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const expectedPrompts = receivesNotification
+        ? [expect.stringContaining("creation-notification-result")]
+        : [];
+      await vi.waitFor(() => expect(callerPrompts).toEqual(expectedPrompts));
+      expect(agentManager.getAgent(created.id)?.lifecycle).toBe("idle");
+      expect((await storage.get(created.id))?.labels?.[PARENT_AGENT_ID_LABEL]).toBe(
+        detached || beforeFinish === "detach" ? undefined : caller.id,
+      );
+      expect(Boolean((await storage.get(caller.id))?.archivedAt)).toBe(
+        beforeFinish === "archive-caller",
+      );
+    } finally {
+      await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
+    }
+  },
+);
 
 test("session create stamps the requested workspaceId when no worktree setup runs", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "create-agent-test-"));

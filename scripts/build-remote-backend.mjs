@@ -20,12 +20,15 @@ const workspacePackages = [
 ];
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  // npm is a .cmd shim on Windows; invoke the CLI with Node without a shell.
+  const npmCli = command === "npm" ? process.env.npm_execpath : undefined;
+  const result = spawnSync(npmCli ? process.execPath : command, npmCli ? [npmCli, ...args] : args, {
     cwd: rootDir,
     encoding: "utf8",
     stdio: "pipe",
     ...options,
   });
+  if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(
       `${command} ${args.join(" ")} failed\n${result.stdout ?? ""}${result.stderr ?? ""}`,
