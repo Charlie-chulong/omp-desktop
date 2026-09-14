@@ -2328,7 +2328,7 @@ export const zhCN: TranslationResources = {
         previousTab: "上一个标签",
         nextTab: "下一个标签",
         splitPaneRight: "向右拆分窗格",
-        splitPaneDown: "向下拆分窗格",
+        splitPaneDown: "切换终端面板",
         focusPaneLeft: "聚焦左侧窗格",
         focusPaneRight: "聚焦右侧窗格",
         focusPaneUp: "聚焦上方窗格",

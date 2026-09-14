@@ -2313,7 +2313,7 @@ export const ja: TranslationResources = {
         previousTab: "前のタブ",
         nextTab: "次のタブ",
         splitPaneRight: "右にペインを分割",
-        splitPaneDown: "下にペインを分割",
+        splitPaneDown: "ターミナルパネルを切り替え",
         focusPaneLeft: "左のペインにフォーカス",
         focusPaneRight: "右のペインにフォーカス",
         focusPaneUp: "上のペインにフォーカス",

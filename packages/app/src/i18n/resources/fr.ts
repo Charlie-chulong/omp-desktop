@@ -2351,7 +2351,7 @@ export const fr: TranslationResources = {
         previousTab: "Onglet précédent",
         nextTab: "Onglet suivant",
         splitPaneRight: "Volet divisé à droite",
-        splitPaneDown: "Diviser le volet vers le bas",
+        splitPaneDown: "Afficher/masquer le panneau du terminal",
         focusPaneLeft: "Volet de mise au point à gauche",
         focusPaneRight: "Volet de mise au point à droite",
         focusPaneUp: "Volet de mise au point vers le haut",

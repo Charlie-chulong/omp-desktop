@@ -121,8 +121,6 @@ async function copyRipgrep(resourcesDir, platform, arch) {
 }
 
 function prepareBundledOmp(resourcesDir, platform, arch) {
-  if (platform !== "darwin" && platform !== "win32") return;
-
   const executablePath = path.join(resourcesDir, "bin", platform === "win32" ? "omp.exe" : "omp");
   if (!fs.existsSync(executablePath)) {
     throw new Error(`Bundled OMP executable is missing for ${platform}-${arch}: ${executablePath}`);

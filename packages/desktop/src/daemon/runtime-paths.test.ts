@@ -78,6 +78,13 @@ describe("runtime-paths", () => {
     expect(resolveBundledOmpPath()).toBe("/Applications/Paseo.app/Contents/Resources/bin/omp");
 
     setProcessRuntime({
+      platform: "linux",
+      execPath: "/opt/omp/omp-desktop",
+      resourcesPath: "/opt/omp/resources",
+    });
+    expect(resolveBundledOmpPath()).toBe("/opt/omp/resources/bin/omp");
+
+    setProcessRuntime({
       platform: "win32",
       execPath: "/opt/omp/OMP Desktop.exe",
       resourcesPath: "/opt/omp/resources",

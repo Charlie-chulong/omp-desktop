@@ -2331,7 +2331,7 @@ export const ptBR: TranslationResources = {
         previousTab: "Aba anterior",
         nextTab: "Próxima aba",
         splitPaneRight: "Dividir painel à direita",
-        splitPaneDown: "Dividir painel abaixo",
+        splitPaneDown: "Alternar painel do terminal",
         focusPaneLeft: "Focar painel à esquerda",
         focusPaneRight: "Focar painel à direita",
         focusPaneUp: "Focar painel acima",

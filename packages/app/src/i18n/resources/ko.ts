@@ -2306,7 +2306,7 @@ export const ko: TranslationResources = {
         previousTab: "이전 탭",
         nextTab: "다음 탭",
         splitPaneRight: "창을 오른쪽으로 분할",
-        splitPaneDown: "창을 아래로 분할",
+        splitPaneDown: "터미널 패널 전환",
         focusPaneLeft: "왼쪽 창에 포커스",
         focusPaneRight: "오른쪽 창에 포커스",
         focusPaneUp: "위쪽 창에 포커스",

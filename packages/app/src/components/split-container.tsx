@@ -82,6 +82,7 @@ import {
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-store";
 import type { WorkspaceTab } from "@/workspace-tabs/model";
+import { getWorkspaceTabZone, type WorkspaceTabZone } from "@/workspace-tabs/side-panel-target";
 import { RenderProfile } from "@/utils/render-profiler";
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
 import { isNative } from "@/constants/platform";
@@ -163,6 +164,45 @@ function asDragOverData(data: unknown): WorkspaceTabDragData | SplitPaneDropData
   if (isWorkspaceTabDragData(data)) return data;
   if (isSplitPaneDropData(data)) return data;
   return undefined;
+}
+
+function getPaneDropZone(input: {
+  pane: SplitPane;
+  tabsById: ReadonlyMap<string, WorkspaceTab>;
+  sidePanelPaneId: string | null;
+}): WorkspaceTabZone {
+  if (input.pane.id === input.sidePanelPaneId) {
+    return "side_panel";
+  }
+  return input.pane.tabIds.some((tabId) => {
+    const tab = input.tabsById.get(tabId);
+    return tab ? getWorkspaceTabZone(tab.target) === "terminal" : false;
+  })
+    ? "terminal"
+    : "workspace";
+}
+
+function canDropWorkspaceTabOnPane(input: {
+  tab: WorkspaceTab;
+  pane: SplitPane;
+  position: SplitDropZoneHover["position"];
+  tabsById: ReadonlyMap<string, WorkspaceTab>;
+  sidePanelPaneId: string | null;
+}): boolean {
+  const tabZone = getWorkspaceTabZone(input.tab.target);
+  if (
+    getPaneDropZone({
+      pane: input.pane,
+      tabsById: input.tabsById,
+      sidePanelPaneId: input.sidePanelPaneId,
+    }) !== tabZone
+  ) {
+    return false;
+  }
+  return (
+    input.position === "center" ||
+    (tabZone === "workspace" && (input.position === "left" || input.position === "right"))
+  );
 }
 
 interface SplitNodeViewProps extends Omit<SplitContainerProps, "layout" | "onMoveTabToPane"> {
@@ -475,6 +515,25 @@ export function SplitContainer({
   );
 
   const panesById = useMemo(() => collectPanesById(layout.root), [layout.root]);
+  const tabsById = useMemo(() => new Map(uiTabs.map((tab) => [tab.tabId, tab])), [uiTabs]);
+  const canDropTab = useCallback(
+    (tabId: string, paneId: string, position: SplitDropZoneHover["position"]): boolean => {
+      const tab = tabsById.get(tabId);
+      const pane = panesById.get(paneId);
+      return Boolean(
+        tab &&
+        pane &&
+        canDropWorkspaceTabOnPane({
+          tab,
+          pane,
+          position,
+          tabsById,
+          sidePanelPaneId,
+        }),
+      );
+    },
+    [panesById, sidePanelPaneId, tabsById],
+  );
   const splitRoot = useMemo(
     () =>
       resolveSplitContainerRoot({
@@ -522,13 +581,15 @@ export function SplitContainer({
       }
 
       if (overData?.kind === "workspace-tab") {
-        const preview = computeTabOverDropPreview({
-          activeData,
-          overData,
-          rects,
-          panesById,
-          uiTabs,
-        });
+        const preview = canDropTab(activeData.tabId, overData.paneId, "center")
+          ? computeTabOverDropPreview({
+              activeData,
+              overData,
+              rects,
+              panesById,
+              uiTabs,
+            })
+          : null;
         setDropPreview(null);
         setTabDropPreview(preview);
         return;
@@ -540,9 +601,12 @@ export function SplitContainer({
         return;
       }
 
-      setDropPreview(computePaneOverDropPreview({ overData, rects }));
+      const preview = computePaneOverDropPreview({ overData, rects });
+      setDropPreview(
+        preview && canDropTab(activeData.tabId, preview.paneId, preview.position) ? preview : null,
+      );
     },
-    [panesById, uiTabs],
+    [canDropTab, panesById, uiTabs],
   );
 
   const applyTabDropEnd = useCallback(
