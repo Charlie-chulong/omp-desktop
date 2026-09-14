@@ -2470,8 +2470,50 @@ export const ko: TranslationResources = {
         unavailable: "오케스트레이션을 관리하려면 이 호스트에 연결하세요",
         enableTools: {
           title: "OMP Desktop 도구 활성화",
-          hint: "에이전트가 워크트리, 에이전트, 일정을 관리할 수 있습니다",
+          hint: "OMP Desktop MCP 도구를 에이전트에 주입하여 현재 디렉터리 작업 외에도 Desktop 리소스를 직접 오케스트레이션할 수 있게 합니다.",
           accessibilityLabel: "OMP Desktop 도구 주입",
+          showDetails: "기능 및 보안 영향 보기",
+          hideDetails: "기능 숨기기",
+          capabilities: {
+            workspace: {
+              title: "Workspace / worktree",
+              body: "workspace 생성, 목록, 이름 변경 및 보관, 기존 디렉터리 사용, Git worktree와 브랜치 생성, 기존 브랜치 또는 GitHub PR checkout을 지원합니다. 보관 시 Agent와 관리 디렉터리를 정리합니다.",
+            },
+            agents: {
+              title: "Agent 오케스트레이션",
+              body: "초기 작업과 함께 하위 또는 독립 Agent를 만들고 기존 Agent에 작업을 추가로 보냅니다. 목록, 상태, 활동을 보고 이름, 라벨, 모델, 사고 설정, 모드를 변경하며 실행 취소, 보관, 종료, 백그라운드 실행과 완료 알림을 지원합니다.",
+            },
+            permissions: {
+              title: "권한",
+              body: "모든 Agent의 대기 중인 권한 요청을 확인하고 명령 실행이나 파일 수정 요청을 포함해 승인 또는 거부합니다.",
+            },
+            schedules: {
+              title: "예약 작업",
+              body: "cron 작업을 생성, 조회, 수정, 일시 중지, 재개, 삭제하거나 즉시 실행합니다. 시간대, 최대 실행 횟수, 만료 시간 및 실행 기록을 지원합니다.",
+            },
+            heartbeat: {
+              title: "Heartbeat",
+              body: "정기 점검, 알림 또는 지속적인 검사를 위해 현재 Agent가 cron 주기로 프롬프트를 다시 받게 합니다.",
+            },
+            terminals: {
+              title: "터미널",
+              body: "Desktop 관리 터미널을 생성, 조회, 종료하고 출력을 읽으며 텍스트, Enter, 방향키 등을 보내 서비스 관찰과 조작을 계속할 수 있습니다.",
+            },
+            scripts: {
+              title: "Workspace scripts",
+              body: "paseo.json에 설정된 스크립트를 조회하고 시작 또는 중지하며 수명 주기, 포트, 프록시 URL, 상태 및 연결된 터미널을 봅니다.",
+            },
+            providers: {
+              title: "Provider / 모델",
+              body: "설정된 provider와 사용 가능 상태, 모델, 지원 모드와 기능을 조회하고 Agent Profiles에서 작업에 맞는 모델 구성을 선택합니다.",
+            },
+          },
+          optional: {
+            title: "추가 호스트 기능",
+            body: "다른 설정과 호스트 지원 여부에 따라 브라우저 자동화, 이미지 생성 및 음성 출력도 제공될 수 있습니다.",
+          },
+          warning:
+            "높은 권한의 접근입니다. Agent는 다른 Agent 생성, worktree 조작, 터미널 실행 및 예약 작업 생성을 수행할 수 있습니다. 세션 모드, 권한 승인, 작업 디렉터리 제한 및 호스트 설정은 계속 적용됩니다. 이 옵션을 꺼도 Agent의 기본 파일 또는 명령 도구는 비활성화되지 않으며 OMP Desktop 오케스트레이션 도구만 제거됩니다.",
         },
         proxy: {
           title: "프록시",
