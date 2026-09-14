@@ -22,6 +22,7 @@ export const ompPluginSettings = {
   listTitle: "Installed",
   installTitle: "Install",
   installSpecLabel: "Plugin spec",
+  installPlaceholder: "Package, path, or Git URL",
   browsePackages: "Browse packages on pi.dev ↗",
   dryRunLabel: "Dry run",
   toggleLabel: "Toggle {{id}}",
@@ -42,6 +43,7 @@ export const ompPluginSettings = {
   marketplace: {
     title: "Marketplaces",
     addLabel: "Add marketplace",
+    addPlaceholder: "owner/repo, Git URL, or local path",
     searchPlaceholder: "Search plugins…",
     searchClear: "Clear search",
     actions: {

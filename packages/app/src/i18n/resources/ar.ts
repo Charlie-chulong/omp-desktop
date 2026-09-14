@@ -1507,6 +1507,11 @@ export const ar: TranslationResources = {
         statusFailed: "غير قادر على التحقق من حالة تثبيت CLI.",
         installFailed: "غير قادر على تثبيت OMP DesktopCLI.",
       },
+      ompShortcut: {
+        statusFailed: "تعذّر التحقق من حالة اختصار أمر OMP.",
+        installFailed: "تعذّر تثبيت اختصار أمر OMP.",
+        uninstallFailed: "تعذّر إلغاء تثبيت اختصار أمر OMP.",
+      },
     },
   },
   rootError: {
@@ -2339,10 +2344,16 @@ export const ar: TranslationResources = {
         title: "سطر الأوامر",
         description: "وكلاء التحكم والبرنامج النصي من المحطة الطرفية الخاصة بك",
       },
+      ompShortcut: {
+        title: "اختصار أمر OMP",
+        description: "شغّل OMP المضمّن باستخدام الوكيل المضبوط حاليًا لهذا المضيف",
+      },
       actions: {
         install: "ثَبَّتَ",
         installing: "جارٍ التثبيت...",
         installed: "تم التثبيت",
+        uninstall: "إلغاء التثبيت",
+        uninstalling: "جارٍ إلغاء التثبيت...",
       },
     },
     permissions: {

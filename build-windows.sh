@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Windows installers must be built one architecture per electron-builder
+# invocation. Passing both architectures in one invocation emits an additional
+# universal NSIS installer containing both payloads.
+read -r -a arches <<<"${WINDOWS_ARCHES:-x64 arm64}"
+
+for arch in "${arches[@]}"; do
+  case "$arch" in
+    x64 | arm64) ;;
+    *)
+      echo "Unsupported Windows architecture: $arch" >&2
+      exit 2
+      ;;
+  esac
+done
+
 # npm installs only the host platform's optional dependencies. Cross-building on
 # macOS therefore omits the Windows keyring bindings that the packaged daemon
-# loads at runtime. Fetch both Windows architectures directly without reifying
-# the workspace (which would remove the other architecture).
+# loads at runtime. Fetch the requested Windows architectures directly without
+# reifying the workspace (which would remove the other architecture).
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 keyring_version="$(node -p "require('./node_modules/@napi-rs/keyring/package.json').version")"
 
-for package in \
-  @napi-rs/keyring-win32-x64-msvc \
-  @napi-rs/keyring-win32-arm64-msvc; do
+for arch in "${arches[@]}"; do
+  package="@napi-rs/keyring-win32-${arch}-msvc"
   archive="$(npm pack --silent --pack-destination "$tmp_dir" "$package@$keyring_version")"
   package_dir="node_modules/$package"
   rm -rf "$package_dir"
@@ -21,4 +35,12 @@ for package in \
   test -f "$package_dir/keyring.$binding_name.node"
 done
 
-npm run build:desktop -- --win "$@"
+# Do not leave a stale universal installer in release/ after splitting builds.
+version="$(node -p "require('./packages/desktop/package.json').version")"
+rm -f \
+  "packages/desktop/release/OMP-Desktop-Setup-$version.exe" \
+  "packages/desktop/release/OMP-Desktop-Setup-$version.exe.blockmap"
+
+for arch in "${arches[@]}"; do
+  npm run build:desktop -- --win "--$arch" "$@"
+done

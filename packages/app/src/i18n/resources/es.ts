@@ -1552,6 +1552,11 @@ export const es: TranslationResources = {
         statusFailed: "No se puede verificar el estado de instalación deCLI.",
         installFailed: "No se puede instalar elOMP DesktopCLI.",
       },
+      ompShortcut: {
+        statusFailed: "No se pudo comprobar el estado del acceso directo de OMP.",
+        installFailed: "No se pudo instalar el acceso directo de OMP.",
+        uninstallFailed: "No se pudo desinstalar el acceso directo de OMP.",
+      },
     },
   },
   rootError: {
@@ -2392,10 +2397,16 @@ export const es: TranslationResources = {
         title: "línea de comando",
         description: "Agentes de control y script desde tu terminal",
       },
+      ompShortcut: {
+        title: "Acceso directo del comando OMP",
+        description: "Ejecuta el OMP incluido con el proxy configurado actualmente para este host",
+      },
       actions: {
         install: "Instalar",
         installing: "Instalando...",
         installed: "Instalado",
+        uninstall: "Desinstalar",
+        uninstalling: "Desinstalando...",
       },
     },
     permissions: {

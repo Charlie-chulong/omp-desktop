@@ -657,7 +657,6 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
             <View style={[settingsStyles.row, styles.installRow]}>
               <Field
                 label={t("settings.host.ompPlugins.installSpecLabel")}
-                hint={t("settings.host.ompPlugins.installPlaceholder")}
                 testID="omp-plugins-install-field"
               >
                 <FieldControlRow
@@ -730,7 +729,6 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
             <View style={[settingsStyles.row, styles.installRow]}>
               <Field
                 label={t("settings.host.ompPlugins.marketplace.addLabel")}
-                hint={t("settings.host.ompPlugins.marketplace.addPlaceholder")}
                 testID="omp-plugins-marketplace-field"
               >
                 <FieldControlRow

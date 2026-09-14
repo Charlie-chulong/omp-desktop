@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import * as pty from "node-pty";
 import { MarkerBuffer } from "./marker-buffer.js";
-import { buildSshArguments } from "./target.js";
+import { buildSshArguments, resolveSshExecutable } from "./target.js";
 import type { RemoteSshTarget } from "./types.js";
 
 export interface SshPtySessionOptions {
@@ -23,11 +23,13 @@ export class SshPtySession {
   private readonly process: pty.IPty;
   private readonly target: RemoteSshTarget;
   private readonly controlPath: string;
+  private readonly sshExecutable: string;
   private interactive = true;
   private closed = false;
 
   constructor(options: SshPtySessionOptions) {
     this.target = options.target;
+    this.sshExecutable = resolveSshExecutable();
     this.controlPath = path.join(
       os.tmpdir(),
       `omp-ssh-${process.pid}-${randomUUID().slice(0, 8)}.sock`,
@@ -38,7 +40,7 @@ export class SshPtySession {
       ),
     );
     this.process = pty.spawn(
-      "ssh",
+      this.sshExecutable,
       [
         ...buildSshArguments(options.target, {
           controlPath: this.controlPath,
@@ -104,7 +106,7 @@ export class SshPtySession {
   private async runMultiplexedCommand(remoteCommand: string, input?: Buffer): Promise<string> {
     if (this.closed) throw new Error("The SSH session is closed");
     const child = spawn(
-      "ssh",
+      this.sshExecutable,
       [
         ...buildSshArguments(this.target, {
           tty: false,

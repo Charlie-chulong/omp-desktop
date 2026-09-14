@@ -1425,6 +1425,72 @@ describe("workspace-layout-store actions", () => {
     expect(layout.focusedPaneId).toBe("explorer");
   });
 
+  it("repairs a mixed conversation and terminal pane without adding a parallel workspace pane", () => {
+    useWorkspaceLayoutIds(
+      "terminal-pane",
+      "terminal-group",
+      "unexpected-workspace-pane",
+      "unexpected-workspace-group",
+    );
+    const workspaceKey = createWorkspaceKey();
+    workspaceLayoutStore.setState((state) => ({
+      ...state,
+      layoutByWorkspace: {
+        ...state.layoutByWorkspace,
+        [workspaceKey]: normalizeLayout({
+          root: {
+            kind: "group",
+            group: {
+              id: "workspace-root",
+              direction: "horizontal",
+              sizes: [0.75, 0.25],
+              children: [
+                createPane({
+                  id: "main",
+                  tabIds: ["agent_agent-1", "terminal_terminal-1"],
+                  focusedTabId: "terminal_terminal-1",
+                  targetsByTabId: {
+                    "agent_agent-1": { kind: "agent", agentId: "agent-1" },
+                    "terminal_terminal-1": { kind: "terminal", terminalId: "terminal-1" },
+                  },
+                }),
+                createPane({ id: "explorer", tabIds: [], hidden: true }),
+              ],
+            },
+          },
+          focusedPaneId: "main",
+        }),
+      },
+      sidePanelPaneIdByWorkspace: {
+        ...state.sidePanelPaneIdByWorkspace,
+        [workspaceKey]: "explorer",
+      },
+    }));
+
+    workspaceLayoutStore.getState().reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: ["agent-1"],
+      autoOpenAgentIds: ["agent-1"],
+      knownAgentIds: ["agent-1"],
+      knownTerminalIds: ["terminal-1"],
+      standaloneTerminalIds: ["terminal-1"],
+    });
+
+    const layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual([
+      "main",
+      "pane_terminal-pane",
+    ]);
+    expect(findPaneContainingTab(layout.root, "agent_agent-1")?.id).toBe("main");
+    expect(findPaneContainingTab(layout.root, "terminal_terminal-1")?.id).toBe(
+      "pane_terminal-pane",
+    );
+    expect(findBottomTerminalPaneId({ layout, tabs: collectAllTabs(layout.root) })).toBe(
+      "pane_terminal-pane",
+    );
+  });
+
   it("keeps two agent conversations in side-by-side center panes through reconciliation", () => {
     useWorkspaceLayoutIds("23232323-2323-2323-2323-232323232323");
     const workspaceKey = createWorkspaceKey();

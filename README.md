@@ -81,6 +81,15 @@ The macOS arm64 application is written to:
 packages/desktop/release/mac-arm64/OMP Desktop.app
 ```
 
+Windows installers are produced in separate electron-builder invocations. Build one architecture with:
+
+```bash
+npm run build:windows:x64
+npm run build:windows:arm64
+```
+
+Run `npm run build:windows` to build both sequentially. Publish the resulting `OMP-Desktop-Setup-<version>-x64.exe` and `OMP-Desktop-Setup-<version>-arm64.exe`; no combined installer is produced.
+
 Download and checksum-verify the latest supported OMP binaries:
 
 ```bash
