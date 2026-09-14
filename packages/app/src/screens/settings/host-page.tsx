@@ -29,7 +29,6 @@ import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
-import { Switch } from "@/components/ui/switch";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import {
   ProfileDraft,
@@ -78,6 +77,7 @@ import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { getProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
+import { PaseoToolsCard } from "./paseo-tools-card";
 import { hasDaemonReconnectedAfter, type DaemonConnectionMarker } from "./daemon-reconnect";
 import { restartDaemonFromSettings } from "./daemon-restart";
 import { OmpAgentShellCard } from "./omp-agent-shell-card";
@@ -580,7 +580,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
         <SettingsSection title={t("settings.hostSections.agents")}>
           <OmpInstallationCard serverId={serverId} />
           <OmpAgentShellCard serverId={serverId} />
-          <InjectPaseoToolsCard serverId={serverId} />
+          <PaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
         </SettingsSection>
@@ -1111,6 +1111,7 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
     void getProfile(host.serverId)
       .then((profile) => {
         if (active) setSshProfile(profile);
+        return profile;
       })
       .catch((error) => {
         console.error(`[HostPage] Failed to load SSH profile for ${host.label}`, error);
@@ -1290,6 +1291,11 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
     () => <ArrowUpToLine size={theme.iconSize.sm} color={theme.colors.foreground} />,
     [theme.iconSize.sm, theme.colors.foreground],
   );
+  const handleOpenSshUpdate = useCallback(() => setSshUpdateVisible(true), []);
+  const handleCloseSshUpdate = useCallback(() => setSshUpdateVisible(false), []);
+  let updateHint = t("settings.host.daemon.update.hint");
+  if (desktopManaged) updateHint = t("settings.host.daemon.update.desktopManagedHint");
+  if (sshProfile) updateHint = t("settings.host.daemon.update.sshManagedHint");
 
   const shouldShowUpdate =
     hasVersionMismatch && (supportsSelfUpdate || desktopManaged || sshProfile !== null);
@@ -1305,19 +1311,13 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
       <View style={settingsStyles.row}>
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("settings.host.daemon.update.title")}</Text>
-          <Text style={settingsStyles.rowHint}>
-            {sshProfile
-              ? t("settings.host.daemon.update.sshManagedHint")
-              : desktopManaged
-                ? t("settings.host.daemon.update.desktopManagedHint")
-                : t("settings.host.daemon.update.hint")}
-          </Text>
+          <Text style={settingsStyles.rowHint}>{updateHint}</Text>
         </View>
         <Button
           variant="outline"
           size="sm"
           leftIcon={updateIcon}
-          onPress={sshProfile ? () => setSshUpdateVisible(true) : handleUpdate}
+          onPress={sshProfile ? handleOpenSshUpdate : handleUpdate}
           disabled={
             sshProfile ? isUpdating : desktopManaged || isUpdating || !daemonClient || !isConnected
           }
@@ -1340,49 +1340,10 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
         <RemoteSshHostModal
           visible
           managedProfile={sshProfile}
-          onClose={() => setSshUpdateVisible(false)}
-          onSaved={() => setSshUpdateVisible(false)}
+          onClose={handleCloseSshUpdate}
+          onSaved={handleCloseSshUpdate}
         />
       ) : null}
-    </View>
-  );
-}
-
-function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
-  const { t } = useTranslation();
-  const isConnected = useHostRuntimeIsConnected(serverId);
-  const { config, patchConfig } = useDaemonConfig(serverId);
-
-  const handleValueChange = useCallback(
-    (next: boolean) => {
-      void patchConfig({
-        mcp: {
-          injectIntoAgents: next,
-        },
-      });
-    },
-    [patchConfig],
-  );
-
-  if (!isConnected) return null;
-
-  return (
-    <View style={settingsStyles.card} testID="host-page-inject-mcp-card">
-      <View style={settingsStyles.row}>
-        <View style={settingsStyles.rowContent}>
-          <Text style={settingsStyles.rowTitle}>
-            {t("settings.host.orchestration.enableTools.title")}
-          </Text>
-          <Text style={settingsStyles.rowHint}>
-            {t("settings.host.orchestration.enableTools.hint")}
-          </Text>
-        </View>
-        <Switch
-          value={config?.mcp.injectIntoAgents !== false}
-          onValueChange={handleValueChange}
-          accessibilityLabel={t("settings.host.orchestration.enableTools.accessibilityLabel")}
-        />
-      </View>
     </View>
   );
 }

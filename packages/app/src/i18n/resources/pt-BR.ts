@@ -2498,8 +2498,50 @@ export const ptBR: TranslationResources = {
         unavailable: "Conecte-se a este host para gerenciar a orquestração",
         enableTools: {
           title: "Ativar ferramentas do OMP Desktop",
-          hint: "Agentes poderão gerenciar worktrees, agentes e agendamentos",
+          hint: "Injeta as ferramentas MCP do OMP Desktop nos agentes para que possam orquestrar recursos do Desktop além de trabalhar no diretório atual.",
           accessibilityLabel: "Injetar ferramentas do OMP Desktop",
+          showDetails: "Ver recursos e impacto de segurança",
+          hideDetails: "Ocultar recursos",
+          capabilities: {
+            workspace: {
+              title: "Workspace e worktree",
+              body: "Crie, liste, renomeie e arquive workspaces; use diretórios existentes; crie worktrees e branches Git; faça checkout de branches existentes ou PRs do GitHub. O arquivamento limpa os agentes e o diretório gerenciado.",
+            },
+            agents: {
+              title: "Orquestração de agentes",
+              body: "Crie agentes filhos ou independentes com uma tarefa inicial; envie mais trabalho a agentes existentes; consulte listas, status e atividades; altere nomes, rótulos, modelos, raciocínio e modos; cancele execuções, arquive ou encerre agentes; execute em segundo plano com notificações.",
+            },
+            permissions: {
+              title: "Permissões",
+              body: "Veja solicitações de permissão pendentes de todos os agentes e aprove ou negue, incluindo pedidos para executar comandos ou modificar arquivos.",
+            },
+            schedules: {
+              title: "Tarefas agendadas",
+              body: "Crie, veja, altere, pause, retome, exclua ou execute imediatamente tarefas cron. Configure fuso horário, máximo de execuções, expiração e histórico.",
+            },
+            heartbeat: {
+              title: "Heartbeat",
+              body: "Envie novamente um prompt ao agente atual em uma cadência cron para verificações, lembretes ou inspeção contínua.",
+            },
+            terminals: {
+              title: "Terminais",
+              body: "Crie, liste e feche terminais gerenciados pelo Desktop; leia a saída e envie texto, Enter, setas e outras entradas para observar ou operar serviços.",
+            },
+            scripts: {
+              title: "Scripts do workspace",
+              body: "Consulte scripts configurados no paseo.json; inicie ou pare; veja ciclo de vida, porta, URL de proxy, integridade e terminal associado.",
+            },
+            providers: {
+              title: "Provedores e modelos",
+              body: "Consulte provedores configurados e disponibilidade; liste modelos, modos e recursos; leia Agent Profiles para escolher uma configuração adequada.",
+            },
+          },
+          optional: {
+            title: "Recursos adicionais do host",
+            body: "Outras configurações e recursos do host também podem expor automação de navegador, geração de imagens e saída de voz.",
+          },
+          warning:
+            "Acesso de alto privilégio: agentes podem criar outros agentes, modificar worktrees, iniciar terminais e criar tarefas agendadas. Modo da sessão, aprovação de permissões, limites do diretório de trabalho e configuração do host ainda se aplicam. Desativar esta opção não remove as ferramentas internas de arquivo ou comando; remove apenas a orquestração do OMP Desktop.",
         },
         proxy: {
           title: "Proxy",

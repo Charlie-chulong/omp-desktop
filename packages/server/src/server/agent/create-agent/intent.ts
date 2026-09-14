@@ -25,9 +25,9 @@ export async function resolveCreateAgentIntent(input: {
   childAgentDefaultLabels?: Record<string, string>;
   resolveWorkspace: (workspaceId: string) => Promise<CreateAgentPlacement>;
   createWorkspace: () => Promise<CreateAgentPlacement>;
-  legacyDetached?: boolean;
+  detached?: boolean;
 }): Promise<CreateAgentIntent> {
-  const parentAgentId = input.legacyDetached ? null : (input.caller?.id ?? null);
+  const parentAgentId = input.detached ? null : (input.caller?.id ?? null);
   const placement = await resolvePlacement(input);
   const labels = {
     ...input.childAgentDefaultLabels,
@@ -35,10 +35,8 @@ export async function resolveCreateAgentIntent(input: {
     ...(parentAgentId ? { [PARENT_AGENT_ID_LABEL]: parentAgentId } : {}),
   };
 
-  // COMPAT(detachedCreate): legacy callers may still request detached creation.
-  // Added in v0.2.0; remove after 2027-01-17 once detached creation is outside the floor.
-  // The delete also strips a parent label injected through input.labels.
-  if (input.legacyDetached) {
+  // Any root must reject parentage forged through caller defaults or input labels.
+  if (!parentAgentId) {
     delete labels[PARENT_AGENT_ID_LABEL];
   }
 

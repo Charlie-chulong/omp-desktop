@@ -43,6 +43,7 @@ describe("resolveCreateAgentIntent", () => {
   it("creates a workspace for a human caller with no workspace context", async () => {
     const intent = await resolveCreateAgentIntent({
       caller: null,
+      labels: { [PARENT_AGENT_ID_LABEL]: "spoofed-parent", source: "desktop" },
       resolveWorkspace: async (workspaceId) => ({ workspaceId, cwd: "/unused" }),
       createWorkspace: async () => ({ workspaceId: "workspace-created", cwd: "/created" }),
     });
@@ -51,15 +52,16 @@ describe("resolveCreateAgentIntent", () => {
       workspaceId: "workspace-created",
       cwd: "/created",
       parentAgentId: null,
-      labels: {},
+      labels: { source: "desktop" },
     });
   });
 
-  it("keeps legacy detached creation independent", async () => {
+  it("keeps detached creation independent in the caller's workspace", async () => {
     const intent = await resolveCreateAgentIntent({
       caller: { id: "parent-agent", cwd: "/parent", workspaceId: "workspace-parent" },
-      labels: { [PARENT_AGENT_ID_LABEL]: "spoofed-parent" },
-      legacyDetached: true,
+      labels: { [PARENT_AGENT_ID_LABEL]: "spoofed-parent", purpose: "review" },
+      childAgentDefaultLabels: { [PARENT_AGENT_ID_LABEL]: "default-parent", team: "tools" },
+      detached: true,
       resolveWorkspace: async (workspaceId) => ({ workspaceId, cwd: "/unused" }),
       createWorkspace: async () => ({ workspaceId: "workspace-created", cwd: "/created" }),
     });
@@ -68,7 +70,7 @@ describe("resolveCreateAgentIntent", () => {
       workspaceId: "workspace-parent",
       cwd: "/parent",
       parentAgentId: null,
-      labels: {},
+      labels: { purpose: "review", team: "tools" },
     });
   });
 });
