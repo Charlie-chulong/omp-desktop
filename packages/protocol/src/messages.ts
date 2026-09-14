@@ -1979,8 +1979,11 @@ export const OmpProviderLogoutRequestMessageSchema = z.object({
 export const OmpPluginInfoSchema = z
   .object({
     name: z.string().min(1),
+    /** Exact CLI identifier. Marketplace plugins use `name@marketplace`. */
+    id: z.string().min(1).optional(),
     version: z.string(),
     path: z.string().optional(),
+    scope: z.enum(["user", "project"]).optional(),
     enabled: z.boolean().optional(),
     description: z.string().optional(),
     features: z.array(z.string()).optional(),
@@ -1994,17 +1997,18 @@ export const OmpMarketplacePluginInfoSchema = z
   .object({
     id: z.string().min(1),
     version: z.string().optional(),
-    scope: z.string().optional(),
-    shadowed: z.boolean().optional(),
+    scope: z.enum(["user", "project"]).optional(),
+    shadowedBy: z.enum(["project"]).optional(),
     entries: z
       .array(
         z
           .object({
-            scope: z.string().optional(),
+            scope: z.enum(["user", "project"]).optional(),
             version: z.string().optional(),
             installPath: z.string().optional(),
             installedAt: z.string().optional(),
             lastUpdated: z.string().optional(),
+            enabled: z.boolean().optional(),
           })
           .passthrough(),
       )
@@ -2029,12 +2033,14 @@ export const OmpPluginInstallRequestMessageSchema = z.object({
 export const OmpPluginRemoveRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.remove.request"),
   name: z.string().trim().min(1).max(214),
+  scope: z.enum(["user", "project"]).optional(),
   requestId: z.string(),
 });
 
 export const OmpPluginSetEnabledRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.setEnabled.request"),
   name: z.string().trim().min(1).max(214),
+  scope: z.enum(["user", "project"]).optional(),
   enabled: z.boolean(),
   requestId: z.string(),
 });

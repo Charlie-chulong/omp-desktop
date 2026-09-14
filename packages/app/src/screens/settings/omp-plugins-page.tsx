@@ -46,6 +46,14 @@ function getDoctorStatusVariant(status: OmpPluginDoctorCheck["status"]): StatusB
 
 type OmpMarketplaceCatalogEntry = NonNullable<OmpPluginMarketplaceInfo["plugins"]>[number];
 
+function getPluginOperationId(plugin: OmpPluginInfo): string {
+  return plugin.id ?? plugin.name;
+}
+
+function getPluginRowId(plugin: OmpPluginInfo): string {
+  return `${getPluginOperationId(plugin)}:${plugin.scope ?? "default"}`;
+}
+
 function DoctorCheckRow({ check }: DoctorCheckRowProps) {
   return (
     <View style={styles.checkRow}>
@@ -359,12 +367,17 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
   const handleToggle = useCallback(
     async (plugin: OmpPluginInfo, enabled: boolean) => {
       if (!client) return;
-      setBusyPlugin(plugin.name);
+      const rowId = getPluginRowId(plugin);
+      setBusyPlugin(rowId);
       try {
-        const result = await client.setOmpPluginEnabled(plugin.name, enabled);
+        const result = await client.setOmpPluginEnabled(
+          getPluginOperationId(plugin),
+          enabled,
+          plugin.scope,
+        );
         if (result.ok) {
           setPlugins((prev) =>
-            prev.map((entry) => (entry.name === plugin.name ? { ...entry, enabled } : entry)),
+            prev.map((entry) => (getPluginRowId(entry) === rowId ? { ...entry, enabled } : entry)),
           );
         } else {
           setLoadError(t("settings.host.ompPlugins.feedback.toggleFailed", { id: plugin.name }));
@@ -381,11 +394,12 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
   const handleRemove = useCallback(
     async (plugin: OmpPluginInfo) => {
       if (!client) return;
-      setBusyPlugin(plugin.name);
+      const rowId = getPluginRowId(plugin);
+      setBusyPlugin(rowId);
       try {
-        const result = await client.removeOmpPlugin(plugin.name);
+        const result = await client.removeOmpPlugin(getPluginOperationId(plugin), plugin.scope);
         if (result.ok) {
-          setPlugins((prev) => prev.filter((entry) => entry.name !== plugin.name));
+          setPlugins((prev) => prev.filter((entry) => getPluginRowId(entry) !== rowId));
         } else {
           setLoadError(
             result.output ??
@@ -615,17 +629,20 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                 </Text>
               </View>
             ) : (
-              plugins.map((plugin) => (
-                <OmpPluginRow
-                  key={plugin.name}
-                  plugin={plugin}
-                  busy={busyPlugin === plugin.name}
-                  onToggle={handleToggle}
-                  onRemove={handleRemove}
-                  removeLabel={t("settings.host.ompPlugins.actions.remove")}
-                  toggleLabel={t("settings.host.ompPlugins.toggleLabel", { id: plugin.name })}
-                />
-              ))
+              plugins.map((plugin) => {
+                const rowId = getPluginRowId(plugin);
+                return (
+                  <OmpPluginRow
+                    key={rowId}
+                    plugin={plugin}
+                    busy={busyPlugin === rowId}
+                    onToggle={handleToggle}
+                    onRemove={handleRemove}
+                    removeLabel={t("settings.host.ompPlugins.actions.remove")}
+                    toggleLabel={t("settings.host.ompPlugins.toggleLabel", { id: plugin.name })}
+                  />
+                );
+              })
             )}
             {rawOutput ? (
               <View style={[styles.outputBlock, styles.outputBlockFirst]}>

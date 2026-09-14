@@ -41,17 +41,17 @@ export class OmpPluginSession {
         });
       }
       case "ompPlugins.remove.request": {
-        const { requestId, name } = msg;
+        const { requestId, name, scope } = msg;
         return this.reply(
           requestId,
           "ompPlugins.remove.response",
-          () => this.service.remove(name) as Promise<Record<string, unknown>>,
+          () => this.service.remove(name, scope) as Promise<Record<string, unknown>>,
         );
       }
       case "ompPlugins.setEnabled.request": {
-        const { requestId, name, enabled } = msg;
+        const { requestId, name, enabled, scope } = msg;
         return this.reply(requestId, "ompPlugins.setEnabled.response", async () => {
-          const result = await this.service.setEnabled(name, enabled);
+          const result = await this.service.setEnabled(name, enabled, scope);
           return { ok: result.ok, name, enabled };
         });
       }

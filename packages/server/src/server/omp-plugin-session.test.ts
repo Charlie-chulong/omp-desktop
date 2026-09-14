@@ -43,7 +43,7 @@ describe("OmpPluginSession", () => {
     });
   });
 
-  it("degrades service errors to an error status instead of a response", async () => {
+  it("answers CLI failures immediately with correlated diagnostic output", async () => {
     const { session, emitted } = makeSession(async () => {
       throw new Error("cli exploded");
     });
@@ -54,8 +54,8 @@ describe("OmpPluginSession", () => {
     } as never);
 
     expect(emitted[0]).toMatchObject({
-      type: "status",
-      payload: { severity: "error", message: "cli exploded", scope: "ompPlugins" },
+      type: "ompPlugins.doctor.response",
+      payload: { requestId: "r-2", checks: [], rawOutput: "cli exploded" },
     });
   });
 
