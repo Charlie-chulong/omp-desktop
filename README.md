@@ -23,6 +23,19 @@ Packaged macOS arm64 and Windows x64/arm64 applications include OMP and do not r
 
 Background commands started by the current Agent appear beside the workspace branch under the composer. The indicator shows the active count; opening it lists live and recently completed commands. Select a command to open its read-only terminal output in a bottom pane. Closing that pane does not stop the process, and reconnecting restores the process state and retained output.
 
+## Independent agent conversations
+
+Agent-scoped `create_agent` calls create a child agent in the caller's workspace by default.
+Set `detached: true` to create an independent conversation instead; `workspaceId` still
+selects its workspace and defaults to the caller's workspace when omitted. The independent
+agent appears as a workspace root and is not canceled or archived with its creator.
+Sharing a workspace does not isolate concurrent file edits.
+
+`notifyOnFinish: true` can notify the creator when an independently created agent finishes,
+fails, or needs permission without establishing a parent relationship. Notifications do
+not revive an archived creator. Regular child agents retain parent-owned notifications,
+which stop if the child is subsequently detached.
+
 ## Development
 
 ```bash

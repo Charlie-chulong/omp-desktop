@@ -1021,6 +1021,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   };
   const agentToAgentInputSchema = {
     ...canonicalCreateAgentFields,
+    detached: z
+      .boolean()
+      .optional()
+      .describe(
+        "Create an independent root instead of a caller-owned subagent. Defaults to false. Use only when the conversation must outlive its creator or be managed separately; parallel or background work alone should remain a subagent. This does not isolate concurrent file edits or change workspace selection.",
+      ),
     notifyOnFinish: z
       .boolean()
       .optional()
@@ -1492,7 +1498,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create agent",
       description:
-        "Create an OMP agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires omp/model and an initial prompt. Call list_models before choosing a model.",
+        "Create an OMP agent. Agent-scoped creation defaults to a caller-owned subagent in the caller's workspace; use detached=true only for a conversation that must outlive its creator or be managed separately. Top-level creation always creates a root and without workspaceId creates a new local workspace. Requires omp/model and an initial prompt. Call list_models before choosing a model.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),
@@ -1659,7 +1665,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       return {
         kind: "agent-scoped",
         parsedArgs: parsed,
-        detached: false,
+        detached: parsed.detached ?? false,
         cwd,
         workspaceId,
         worktree: undefined,

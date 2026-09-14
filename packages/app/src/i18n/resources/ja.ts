@@ -2480,8 +2480,50 @@ export const ja: TranslationResources = {
         unavailable: "オーケストレーションを管理するにはこのホストに接続してください",
         enableTools: {
           title: "OMP Desktopツールを有効にする",
-          hint: "エージェントがワークツリー、エージェント、スケジュールを管理できるようになります",
-          accessibilityLabel: "OMP Desktopツールを有効にする",
+          hint: "OMP DesktopのMCPツールをエージェントに注入し、現在のディレクトリ操作に加えてDesktopリソースを直接オーケストレーションできるようにします。",
+          accessibilityLabel: "OMP Desktopツールを注入",
+          showDetails: "機能とセキュリティへの影響を表示",
+          hideDetails: "機能を非表示",
+          capabilities: {
+            workspace: {
+              title: "Workspace / worktree",
+              body: "workspaceの作成、一覧、名前変更、アーカイブ、既存ディレクトリの利用、Git worktreeとブランチの作成、既存ブランチやGitHub PRのcheckoutができます。アーカイブ時はAgentと管理対象ディレクトリを整理します。",
+            },
+            agents: {
+              title: "Agentオーケストレーション",
+              body: "初期タスク付きの子Agentまたは独立Agentの作成、既存Agentへの追加タスク送信、一覧・状態・活動の確認、名前・ラベル・モデル・思考設定・モードの変更、実行のキャンセル、アーカイブ、終了、バックグラウンド実行と完了通知に対応します。",
+            },
+            permissions: {
+              title: "権限",
+              body: "すべてのAgentの保留中の権限要求を確認し、コマンド実行やファイル変更の要求を含めて承認または拒否できます。",
+            },
+            schedules: {
+              title: "スケジュール",
+              body: "cronタスクの作成、確認、変更、一時停止、再開、削除、即時実行ができます。タイムゾーン、最大実行回数、有効期限、実行履歴にも対応します。",
+            },
+            heartbeat: {
+              title: "Heartbeat",
+              body: "定期確認、リマインダー、継続監視のため、cron周期で現在のAgentにプロンプトを再送します。",
+            },
+            terminals: {
+              title: "ターミナル",
+              body: "Desktop管理ターミナルの作成、一覧、終了、出力の読み取り、文字列、Enter、矢印キーなどの入力ができ、サービスを継続して監視・操作できます。",
+            },
+            scripts: {
+              title: "Workspace scripts",
+              body: "paseo.jsonに設定されたスクリプトの確認、開始、停止、ライフサイクル、ポート、プロキシURL、ヘルス、関連ターミナルの表示ができます。",
+            },
+            providers: {
+              title: "Provider / モデル",
+              body: "設定済みproviderと利用状況、モデル、対応モードや機能を確認し、Agent Profilesからタスクに適したモデル構成を選べます。",
+            },
+          },
+          optional: {
+            title: "追加のホスト機能",
+            body: "他の設定とホストの対応状況により、ブラウザ自動化、画像生成、音声出力も提供される場合があります。",
+          },
+          warning:
+            "高権限アクセス：Agentは他のAgentの作成、worktreeの操作、ターミナルの起動、スケジュールの作成ができます。セッションモード、権限承認、作業ディレクトリ制限、ホスト設定は引き続き適用されます。無効化してもAgent内蔵のファイル・コマンドツールは削除されず、OMP Desktopのオーケストレーションツールのみ削除されます。",
         },
         proxy: {
           title: "プロキシ",
