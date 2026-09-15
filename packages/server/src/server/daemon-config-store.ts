@@ -28,7 +28,7 @@ interface SupportedMutableConfigPatch {
     publicEndpoint?: string;
     publicUseTls?: boolean;
   };
-  mcp?: { injectIntoAgents?: boolean };
+  mcp?: MutableDaemonConfigPatch["mcp"];
   browserTools?: { enabled?: boolean };
   providers?: MutableDaemonConfig["providers"];
   removeProviders?: string[];
@@ -304,6 +304,7 @@ const RELOADABLE_PATHS = [
   "daemon.relay.publicUseTls",
   "daemon.mcp.enabled",
   "daemon.mcp.injectIntoAgents",
+  "daemon.mcp.toolCapabilities",
   "daemon.browserTools.enabled",
   "daemon.hostnames",
   "daemon.cors.allowedOrigins",
@@ -333,6 +334,7 @@ const PERSISTED_TO_MUTABLE_PATH: Record<string, string> = {
   "daemon.relay.publicUseTls": "relay.publicUseTls",
   "daemon.mcp.enabled": "mcp.enabled",
   "daemon.mcp.injectIntoAgents": "mcp.injectIntoAgents",
+  "daemon.mcp.toolCapabilities": "mcp.toolCapabilities",
   "daemon.browserTools.enabled": "browserTools.enabled",
   "daemon.hostnames": "hostnames",
   "daemon.cors.allowedOrigins": "cors.allowedOrigins",
@@ -405,6 +407,22 @@ function pickRelayPatchField(
   };
 }
 
+function pickMcpPatchField(
+  patch: MutableDaemonConfigPatch,
+): Pick<SupportedMutableConfigPatch, "mcp"> {
+  if (patch.mcp === undefined) return {};
+  return {
+    mcp: {
+      ...(patch.mcp.injectIntoAgents !== undefined
+        ? { injectIntoAgents: patch.mcp.injectIntoAgents }
+        : {}),
+      ...(patch.mcp.toolCapabilities !== undefined
+        ? { toolCapabilities: patch.mcp.toolCapabilities }
+        : {}),
+    },
+  };
+}
+
 function pickQuickAskPatchField(
   patch: MutableDaemonConfigPatch,
 ): Pick<SupportedMutableConfigPatch, "quickAsk"> {
@@ -414,9 +432,7 @@ function pickQuickAskPatchField(
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatchField(patch),
-    ...(patch.mcp?.injectIntoAgents !== undefined
-      ? { mcp: { injectIntoAgents: patch.mcp.injectIntoAgents } }
-      : {}),
+    ...pickMcpPatchField(patch),
     ...(patch.browserTools?.enabled !== undefined
       ? { browserTools: { enabled: patch.browserTools.enabled } }
       : {}),
@@ -977,6 +993,15 @@ function mergeMutableDaemonPatch(
   }
   if (patch.mcp?.injectIntoAgents !== undefined) {
     next.mcp = { ...next.mcp, injectIntoAgents: patch.mcp.injectIntoAgents };
+  }
+  if (patch.mcp?.toolCapabilities !== undefined) {
+    next.mcp = {
+      ...next.mcp,
+      toolCapabilities: {
+        ...next.mcp?.toolCapabilities,
+        ...patch.mcp.toolCapabilities,
+      },
+    };
   }
   if (patch.browserTools?.enabled !== undefined) {
     next.browserTools = { ...next.browserTools, enabled: patch.browserTools.enabled };

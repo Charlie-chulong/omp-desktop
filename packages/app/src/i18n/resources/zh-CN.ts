@@ -2546,7 +2546,7 @@ export const zhCN: TranslationResources = {
             body: "根据其他设置和宿主能力，还可能注入浏览器自动化、图片生成和语音输出。",
           },
           warning:
-            "高权限访问：Agent 可以创建其他 Agent、操作 worktree、启动终端和定时任务。实际操作仍受会话模式、权限审批、工作目录限制和宿主配置约束。关闭此开关不会禁用 Agent 原本自带的文件或命令工具，只会移除 OMP Desktop 编排工具。",
+            "高权限访问：Agent 可以创建其他 Agent、操作 worktree、启动终端和定时任务。实际操作仍受会话模式、权限审批、工作目录限制和宿主配置约束。关闭单项能力只会移除对应的一组 OMP Desktop 工具；关闭总开关会移除全部 OMP Desktop 编排工具。两种操作都不会禁用 Agent 原本自带的文件或命令工具。",
         },
         proxy: {
           title: "代理",

@@ -2552,7 +2552,7 @@ export const ptBR: TranslationResources = {
             body: "Outras configurações e recursos do host também podem expor automação de navegador, geração de imagens e saída de voz.",
           },
           warning:
-            "Acesso de alto privilégio: agentes podem criar outros agentes, modificar worktrees, iniciar terminais e criar tarefas agendadas. Modo da sessão, aprovação de permissões, limites do diretório de trabalho e configuração do host ainda se aplicam. Desativar esta opção não remove as ferramentas internas de arquivo ou comando; remove apenas a orquestração do OMP Desktop.",
+            "Acesso de alto privilégio: agentes podem criar outros agentes, modificar worktrees, iniciar terminais e criar tarefas agendadas. Modo da sessão, aprovação de permissões, limites do diretório de trabalho e configuração do host ainda se aplicam. Desativar uma capacidade remove apenas esse grupo de ferramentas do OMP Desktop; desativar o interruptor principal remove todas as ferramentas de orquestração do OMP Desktop. Nenhuma das ações desativa as ferramentas internas de arquivo ou comando do agente.",
         },
         proxy: {
           title: "Proxy",

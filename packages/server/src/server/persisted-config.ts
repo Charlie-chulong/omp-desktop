@@ -13,6 +13,7 @@ import {
   AgentProfileSchema,
   AgentSkillSelectionSchema,
   PluginIdSchema,
+  OmpDesktopToolCapabilitiesSchema,
   PluginSourceSchema,
   TerminalProfileSchema,
 } from "@omp-desktop/protocol/messages";
@@ -282,6 +283,7 @@ export const PersistedConfigSchema = z
           .object({
             enabled: z.boolean().optional(),
             injectIntoAgents: z.boolean().optional(),
+            toolCapabilities: OmpDesktopToolCapabilitiesSchema.partial().optional(),
           })
           .passthrough()
           .optional(),

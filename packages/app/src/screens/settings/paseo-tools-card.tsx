@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import type { OmpDesktopToolCapabilities } from "@omp-desktop/protocol/messages";
 import { Switch } from "@/components/ui/switch";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -14,6 +15,7 @@ const ThemedChevronUp = withUnistyles(ChevronUp);
 const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const EXPANDED_ACCESSIBILITY_STATE = { expanded: true } as const;
 const COLLAPSED_ACCESSIBILITY_STATE = { expanded: false } as const;
+type CapabilityKey = keyof OmpDesktopToolCapabilities;
 
 const capabilityKeys = [
   "workspace",
@@ -24,7 +26,54 @@ const capabilityKeys = [
   "terminals",
   "scripts",
   "providers",
-] as const;
+  "optional",
+] as const satisfies readonly CapabilityKey[];
+
+interface CapabilityRowProps {
+  capabilityKey: CapabilityKey;
+  enabled: boolean;
+  toolsEnabled: boolean;
+  onValueChange: (key: CapabilityKey, next: boolean) => void;
+}
+
+function CapabilityRow({
+  capabilityKey,
+  enabled,
+  toolsEnabled,
+  onValueChange,
+}: CapabilityRowProps) {
+  const { t } = useTranslation();
+  const titleKey =
+    capabilityKey === "optional"
+      ? "settings.host.orchestration.enableTools.optional.title"
+      : `settings.host.orchestration.enableTools.capabilities.${capabilityKey}.title`;
+  const bodyKey =
+    capabilityKey === "optional"
+      ? "settings.host.orchestration.enableTools.optional.body"
+      : `settings.host.orchestration.enableTools.capabilities.${capabilityKey}.body`;
+  const handleValueChange = useCallback(
+    (next: boolean) => onValueChange(capabilityKey, next),
+    [capabilityKey, onValueChange],
+  );
+
+  return (
+    <View style={styles.capability}>
+      <View style={styles.capabilityRow}>
+        <View style={styles.capabilityContent}>
+          <Text style={styles.capabilityTitle}>{t(titleKey)}</Text>
+          <Text style={styles.capabilityBody}>{t(bodyKey)}</Text>
+        </View>
+        <Switch
+          value={enabled}
+          onValueChange={handleValueChange}
+          disabled={!toolsEnabled}
+          accessibilityLabel={t(titleKey)}
+          testID={`host-page-inject-mcp-capability-${capabilityKey}-switch`}
+        />
+      </View>
+    </View>
+  );
+}
 
 export function PaseoToolsCard({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
@@ -32,6 +81,7 @@ export function PaseoToolsCard({ serverId }: { serverId: string }) {
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [expanded, setExpanded] = useState(false);
 
+  const toolsEnabled = config?.mcp.injectIntoAgents !== false;
   const handleValueChange = useCallback(
     (next: boolean) => {
       void patchConfig({
@@ -39,6 +89,13 @@ export function PaseoToolsCard({ serverId }: { serverId: string }) {
           injectIntoAgents: next,
         },
       });
+    },
+    [patchConfig],
+  );
+  const handleCapabilityValueChange = useCallback(
+    (key: CapabilityKey, next: boolean) => {
+      const toolCapabilities: Partial<OmpDesktopToolCapabilities> = { [key]: next };
+      void patchConfig({ mcp: { toolCapabilities } });
     },
     [patchConfig],
   );
@@ -58,7 +115,7 @@ export function PaseoToolsCard({ serverId }: { serverId: string }) {
           </Text>
         </View>
         <Switch
-          value={config?.mcp.injectIntoAgents !== false}
+          value={toolsEnabled}
           onValueChange={handleValueChange}
           accessibilityLabel={t("settings.host.orchestration.enableTools.accessibilityLabel")}
           testID="host-page-inject-mcp-switch"
@@ -90,23 +147,14 @@ export function PaseoToolsCard({ serverId }: { serverId: string }) {
           testID="host-page-inject-mcp-details"
         >
           {capabilityKeys.map((key) => (
-            <View key={key} style={styles.capability}>
-              <Text style={styles.capabilityTitle}>
-                {t(`settings.host.orchestration.enableTools.capabilities.${key}.title`)}
-              </Text>
-              <Text style={styles.capabilityBody}>
-                {t(`settings.host.orchestration.enableTools.capabilities.${key}.body`)}
-              </Text>
-            </View>
+            <CapabilityRow
+              key={key}
+              capabilityKey={key}
+              enabled={config?.mcp.toolCapabilities?.[key] !== false}
+              toolsEnabled={toolsEnabled}
+              onValueChange={handleCapabilityValueChange}
+            />
           ))}
-          <View style={styles.capability}>
-            <Text style={styles.capabilityTitle}>
-              {t("settings.host.orchestration.enableTools.optional.title")}
-            </Text>
-            <Text style={styles.capabilityBody}>
-              {t("settings.host.orchestration.enableTools.optional.body")}
-            </Text>
-          </View>
           <Text style={styles.warning}>{t("settings.host.orchestration.enableTools.warning")}</Text>
         </View>
       ) : null}
@@ -133,6 +181,15 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface2,
   },
   capability: {
+    gap: theme.spacing[1],
+  },
+  capabilityRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing[3],
+  },
+  capabilityContent: {
+    flex: 1,
     gap: theme.spacing[1],
   },
   capabilityTitle: {

@@ -5,7 +5,10 @@ import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentManager } from "../agent-manager.js";
-import { AgentProfileSchema } from "@omp-desktop/protocol/messages";
+import {
+  AgentProfileSchema,
+  type OmpDesktopToolCapabilities,
+} from "@omp-desktop/protocol/messages";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
 import {
   AgentFeatureSchema,
@@ -547,6 +550,74 @@ function resolveTerminalKeyToken(key: string, literal: boolean): string {
   }
 }
 
+type OmpDesktopToolCapability = keyof OmpDesktopToolCapabilities;
+
+const TOOL_CAPABILITY_BY_NAME: Readonly<Record<string, OmpDesktopToolCapability>> = {
+  create_workspace: "workspace",
+  list_workspaces: "workspace",
+  archive_workspace: "workspace",
+  rename_workspace: "workspace",
+  create_agent: "agents",
+  send_agent_prompt: "agents",
+  get_agent_status: "agents",
+  list_agents: "agents",
+  cancel_agent: "agents",
+  archive_agent: "agents",
+  kill_agent: "agents",
+  update_agent: "agents",
+  get_agent_activity: "agents",
+  set_agent_mode: "agents",
+  list_pending_permissions: "permissions",
+  respond_to_permission: "permissions",
+  create_schedule: "schedules",
+  list_schedules: "schedules",
+  inspect_schedule: "schedules",
+  pause_schedule: "schedules",
+  resume_schedule: "schedules",
+  delete_schedule: "schedules",
+  update_schedule: "schedules",
+  schedule_logs: "schedules",
+  run_schedule_once: "schedules",
+  create_heartbeat: "heartbeat",
+  delete_heartbeat: "heartbeat",
+  list_terminals: "terminals",
+  create_terminal: "terminals",
+  kill_terminal: "terminals",
+  capture_terminal: "terminals",
+  send_terminal_keys: "terminals",
+  list_workspace_scripts: "scripts",
+  start_workspace_script: "scripts",
+  stop_workspace_script: "scripts",
+  list_providers: "providers",
+  list_models: "providers",
+  list_profiles: "providers",
+  inspect_provider: "providers",
+  speak: "optional",
+  image_gen: "optional",
+  browser_list_tabs: "optional",
+  browser_new_tab: "optional",
+  browser_snapshot: "optional",
+  browser_click: "optional",
+  browser_fill: "optional",
+  browser_wait: "optional",
+  browser_type: "optional",
+  browser_keypress: "optional",
+  browser_navigate: "optional",
+  browser_back: "optional",
+  browser_forward: "optional",
+  browser_reload: "optional",
+  browser_screenshot: "optional",
+  browser_upload: "optional",
+  browser_hover: "optional",
+  browser_select: "optional",
+  browser_drag: "optional",
+  browser_logs: "optional",
+  browser_evaluate: "optional",
+  browser_scroll: "optional",
+  browser_resize: "optional",
+  browser_close_tab: "optional",
+};
+
 export function createPaseoToolCatalog(options: PaseoToolHostDependencies): PaseoToolCatalog {
   const {
     agentManager,
@@ -585,6 +656,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tool handlers are schema-validated at registration boundaries.
     handler: (input: any, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>,
   ) => {
+    const capability = TOOL_CAPABILITY_BY_NAME[name];
+    if (!capability) {
+      throw new Error(`OMP Desktop tool '${name}' is missing a capability classification`);
+    }
+    if (callerAgentId && daemonConfigStore?.get().mcp.toolCapabilities?.[capability] === false) {
+      return;
+    }
     tools.set(name, {
       name,
       title: config.title,

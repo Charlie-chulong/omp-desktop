@@ -2640,7 +2640,7 @@ export const en = {
             body: "Other enabled settings and host support may also expose browser automation, image generation, and voice output.",
           },
           warning:
-            "High-privilege access: agents can create other agents, modify worktrees, start terminals, and create schedules. Session mode, permission approval, working-directory restrictions, and host configuration still apply. Turning this off does not remove an agent's built-in file or command tools; it only removes OMP Desktop orchestration tools.",
+            "High-privilege access: agents can create other agents, modify worktrees, start terminals, and create schedules. Session mode, permission approval, working-directory restrictions, and host configuration still apply. Turning off one capability removes only that group of OMP Desktop tools; turning off the main switch removes every OMP Desktop orchestration tool. Neither action disables an agent's built-in file or command tools.",
         },
         proxy: {
           title: "Proxy",
