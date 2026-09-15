@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Pressable,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type PressableStateCallbackType,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { AgentProvider } from "@omp-desktop/protocol/agent-types";
@@ -116,6 +122,29 @@ export function CombinedModelSelector({
     browseProviders,
   });
   const { prepareToOpen, reset, showAll } = browser;
+  const footerBaseHeightRef = useRef<number | null>(null);
+  const [footerHeightDelta, setFooterHeightDelta] = useState(0);
+  const desktopFixedHeight = useMemo(
+    () =>
+      browser.desktopFixedHeight == null
+        ? undefined
+        : browser.desktopFixedHeight + footerHeightDelta,
+    [browser.desktopFixedHeight, footerHeightDelta],
+  );
+
+  const handleFooterLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    const baseHeight = footerBaseHeightRef.current;
+    if (baseHeight === null || height < baseHeight) {
+      footerBaseHeightRef.current = height;
+      setFooterHeightDelta(0);
+      return;
+    }
+    setFooterHeightDelta((current) => {
+      const next = height - baseHeight;
+      return current === next ? current : next;
+    });
+  }, []);
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -238,7 +267,7 @@ export function CombinedModelSelector({
   const selectorBody = footer ? (
     <View style={styles.selectorContent}>
       <View style={styles.selectorBrowser}>{browserBody}</View>
-      {footer}
+      <View onLayout={handleFooterLayout}>{footer}</View>
     </View>
   ) : (
     browserBody
@@ -310,7 +339,7 @@ export function CombinedModelSelector({
         desktopPlacement={desktopPlacement}
         desktopMinWidth={desktopMinWidth}
         desktopLockWidth
-        desktopFixedHeight={browser.desktopFixedHeight}
+        desktopFixedHeight={desktopFixedHeight}
         desktopChildrenScrollEnabled={false}
         header={browser.header}
         mobileChildrenScrollEnabled={!browser.isProviderView || !isNative}
