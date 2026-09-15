@@ -89,6 +89,7 @@ export interface UserMessageItem {
   clientMessageId?: string;
   messageId?: string;
   turnId?: string;
+  workingStartedAt?: Date;
   timelineCursor?: TimelinePosition;
   text: string;
   timestamp: Date;
@@ -101,6 +102,7 @@ export interface UserMessageInput {
   clientMessageId?: string;
   messageId?: string;
   turnId?: string;
+  workingStartedAt?: Date;
   timelineCursor?: TimelinePosition;
   text: string;
   timestamp: Date;
@@ -119,6 +121,7 @@ export function createUserMessage(input: UserMessageInput): UserMessageItem {
     ...(input.clientMessageId ? { clientMessageId: input.clientMessageId } : {}),
     ...(input.messageId ? { messageId: input.messageId } : {}),
     ...(input.turnId ? { turnId: input.turnId } : {}),
+    ...(input.workingStartedAt ? { workingStartedAt: input.workingStartedAt } : {}),
     ...(input.timelineCursor ? { timelineCursor: input.timelineCursor } : {}),
     text: input.text,
     timestamp: input.timestamp,
@@ -235,6 +238,20 @@ interface UserMessageProductionResult {
   matched: boolean;
 }
 
+function userMessagesEqual(existing: UserMessageItem, merged: UserMessageItem): boolean {
+  return (
+    existing.id === merged.id &&
+    existing.clientMessageId === merged.clientMessageId &&
+    existing.messageId === merged.messageId &&
+    existing.timelineCursor === merged.timelineCursor &&
+    existing.text === merged.text &&
+    existing.workingStartedAt === merged.workingStartedAt &&
+    existing.timestamp === merged.timestamp &&
+    existing.images === merged.images &&
+    existing.attachments === merged.attachments
+  );
+}
+
 function produceUserMessage(
   items: StreamItem[],
   incoming: UserMessageItem,
@@ -271,16 +288,7 @@ function produceUserMessage(
       presentation.images ??
       (presentationPolicy === "incoming" ? existing.images : incoming.images),
   });
-  if (
-    existing.id === merged.id &&
-    existing.clientMessageId === merged.clientMessageId &&
-    existing.messageId === merged.messageId &&
-    existing.timelineCursor === merged.timelineCursor &&
-    existing.text === merged.text &&
-    existing.timestamp === merged.timestamp &&
-    existing.images === merged.images &&
-    existing.attachments === merged.attachments
-  ) {
+  if (userMessagesEqual(existing, merged)) {
     return { items, index, message: existing, matched: true };
   }
   const next = [...items];
@@ -621,6 +629,48 @@ function preserveReplacementHead(
   };
 }
 
+function mergePreservedTailToolCalls(
+  input: CanonicalStreamReplacementInput,
+  canonicalTail: StreamItem[],
+): StreamItem[] {
+  const canonicalCallIds = new Set(
+    input.canonical.filter(isAgentToolCallItem).map((item) => item.payload.data.callId),
+  );
+  const survivingTailToolCalls = input.preserveContinuity
+    ? input.previousTail.filter(
+        (item): item is AgentToolCallItem =>
+          isAgentToolCallItem(item) && !canonicalCallIds.has(item.payload.data.callId),
+      )
+    : [];
+  let canonicalIndex = 0;
+  let survivorIndex = 0;
+  const mergedTail: StreamItem[] = [];
+  while (canonicalIndex < canonicalTail.length || survivorIndex < survivingTailToolCalls.length) {
+    const canonicalItem = canonicalTail[canonicalIndex];
+    const survivor = survivingTailToolCalls[survivorIndex];
+    const canonicalSeq = canonicalItem?.timelineCursor?.seq;
+    const survivorSeq = survivor?.timelineCursor?.seq;
+    if (
+      survivor &&
+      survivorSeq !== undefined &&
+      (canonicalItem === undefined || canonicalSeq === undefined || survivorSeq < canonicalSeq)
+    ) {
+      mergedTail.push(survivor);
+      survivorIndex += 1;
+      continue;
+    }
+    if (canonicalItem !== undefined) {
+      mergedTail.push(canonicalItem);
+      canonicalIndex += 1;
+      continue;
+    }
+    // Survivor without a cursor (defensive): keep it after everything else.
+    mergedTail.push(survivor as AgentToolCallItem);
+    survivorIndex += 1;
+  }
+  return mergedTail;
+}
+
 export function replaceWithCanonicalStream(
   input: CanonicalStreamReplacementInput,
 ): CanonicalStreamReplacementResult {
@@ -666,46 +716,9 @@ export function replaceWithCanonicalStream(
   }
 
   // A canonical page can lag the live timeline (empty pages, pages captured
-  // before a tool call landed). Any live-painted agent tool call from the
-  // previous tail that the canonical page does not carry must survive the
-  // replacement, or the only record of a created/edited/deleted file silently
-  // disappears. Re-merge them by timeline seq so ordering stays stable.
-  const canonicalCallIds = new Set(
-    input.canonical.filter(isAgentToolCallItem).map((item) => item.payload.data.callId),
-  );
-  const survivingTailToolCalls = input.preserveContinuity
-    ? input.previousTail.filter(
-        (item): item is AgentToolCallItem =>
-          isAgentToolCallItem(item) && !canonicalCallIds.has(item.payload.data.callId),
-      )
-    : [];
-  let canonicalIndex = 0;
-  let survivorIndex = 0;
-  const mergedTail: StreamItem[] = [];
-  while (canonicalIndex < nextTail.length || survivorIndex < survivingTailToolCalls.length) {
-    const canonicalItem = nextTail[canonicalIndex];
-    const survivor = survivingTailToolCalls[survivorIndex];
-    const canonicalSeq = canonicalItem?.timelineCursor?.seq;
-    const survivorSeq = survivor?.timelineCursor?.seq;
-    if (
-      survivor &&
-      survivorSeq !== undefined &&
-      (canonicalItem === undefined || canonicalSeq === undefined || survivorSeq < canonicalSeq)
-    ) {
-      mergedTail.push(survivor);
-      survivorIndex += 1;
-      continue;
-    }
-    if (canonicalItem !== undefined) {
-      mergedTail.push(canonicalItem);
-      canonicalIndex += 1;
-      continue;
-    }
-    // Survivor without a cursor (defensive): keep it after everything else.
-    mergedTail.push(survivor as AgentToolCallItem);
-    survivorIndex += 1;
-  }
-  nextTail = mergedTail;
+  // before a tool call landed). Preserve live-painted tool calls missing from
+  // the canonical page and merge them by timeline sequence.
+  nextTail = mergePreservedTailToolCalls(input, nextTail);
 
   const retainedTailMessages: UserMessageItem[] = [];
   for (const local of unmatchedTailMessages) {
@@ -927,6 +940,7 @@ function appendUserMessage(
   clientMessageId?: string,
   timelineCursor?: TimelinePosition,
   turnId?: string,
+  workingStartedAt?: Date,
   images?: Array<{ data: string; mimeType: string }>,
 ): StreamItem[] {
   const { chunk, hasContent } = normalizeChunk(text);
@@ -942,6 +956,7 @@ function appendUserMessage(
     messageId,
     timelineCursor,
     turnId,
+    workingStartedAt,
     text: chunk,
     timestamp,
     images: timelineImagesToAttachments(images, id, timestamp),
@@ -1517,6 +1532,7 @@ function reduceTimelineEvent(
           item.clientMessageId,
           timelineCursor,
           event.turnId,
+          item.workingStartedAt ? new Date(item.workingStartedAt) : undefined,
           item.images,
         ),
       );
@@ -1956,6 +1972,9 @@ function applyCanonicalUserMessageEvent(params: {
     messageId: event.item.messageId,
     clientMessageId: event.item.clientMessageId,
     turnId: event.turnId,
+    workingStartedAt: event.item.workingStartedAt
+      ? new Date(event.item.workingStartedAt)
+      : undefined,
     timelineCursor,
     text: normalized.chunk,
     timestamp,

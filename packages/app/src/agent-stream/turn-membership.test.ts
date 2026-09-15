@@ -9,8 +9,15 @@ function at(second: number): Date {
   return new Date(`2026-01-01T00:00:${second.toString().padStart(2, "0")}.000Z`);
 }
 
-function user(id: string, second: number, turnId: string): StreamItem {
-  return { kind: "user_message", id, text: id, timestamp: at(second), turnId };
+function user(id: string, second: number, turnId: string, workingStartedAt?: Date): StreamItem {
+  return {
+    kind: "user_message",
+    id,
+    text: id,
+    timestamp: at(second),
+    turnId,
+    ...(workingStartedAt ? { workingStartedAt } : {}),
+  };
 }
 
 function assistant(id: string, second: number, turnId: string): StreamItem {
@@ -118,6 +125,22 @@ describe("canonical turn membership", () => {
     const completedItems = [...build(turnId), assistant("done", 9, turnId)];
     const completed = layoutFor(completedItems, false);
     expect(completedFooterIds(completed.layout)).toEqual(["done"]);
+    expect(completed.model.turnTiming.byAssistantId.get("done")).toMatchObject({
+      startedAt: at(1),
+      completedAt: at(9),
+      durationMs: 8000,
+    });
+  });
+
+  it("keeps elapsed work continuous when a steer falls back to a replacement turn", () => {
+    const items = [
+      user("prompt", 1, "turn-1"),
+      assistant("first reply", 2, "turn-1"),
+      user("steer", 4, "turn-2", at(1)),
+      assistant("done", 9, "turn-2"),
+    ];
+
+    const completed = layoutFor(items, false);
     expect(completed.model.turnTiming.byAssistantId.get("done")).toMatchObject({
       startedAt: at(1),
       completedAt: at(9),

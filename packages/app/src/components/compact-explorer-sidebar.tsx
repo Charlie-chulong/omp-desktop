@@ -140,6 +140,34 @@ export function CompactExplorerSidebar({
   );
 }
 
+export function DesktopExplorerSidebar({
+  serverId,
+  workspaceId,
+  workspaceRoot,
+  isGit,
+  onOpenFile,
+  onClose,
+}: ExplorerSidebarProps & { onClose: () => void }) {
+  const { explorerTab, handleTabPress } = useExplorerSidebarSharedState({
+    serverId,
+    workspaceRoot,
+    isGit,
+  });
+  return (
+    <ExplorerSidebarContent
+      activeTab={explorerTab}
+      onTabPress={handleTabPress}
+      onClose={onClose}
+      serverId={serverId}
+      workspaceId={workspaceId}
+      workspaceRoot={workspaceRoot}
+      isGit={isGit}
+      isOpen
+      onOpenFile={onOpenFile}
+    />
+  );
+}
+
 interface ExplorerTabButtonProps {
   tab: ExplorerTab;
   active: boolean;

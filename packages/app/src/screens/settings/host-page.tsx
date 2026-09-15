@@ -231,21 +231,6 @@ function HostConnectionError({ serverId }: { serverId: string }) {
   return <Text style={styles.errorText}>{connectionError}</Text>;
 }
 
-export function HostConnectionsPage({ serverId }: { serverId: string }) {
-  const host = useHostProfile(serverId);
-
-  if (!host) {
-    return <HostNotFound />;
-  }
-
-  return (
-    <View>
-      <HostConnectionError serverId={serverId} />
-      <ConnectionsSection host={host} />
-    </View>
-  );
-}
-
 type OmpInstallationAction = "install" | "check" | "update";
 type OmpInstallStrategy = "immediate" | "stop-agents" | "defer";
 
@@ -715,6 +700,8 @@ export function HostSettingsPage({
       </View>
 
       <HostStatusBadges serverId={serverId} />
+      <HostConnectionError serverId={serverId} />
+      <ConnectionsSection host={host} />
 
       <HostAppearanceSection host={host} />
       <PairDeviceSection key={serverId} serverId={serverId} />

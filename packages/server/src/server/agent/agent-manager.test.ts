@@ -603,7 +603,7 @@ class UnsupportedSteeringSession extends TestAgentSession {
 async function startAndSteerThroughManager(
   session: AgentSession,
   behavior: "steer" | "interrupt" = "steer",
-): Promise<{ manager: AgentManager; agentId: string; workdir: string }> {
+): Promise<{ manager: AgentManager; agentId: string; workdir: string; initialStartedAt: Date }> {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-steer-dispatch-"));
   const client = new (class extends TestAgentClient {
     override async createSession(): Promise<AgentSession> {
@@ -620,12 +620,16 @@ async function startAndSteerThroughManager(
     }
   })();
   await manager.waitForAgentRunStart(agent.id);
+  const initialStartedAt = manager.getAgent(agent.id)?.activeTurnStartedAt;
+  if (!initialStartedAt) {
+    throw new Error("Initial turn did not publish a start time");
+  }
   await startAgentRun(manager, agent.id, "replacement", logger, {
     replaceRunning: true,
     activeTurnBehavior: behavior,
     runOptions: { clientMessageId: "replacement-client" },
   });
-  return { manager, agentId: agent.id, workdir };
+  return { manager, agentId: agent.id, workdir, initialStartedAt };
 }
 
 test("uses an injected timeline store without making it a production requirement", async () => {
@@ -1108,12 +1112,22 @@ test("isolated rewind falls back from steering to the normal replacement path", 
 
 test("missing steer operation interrupts once and starts one replacement turn", async () => {
   const session = new UnsupportedSteeringSession({ provider: "codex", cwd: process.cwd() });
-  const { manager, agentId, workdir } = await startAndSteerThroughManager(session);
+  const { manager, agentId, workdir, initialStartedAt } =
+    await startAndSteerThroughManager(session);
   try {
+    await manager.waitForAgentRunStart(agentId);
     expect(session.interruptCount).toBe(1);
     expect(session.startCount).toBe(2);
     expect(manager.getTimeline(agentId)).toContainEqual(
       expect.objectContaining({ type: "user_message", clientMessageId: "replacement-client" }),
+    );
+    expect(manager.getAgent(agentId)?.activeTurnStartedAt).toEqual(initialStartedAt);
+    expect(manager.getTimeline(agentId)).toContainEqual(
+      expect.objectContaining({
+        type: "user_message",
+        clientMessageId: "replacement-client",
+        workingStartedAt: initialStartedAt.toISOString(),
+      }),
     );
   } finally {
     await manager.closeAgent(agentId);
