@@ -15,6 +15,7 @@ import {
 } from "@/composer/attachments/submit";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { SidebarMenuToggle } from "@/components/headers/menu-header";
+import { TerminalPane } from "@/components/terminal-pane";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { HEADER_INNER_HEIGHT, MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
@@ -902,6 +903,7 @@ export function NewWorkspaceScreen({
     [draftId, removeSidebarConversationDraft],
   );
   const [isDraftExplorerOpen, setIsDraftExplorerOpen] = useState(false);
+  const [draftTerminalId, setDraftTerminalId] = useState<string | null>(null);
   const composerState = chatDraft.composerState;
   const [hoveredCloseTabKey, setHoveredCloseTabKey] = useState<string | null>(null);
   const newConversationTabs = useMemo<WorkspaceDesktopTabRowItem[]>(
@@ -1123,6 +1125,60 @@ export function NewWorkspaceScreen({
     () => launchTerminal(selectedTerminalProfile, terminalPromptText),
     [launchTerminal, selectedTerminalProfile, terminalPromptText],
   );
+  useEffect(() => {
+    if (!client || !draftTerminalId) {
+      return;
+    }
+    return () => {
+      void client.killTerminal(draftTerminalId).catch((error) => {
+        console.warn("[NewWorkspace] Failed to close draft terminal", error);
+      });
+    };
+  }, [client, draftTerminalId]);
+
+  const handleToggleDraftTerminal = useCallback(async () => {
+    if (draftTerminalId) {
+      setDraftTerminalId(null);
+      return;
+    }
+    if (isPending || !selectedSourceDirectory) {
+      return;
+    }
+    try {
+      setErrorMessage(null);
+      setPendingAction("terminal");
+      const connectedClient = withConnectedClient();
+      const createdTerminal = await connectedClient.createTerminal(
+        selectedSourceDirectory,
+        undefined,
+        undefined,
+        {
+          command: resolveDesktopDefaultTerminalShell({
+            activeConnection: terminalActiveConnection,
+            loginShell: getDesktopHost()?.loginShell,
+          }),
+        },
+      );
+      if (!createdTerminal.terminal) {
+        throw new Error(createdTerminal.error ?? t("newWorkspace.errors.createWorkspaceFailed"));
+      }
+      setDraftTerminalId(createdTerminal.terminal.id);
+    } catch (error) {
+      const message = toErrorMessage(error);
+      setErrorMessage(message);
+      toast.error(message);
+    } finally {
+      setPendingAction(null);
+    }
+  }, [
+    draftTerminalId,
+    isPending,
+    selectedSourceDirectory,
+    t,
+    terminalActiveConnection,
+    toast,
+    withConnectedClient,
+  ]);
 
   const contentStyle = useMemo(
     () => getContentStyle({ isCompact, insetBottom: insets.bottom }),
@@ -1234,14 +1290,15 @@ export function NewWorkspaceScreen({
     }),
     [isPending, launchHeaderTab],
   );
-  const handleOpenHeaderTerminal = useCallback(() => {
-    void launchHeaderTab({ kind: "terminal" });
-  }, [launchHeaderTab]);
+  const handleOpenHeaderTerminal = handleToggleDraftTerminal;
   const handleToggleHeaderExplorer = useCallback(() => {
     setIsDraftExplorerOpen((isOpen) => !isOpen);
   }, []);
   const handleCloseDraftExplorer = useCallback(() => {
     setIsDraftExplorerOpen(false);
+  }, []);
+  const handleOpenDraftExplorer = useCallback(() => {
+    setIsDraftExplorerOpen(true);
   }, []);
   const screenHeaderRight = useMemo(
     () =>
@@ -1251,7 +1308,7 @@ export function NewWorkspaceScreen({
             <WorkspaceHeaderActions
               showPanels
               showNewTab
-              bottomPaneOpen={false}
+              bottomPaneOpen={draftTerminalId !== null}
               onToggleBottomPane={handleOpenHeaderTerminal}
               bottomPaneKeys={[]}
               onToggleSidePanel={handleToggleHeaderExplorer}
@@ -1277,6 +1334,7 @@ export function NewWorkspaceScreen({
       headerLauncher,
       isCompact,
       isConnected,
+      draftTerminalId,
       isPending,
       handleOpenHeaderTerminal,
       handleToggleHeaderExplorer,
@@ -1376,6 +1434,19 @@ export function NewWorkspaceScreen({
               <DraftErrorMessage message={errorMessage} />
             </ReanimatedAnimated.View>
           </View>
+          {draftTerminalId && selectedSourceDirectory ? (
+            <View style={styles.draftTerminal}>
+              <TerminalPane
+                serverId={selectedServerId}
+                cwd={selectedSourceDirectory}
+                terminalId={draftTerminalId}
+                isWorkspaceFocused
+                isPaneFocused
+                onOpenFileExplorer={handleOpenDraftExplorer}
+                onOpenWorkspaceFile={handleOpenDraftExplorer}
+              />
+            </View>
+          ) : null}
         </View>
         <DraftExplorerPane
           isCompact={isCompact}
@@ -1425,6 +1496,13 @@ const styles = StyleSheet.create((theme) => ({
     minHeight: 0,
     borderLeftWidth: 1,
     borderLeftColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
+  },
+  draftTerminal: {
+    height: "40%",
+    minHeight: 240,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.surface0,
   },
   newConversationTabs: {

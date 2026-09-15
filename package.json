@@ -65,6 +65,7 @@
     "dev:desktop": "cross-env PASEO_LISTEN=127.0.0.1:6770 npm run dev --workspace=@omp-desktop/desktop",
     "dev:win:desktop": "npm run dev:win --workspace=@omp-desktop/desktop",
     "build:desktop": "npm run build:app-deps:clean && npm run clean --workspace=@omp-desktop/app && cd packages/app && cross-env PASEO_WEB_PLATFORM=electron npx expo export --platform web && cd ../.. && npm run build --workspace=@omp-desktop/desktop --",
+    "build:mac": "./build-mac.sh",
     "build:windows": "WINDOWS_ARCHES='x64 arm64' ./build-windows.sh",
     "build:windows:x64": "WINDOWS_ARCHES=x64 ./build-windows.sh",
     "build:windows:arm64": "WINDOWS_ARCHES=arm64 ./build-windows.sh",

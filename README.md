@@ -81,6 +81,25 @@ The macOS arm64 application is written to:
 packages/desktop/release/mac-arm64/OMP Desktop.app
 ```
 
+For a local test package, run:
+
+```bash
+npm run build:mac
+```
+
+Without notarization credentials this produces an unsigned package and prints a warning. Gatekeeper
+will reject that package unless quarantine is explicitly removed on the test Mac.
+
+For a signed, notarized release, the build machine needs a valid `Developer ID Application`
+certificate (or `CSC_LINK`) and one of electron-builder's notarization credential sets:
+
+- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` (recommended);
+- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`; or
+- `APPLE_KEYCHAIN_PROFILE`, with optional `APPLE_KEYCHAIN`.
+
+When those credentials are present, the script verifies the application's code signature, stapled
+notarization ticket, and Gatekeeper assessment after packaging.
+
 Windows installers are produced in separate electron-builder invocations. Build one architecture with:
 
 ```bash
