@@ -2567,7 +2567,7 @@ export const es: TranslationResources = {
             body: "Otros ajustes y capacidades del host también pueden exponer automatización del navegador, generación de imágenes y salida de voz.",
           },
           warning:
-            "Acceso de alto privilegio: los agentes pueden crear otros agentes, modificar worktrees, iniciar terminales y crear tareas programadas. Se siguen aplicando el modo de sesión, la aprobación de permisos, los límites del directorio de trabajo y la configuración del host. Desactivar esta opción no elimina las herramientas de archivos o comandos integradas; solo las de orquestación de OMP Desktop.",
+            "Acceso de alto privilegio: los agentes pueden crear otros agentes, modificar worktrees, iniciar terminales y crear tareas programadas. Se siguen aplicando el modo de sesión, la aprobación de permisos, los límites del directorio de trabajo y la configuración del host. Desactivar una capacidad solo elimina ese grupo de herramientas de OMP Desktop; desactivar el interruptor principal elimina todas las herramientas de orquestación de OMP Desktop. Ninguna de las dos acciones desactiva las herramientas integradas de archivos o comandos del agente.",
         },
         proxy: {
           title: "Proxy",

@@ -183,10 +183,12 @@ import type { PushNotificationSender } from "./push/index.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
+import { DEFAULT_OMP_DESKTOP_TOOL_CAPABILITIES } from "@omp-desktop/protocol/messages";
 import type {
   AgentProfile,
   AgentSkillSelection,
   FirstAgentContext,
+  OmpDesktopToolCapabilities,
   PluginSource,
   TerminalProfile,
 } from "@omp-desktop/protocol/messages";
@@ -405,6 +407,7 @@ export interface PaseoDaemonConfig {
   trustedProxies?: true | string[];
   mcpEnabled?: boolean;
   mcpInjectIntoAgents?: boolean;
+  mcpToolCapabilities?: Partial<OmpDesktopToolCapabilities>;
   browserToolsEnabled?: boolean;
   git?: {
     maxProcessesPerSecond: number;
@@ -614,6 +617,10 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     mcp: {
       enabled: config.mcpEnabled ?? true,
       injectIntoAgents: config.mcpInjectIntoAgents ?? true,
+      toolCapabilities: {
+        ...DEFAULT_OMP_DESKTOP_TOOL_CAPABILITIES,
+        ...config.mcpToolCapabilities,
+      },
     },
     ...(config.hostnames !== undefined ? { hostnames: config.hostnames } : {}),
     cors: { allowedOrigins: config.corsAllowedOrigins },

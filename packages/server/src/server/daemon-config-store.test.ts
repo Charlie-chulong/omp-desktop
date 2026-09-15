@@ -133,6 +133,33 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(true);
   });
 
+  test("persists independent OMP Desktop tool capability switches", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: true },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({ mcp: { toolCapabilities: { terminals: false } } });
+    store.patch({ mcp: { toolCapabilities: { schedules: false } } });
+
+    expect(store.get().mcp.toolCapabilities).toMatchObject({
+      terminals: false,
+      schedules: false,
+    });
+    expect(loadPersistedConfig(paseoHome).daemon?.mcp?.toolCapabilities).toEqual({
+      terminals: false,
+      schedules: false,
+    });
+  });
+
   function relayStore(
     relay: NonNullable<NonNullable<PersistedConfig["daemon"]>["relay"]>,
     env: NodeJS.ProcessEnv = {},

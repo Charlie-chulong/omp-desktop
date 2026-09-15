@@ -249,6 +249,33 @@ export const AgentSkillSelectionSchema = z.discriminatedUnion("mode", [
 ]);
 export type AgentSkillSelection = z.infer<typeof AgentSkillSelectionSchema>;
 
+export const OmpDesktopToolCapabilitiesSchema = z
+  .object({
+    workspace: z.boolean(),
+    agents: z.boolean(),
+    permissions: z.boolean(),
+    schedules: z.boolean(),
+    heartbeat: z.boolean(),
+    terminals: z.boolean(),
+    scripts: z.boolean(),
+    providers: z.boolean(),
+    optional: z.boolean(),
+  })
+  .strict();
+export type OmpDesktopToolCapabilities = z.infer<typeof OmpDesktopToolCapabilitiesSchema>;
+
+export const DEFAULT_OMP_DESKTOP_TOOL_CAPABILITIES: OmpDesktopToolCapabilities = {
+  workspace: true,
+  agents: true,
+  permissions: true,
+  schedules: true,
+  heartbeat: true,
+  terminals: true,
+  scripts: true,
+  providers: true,
+  optional: true,
+};
+
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -257,6 +284,7 @@ export const MutableDaemonConfigSchema = z
       .object({
         enabled: z.boolean().optional(),
         injectIntoAgents: z.boolean(),
+        toolCapabilities: OmpDesktopToolCapabilitiesSchema.partial().optional(),
       })
       .passthrough(),
     hostnames: z.union([z.literal(true), z.array(z.string())]).optional(),
@@ -294,7 +322,13 @@ export const MutableDaemonConfigSchema = z
 export const MutableDaemonConfigPatchSchema = z
   .object({
     relay: MutableRelayConfigSchema.partial().optional(),
-    mcp: z.object({ injectIntoAgents: z.boolean().optional() }).passthrough().optional(),
+    mcp: z
+      .object({
+        injectIntoAgents: z.boolean().optional(),
+        toolCapabilities: OmpDesktopToolCapabilitiesSchema.partial().optional(),
+      })
+      .passthrough()
+      .optional(),
     browserTools: MutableBrowserToolsConfigSchema.partial().optional(),
     providers: z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())

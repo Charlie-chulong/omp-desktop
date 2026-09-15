@@ -2573,7 +2573,7 @@ export const fr: TranslationResources = {
             body: "D’autres réglages et capacités de l’hôte peuvent aussi exposer l’automatisation du navigateur, la génération d’images et la sortie vocale.",
           },
           warning:
-            "Accès à privilèges élevés : les agents peuvent créer d’autres agents, modifier des worktrees, démarrer des terminaux et créer des tâches planifiées. Le mode de session, l’approbation des autorisations, les limites du répertoire de travail et la configuration de l’hôte restent applicables. Désactiver cette option ne retire pas les outils de fichiers ou de commandes intégrés, seulement l’orchestration OMP Desktop.",
+            "Accès à privilèges élevés : les agents peuvent créer d’autres agents, modifier des worktrees, démarrer des terminaux et créer des tâches planifiées. Le mode de session, l’approbation des autorisations, les limites du répertoire de travail et la configuration de l’hôte restent applicables. Désactiver une capacité retire uniquement ce groupe d’outils OMP Desktop ; désactiver l’interrupteur principal retire tous les outils d’orchestration OMP Desktop. Aucune de ces actions ne désactive les outils de fichiers ou de commandes intégrés à l’agent.",
         },
         proxy: {
           title: "Proxy",

@@ -591,15 +591,22 @@ function resolveProfileLists(persisted: ReturnType<typeof loadPersistedConfig>) 
   };
 }
 
+function resolveMcpSettings(cli: CliConfigOverrides | undefined, persisted: PersistedConfig) {
+  return {
+    mcpEnabled: cli?.mcpEnabled ?? persisted.daemon?.mcp?.enabled ?? true,
+    mcpInjectIntoAgents:
+      cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
+    mcpToolCapabilities: persisted.daemon?.mcp?.toolCapabilities,
+  };
+}
+
 function resolveStaticLoadConfigSettings(
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,
   persisted: ReturnType<typeof loadPersistedConfig>,
 ) {
   return {
-    mcpEnabled: cli?.mcpEnabled ?? persisted.daemon?.mcp?.enabled ?? true,
-    mcpInjectIntoAgents:
-      cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
+    ...resolveMcpSettings(cli, persisted),
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
@@ -634,6 +641,7 @@ export function resolveConfigFromPersisted(
   const {
     mcpEnabled,
     mcpInjectIntoAgents,
+    mcpToolCapabilities,
     browserToolsEnabled,
     autoArchiveAfterMerge,
     appendSystemPrompt,
@@ -678,6 +686,7 @@ export function resolveConfigFromPersisted(
     trustedProxies,
     mcpEnabled,
     mcpInjectIntoAgents,
+    mcpToolCapabilities,
     browserToolsEnabled,
     git: resolveGitProcessConfig(env, persisted),
     autoArchiveAfterMerge,
