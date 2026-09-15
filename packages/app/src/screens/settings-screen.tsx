@@ -91,7 +91,6 @@ import {
   type SupportedLocale,
 } from "@/i18n/locales";
 import {
-  HostConnectionsPage,
   HostAgentsPage,
   HostSettingsPage,
   HostProvidersPage,
@@ -171,7 +170,6 @@ interface HostSectionItem {
 const HOST_SECTION_ITEMS: HostSectionItem[] = [
   { id: "host", labelKey: "settings.hostSections.host", icon: Server },
   { id: "projects", labelKey: "settings.hostSections.projects", icon: FolderGit2 },
-  { id: "connections", labelKey: "settings.hostSections.connections", icon: Network },
   { id: "agents", labelKey: "settings.hostSections.agents", icon: Bot },
   { id: "memory", labelKey: "settings.memory.title", icon: Brain },
   { id: "proxy", labelKey: "settings.hostSections.proxy", icon: Globe2 },
@@ -194,8 +192,6 @@ function renderHostSettingsContent(
   switch (view.section) {
     case "projects":
       return <ProjectsScreen serverId={view.serverId} />;
-    case "connections":
-      return <HostConnectionsPage serverId={view.serverId} />;
     case "agents":
       return <HostAgentsPage serverId={view.serverId} />;
     case "memory":

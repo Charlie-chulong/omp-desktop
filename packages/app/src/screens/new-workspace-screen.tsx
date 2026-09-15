@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { router } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -81,6 +82,7 @@ import { NewTabLauncherProvider, type NewTabLauncher } from "@/workspace-tabs/la
 import type { NewTabSelection } from "@/workspace-tabs/new-tab";
 import { createWorkspaceBrowser } from "@/desktop/browser/store";
 import { getIsElectron } from "@/constants/platform";
+import { DesktopExplorerSidebar } from "@/components/compact-explorer-sidebar";
 import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
 import {
   getWorkspaceNamingAttachments,
@@ -669,6 +671,95 @@ function useNewWorkspaceInitialContext({
   };
 }
 
+type DraftTabsProps = Pick<
+  ComponentProps<typeof WorkspaceDesktopTabsRow>,
+  "tabs" | "normalizedServerId" | "setHoveredCloseTabKey" | "onCloseTab"
+> & {
+  isCompact: boolean;
+};
+
+function DraftTabs({
+  isCompact,
+  tabs,
+  normalizedServerId,
+  setHoveredCloseTabKey,
+  onCloseTab,
+}: DraftTabsProps) {
+  if (isCompact) return null;
+  return (
+    <View style={styles.newConversationTabs}>
+      <TitlebarDragRegion />
+      <WorkspaceDesktopTabsRow
+        isFocused
+        newTabShortcutEnabled={false}
+        tabs={tabs}
+        normalizedServerId={normalizedServerId}
+        normalizedWorkspaceId=""
+        setHoveredCloseTabKey={setHoveredCloseTabKey}
+        onNavigateTab={noopWorkspaceTabAction}
+        onCloseTab={onCloseTab}
+        onCopyResumeCommand={noopWorkspaceTabAction}
+        onCopyAgentId={noopWorkspaceTabAction}
+        onCopyTerminalId={noopWorkspaceTabAction}
+        onCopyFilePath={noopWorkspaceTabAction}
+        onReloadAgent={noopWorkspaceTabAction}
+        onRenameTab={noopWorkspaceTabAction}
+        onCloseTabsToLeft={noopWorkspaceTabAction}
+        onCloseTabsToRight={noopWorkspaceTabAction}
+        onCloseOtherTabs={noopWorkspaceTabAction}
+        onCreateNewTab={noopWorkspaceTabAction}
+        onReorderTabs={noopWorkspaceTabAction}
+        focusModeEnabled={false}
+        onExitFocusMode={noopWorkspaceTabAction}
+      />
+    </View>
+  );
+}
+
+function OptionalGoalBar({
+  enabled,
+  ...props
+}: ComponentProps<typeof GoalBar> & { enabled: boolean }) {
+  if (!enabled) return null;
+  return <GoalBar {...props} />;
+}
+
+function DraftErrorMessage({ message }: { message: string | null }) {
+  if (!message) return null;
+  return <Text style={styles.errorText}>{message}</Text>;
+}
+
+type DraftExplorerPaneProps = ComponentProps<typeof DesktopExplorerSidebar> & {
+  isCompact: boolean;
+  isOpen: boolean;
+};
+
+function DraftExplorerPane({
+  isCompact,
+  isOpen,
+  serverId,
+  workspaceRoot,
+  isGit,
+  onClose,
+}: DraftExplorerPaneProps) {
+  if (isCompact || !isOpen || !workspaceRoot) return null;
+  return (
+    <View style={styles.draftExplorer}>
+      <DesktopExplorerSidebar
+        serverId={serverId}
+        workspaceRoot={workspaceRoot}
+        isGit={isGit}
+        onClose={onClose}
+      />
+    </View>
+  );
+}
+
+function getInitialSidebarDraftHasContent(draftId: string | undefined): boolean {
+  if (!draftId) return false;
+  return useSidebarConversationDraftStore.getState().drafts[draftId]?.hasContent === true;
+}
+
 export function NewWorkspaceScreen({
   serverId,
   sourceDirectory: sourceDirectoryProp,
@@ -758,11 +849,7 @@ export function NewWorkspaceScreen({
   const removeSidebarConversationDraft = useSidebarConversationDraftStore(
     (state) => state.removeDraft,
   );
-  const sidebarDraftHasContentRef = useRef(
-    draftId
-      ? useSidebarConversationDraftStore.getState().drafts[draftId]?.hasContent === true
-      : false,
-  );
+  const sidebarDraftHasContentRef = useRef(getInitialSidebarDraftHasContent(draftId));
   const publishSidebarDraftContent = useCallback(
     (hasContent: boolean) => {
       sidebarDraftHasContentRef.current = hasContent;
@@ -814,6 +901,7 @@ export function NewWorkspaceScreen({
     },
     [draftId, removeSidebarConversationDraft],
   );
+  const [isDraftExplorerOpen, setIsDraftExplorerOpen] = useState(false);
   const composerState = chatDraft.composerState;
   const [hoveredCloseTabKey, setHoveredCloseTabKey] = useState<string | null>(null);
   const newConversationTabs = useMemo<WorkspaceDesktopTabRowItem[]>(
@@ -1149,9 +1237,12 @@ export function NewWorkspaceScreen({
   const handleOpenHeaderTerminal = useCallback(() => {
     void launchHeaderTab({ kind: "terminal" });
   }, [launchHeaderTab]);
-  const handleOpenHeaderExplorer = useCallback(() => {
-    void launchHeaderTab({ kind: "target", target: { kind: "files" } });
-  }, [launchHeaderTab]);
+  const handleToggleHeaderExplorer = useCallback(() => {
+    setIsDraftExplorerOpen((isOpen) => !isOpen);
+  }, []);
+  const handleCloseDraftExplorer = useCallback(() => {
+    setIsDraftExplorerOpen(false);
+  }, []);
   const screenHeaderRight = useMemo(
     () =>
       !isCompact ? (
@@ -1163,9 +1254,13 @@ export function NewWorkspaceScreen({
               bottomPaneOpen={false}
               onToggleBottomPane={handleOpenHeaderTerminal}
               bottomPaneKeys={[]}
-              onToggleSidePanel={handleOpenHeaderExplorer}
-              sidePanelLabel={t("workspace.tabs.sidePanel.open")}
-              sidePanelOpen={false}
+              onToggleSidePanel={handleToggleHeaderExplorer}
+              sidePanelLabel={t(
+                isDraftExplorerOpen
+                  ? "workspace.tabs.sidePanel.close"
+                  : "workspace.tabs.sidePanel.open",
+              )}
+              sidePanelOpen={isDraftExplorerOpen}
               sidePanelKeys={[]}
               disabled={isPending || !selectedSourceDirectory || !isConnected}
             >
@@ -1184,7 +1279,8 @@ export function NewWorkspaceScreen({
       isConnected,
       isPending,
       handleOpenHeaderTerminal,
-      handleOpenHeaderExplorer,
+      handleToggleHeaderExplorer,
+      isDraftExplorerOpen,
       selectedServerId,
       selectedSourceDirectory,
       t,
@@ -1194,111 +1290,101 @@ export function NewWorkspaceScreen({
   return (
     <View style={styles.container}>
       <ScreenHeader left={screenHeaderLeft} right={screenHeaderRight} borderless />
-      {!isCompact ? (
-        <View style={styles.newConversationTabs}>
-          <TitlebarDragRegion />
-          <WorkspaceDesktopTabsRow
-            isFocused
-            newTabShortcutEnabled={false}
+      <View style={styles.screenBody}>
+        <View style={styles.draftPane}>
+          <DraftTabs
+            isCompact={isCompact}
             tabs={newConversationTabs}
             normalizedServerId={selectedServerId}
-            normalizedWorkspaceId=""
             setHoveredCloseTabKey={setHoveredCloseTabKey}
-            onNavigateTab={noopWorkspaceTabAction}
             onCloseTab={handleCloseNewConversationTab}
-            onCopyResumeCommand={noopWorkspaceTabAction}
-            onCopyAgentId={noopWorkspaceTabAction}
-            onCopyTerminalId={noopWorkspaceTabAction}
-            onCopyFilePath={noopWorkspaceTabAction}
-            onReloadAgent={noopWorkspaceTabAction}
-            onRenameTab={noopWorkspaceTabAction}
-            onCloseTabsToLeft={noopWorkspaceTabAction}
-            onCloseTabsToRight={noopWorkspaceTabAction}
-            onCloseOtherTabs={noopWorkspaceTabAction}
-            onCreateNewTab={noopWorkspaceTabAction}
-            onReorderTabs={noopWorkspaceTabAction}
-            focusModeEnabled={false}
-            onExitFocusMode={noopWorkspaceTabAction}
           />
-        </View>
-      ) : null}
-      <View style={contentStyle}>
-        <TitlebarDragRegion />
-        <ReanimatedAnimated.View style={centeredStyle}>
-          <View style={styles.composerTitleContainer}>
-            <Text style={styles.composerTitle}>{t("newWorkspace.title")}</Text>
-          </View>
-          {isTerminalLaunch ? (
-            <Composer
-              externalKeyboardShift
-              inputMode="terminal"
-              readOnly={!terminalTakesPrompt}
-              placeholder={terminalPlaceholder}
-              submitLabel={terminalSubmitLabel}
-              agentId={draftKey}
-              serverId={selectedServerId}
-              isPaneFocused={true}
-              onSubmitMessage={handleSubmitTerminalLaunch}
-              allowEmptySubmit={true}
-              submitButtonAccessibilityLabel={t("newWorkspace.launch.submit")}
-              submitButtonTestID="new-workspace-launch-submit"
-              isSubmitLoading={isPending}
-              submitBehavior="preserve-and-lock"
-              blurOnSubmit={true}
-              value={terminalComposerValue}
-              onChangeText={setTerminalPromptText}
-              textReplacementKey={launchFocusKey}
-              attachments={NO_TERMINAL_ATTACHMENTS}
-              onChangeAttachments={noopChangeAttachments}
-              cwd={selectedSourceDirectory ?? ""}
-              clearDraft={noopClearDraft}
-              autoFocus={terminalTakesPrompt}
-              autoFocusKey={launchFocusKey}
-            />
-          ) : (
-            <>
-              {draftGoalEnabled ? (
-                <GoalBar
-                  goal={null}
-                  initialObjective={draftGoalObjective}
-                  disabled={isPending}
-                  onSave={saveDraftGoal}
-                  onAction={controlDraftGoal}
+          <View style={contentStyle}>
+            <TitlebarDragRegion />
+            <ReanimatedAnimated.View style={centeredStyle}>
+              <View style={styles.composerTitleContainer}>
+                <Text style={styles.composerTitle}>{t("newWorkspace.title")}</Text>
+              </View>
+              {isTerminalLaunch ? (
+                <Composer
+                  externalKeyboardShift
+                  inputMode="terminal"
+                  readOnly={!terminalTakesPrompt}
+                  placeholder={terminalPlaceholder}
+                  submitLabel={terminalSubmitLabel}
+                  agentId={draftKey}
+                  serverId={selectedServerId}
+                  isPaneFocused={true}
+                  onSubmitMessage={handleSubmitTerminalLaunch}
+                  allowEmptySubmit={true}
+                  submitButtonAccessibilityLabel={t("newWorkspace.launch.submit")}
+                  submitButtonTestID="new-workspace-launch-submit"
+                  isSubmitLoading={isPending}
+                  submitBehavior="preserve-and-lock"
+                  blurOnSubmit={true}
+                  value={terminalComposerValue}
+                  onChangeText={setTerminalPromptText}
+                  textReplacementKey={launchFocusKey}
+                  attachments={NO_TERMINAL_ATTACHMENTS}
+                  onChangeAttachments={noopChangeAttachments}
+                  cwd={selectedSourceDirectory ?? ""}
+                  clearDraft={noopClearDraft}
+                  autoFocus={terminalTakesPrompt}
+                  autoFocusKey={launchFocusKey}
                 />
-              ) : null}
-              <Composer
-                externalKeyboardShift
-                agentId={draftKey}
-                serverId={selectedServerId}
-                isPaneFocused={true}
-                onSubmitMessage={handleSubmitNewWorkspace}
-                allowEmptySubmit={true}
-                submitButtonAccessibilityLabel={t("newWorkspace.create")}
-                submitButtonTestID="workspace-create-submit"
-                submitIcon="return"
-                isSubmitLoading={isPending}
-                waitForGithubAutoAttachOnSubmit
-                submitBehavior="preserve-and-lock"
-                blurOnSubmit={true}
-                value={chatDraft.text}
-                onChangeText={handleChatDraftTextChange}
-                textReplacementKey={chatDraft.textReplacementKey}
-                attachments={chatDraft.attachments}
-                attachmentScopeKeys={visibleDraftContextScopeKeys}
-                onChangeAttachments={handleChatDraftAttachmentsChange}
-                onGithubPrDetected={handleGithubPrDetected}
-                onGithubPrAutoAttach={handleGithubPrAutoAttach}
-                cwd={selectedSourceDirectory ?? ""}
-                clearDraft={handleClearDraft}
-                autoFocus
-                autoFocusKey={launchFocusKey}
-                commandDraftConfig={composerState?.commandDraftConfig}
-                agentControls={agentControlsWithDisabled}
-              />
-            </>
-          )}
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-        </ReanimatedAnimated.View>
+              ) : (
+                <>
+                  <OptionalGoalBar
+                    enabled={draftGoalEnabled}
+                    goal={null}
+                    initialObjective={draftGoalObjective}
+                    disabled={isPending}
+                    onSave={saveDraftGoal}
+                    onAction={controlDraftGoal}
+                  />
+                  <Composer
+                    externalKeyboardShift
+                    agentId={draftKey}
+                    serverId={selectedServerId}
+                    isPaneFocused={true}
+                    onSubmitMessage={handleSubmitNewWorkspace}
+                    allowEmptySubmit={true}
+                    submitButtonAccessibilityLabel={t("newWorkspace.create")}
+                    submitButtonTestID="workspace-create-submit"
+                    submitIcon="return"
+                    isSubmitLoading={isPending}
+                    waitForGithubAutoAttachOnSubmit
+                    submitBehavior="preserve-and-lock"
+                    blurOnSubmit={true}
+                    value={chatDraft.text}
+                    onChangeText={handleChatDraftTextChange}
+                    textReplacementKey={chatDraft.textReplacementKey}
+                    attachments={chatDraft.attachments}
+                    attachmentScopeKeys={visibleDraftContextScopeKeys}
+                    onChangeAttachments={handleChatDraftAttachmentsChange}
+                    onGithubPrDetected={handleGithubPrDetected}
+                    onGithubPrAutoAttach={handleGithubPrAutoAttach}
+                    cwd={selectedSourceDirectory ?? ""}
+                    clearDraft={handleClearDraft}
+                    autoFocus
+                    autoFocusKey={launchFocusKey}
+                    commandDraftConfig={composerState?.commandDraftConfig}
+                    agentControls={agentControlsWithDisabled}
+                  />
+                </>
+              )}
+              <DraftErrorMessage message={errorMessage} />
+            </ReanimatedAnimated.View>
+          </View>
+        </View>
+        <DraftExplorerPane
+          isCompact={isCompact}
+          isOpen={isDraftExplorerOpen}
+          serverId={selectedServerId}
+          workspaceRoot={selectedSourceDirectory ?? ""}
+          isGit={selectedProject?.projectKind === "git"}
+          onClose={handleCloseDraftExplorer}
+        />
       </View>
     </View>
   );
@@ -1321,6 +1407,25 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     backgroundColor: theme.colors.surface0,
     userSelect: "none",
+  },
+  screenBody: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: "row",
+  },
+  draftPane: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+  },
+  draftExplorer: {
+    width: "30%",
+    minWidth: 320,
+    maxWidth: 520,
+    minHeight: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
   },
   newConversationTabs: {
     position: "relative",

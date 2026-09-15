@@ -41,7 +41,8 @@ export function deriveStreamTurnTiming(params: {
   const visitItem = (item: StreamItem) => {
     if (startsNewTurn(item, previousItem)) {
       flushCompletedTurn();
-      currentUserAt = item.kind === "user_message" ? item.timestamp : null;
+      currentUserAt =
+        item.kind === "user_message" ? (item.workingStartedAt ?? item.timestamp) : null;
       currentLastItemAt = null;
       currentAssistantIds = [];
     }

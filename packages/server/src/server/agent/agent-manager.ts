@@ -2245,6 +2245,7 @@ export class AgentManager {
     agentId: string,
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
+    workingStartedAt?: Date,
   ): AsyncGenerator<AgentStreamEvent> {
     const existingAgent = this.requireSessionAgent(agentId);
     this.logger.trace(
@@ -2296,7 +2297,7 @@ export class AgentManager {
       if (isReplacement) {
         agent.pendingReplacement = false;
       }
-      const turnStartedAt = new Date();
+      const turnStartedAt = workingStartedAt ?? new Date();
       pendingRun.started = true;
       pendingRun.turnId = turnId;
       agent.activeForegroundTurnId = turnId;
@@ -2323,6 +2324,7 @@ export class AgentManager {
         this.recordSubmittedPrompt(agent, prompt, options.clientMessageId, {
           messageId: options.clientMessageId,
           turnId,
+          ...(workingStartedAt ? { workingStartedAt: workingStartedAt.toISOString() } : {}),
           providerMessageId:
             stagedSubmittedPromptEcho?.item.type === "user_message"
               ? stagedSubmittedPromptEcho.item.messageId
@@ -2600,6 +2602,7 @@ export class AgentManager {
     options?: AgentRunOptions,
   ): Promise<AsyncGenerator<AgentStreamEvent>> {
     this.assertSteerAdmissionOwnsTurn(agent, expectedTurnId);
+    const workingStartedAt = agent.activeTurnStartedAt ?? undefined;
     agent.pendingReplacement = true;
     agent.lifecycle = "running";
     this.touchUpdatedAt(agent);
@@ -2607,7 +2610,7 @@ export class AgentManager {
 
     try {
       await this.cancelAgentRunBefore(agent.id, "replace");
-      return this.streamAgent(agent.id, prompt, options);
+      return this.streamAgent(agent.id, prompt, options, workingStartedAt);
     } catch (error) {
       const latest = this.agents.get(agent.id);
       if (latest) {
@@ -2629,6 +2632,9 @@ export class AgentManager {
     this.recordSubmittedPrompt(agent, prompt, clientMessageId, {
       messageId: clientMessageId,
       turnId: expectedTurnId,
+      ...(agent.activeTurnStartedAt
+        ? { workingStartedAt: agent.activeTurnStartedAt.toISOString() }
+        : {}),
     });
     this.emitState(agent);
   }
@@ -4409,7 +4415,12 @@ export class AgentManager {
     agent: ActiveManagedAgent,
     prompt: AgentPromptInput,
     clientMessageId: string,
-    options?: { messageId?: string; providerMessageId?: string; turnId?: string },
+    options?: {
+      messageId?: string;
+      providerMessageId?: string;
+      turnId?: string;
+      workingStartedAt?: string;
+    },
   ): void {
     if (this.timelineStore.getSubmittedUserMessage(agent.id, clientMessageId)) {
       return;
@@ -4429,6 +4440,7 @@ export class AgentManager {
       text: submittedPromptText(prompt),
       ...(images ? { images } : {}),
       clientMessageId,
+      ...(options?.workingStartedAt ? { workingStartedAt: options.workingStartedAt } : {}),
       ...(options?.messageId ? { messageId: options.messageId } : {}),
     };
     this.recordAndDispatchTimelineItem(agent.id, item, agent.provider, options?.turnId, options);
