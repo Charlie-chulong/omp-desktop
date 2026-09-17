@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   AgentSnapshotPayloadSchema,
   AgentTimelineItemPayloadSchema,
+  MutableDaemonConfigPatchSchema,
   OmpProviderManagementSchema,
   OmpProviderAccountOrderUpdateRequestMessageSchema,
   ServerInfoStatusPayloadSchema,
@@ -322,6 +323,14 @@ describe("wire schema compatibility", () => {
       fiveHourLimitReached: true,
     });
   });
+  test("daemon config patch carries synchronized OMP account notes", () => {
+    expect(
+      MutableDaemonConfigPatchSchema.parse({
+        ompProviderAccountNotes: { "4": "  personal subscription  " },
+      }).ompProviderAccountNotes,
+    ).toEqual({ "4": "personal subscription" });
+  });
+
   test("OMP account ordering request preserves credential priority", () => {
     expect(
       OmpProviderAccountOrderUpdateRequestMessageSchema.parse({

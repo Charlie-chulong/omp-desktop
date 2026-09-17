@@ -1,8 +1,7 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback } from "react";
 import { useFetchQuery } from "@/data/query";
 import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
-import { loadOmpProviderAccountNotes } from "@/components/omp-provider-account-notes";
+import { useOmpProviderAccountNotes } from "@/hooks/use-omp-provider-account-notes";
 import { resolveOmpModelProviderNamespace } from "@/provider-selection/omp-model-provider";
 import { useSessionStore } from "@/stores/session-store";
 
@@ -70,6 +69,7 @@ export function useOmpCodexAccountQuota(
   );
   const canFetch = Boolean(client && supportsOmpProviderManagement);
   const active = enabled && canFetch;
+  const accountNotes = useOmpProviderAccountNotes(active ? serverId : null);
   const query = useFetchQuery({
     queryKey: ompAccountQuotaQueryKey(serverId ?? ""),
     queryFn: async () => {
@@ -83,27 +83,17 @@ export function useOmpCodexAccountQuota(
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
   });
-  const notesQuery = useFetchQuery({
-    queryKey: ["ompProviderAccountNotes", serverId ?? ""],
-    queryFn: () => loadOmpProviderAccountNotes(AsyncStorage, serverId ?? undefined),
-    enabled: Boolean(serverId && active),
-    dataShape: "value",
-    staleTimeMs: 0,
-    refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
-  });
   const refetchQuota = query.refetch;
-  const refetchNotes = notesQuery.refetch;
   const refresh = useCallback(async () => {
     if (!active) return;
-    await Promise.all([refetchQuota(), refetchNotes()]);
-  }, [active, refetchNotes, refetchQuota]);
+    await refetchQuota();
+  }, [active, refetchQuota]);
   const provider = active
     ? (query.data?.loginProviders.find((entry) => entry.id === "openai-codex") ?? null)
     : null;
   const accounts = (provider?.accounts ?? []).map((account) =>
     Object.assign({}, account, {
-      note: notesQuery.data?.[String(account.credentialId)],
+      note: accountNotes.notes[String(account.credentialId)],
     }),
   );
   const updatedAtMs = query.dataUpdatedAt || query.errorUpdatedAt;
@@ -111,7 +101,7 @@ export function useOmpCodexAccountQuota(
   return {
     accounts,
     provider,
-    loading: active && (query.isFetching || notesQuery.isFetching),
+    loading: active && (query.isFetching || accountNotes.loading),
     error: active && query.isError ? errorMessage(query.error) : null,
     updatedAt: updatedAtMs > 0 ? new Date(updatedAtMs).toISOString() : null,
     refresh,
