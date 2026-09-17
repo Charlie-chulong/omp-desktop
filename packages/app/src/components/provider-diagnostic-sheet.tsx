@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -46,6 +45,7 @@ import { useToast } from "@/contexts/toast-context";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ompAccountQuotaQueryKey } from "@/hooks/use-omp-account-quota";
+import { useOmpProviderAccountNotes } from "@/hooks/use-omp-provider-account-notes";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -68,11 +68,7 @@ import {
   type OmpProviderDraft,
   type OmpProviderModelDraft,
 } from "./omp-custom-provider-config";
-import {
-  loadOmpProviderAccountNotes,
-  saveOmpProviderAccountNotes,
-  updateOmpProviderAccountNote,
-} from "./omp-provider-account-notes";
+import { updateOmpProviderAccountNote } from "./omp-provider-account-notes";
 import { formatOmpAccountIdentity, resolveOmpLoginAction } from "./omp-provider-accounts";
 import {
   formatOmpQuotaResetTime,
@@ -546,6 +542,7 @@ interface OmpProviderSummaryRowProps {
   removingProviderId?: string | null;
   reorderingProviderId?: string | null;
   accountNotes?: Record<string, string>;
+  accountNotesLoading?: boolean;
   editingAccountId?: number | null;
   accountNoteDraft?: string;
   savingAccountNoteId?: number | null;
@@ -811,6 +808,7 @@ function OmpProviderAccounts({
   loggingOutProviderId,
   loggingOutCredentialId,
   reorderingProviderId,
+  accountNotesLoading,
   accountNotes,
   editingAccountId,
   accountNoteDraft,
@@ -828,6 +826,7 @@ function OmpProviderAccounts({
   loggingOutProviderId: string | null;
   loggingOutCredentialId: number | null;
   reorderingProviderId?: string | null;
+  accountNotesLoading?: boolean;
   accountNotes: Record<string, string>;
   editingAccountId: number | null;
   accountNoteDraft: string;
@@ -844,7 +843,9 @@ function OmpProviderAccounts({
   if (accounts.length === 0) {
     return null;
   }
-  const disabled = Boolean(loggingInProviderId || loggingOutProviderId || reorderingProviderId);
+  const disabled = Boolean(
+    accountNotesLoading || loggingInProviderId || loggingOutProviderId || reorderingProviderId,
+  );
   return (
     <View style={sheetStyles.accountList}>
       {accounts.length > 1 ? (
@@ -888,6 +889,7 @@ function OmpProviderSummaryRow({
   removingProviderId,
   reorderingProviderId,
   accountNotes = EMPTY_OMP_ACCOUNT_NOTES,
+  accountNotesLoading = false,
   editingAccountId = null,
   accountNoteDraft = "",
   savingAccountNoteId = null,
@@ -979,6 +981,7 @@ function OmpProviderSummaryRow({
         loggingOutProviderId={loggingOutProviderId}
         loggingOutCredentialId={loggingOutCredentialId}
         reorderingProviderId={reorderingProviderId}
+        accountNotesLoading={accountNotesLoading}
         accountNotes={accountNotes}
         editingAccountId={editingAccountId}
         accountNoteDraft={accountNoteDraft}
@@ -1708,6 +1711,12 @@ function OmpManagementPanel({
   const { theme } = useUnistyles();
   const client = useHostRuntimeClient(serverId);
   const queryClient = useQueryClient();
+  const {
+    notes: accountNotes,
+    save: saveAccountNotes,
+    migrationError: accountNotesMigrationError,
+    loading: accountNotesLoading,
+  } = useOmpProviderAccountNotes(serverId);
   const supported = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.ompProviderManagement === true,
   );
@@ -1733,7 +1742,6 @@ function OmpManagementPanel({
   const [loginFlow, setLoginFlow] = useState<OmpProviderLoginFlowState | null>(null);
   const [loginInput, setLoginInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [accountNotes, setAccountNotes] = useState<Record<string, string>>({});
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [accountNoteDraft, setAccountNoteDraft] = useState("");
   const [savingAccountNoteId, setSavingAccountNoteId] = useState<number | null>(null);
@@ -1823,28 +1831,10 @@ function OmpManagementPanel({
     setError(null);
   }, [cancelLoginFlow, loginFlow, visible]);
   useEffect(() => {
-    if (!visible) {
-      setAccountNotes({});
-      setEditingAccountId(null);
-      setAccountNoteDraft("");
-      setSavingAccountNoteId(null);
-      return;
+    if (visible && accountNotesMigrationError) {
+      setError(accountNotesMigrationError.message);
     }
-    let mounted = true;
-    void loadOmpProviderAccountNotes(AsyncStorage, serverId)
-      .then((notes) => {
-        if (mounted) setAccountNotes(notes);
-        return undefined;
-      })
-      .catch((notesError) => {
-        if (mounted) {
-          setError(notesError instanceof Error ? notesError.message : String(notesError));
-        }
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [serverId, visible]);
+  }, [accountNotesMigrationError, visible]);
   const save = useCallback(async () => {
     if (!client) return;
     setSaving(true);
@@ -1996,8 +1986,7 @@ function OmpManagementPanel({
     setSavingAccountNoteId(editingAccountId);
     setError(null);
     try {
-      await saveOmpProviderAccountNotes(AsyncStorage, nextNotes, serverId);
-      setAccountNotes(nextNotes);
+      await saveAccountNotes(nextNotes);
       setEditingAccountId(null);
       setAccountNoteDraft("");
     } catch (noteError) {
@@ -2005,7 +1994,7 @@ function OmpManagementPanel({
     } finally {
       setSavingAccountNoteId(null);
     }
-  }, [accountNoteDraft, accountNotes, editingAccountId, serverId]);
+  }, [accountNoteDraft, accountNotes, editingAccountId, saveAccountNotes]);
 
   const signInProviders = useMemo<OmpProviderSummary[]>(() => {
     if (!management) return [];
@@ -2193,6 +2182,7 @@ function OmpManagementPanel({
             loggingOutProviderId={logoutProviderId}
             loggingOutCredentialId={logoutCredentialId}
             accountNotes={accountNotes}
+            accountNotesLoading={accountNotesLoading}
             editingAccountId={editingAccountId}
             accountNoteDraft={accountNoteDraft}
             savingAccountNoteId={savingAccountNoteId}

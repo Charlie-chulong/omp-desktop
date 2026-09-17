@@ -42,6 +42,7 @@ function reloadableConfig(
     appendSystemPrompt: daemon.appendSystemPrompt ?? "",
     terminalProfiles: daemon.terminalProfiles,
     agentProfiles: daemon.agentProfiles,
+    ompProviderAccountNotes: daemon.ompProviderAccountNotes,
     cors: { allowedOrigins: [] },
     trustedProxies: ["loopback"],
     git: {
@@ -388,6 +389,27 @@ describe("DaemonConfigStore", () => {
       },
     ]);
     expect(store.get().agentProfiles).toHaveLength(1);
+  });
+
+  test("patch round-trips OMP provider account notes through daemon config", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({ ompProviderAccountNotes: { "4": "个人订阅" } });
+
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.ompProviderAccountNotes).toEqual({ "4": "个人订阅" });
+    expect(reloadableConfig(persisted).ompProviderAccountNotes).toEqual({ "4": "个人订阅" });
   });
 
   test("patch replaces the whole agent profile list rather than merging entries", () => {

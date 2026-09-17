@@ -276,6 +276,11 @@ export const DEFAULT_OMP_DESKTOP_TOOL_CAPABILITIES: OmpDesktopToolCapabilities =
   optional: true,
 };
 
+export const OmpProviderAccountNotesSchema = z.record(
+  z.string().regex(/^\d+$/),
+  z.string().trim().min(1).max(200),
+);
+
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -313,6 +318,7 @@ export const MutableDaemonConfigSchema = z
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    ompProviderAccountNotes: OmpProviderAccountNotesSchema.optional(),
     skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
@@ -342,6 +348,7 @@ export const MutableDaemonConfigPatchSchema = z
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    ompProviderAccountNotes: OmpProviderAccountNotesSchema.optional(),
     pluginsEnabled: z.boolean().optional(),
     plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
   })

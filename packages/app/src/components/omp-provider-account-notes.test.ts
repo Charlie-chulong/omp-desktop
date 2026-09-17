@@ -1,10 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  loadOmpProviderAccountNotes,
-  OMP_PROVIDER_ACCOUNT_NOTES_STORAGE_KEY,
-  ompProviderAccountNotesStorageKey,
-  saveOmpProviderAccountNotes,
+  loadLegacyOmpProviderAccountNotes,
+  removeLegacyOmpProviderAccountNotes,
   updateOmpProviderAccountNote,
 } from "./omp-provider-account-notes";
 
@@ -25,30 +23,39 @@ function createMemoryStorage() {
 }
 
 describe("OMP provider account notes", () => {
-  test("round-trips notes through validated storage", async () => {
+  test("loads the host-scoped legacy value before the original unscoped value", async () => {
     const storage = createMemoryStorage();
-    await saveOmpProviderAccountNotes(storage, { "4": "个人订阅" });
+    await storage.setItem(
+      "@omp-desktop:omp-provider-account-notes",
+      JSON.stringify({ "4": "旧默认" }),
+    );
+    await storage.setItem(
+      "@omp-desktop:omp-provider-account-notes:host-a",
+      JSON.stringify({ "4": "主机 A" }),
+    );
 
-    await expect(loadOmpProviderAccountNotes(storage)).resolves.toEqual({ "4": "个人订阅" });
-    expect(storage.values.has(OMP_PROVIDER_ACCOUNT_NOTES_STORAGE_KEY)).toBe(true);
+    await expect(loadLegacyOmpProviderAccountNotes(storage, "host-a")).resolves.toEqual({
+      key: "@omp-desktop:omp-provider-account-notes:host-a",
+      notes: { "4": "主机 A" },
+    });
+  });
+
+  test("falls back to and removes the original unscoped legacy value", async () => {
+    const storage = createMemoryStorage();
+    const key = "@omp-desktop:omp-provider-account-notes";
+    await storage.setItem(key, JSON.stringify({ "4": "个人订阅" }));
+
+    await expect(loadLegacyOmpProviderAccountNotes(storage, "host-a")).resolves.toEqual({
+      key,
+      notes: { "4": "个人订阅" },
+    });
+    await removeLegacyOmpProviderAccountNotes(storage, key);
+    expect(storage.values.has(key)).toBe(false);
   });
 
   test("updates and removes trimmed account notes", () => {
     const withNote = updateOmpProviderAccountNote({}, 4, "  主账号  ");
     expect(withNote).toEqual({ "4": "主账号" });
     expect(updateOmpProviderAccountNote(withNote, 4, " ")).toEqual({});
-  });
-  test("uses separate storage keys for separate hosts", async () => {
-    const storage = createMemoryStorage();
-    await saveOmpProviderAccountNotes(storage, { "4": "主机 A" }, "host-a");
-    await saveOmpProviderAccountNotes(storage, { "4": "主机 B" }, "host-b");
-
-    await expect(loadOmpProviderAccountNotes(storage, "host-a")).resolves.toEqual({
-      "4": "主机 A",
-    });
-    await expect(loadOmpProviderAccountNotes(storage, "host-b")).resolves.toEqual({
-      "4": "主机 B",
-    });
-    expect(ompProviderAccountNotesStorageKey()).toBe(OMP_PROVIDER_ACCOUNT_NOTES_STORAGE_KEY);
   });
 });

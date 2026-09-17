@@ -418,6 +418,7 @@ export interface PaseoDaemonConfig {
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
+  ompProviderAccountNotes?: Record<string, string>;
   skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
@@ -648,6 +649,10 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
 
   if (config.agentProfiles !== undefined) {
     initialConfig.agentProfiles = config.agentProfiles;
+  }
+
+  if (config.ompProviderAccountNotes !== undefined) {
+    initialConfig.ompProviderAccountNotes = config.ompProviderAccountNotes;
   }
 
   return initialConfig;
