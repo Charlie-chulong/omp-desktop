@@ -21,6 +21,10 @@ const en = {
   unavailable: "Unavailable",
   outputUnavailable: "Process output is unavailable.",
   loading: "Loading output…",
+  stop: "Stop",
+  stopProcess: "Stop {{name}}",
+  stopFailed: "Failed to stop the background process.",
+  openOutput: "Open output for {{name}}",
 };
 
 export const backgroundProcesses = {
@@ -48,5 +52,9 @@ export const backgroundProcesses = {
     unavailable: "暂不可用",
     outputUnavailable: "进程输出不可用。",
     loading: "正在加载输出…",
+    stop: "停止",
+    stopProcess: "停止 {{name}}",
+    stopFailed: "停止后台进程失败。",
+    openOutput: "打开 {{name}} 的输出",
   },
 };

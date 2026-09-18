@@ -1575,6 +1575,7 @@ export class OmpAgentSession implements AgentSession {
   private activePromptAgentInvoked: boolean | null = null;
   private readonly pendingPromptResults = new Map<string, boolean>();
   private pendingNoTurnCompletionAbort: AbortController | null = null;
+  private suppressAutonomousEventsAfterInterrupt = false;
   private lastKnownThinkingOptionId: string | null;
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
   private outOfBandCompactionStarted = false;
@@ -1768,6 +1769,35 @@ export class OmpAgentSession implements AgentSession {
     }
     throw new Error("Background process output is unavailable");
   }
+  async stopBackgroundProcess(processId: string): Promise<boolean> {
+    const entry = (await this.listBackgroundProcesses()).find(
+      (process) => process.id === processId,
+    );
+    if (!entry) throw new Error("Background process not found");
+    if (entry.source === "omp-job" && this.runtimeSession.stopBackgroundJob) {
+      return this.runtimeSession.stopBackgroundJob(processId);
+    }
+    if (entry.source === "omp-daemon" && this.backgroundDaemons) {
+      return this.backgroundDaemons.stop(processId);
+    }
+    throw new Error("Background process cannot be stopped");
+  }
+
+  async stopAllBackgroundProcesses(): Promise<number> {
+    const jobsStopped = (await this.runtimeSession.stopAllBackgroundJobs?.()) ?? 0;
+    const daemons = (await this.listBackgroundProcesses()).filter(
+      (process) =>
+        process.source === "omp-daemon" &&
+        ["starting", "running", "ready", "restarting", "stopping"].includes(process.status),
+    );
+    const daemonResults = await Promise.allSettled(
+      daemons.map((process) => this.backgroundDaemons?.stop(process.id)),
+    );
+    const daemonsStopped = daemonResults.filter(
+      (result) => result.status === "fulfilled" && result.value === true,
+    ).length;
+    return jobsStopped + daemonsStopped;
+  }
 
   async run(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<AgentRunResult> {
     return runProviderTurn({
@@ -1785,6 +1815,7 @@ export class OmpAgentSession implements AgentSession {
     if (this.activeTurnId) {
       throw new Error("An OMP turn is already active");
     }
+    this.suppressAutonomousEventsAfterInterrupt = false;
     this.dismissPendingPlanApproval();
 
     const payload = convertPromptInput(prompt, { model: this.state.model });
@@ -2303,6 +2334,7 @@ export class OmpAgentSession implements AgentSession {
   async interrupt(): Promise<void> {
     const turnId = this.activeTurnId;
     await this.runtimeSession.abort();
+    this.suppressAutonomousEventsAfterInterrupt = true;
     if (turnId && this.activeTurnId === turnId) {
       this.terminalizeActiveWork();
       this.usagePoller.stopTurn();
@@ -3143,6 +3175,25 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
+  private handlePromptResult(event: OmpRuntimeEvent): void {
+    const requestId = optionalString("id" in event ? event.id : undefined);
+    const agentInvoked =
+      "agentInvoked" in event && typeof event.agentInvoked === "boolean"
+        ? event.agentInvoked
+        : undefined;
+    if (!requestId || agentInvoked === undefined) return;
+    if (requestId === this.activePromptRequestId && this.activeTurnId) {
+      this.activePromptAgentInvoked = agentInvoked;
+      if (agentInvoked === false) {
+        this.scheduleNoTurnPromptCompletion(this.activeTurnId);
+      } else {
+        this.cancelNoTurnPromptCompletion();
+      }
+    } else if (this.activePromptRequestId === null) {
+      this.pendingPromptResults.set(requestId, agentInvoked);
+    }
+  }
+
   private handleRuntimeEvent(event: OmpRuntimeEvent): void {
     if (event.type === "credential_changed") {
       this.handleCredentialChanged(event);
@@ -3162,23 +3213,7 @@ export class OmpAgentSession implements AgentSession {
       return;
     }
     if (event.type === "prompt_result") {
-      const requestId = optionalString("id" in event ? event.id : undefined);
-      const agentInvoked =
-        "agentInvoked" in event && typeof event.agentInvoked === "boolean"
-          ? event.agentInvoked
-          : undefined;
-      if (requestId && agentInvoked !== undefined) {
-        if (requestId === this.activePromptRequestId && this.activeTurnId) {
-          this.activePromptAgentInvoked = agentInvoked;
-          if (agentInvoked === false) {
-            this.scheduleNoTurnPromptCompletion(this.activeTurnId);
-          } else {
-            this.cancelNoTurnPromptCompletion();
-          }
-        } else if (this.activePromptRequestId === null) {
-          this.pendingPromptResults.set(requestId, agentInvoked);
-        }
-      }
+      this.handlePromptResult(event);
       return;
     }
     if (this.handleExtraRuntimeEvent(event)) {
@@ -3191,6 +3226,9 @@ export class OmpAgentSession implements AgentSession {
         // A resumed OMP process replays session events for pre-existing
         // conversation on startup; that content is delivered via
         // streamHistory, so replay must not re-enter the live timeline.
+        return;
+      }
+      if (this.suppressAutonomousEventsAfterInterrupt && !this.activeTurnId) {
         return;
       }
       this.handleSessionEvent(event);

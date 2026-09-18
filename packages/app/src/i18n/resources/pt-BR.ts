@@ -1287,6 +1287,10 @@ export const ptBR: TranslationResources = {
         removeFailed: "Falha ao remover alguns workspaces",
         updateHostToRemove: "Atualize o host para remover projetos.",
       },
+      drop: {
+        hint: "Solte uma pasta para adicioná-la como projeto",
+        failed: "Não foi possível adicionar a pasta",
+      },
       empty: {
         title: "Nenhum projeto ainda",
       },

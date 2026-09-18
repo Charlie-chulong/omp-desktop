@@ -60,6 +60,8 @@ export interface OmpRuntimeSession {
   getState(): Promise<OmpSessionState>;
   listBackgroundJobs?(): Promise<BackgroundProcess[]>;
   getBackgroundJobOutput?(processId: string, cursor?: number): Promise<BackgroundProcessOutput>;
+  stopBackgroundJob?(processId: string): Promise<boolean>;
+  stopAllBackgroundJobs?(): Promise<number>;
   setFastMode(enabled: boolean): Promise<OmpFastModeResult>;
   getMessages(): Promise<OmpAgentMessage[]>;
   getAvailableModels(timeoutMs?: number | null): Promise<OmpModel[]>;

@@ -82,6 +82,7 @@ import {
 import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useOpenProject } from "@/hooks/use-open-project";
+import type { OpenProjectResult } from "@/hooks/open-project";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import {
   type SidebarProjectEntry,
@@ -119,6 +120,7 @@ import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
+import { SidebarProjectDropZone } from "./sidebar-project-drop-zone";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
@@ -167,6 +169,8 @@ interface SidebarLabels {
   sessions: string;
   schedules: string;
   closeSidebar: string;
+  projectDropHint: string;
+  projectDropFailed: string;
 }
 
 interface MobileSidebarProps extends SidebarSharedProps {
@@ -180,6 +184,8 @@ interface MobileSidebarProps extends SidebarSharedProps {
 interface DesktopSidebarProps extends SidebarSharedProps {
   insetsTop: number;
   active: boolean;
+  localServerId: string | null;
+  openLocalProject: (path: string) => Promise<OpenProjectResult>;
   handleViewMore: () => void;
   handleViewSchedules: () => void;
 }
@@ -320,6 +326,8 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
       sessions: t("sidebar.sections.sessions"),
       schedules: t("sidebar.sections.schedules"),
       closeSidebar: t("sidebar.actions.closeSidebar"),
+      projectDropHint: t("sidebar.project.drop.hint"),
+      projectDropFailed: t("sidebar.project.drop.failed"),
     }),
     [t],
   );
@@ -374,6 +382,8 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
         handleAddHost={handleAddHostDesktop}
         handleOpenHostSettings={handleOpenHostSettingsDesktop}
         handleViewMore={handleViewMoreNavigate}
+        localServerId={localServerId}
+        openLocalProject={openImportedProject}
         handleViewSchedules={handleViewSchedulesNavigate}
       />
     </RetainedPanelActivity>
@@ -1680,6 +1690,8 @@ function DesktopSidebar({
   handleOpenHostSettings,
   insetsTop,
   active,
+  localServerId,
+  openLocalProject,
   handleViewMore,
   handleViewSchedules,
 }: DesktopSidebarProps) {
@@ -1773,7 +1785,14 @@ function DesktopSidebar({
       pointerEvents={active ? "auto" : "none"}
       style={desktopSidebarStyle}
     >
-      <View style={desktopSidebarBorderStyle}>
+      <SidebarProjectDropZone
+        disabled={!active}
+        localServerId={localServerId}
+        hint={labels.projectDropHint}
+        failedMessage={labels.projectDropFailed}
+        openProject={openLocalProject}
+        style={desktopSidebarBorderStyle}
+      >
         <View style={styles.sidebarDragArea}>
           {ownsTopLeft || DEV_BUILD_LABEL ? (
             <View style={styles.desktopChromeRow}>
@@ -1866,7 +1885,7 @@ function DesktopSidebar({
           pressed={resizePressed}
           testID="left-sidebar-resize-handle"
         />
-      </View>
+      </SidebarProjectDropZone>
     </Animated.View>
   );
 }

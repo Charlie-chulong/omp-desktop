@@ -1298,6 +1298,10 @@ export const en = {
         removeFailed: "Failed to remove some workspaces",
         updateHostToRemove: "Update the host to remove projects.",
       },
+      drop: {
+        hint: "Drop a folder to add it as a project",
+        failed: "Couldn't add the dropped folder",
+      },
       empty: {
         title: "No projects yet",
       },

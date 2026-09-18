@@ -97,6 +97,8 @@ import {
 } from "@/assistant-file-links";
 import { getCompactionMarkerLabel } from "./message-compaction-label";
 import { useAssistantImage } from "@/assistant-image/use-assistant-image";
+import { parseSkillInvocationMessage } from "./skill-invocation-message";
+import { SkillInvocationMessageView } from "./skill-invocation-message-view";
 import {
   AttachmentFrame,
   AttachmentLabel,
@@ -448,6 +450,7 @@ export const UserMessage = memo(function UserMessage({
     () => formatMessageTimestamp(new Date(timestamp)),
     [timestamp],
   );
+  const skillInvocation = useMemo(() => parseSkillInvocationMessage(message), [message]);
   const rewindMutation = useRewindAgentMutation({ serverId, agentId, client, messageId });
 
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
@@ -499,6 +502,16 @@ export const UserMessage = memo(function UserMessage({
     ],
     [showTrailingRow],
   );
+  let textContent: ReactNode = null;
+  if (hasText) {
+    textContent = skillInvocation ? (
+      <SkillInvocationMessageView message={message} invocation={skillInvocation} />
+    ) : (
+      <Text selectable style={userMessageStylesheet.text}>
+        {message}
+      </Text>
+    );
+  }
 
   return (
     <View style={containerStyle} testID="user-message" aria-busy={isPending}>
@@ -538,11 +551,7 @@ export const UserMessage = memo(function UserMessage({
               })}
             </View>
           ) : null}
-          {hasText ? (
-            <Text selectable style={userMessageStylesheet.text}>
-              {message}
-            </Text>
-          ) : null}
+          {textContent}
         </View>
         {hasText ? (
           <View

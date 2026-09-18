@@ -1269,6 +1269,10 @@ export const ko: TranslationResources = {
         removeFailed: "일부 워크스페이스를 제거하지 못했습니다",
         updateHostToRemove: "프로젝트를 제거하려면 호스트를 업데이트하세요.",
       },
+      drop: {
+        hint: "폴더를 놓아 프로젝트로 추가",
+        failed: "놓은 폴더를 추가할 수 없습니다",
+      },
       empty: {
         title: "아직 프로젝트가 없습니다",
       },

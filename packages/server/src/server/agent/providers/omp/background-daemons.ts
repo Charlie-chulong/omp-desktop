@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as net from "node:net";
 import { homedir } from "node:os";
 import * as path from "node:path";
+import { promisify } from "node:util";
 import type {
   BackgroundProcess,
   BackgroundProcessOutput,
@@ -13,6 +15,7 @@ import { resolveOmpDiagnosticPaths } from "./provider-config.js";
 
 const OUTPUT_LIMIT = 256 * 1024;
 const RESPONSE_LIMIT = 8 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 const STATES: Record<string, true> = {
   starting: true,
   running: true,
@@ -227,6 +230,7 @@ async function readPositionTail(
 /** Passive scope inspection: never acquires a lease, publishes owners, or starts a broker. */
 export class OmpBackgroundDaemons {
   private readonly cwd: string;
+  private readonly command: string[];
   private readonly env: NodeJS.ProcessEnv;
   private readonly sockets = new Set<net.Socket>();
   private readonly known = new Map<string, Daemon>();
@@ -242,6 +246,7 @@ export class OmpBackgroundDaemons {
     this.env = { ...process.env, ...options.env };
     // Profile flags override the inherited environment, just as in OMP's bootstrap.
     const command = options.command ?? [this.env.OMP_COMMAND ?? "omp"];
+    this.command = command;
     for (let i = 1; i < command.length; i++) {
       const arg = command[i]!;
       if (arg === "--profile") {
@@ -289,6 +294,27 @@ export class OmpBackgroundDaemons {
       })
       .catch(() => undefined);
     return result;
+  }
+  async stop(processId: string): Promise<boolean> {
+    this.assertOpen();
+    if (!this.known.has(processId)) await this.list();
+    const entry = this.known.get(processId);
+    if (!entry) throw new Error("Unknown OMP background process");
+    const [executable, ...baseArgs] = this.command;
+    if (!executable) throw new Error("OMP command is unavailable");
+    await execFileAsync(
+      executable,
+      [...baseArgs, "ps", "stop", String(entry.snapshot.name), "--dir", this.cwd, "--timeout", "2"],
+      {
+        env: this.env,
+        timeout: 10_000,
+        killSignal: "SIGKILL",
+        maxBuffer: 64 * 1024,
+        windowsHide: true,
+      },
+    );
+    await this.list();
+    return true;
   }
 
   dispose(): void {

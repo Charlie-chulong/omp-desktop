@@ -6231,10 +6231,16 @@ test("cancelAgentRun waits for an acknowledged autonomous interrupt to settle", 
   class LiveInterruptSession extends TestAgentSession {
     public interruptCount = 0;
     readonly interruptCalled = deferred<void>();
+    public stopAllBackgroundProcessesCount = 0;
 
     override async interrupt(): Promise<void> {
       this.interruptCount += 1;
       this.interruptCalled.resolve(undefined);
+    }
+
+    override async stopAllBackgroundProcesses(): Promise<number> {
+      this.stopAllBackgroundProcessesCount += 1;
+      return 1;
     }
   }
 
@@ -6306,6 +6312,7 @@ test("cancelAgentRun waits for an acknowledged autonomous interrupt to settle", 
 
   expect(cancelSettled).toBe(false);
   expect(client.lastSession?.interruptCount).toBe(1);
+  expect(client.lastSession?.stopAllBackgroundProcessesCount).toBe(1);
 
   capturedSession.pushEvent({
     type: "turn_canceled",

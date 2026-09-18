@@ -1296,6 +1296,10 @@ export const fr: TranslationResources = {
         removeFailed: "Échec de la suppression de certains espaces de travail",
         updateHostToRemove: "Mettez à jour le host pour supprimer des projets.",
       },
+      drop: {
+        hint: "Déposez un dossier pour l’ajouter comme projet",
+        failed: "Impossible d’ajouter le dossier déposé",
+      },
       empty: {
         title: "Aucun projet pour l'instant",
       },

@@ -203,6 +203,46 @@ describe("OMP passive daemon inspection", () => {
     expect((await adapter.list()).map((row) => row.id)).toEqual(["daemon-id"]);
   });
 
+  test("stops a known daemon through the configured OMP command", async () => {
+    const requests: Record<string, unknown>[] = [];
+    await broker((request, socket) => {
+      requests.push(request);
+      socket.end(
+        `${JSON.stringify({
+          id: request.id,
+          ok: true,
+          result: { op: "list", daemons: [snapshot] },
+        })}\n`,
+      );
+    });
+    const marker = path.join(root, "stop-args.json");
+    adapter.dispose();
+    adapter = new OmpBackgroundDaemons({
+      cwd: root,
+      env,
+      command: [
+        process.execPath,
+        "-e",
+        "require('node:fs').writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))",
+        marker,
+      ],
+    });
+    await adapter.list();
+
+    await expect(adapter.stop("daemon-id")).resolves.toBe(true);
+
+    expect(JSON.parse(await fs.readFile(marker, "utf8"))).toEqual([
+      "ps",
+      "stop",
+      "web",
+      "--dir",
+      root,
+      "--timeout",
+      "2",
+    ]);
+    expect(requests).toHaveLength(2);
+  });
+
   test("rejects arbitrary paths, unknown IDs, replacement IDs, and symlinked logs", async () => {
     await adapter.list();
     await expect(adapter.output("../../scope.json")).rejects.toThrow(

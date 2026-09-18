@@ -2,8 +2,10 @@ import { z } from "zod";
 import {
   BackgroundProcessListRequestSchema,
   BackgroundProcessOutputRequestSchema,
+  BackgroundProcessStopRequestSchema,
   BackgroundProcessListResponseSchema,
   BackgroundProcessOutputResponseSchema,
+  BackgroundProcessStopResponseSchema,
 } from "./background-processes.js";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
@@ -3641,6 +3643,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineListPromptsRequestMessageSchema,
   BackgroundProcessListRequestSchema,
   BackgroundProcessOutputRequestSchema,
+  BackgroundProcessStopRequestSchema,
   ProviderSubagentListRequestMessageSchema,
   ProviderSubagentTimelineRequestMessageSchema,
   SetAgentTimelineSubscriptionRequestMessageSchema,
@@ -7375,6 +7378,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineListPromptsResponseMessageSchema,
   BackgroundProcessListResponseSchema,
   BackgroundProcessOutputResponseSchema,
+  BackgroundProcessStopResponseSchema,
   ProviderSubagentListResponseMessageSchema,
   ProviderSubagentTimelineResponseMessageSchema,
   ProviderSubagentUpdateMessageSchema,

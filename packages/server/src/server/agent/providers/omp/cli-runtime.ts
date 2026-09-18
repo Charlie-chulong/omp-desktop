@@ -283,13 +283,24 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
       await this.requestBackgroundJobs(`/output?${query}`),
     );
   }
+  async stopBackgroundJob(processId: string): Promise<boolean> {
+    const query = new URLSearchParams({ id: processId });
+    const payload = await this.requestBackgroundJobs(`/stop?${query}`, { method: "POST" });
+    return z.object({ stopped: z.boolean() }).parse(payload).stopped;
+  }
 
-  private async requestBackgroundJobs(path: string): Promise<unknown> {
+  async stopAllBackgroundJobs(): Promise<number> {
+    const payload = await this.requestBackgroundJobs("/stop-all", { method: "POST" });
+    return z.object({ stopped: z.number().int().nonnegative() }).parse(payload).stopped;
+  }
+
+  private async requestBackgroundJobs(path: string, init?: { method: "POST" }): Promise<unknown> {
     const endpoint = this.backgroundJobsEndpoint;
     if (!endpoint) throw new Error("OMP background-process bridge is not available yet");
     const response = await fetch(`http://127.0.0.1:${endpoint.port}${path}`, {
+      ...init,
       headers: { authorization: `Bearer ${endpoint.token}` },
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(init ? 30_000 : 5_000),
       redirect: "error",
     });
     if (!response.ok) throw new Error(`OMP background-process request failed (${response.status})`);
