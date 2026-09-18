@@ -251,7 +251,7 @@ export const zhCN: TranslationResources = {
         off: "关闭",
         minimal: "最少",
         low: "低",
-        medium: "中等",
+        medium: "中",
         high: "高",
         max: "最高",
       },
@@ -1277,6 +1277,10 @@ export const zhCN: TranslationResources = {
         hostDisconnected: "主机未连接",
         removeFailed: "部分工作区移除失败",
         updateHostToRemove: "更新主机以移除项目。",
+      },
+      drop: {
+        hint: "拖放文件夹以添加到项目列表",
+        failed: "无法添加拖放的文件夹",
       },
       empty: {
         title: "还没有项目",

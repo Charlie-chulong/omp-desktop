@@ -1274,6 +1274,10 @@ export const ja: TranslationResources = {
         removeFailed: "一部のワークスペースの削除に失敗しました",
         updateHostToRemove: "プロジェクトを削除するにはホストを更新してください。",
       },
+      drop: {
+        hint: "フォルダをドロップしてプロジェクトに追加",
+        failed: "ドロップしたフォルダを追加できませんでした",
+      },
       empty: {
         title: "プロジェクトがまだありません",
       },

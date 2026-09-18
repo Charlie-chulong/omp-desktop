@@ -27,8 +27,11 @@ function createBackgroundProcessState(processes: BackgroundProcess[]) {
   return {
     processes,
     error: null,
+    stopError: null,
     isConnected: true,
     isLoading: false,
+    stoppingProcessIds: new Set<string>(),
+    stopProcess: vi.fn(async () => {}),
   };
 }
 

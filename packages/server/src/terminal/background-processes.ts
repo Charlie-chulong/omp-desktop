@@ -128,3 +128,26 @@ export async function readAgentTerminalOutput(
     format: "terminal",
   };
 }
+export async function stopAgentTerminalProcess(
+  manager: TerminalManager,
+  agentId: string,
+  processId: string,
+): Promise<boolean> {
+  const entry = registries.get(manager)?.get(processId);
+  if (!entry || entry.process.ownerAgentId !== agentId)
+    throw new Error("Background process not found");
+  if (!entry.process.terminalId) return false;
+  await manager.killTerminalAndWait(entry.process.terminalId);
+  return true;
+}
+
+export async function stopAllAgentTerminalProcesses(
+  manager: TerminalManager,
+  agentId: string,
+): Promise<number> {
+  const terminalIds = [...(registries.get(manager)?.values() ?? [])]
+    .filter((entry) => entry.process.ownerAgentId === agentId && entry.process.terminalId !== null)
+    .map((entry) => entry.process.terminalId!);
+  await Promise.all(terminalIds.map((terminalId) => manager.killTerminalAndWait(terminalId)));
+  return terminalIds.length;
+}

@@ -1297,6 +1297,10 @@ export const es: TranslationResources = {
         removeFailed: "No se pudieron eliminar algunos espacios de trabajo",
         updateHostToRemove: "Actualiza el host para eliminar proyectos.",
       },
+      drop: {
+        hint: "Suelta una carpeta para añadirla como proyecto",
+        failed: "No se pudo añadir la carpeta",
+      },
       empty: {
         title: "Aún no hay proyectos",
       },

@@ -49,6 +49,12 @@ export const BackgroundProcessOutputRequestSchema = z.object({
   cursor: z.number().int().nonnegative().optional(),
   requestId: z.string(),
 });
+export const BackgroundProcessStopRequestSchema = z.object({
+  type: z.literal("agent.background_processes.stop.request"),
+  agentId: z.string(),
+  processId: z.string(),
+  requestId: z.string(),
+});
 export const BackgroundProcessListResponseSchema = z.object({
   type: z.literal("agent.background_processes.list.response"),
   payload: z.object({
@@ -62,6 +68,15 @@ export const BackgroundProcessOutputResponseSchema = z.object({
   payload: z.object({
     requestId: z.string(),
     output: BackgroundProcessOutputSchema.nullable(),
+    error: z.string().nullable(),
+  }),
+});
+export const BackgroundProcessStopResponseSchema = z.object({
+  type: z.literal("agent.background_processes.stop.response"),
+  payload: z.object({
+    requestId: z.string(),
+    processId: z.string(),
+    stopped: z.boolean(),
     error: z.string().nullable(),
   }),
 });

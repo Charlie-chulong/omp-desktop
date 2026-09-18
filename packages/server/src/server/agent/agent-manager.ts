@@ -1119,6 +1119,18 @@ export class AgentManager {
     }
     return agent.session.getBackgroundProcessOutput(processId, cursor);
   }
+  async stopBackgroundProcess(agentId: string, processId: string): Promise<boolean> {
+    const agent = this.requirePublicAgent(agentId);
+    if (!agent.session?.stopBackgroundProcess) {
+      throw new Error("Background process cannot be stopped");
+    }
+    return agent.session.stopBackgroundProcess(processId);
+  }
+
+  async stopAllBackgroundProcesses(agentId: string): Promise<number> {
+    const agent = this.requirePublicAgent(agentId);
+    return (await agent.session?.stopAllBackgroundProcesses?.()) ?? 0;
+  }
 
   listProviderSubagents(parentAgentId: string): ProviderSubagentDescriptor[] {
     this.requirePublicAgent(parentAgentId);
@@ -2830,6 +2842,11 @@ export class AgentManager {
     }
 
     const interruptAcknowledged = await this.interruptSession(agent.session, agentId);
+    if (interruptAcknowledged) {
+      await this.stopAllBackgroundProcesses(agentId).catch((error: unknown) => {
+        this.logger.warn({ err: error, agentId }, "Failed to stop agent background processes");
+      });
+    }
     const settlement = await this.waitWithTimeout({
       operation: run.settledPromise,
       timeoutMs: interruptAcknowledged

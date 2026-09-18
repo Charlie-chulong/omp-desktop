@@ -3064,6 +3064,24 @@ export class DaemonClient {
           : null,
     });
   }
+  async stopBackgroundProcess(agentId: string, processId: string) {
+    const requestId = this.createRequestId();
+    return this.sendRequest({
+      requestId,
+      message: SessionInboundMessageSchema.parse({
+        type: "agent.background_processes.stop.request",
+        agentId,
+        processId,
+        requestId,
+      }),
+      options: { skipQueue: true },
+      select: (response) =>
+        response.type === "agent.background_processes.stop.response" &&
+        response.payload.requestId === requestId
+          ? response.payload
+          : null,
+    });
+  }
 
   async listProviderSubagents(
     parentAgentId: string,

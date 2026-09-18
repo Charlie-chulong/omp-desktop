@@ -175,11 +175,25 @@ export default function desktopBackgroundJobs(pi: ExtensionApi): void {
       return result;
     };
     manager.register = observeRegister;
+    const stopJobs = async (ids: string[]): Promise<number> => {
+      if (ids.length === 0) return 0;
+      manager.acknowledgeDeliveries(ids);
+      const jobs = ids.map((id) => manager.getJob(id)).filter((job) => job !== undefined);
+      const stopped = ids.reduce((count, id) => count + (manager.cancel(id) ? 1 : 0), 0);
+      await Promise.allSettled(jobs.map((job) => job.promise));
+      manager.consumeJobResults(ids);
+      list();
+      return stopped;
+    };
     // Bun exists only inside the OMP extension host; the desktop Node build
     // deliberately does not depend on Bun's ambient global types.
     const host = globalThis as unknown as {
       Bun: {
-        serve(options: { hostname: string; port: number; fetch(request: Request): Response }): {
+        serve(options: {
+          hostname: string;
+          port: number;
+          fetch(request: Request): Response | Promise<Response>;
+        }): {
           port: number;
           stop(): void;
         };
@@ -189,30 +203,47 @@ export default function desktopBackgroundJobs(pi: ExtensionApi): void {
     const server = bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      fetch(request) {
+      async fetch(request) {
         if (request.headers.get("authorization") !== `Bearer ${token}`)
           return new Response(null, { status: 401 });
-        if (request.method !== "GET") return new Response(null, { status: 405 });
         const url = new URL(request.url);
         const processes = list();
-        if (url.pathname === "/list") return Response.json({ processes });
-        if (url.pathname !== "/output") return new Response(null, { status: 404 });
-        const publicId = url.searchParams.get("id");
-        const id = publicId?.startsWith(processPrefix)
-          ? publicId.slice(processPrefix.length)
-          : null;
-        if (!id || !retained.has(id))
-          return new Response("Background process not found", { status: 404 });
-        const output = outputs.get(id) ?? { text: "", cursor: 0, truncated: false };
-        const unchanged = url.searchParams.get("cursor") === String(output.cursor);
-        const response: BackgroundProcessOutput = {
-          text: unchanged ? "" : output.text,
-          cursor: output.cursor,
-          reset: !unchanged,
-          format: "text",
-          truncated: output.truncated,
-        };
-        return Response.json(response);
+        if (request.method === "GET" && url.pathname === "/list")
+          return Response.json({ processes });
+        if (request.method === "GET" && url.pathname === "/output") {
+          const publicId = url.searchParams.get("id");
+          const id = publicId?.startsWith(processPrefix)
+            ? publicId.slice(processPrefix.length)
+            : null;
+          if (!id || !retained.has(id))
+            return new Response("Background process not found", { status: 404 });
+          const output = outputs.get(id) ?? { text: "", cursor: 0, truncated: false };
+          const unchanged = url.searchParams.get("cursor") === String(output.cursor);
+          const response: BackgroundProcessOutput = {
+            text: unchanged ? "" : output.text,
+            cursor: output.cursor,
+            reset: !unchanged,
+            format: "text",
+            truncated: output.truncated,
+          };
+          return Response.json(response);
+        }
+        if (request.method === "POST" && url.pathname === "/stop") {
+          const publicId = url.searchParams.get("id");
+          const id = publicId?.startsWith(processPrefix)
+            ? publicId.slice(processPrefix.length)
+            : null;
+          if (!id || !retained.has(id))
+            return new Response("Background process not found", { status: 404 });
+          return Response.json({ stopped: (await stopJobs([id])) > 0 });
+        }
+        if (request.method === "POST" && url.pathname === "/stop-all") {
+          const ids = [...retained.entries()]
+            .filter(([, process]) => process.status === "running")
+            .map(([id]) => id);
+          return Response.json({ stopped: await stopJobs(ids) });
+        }
+        return new Response(null, { status: 405 });
       },
     });
     cleanup = () => {

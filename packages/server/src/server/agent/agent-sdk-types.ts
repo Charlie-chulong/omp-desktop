@@ -693,6 +693,8 @@ export interface AgentSession {
   listCommands?(): Promise<AgentSlashCommand[]>;
   listBackgroundProcesses?(): Promise<BackgroundProcess[]>;
   getBackgroundProcessOutput?(processId: string, cursor?: number): Promise<BackgroundProcessOutput>;
+  stopBackgroundProcess?(processId: string): Promise<boolean>;
+  stopAllBackgroundProcesses?(): Promise<number>;
   setModel?(modelId: string | null): Promise<void>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
   setFeature?(featureId: string, value: unknown): Promise<void>;

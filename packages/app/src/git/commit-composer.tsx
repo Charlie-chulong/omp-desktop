@@ -92,6 +92,10 @@ export function CommitComposer({ serverId, cwd, branchName, hasChanges }: Commit
         end: nextMessage.length,
       });
       if (nextMessage.length === 0) {
+        if (isWeb) {
+          const input = inputRef.current?.getNativeRef() as WebResizableInput | null;
+          if (input?.style) input.style.height = `${MIN_MESSAGE_INPUT_HEIGHT}px`;
+        }
         setInputHeight(MIN_MESSAGE_INPUT_HEIGHT);
       } else if (isWeb) {
         requestAnimationFrame(() => resizeInput());

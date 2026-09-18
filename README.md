@@ -21,7 +21,7 @@ Packaged macOS, Linux, and Windows applications include OMP and do not require a
 
 ## Background processes
 
-Background commands started by the current Agent appear beside the workspace branch under the composer. The indicator shows the active count; opening it lists live and recently completed commands. Select a command to open its read-only terminal output in a bottom pane. Closing that pane does not stop the process, and reconnecting restores the process state and retained output.
+Background commands started by the current Agent appear beside the workspace branch under the composer. The indicator shows the active count; opening it lists live and recently completed commands. Select a command to open its read-only terminal output in a bottom pane, or use **Stop** to terminate that command. Closing the output pane does not stop the process. Stopping the current Agent response terminates that Agent's running background commands and suppresses their late completion events; reconnecting restores retained process state and output.
 
 ## Independent agent conversations
 

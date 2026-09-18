@@ -1,6 +1,6 @@
+import { useCallback, useState } from "react";
 import { useFetchQuery } from "@/data/query";
 import { useTranslation } from "react-i18next";
-import type { BackgroundProcess } from "@omp-desktop/protocol/background-processes";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppVisible } from "@/hooks/use-app-visible";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -8,18 +8,6 @@ import { useSessionStore } from "@/stores/session-store";
 
 export const backgroundProcessesQueryKey = (serverId: string, agentId: string) =>
   ["background-processes", serverId, agentId] as const;
-
-const RUNNING_STATUSES: Partial<Record<BackgroundProcess["status"], true>> = {
-  starting: true,
-  running: true,
-  ready: true,
-  restarting: true,
-  stopping: true,
-};
-
-export function isBackgroundProcessRunning(process: BackgroundProcess): boolean {
-  return RUNNING_STATUSES[process.status] === true;
-}
 
 function resolveBackgroundProcessesError(
   isSupported: boolean,
@@ -42,6 +30,10 @@ export function useBackgroundProcesses(serverId: string, agentId: string, enable
   );
   const retainedActive = useRetainedPanelActive();
   const appVisible = useAppVisible();
+  const [stoppingProcessIds, setStoppingProcessIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [stopError, setStopError] = useState<string | null>(null);
   const query = useFetchQuery({
     queryKey: backgroundProcessesQueryKey(serverId, agentId),
     queryFn: async () => {
@@ -61,6 +53,7 @@ export function useBackgroundProcesses(serverId: string, agentId: string, enable
     staleTimeMs: 0,
     retry: false,
   });
+  const refetchProcesses = query.refetch;
   const processes = query.data?.processes ?? [];
   const error = resolveBackgroundProcessesError(
     isSupported,
@@ -69,7 +62,41 @@ export function useBackgroundProcesses(serverId: string, agentId: string, enable
     query.error?.message,
     query.data?.error,
   );
-  return { processes, error, isConnected, isLoading: query.isLoading };
+  const stopProcess = useCallback(
+    async (processId: string) => {
+      if (!client) throw new Error(t("common.errors.daemonClientUnavailable"));
+      setStopError(null);
+      setStoppingProcessIds((current) => new Set(current).add(processId));
+      try {
+        const response = await client.stopBackgroundProcess(agentId, processId);
+        if (response.error) throw new Error(response.error);
+        await refetchProcesses();
+      } catch (stopProcessError) {
+        const message =
+          stopProcessError instanceof Error
+            ? stopProcessError.message
+            : t("backgroundProcesses.stopFailed");
+        setStopError(message);
+        throw stopProcessError;
+      } finally {
+        setStoppingProcessIds((current) => {
+          const next = new Set(current);
+          next.delete(processId);
+          return next;
+        });
+      }
+    },
+    [agentId, client, refetchProcesses, t],
+  );
+  return {
+    processes,
+    error,
+    stopError,
+    isConnected,
+    isLoading: query.isLoading,
+    stoppingProcessIds,
+    stopProcess,
+  };
 }
 
 export type BackgroundProcessesState = ReturnType<typeof useBackgroundProcesses>;

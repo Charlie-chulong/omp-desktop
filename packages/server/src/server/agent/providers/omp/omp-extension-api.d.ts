@@ -11,6 +11,7 @@ declare module "@oh-my-pi/pi-coding-agent/async" {
     resultText?: string;
     promise: Promise<void>;
     errorText?: string;
+    abortController: AbortController;
     latestDetails?: { exitCode?: number };
   }
   export interface AsyncJobRegisterOptions {
@@ -20,6 +21,9 @@ declare module "@oh-my-pi/pi-coding-agent/async" {
   export class AsyncJobManager {
     static instance(): AsyncJobManager | undefined;
     register(type: string, label: string, run: unknown, options?: AsyncJobRegisterOptions): string;
+    cancel(id: string): boolean;
+    acknowledgeDeliveries(jobIds: string[]): number;
+    consumeJobResults(jobIds: string[]): number;
     getJob(id: string): AsyncJob | undefined;
   }
 }

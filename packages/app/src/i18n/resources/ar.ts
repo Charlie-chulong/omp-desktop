@@ -1261,6 +1261,10 @@ export const ar: TranslationResources = {
         removeFailed: "فشل في إزالة بعض مساحات العمل",
         updateHostToRemove: "قم بتحديث Host لإزالة المشاريع.",
       },
+      drop: {
+        hint: "أفلت مجلدًا لإضافته كمشروع",
+        failed: "تعذرت إضافة المجلد",
+      },
       empty: {
         title: "لا توجد مشاريع حتى الآن",
       },

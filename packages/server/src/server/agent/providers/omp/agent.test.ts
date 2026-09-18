@@ -1572,6 +1572,23 @@ describe("OMP agent client and session", () => {
     await omp.close();
     expect(omp.isClosed()).toBe(true);
   });
+  test("does not let late autonomous events wake an interrupted conversation", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+
+    await omp.interruptActiveTurn("stop me");
+    await omp.runAutonomousTurn("late background completion");
+
+    expect(omp.completedTurnCount()).toBe(0);
+    expect(omp.timeline()).not.toContainEqual(
+      expect.objectContaining({ text: "late background completion" }),
+    );
+
+    await omp.runPrompt("continue explicitly", "continued");
+    expect(omp.timeline()).toContainEqual(
+      expect.objectContaining({ type: "assistant_message", text: "continued" }),
+    );
+  });
 
   test("interrupt terminalizes in-flight tool calls, retry notices, and running subagents", async () => {
     const omp = new OmpHarness();
