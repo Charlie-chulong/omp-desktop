@@ -46,6 +46,11 @@ import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { ompAccountQuotaQueryKey } from "@/hooks/use-omp-account-quota";
 import { useOmpProviderAccountNotes } from "@/hooks/use-omp-provider-account-notes";
+import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
+import { resolveLoginProviderUsage } from "@/provider-usage/login-usage";
+import type { ProviderUsage } from "@/provider-usage/types";
+import { useProviderUsage } from "@/provider-usage/use-provider-usage";
+import { ProviderUsageWindowBar } from "@/provider-usage/window-bar";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -557,6 +562,7 @@ interface OmpProviderSummaryRowProps {
   onChangeAccountNote?: (value: string) => void;
   onSaveAccountNote?: () => void;
   onCancelAccountNote?: () => void;
+  usage?: ProviderUsage | null;
 }
 
 function OmpProviderSummaryActions({
@@ -893,6 +899,7 @@ function OmpProviderSummaryRow({
   editingAccountId = null,
   accountNoteDraft = "",
   savingAccountNoteId = null,
+  usage = null,
   onConfigureModels,
   onEdit,
   onLogin,
@@ -993,6 +1000,16 @@ function OmpProviderSummaryRow({
         onLogoutAccount={onLogoutAccount}
         onReorderAccounts={onReorderAccounts}
       />
+      {usage ? (
+        <View style={sheetStyles.providerUsage} testID={`omp-provider-usage-${summary.id}`}>
+          {usage.windows.map((window) => (
+            <ProviderUsageWindowBar key={window.id} window={window} />
+          ))}
+          {(usage.balances ?? []).map((balance) => (
+            <ProviderUsageBalanceBar key={balance.id} balance={balance} />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1720,6 +1737,7 @@ function OmpManagementPanel({
   const supported = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.ompProviderManagement === true,
   );
+  const { view: providerUsageView } = useProviderUsage(serverId, { enabled: visible });
   const [management, setManagement] = useState<OmpProviderManagement | null>(null);
   const [configYaml, setConfigYaml] = useState("");
   const [activeTab, setActiveTab] = useState<OmpManagementTab>("sign-in");
@@ -2177,6 +2195,7 @@ function OmpManagementPanel({
           <OmpProviderSummaryRow
             key={summary.id}
             summary={summary}
+            usage={resolveLoginProviderUsage(providerUsageView, summary.id)}
             loggingInProviderId={loginProviderId}
             loginFlowActive={loginFlow !== null}
             loggingOutProviderId={logoutProviderId}
@@ -3134,6 +3153,15 @@ const sheetStyles = StyleSheet.create((theme) => ({
   },
   accountList: {
     paddingBottom: theme.spacing[2],
+  },
+  providerUsage: {
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[2],
+    paddingBottom: theme.spacing[3],
+    marginLeft: theme.spacing[4],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
   },
   accountRow: {
     flexDirection: "row",

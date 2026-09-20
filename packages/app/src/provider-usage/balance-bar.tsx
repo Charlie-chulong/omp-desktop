@@ -50,11 +50,17 @@ function fillToneStyle(tone: ProviderUsageTone) {
   }
 }
 
-export function ProviderUsageBalanceBar({ balance }: { balance: ProviderUsageBalance }) {
+export function ProviderUsageBalanceBar({
+  balance,
+  showReset = true,
+}: {
+  balance: ProviderUsageBalance;
+  showReset?: boolean;
+}) {
   const { t, i18n } = useTranslation();
   const { amountText, usedPct } = resolveBalance(balance, t, i18n.language);
   const tone = balance.tone ?? "default";
-  const resetLabel = formatResetLabel(balance.resetsAt, t);
+  const resetLabel = showReset ? formatResetLabel(balance.resetsAt, t) : null;
 
   const fillStyle = useMemo<StyleProp<ViewStyle>>(
     () => [styles.fill, fillToneStyle(tone), { width: `${clampPct(usedPct ?? 0)}%` }],

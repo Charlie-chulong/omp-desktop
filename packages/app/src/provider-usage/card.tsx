@@ -94,10 +94,10 @@ export function ProviderUsageCard({
       {usage.windows.length > 0 || balances.length > 0 ? (
         <View style={styles.bars}>
           {usage.windows.map((window) => (
-            <ProviderUsageWindowBar key={window.id} window={window} />
+            <ProviderUsageWindowBar key={window.id} window={window} showReset={!compact} />
           ))}
           {balances.map((balance) => (
-            <ProviderUsageBalanceBar key={balance.id} balance={balance} />
+            <ProviderUsageBalanceBar key={balance.id} balance={balance} showReset={!compact} />
           ))}
         </View>
       ) : null}
