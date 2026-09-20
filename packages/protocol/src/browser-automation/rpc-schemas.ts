@@ -276,6 +276,9 @@ export const BrowserAutomationNewTabResultSchema = z.object({
   command: z.literal("new_tab"),
   browserId: BrowserAutomationBrowserIdSchema,
   workspaceId: z.string().min(1),
+  hostWorkspaceId: z.string().min(1).optional(),
+  presented: z.boolean().optional(),
+  activated: z.boolean().optional(),
   url: z.string().min(1),
 });
 

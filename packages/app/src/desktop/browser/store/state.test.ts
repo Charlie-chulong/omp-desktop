@@ -43,6 +43,19 @@ describe("normalizeBrowserUrl", () => {
 });
 
 describe("createBrowserRecord", () => {
+  it("keeps a separate automation workspace owner", () => {
+    const record = createBrowserRecord({
+      browserId: "b1",
+      initialUrl: "https://example.com",
+      automationServerId: " server-owner ",
+      automationWorkspaceId: " workspace-owner ",
+      now: 1000,
+    });
+
+    expect(record.automationServerId).toBe("server-owner");
+    expect(record.automationWorkspaceId).toBe("workspace-owner");
+  });
+
   it("normalizes the initial URL and starts with idle state", () => {
     const record = createBrowserRecord({
       browserId: "b1",
@@ -52,6 +65,8 @@ describe("createBrowserRecord", () => {
 
     expect(record).toEqual({
       browserId: "b1",
+      automationServerId: null,
+      automationWorkspaceId: null,
       url: "http://localhost:8081",
       title: "",
       isLoading: false,

@@ -597,6 +597,7 @@ export function BrowserPane({
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const browser = useBrowserStore((state) => state.browsersById[browserId] ?? null);
+  const automationWorkspaceId = browser?.automationWorkspaceId ?? workspaceId;
   const updateBrowser = useBrowserStore((state) => state.updateBrowser);
   const setBrowserViewport = useBrowserStore((state) => state.setBrowserViewport);
   const browserViewport = browser?.viewport ?? RESPONSIVE_BROWSER_VIEWPORT;
@@ -742,7 +743,7 @@ export function BrowserPane({
     if (!residentWebview) {
       prepareBrowserWebview(webview, {
         browserId,
-        workspaceId,
+        workspaceId: automationWorkspaceId,
         initialUrl: initialUnsafeNavigationMessage ? "about:blank" : initialUrlRef.current,
       });
     }
@@ -907,7 +908,7 @@ export function BrowserPane({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [browserId, onFocusPane]);
+  }, [automationWorkspaceId, browserId, onFocusPane]);
 
   useEffect(() => {
     const webview = webviewRef.current;

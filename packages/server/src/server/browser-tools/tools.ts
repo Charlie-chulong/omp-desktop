@@ -887,7 +887,7 @@ function summarizeBrowserSuccess(
 
   if (payload.result.command === "new_tab") {
     return withDialogs(
-      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}. Use this browserId for tab-scoped browser tools.`,
+      `Created browser tab browserId=${payload.result.browserId} url=${payload.result.url}; ${payload.result.presented ? "added to the current visible tab host in the background" : "created in its owner workspace but not shown in the current tab host"}. Use this browserId for tab-scoped browser tools.`,
     );
   }
 

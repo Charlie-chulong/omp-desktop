@@ -118,6 +118,9 @@ function newTabPayload(): Extract<BrowserToolsResponsePayload, { ok: true }> {
       command: "new_tab",
       browserId: BROWSER_ID,
       workspaceId: "wks_workspace_a",
+      hostWorkspaceId: "wks_workspace_a",
+      presented: true,
+      activated: false,
       url: "https://example.com",
     },
   };
@@ -601,7 +604,7 @@ describe("registerBrowserTools", () => {
     expect(response.content).toEqual([
       {
         type: "text",
-        text: `Created browser tab browserId=${BROWSER_ID} url=https://example.com. Use this browserId for tab-scoped browser tools.`,
+        text: `Created browser tab browserId=${BROWSER_ID} url=https://example.com; added to the current visible tab host in the background. Use this browserId for tab-scoped browser tools.`,
       },
     ]);
   });
