@@ -8,7 +8,7 @@ import {
 import {
   EXPLORER_ENTRY_DRAG_MIME,
   parseExplorerEntryDragPayload,
-  resolveExplorerEntryMove,
+  resolveExplorerEntryMoves,
   serializeExplorerEntryDragPayload,
   type ExplorerEntryDragPayload,
   type ExplorerEntryMoveRequest,
@@ -37,16 +37,16 @@ function isBlockedTarget(event: DragEvent, target: ExplorerEntryDropTarget): boo
   return event.target.closest(target.blockedDescendantSelector) !== null;
 }
 
-function resolveMove(
+function resolveMoves(
   event: DragEvent,
   target: ExplorerEntryDropTarget,
-): ExplorerEntryMoveRequest | null {
+): ExplorerEntryMoveRequest[] | null {
   if (!includesExplorerEntry(event.dataTransfer)) {
     return null;
   }
   const payload = readExplorerEntryPayload(event.dataTransfer);
   return payload
-    ? resolveExplorerEntryMove({
+    ? resolveExplorerEntryMoves({
         payload,
         serverId: target.serverId,
         workspaceId: target.workspaceId,
@@ -90,15 +90,18 @@ export function useExplorerEntryDrag({
         );
       }
       if (source.includeChatAttachment) {
-        event.dataTransfer.setData(
-          WORKSPACE_FILE_DRAG_MIME,
-          serializeWorkspaceFileDragPayload({
-            version: 1,
-            serverId: source.payload.serverId,
-            workspaceId: source.payload.workspaceId,
-            attachment: createWorkspaceFileAttachment({ path: source.payload.path }),
-          }),
-        );
+        const chatEntry = source.payload.entries.find((entry) => entry.kind === "file");
+        if (chatEntry) {
+          event.dataTransfer.setData(
+            WORKSPACE_FILE_DRAG_MIME,
+            serializeWorkspaceFileDragPayload({
+              version: 1,
+              serverId: source.payload.serverId,
+              workspaceId: source.payload.workspaceId,
+              attachment: createWorkspaceFileAttachment({ path: chatEntry.path }),
+            }),
+          );
+        }
       }
     }
 
@@ -125,8 +128,8 @@ export function useExplorerEntryDrag({
         return;
       }
       event.stopPropagation();
-      const request = resolveMove(event, target);
-      if (!request) {
+      const requests = resolveMoves(event, target);
+      if (!requests) {
         if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
         setIsDropTarget(false);
         return;
@@ -141,8 +144,8 @@ export function useExplorerEntryDrag({
         return;
       }
       event.stopPropagation();
-      const request = resolveMove(event, target);
-      if (!request) {
+      const requests = resolveMoves(event, target);
+      if (!requests) {
         if (event.dataTransfer) event.dataTransfer.dropEffect = "none";
         setIsDropTarget(false);
         return;
@@ -169,12 +172,12 @@ export function useExplorerEntryDrag({
       }
       event.stopPropagation();
       setIsDropTarget(false);
-      const request = resolveMove(event, target);
-      if (!request) {
+      const requests = resolveMoves(event, target);
+      if (!requests) {
         return;
       }
       event.preventDefault();
-      target.onMove(request);
+      target.onMove(requests);
     }
 
     element.addEventListener("dragenter", handleBlockedDescendant, true);

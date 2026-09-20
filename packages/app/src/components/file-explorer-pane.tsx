@@ -88,7 +88,11 @@ import { confirmDialog } from "@/utils/confirm-dialog";
 import { useToast } from "@/contexts/toast-context";
 import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-open-targets";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
-import type { ExplorerEntryMoveRequest } from "@/file-explorer/entry-drag";
+import {
+  resolveExplorerDragEntries,
+  type ExplorerEntryDragItem,
+  type ExplorerEntryMoveRequest,
+} from "@/file-explorer/entry-drag";
 import { deleteExplorerSelectionPaths, resolveExplorerSelection } from "@/file-explorer/selection";
 import { useExplorerEntryDrag } from "@/file-explorer/use-entry-drag";
 
@@ -167,7 +171,8 @@ interface TreeRowItemProps {
   onRenameEntry?: (entry: ExplorerEntry) => void;
   onDuplicateEntry?: (entry: ExplorerEntry) => void;
   onDeleteEntry?: (entry: ExplorerEntry) => void;
-  onMoveEntry?: (request: ExplorerEntryMoveRequest) => void;
+  onMoveEntry?: (requests: ExplorerEntryMoveRequest[]) => void;
+  selectedEntries?: readonly ExplorerEntryDragItem[];
   testID?: string;
 }
 
@@ -300,6 +305,7 @@ function TreeRowItem({
   onDuplicateEntry,
   onDeleteEntry,
   onMoveEntry,
+  selectedEntries,
   testID,
 }: TreeRowItemProps) {
   const { t } = useTranslation();
@@ -317,14 +323,16 @@ function TreeRowItem({
               version: 1 as const,
               serverId,
               workspaceId,
-              path: entry.path,
-              kind: entry.kind,
+              entries: resolveExplorerDragEntries({
+                dragged: { path: entry.path, kind: entry.kind },
+                selectedEntries: selectedEntries ?? [],
+              }),
             },
             includeChatAttachment: !isDirectory,
             moveEnabled: Boolean(onMoveEntry),
           }
         : undefined,
-    [entry.kind, entry.path, isDirectory, onMoveEntry, serverId, workspaceId],
+    [entry.kind, entry.path, isDirectory, onMoveEntry, selectedEntries, serverId, workspaceId],
   );
   const dragTarget = useMemo(
     () =>
@@ -917,22 +925,31 @@ export function FileExplorerPane({
     [pendingEdit, reconcileRelocatedEntry, renameEntry, t, toast],
   );
   const handleMoveEntry = useCallback(
-    async (request: ExplorerEntryMoveRequest) => {
-      try {
-        const payload = await moveEntry({
-          path: request.path,
-          parentPath: request.parentPath,
-        });
-        if (!payload) {
-          return;
+    async (requests: ExplorerEntryMoveRequest[]) => {
+      let failed = false;
+      let firstError: string | null = null;
+      for (const request of requests) {
+        try {
+          const payload = await moveEntry({
+            path: request.path,
+            parentPath: request.parentPath,
+          });
+          if (!payload) {
+            break;
+          }
+          if (!payload.success || !payload.movedPath) {
+            failed = true;
+            firstError ??= payload.error ?? t("workspace.fileExplorer.errors.moveFailed");
+            continue;
+          }
+          await reconcileRelocatedEntry(request, payload.movedPath);
+        } catch (cause) {
+          failed = true;
+          firstError ??= cause instanceof Error ? cause.message : String(cause);
         }
-        if (!payload.success || !payload.movedPath) {
-          toast.error(payload.error ?? t("workspace.fileExplorer.errors.moveFailed"));
-          return;
-        }
-        await reconcileRelocatedEntry(request, payload.movedPath);
-      } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : String(cause));
+      }
+      if (failed) {
+        toast.error(firstError ?? t("workspace.fileExplorer.errors.moveFailed"));
       }
     },
     [moveEntry, reconcileRelocatedEntry, t, toast],
@@ -1112,6 +1129,22 @@ export function FileExplorerPane({
     [directories, expandedPaths, showHiddenFiles, sortOption],
   );
   const visibleEntryPaths = useMemo(() => treeRows.map((row) => row.entry.path), [treeRows]);
+  const selectedDragEntries = useMemo(() => {
+    const kindByPath = new Map<string, ExplorerEntry["kind"]>();
+    for (const directory of directories.values()) {
+      for (const directoryEntry of directory.entries) {
+        kindByPath.set(directoryEntry.path, directoryEntry.kind);
+      }
+    }
+    const entries: ExplorerEntryDragItem[] = [];
+    for (const path of selectedEntryPaths) {
+      const kind = kindByPath.get(path);
+      if (kind) {
+        entries.push({ path, kind });
+      }
+    }
+    return entries;
+  }, [directories, selectedEntryPaths]);
 
   const handleSelectEntry = useCallback(
     (entry: ExplorerEntry) => {
@@ -1242,6 +1275,7 @@ export function FileExplorerPane({
           onCollapseDirectory={handleCollapseDirectory}
           onRenameEntry={fsEntryOpsEnabled ? handleRenameEntry : undefined}
           onMoveEntry={fsEntryMoveEnabled ? handleMoveEntry : undefined}
+          selectedEntries={selectedDragEntries}
           onDuplicateEntry={fsEntryDuplicateEnabled ? handleDuplicateEntry : undefined}
           onDeleteEntry={fsEntryOpsEnabled ? handleDeleteEntry : undefined}
         />
@@ -1266,6 +1300,7 @@ export function FileExplorerPane({
       handleRenameCommit,
       handleMoveEntry,
       handleRenameEntry,
+      selectedDragEntries,
       handleRevealEntry,
       handleSelectEntry,
       isDirectoryLoading,
@@ -1805,6 +1840,7 @@ function TreeRowDispatcher({
   onDuplicateEntry,
   onDeleteEntry,
   onMoveEntry,
+  selectedEntries,
 }: {
   serverId: string;
   workspaceId?: string | null;
@@ -1827,7 +1863,8 @@ function TreeRowDispatcher({
   onRenameEntry?: (entry: ExplorerEntry) => void;
   onDuplicateEntry?: (entry: ExplorerEntry) => void;
   onDeleteEntry?: (entry: ExplorerEntry) => void;
-  onMoveEntry?: (request: ExplorerEntryMoveRequest) => void;
+  onMoveEntry?: (requests: ExplorerEntryMoveRequest[]) => void;
+  selectedEntries?: readonly ExplorerEntryDragItem[];
 }) {
   const entry = row.entry;
   const depth = row.depth;
@@ -1860,6 +1897,7 @@ function TreeRowDispatcher({
       onDuplicateEntry={onDuplicateEntry}
       onDeleteEntry={onDeleteEntry}
       onMoveEntry={onMoveEntry}
+      selectedEntries={selectedEntries}
       testID={`file-explorer-row-${index}`}
     />
   );
