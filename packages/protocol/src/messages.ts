@@ -115,6 +115,7 @@ const MutableDaemonProviderConfigSchema = z
     enabled: z.boolean().optional(),
     additionalModels: z.array(MutableDaemonProviderModelSchema).optional(),
     env: z.record(z.string(), z.string()).optional(),
+    params: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 

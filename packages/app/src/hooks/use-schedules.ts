@@ -50,8 +50,11 @@ export function useSchedules(): UseSchedulesResult {
   const query = useFetchQuery({
     queryKey: [...schedulesQueryKey(serverIds), connectionStatusKey],
     queryFn: () => fetchAggregatedSchedules({ hosts: hostInputs, runtime }),
-    dataShape: "list",
+    // Object result, not a row list. `list` would keep a `connecting`
+    // placeholder over the first loaded payload.
+    dataShape: "value",
     staleTimeMs: 5_000,
+    refetchInterval: (query) => (query.state.data?.status === "connecting" ? 1_000 : false),
   });
 
   let loadState: AggregateLoadState<AggregatedSchedule>;

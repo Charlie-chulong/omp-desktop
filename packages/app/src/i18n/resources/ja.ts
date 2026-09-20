@@ -3,10 +3,12 @@ import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
 import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
+import { schedules } from "./schedules";
 
 export const ja: TranslationResources = {
   providerUsage: providerUsage.ja,
   backgroundProcesses: en.backgroundProcesses,
+  schedules: schedules.ja,
   externalFilePreview: en.externalFilePreview,
   common: {
     back: "戻る",

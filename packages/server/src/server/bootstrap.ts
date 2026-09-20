@@ -8,6 +8,7 @@ import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Logger } from "pino";
 import { z } from "zod";
+import { resolveOmpProxyUrl } from "@omp-desktop/protocol/provider-config";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
 
 export type ListenTarget =
@@ -155,6 +156,7 @@ import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { OpenAIImageGenerationService } from "./image-generation/openai-image-generator.js";
 import { DefaultOmpSubscriptionCredentialResolver } from "./image-generation/omp-subscription-credential.js";
+import { createProxyFetch } from "../services/quota-fetcher/proxy-fetch.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import {
   DEFAULT_APP_BASE_URL,
@@ -720,6 +722,9 @@ export async function createPaseoDaemon(
     getConfig: () => daemonConfigStore.getImageGenerationRuntimeConfig(),
     logger,
     subscriptionCredentialResolver: new DefaultOmpSubscriptionCredentialResolver(),
+    fetch: createProxyFetch({
+      getProxyUrl: () => resolveOmpProxyUrl(daemonConfigStore.get().providers.omp),
+    }),
   });
   const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
   void orchestrationSkills.autoUpdate().catch((error) => {

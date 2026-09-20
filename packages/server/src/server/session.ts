@@ -10,6 +10,7 @@ import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import { basename, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { CLIENT_CAPS, type ClientCapability } from "@omp-desktop/protocol/client-capabilities";
+import { resolveOmpProxyUrl } from "@omp-desktop/protocol/provider-config";
 import {
   serializeAgentStreamEvent,
   type AgentSnapshotPayload,
@@ -943,7 +944,7 @@ export class Session {
     this.ompPluginSession = new OmpPluginSession({
       service: new OmpPluginCliService({
         logger: this.sessionLogger,
-        getProxyUrl: () => daemonConfigStore.get().providers.omp?.env?.PI_PROXY,
+        getProxyUrl: () => resolveOmpProxyUrl(daemonConfigStore.get().providers.omp),
       }),
       emit: (msg) => this.emit(msg),
       logger: this.sessionLogger,

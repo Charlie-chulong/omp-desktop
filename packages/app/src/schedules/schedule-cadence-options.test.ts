@@ -7,12 +7,12 @@ import {
 
 describe("schedule cadence form options", () => {
   it("offers the approved cron preset vocabulary", () => {
-    expect(CADENCE_PRESET_OPTIONS.map((option) => option.label)).toEqual([
-      "Every minute",
-      "Every hour",
-      "Daily 9:00",
-      "Weekdays 9:00",
-      "Mondays 9:00",
+    expect(CADENCE_PRESET_OPTIONS.map((option) => option.id)).toEqual([
+      "every-minute",
+      "every-hour",
+      "daily-9",
+      "weekdays-9",
+      "mondays-9",
     ]);
   });
 

@@ -1,7 +1,9 @@
+import type { TFunction } from "i18next";
 import type { ScheduleCadence, ScheduleSummary } from "@omp-desktop/protocol/schedule/types";
 import { validateCronExpression } from "@omp-desktop/protocol/schedule/cron-expression";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
+export type ScheduleProductKind = "schedule" | "heartbeat";
 type CronCadence = Extract<ScheduleCadence, { type: "cron" }>;
 
 const MS_PER_MINUTE = 60_000;
@@ -14,25 +16,55 @@ const UNIT_MS: Record<IntervalUnit, number> = {
   days: MS_PER_DAY,
 };
 
-const DAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
+const CRON_DAY_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
 ] as const;
+
+const CRON_FIELD_KEYS: Record<string, string> = {
+  minute: "schedules.cadence.fields.minute",
+  hour: "schedules.cadence.fields.hour",
+  "day-of-month": "schedules.cadence.fields.dayOfMonth",
+  month: "schedules.cadence.fields.month",
+  "day-of-week": "schedules.cadence.fields.dayOfWeek",
+};
 
 export function isNewAgentSchedule(schedule: ScheduleSummary): boolean {
   return schedule.target.type === "new-agent";
 }
 
-export function scheduleProductName(schedule: ScheduleSummary): "Heartbeat" | "Schedule" {
-  return schedule.target.type === "agent" ? "Heartbeat" : "Schedule";
+export function scheduleProductKind(schedule: ScheduleSummary): ScheduleProductKind {
+  return schedule.target.type === "agent" ? "heartbeat" : "schedule";
 }
 
-export function resolveScheduleTitle(schedule: ScheduleSummary): string {
+export function scheduleProductName(schedule: ScheduleSummary): "Heartbeat" | "Schedule" {
+  return scheduleProductKind(schedule) === "heartbeat" ? "Heartbeat" : "Schedule";
+}
+
+export function scheduleProductLabel(schedule: ScheduleSummary, t: TFunction): string {
+  return t(`schedules.product.${scheduleProductKind(schedule)}`);
+}
+
+/** Derivation/form sentinels. Localize at display with `localizeScheduleTargetLabel`. */
+export const UNTITLED_AGENT_LABEL = "Untitled agent";
+export const AGENT_UNAVAILABLE_LABEL = "Agent unavailable";
+
+export function localizeScheduleTargetLabel(label: string, t: TFunction): string {
+  if (label === UNTITLED_AGENT_LABEL) {
+    return t("schedules.target.untitledAgent");
+  }
+  if (label === AGENT_UNAVAILABLE_LABEL) {
+    return t("schedules.target.agentUnavailable");
+  }
+  return label;
+}
+
+export function resolveScheduleTitle(schedule: ScheduleSummary, t: TFunction): string {
   const name = schedule.name?.trim();
   if (name) {
     return name;
@@ -47,11 +79,7 @@ export function resolveScheduleTitle(schedule: ScheduleSummary): string {
     .split("\n")
     .map((line) => line.trim())
     .find((line) => line.length > 0);
-  return firstPromptLine || `Untitled ${scheduleProductName(schedule).toLowerCase()}`;
-}
-
-function pluralize(value: number, noun: string): string {
-  return value === 1 ? `1 ${noun}` : `${value} ${noun}s`;
+  return firstPromptLine || t(`schedules.untitled.${scheduleProductKind(schedule)}`);
 }
 
 export function everyMsToParts(ms: number): { value: number; unit: IntervalUnit } {
@@ -72,22 +100,20 @@ export function partsToEveryMs(value: number, unit: IntervalUnit): number {
   return normalized * UNIT_MS[unit];
 }
 
-const UNIT_NOUN: Record<IntervalUnit, string> = {
-  minutes: "minute",
-  hours: "hour",
-  days: "day",
-};
-
-function formatEvery(everyMs: number): string {
+function formatEvery(everyMs: number, t: TFunction): string {
   const { value, unit } = everyMsToParts(everyMs);
-  return `Every ${pluralize(value, UNIT_NOUN[unit])}`;
+  const unitKey = unit === "minutes" ? "minute" : unit === "hours" ? "hour" : "day";
+  if (value === 1) {
+    return t(`schedules.cadence.every.${unitKey}One`);
+  }
+  return t(`schedules.cadence.every.${unitKey}Other`, { count: value });
 }
 
-export function formatCadence(cadence: ScheduleCadence): string {
+export function formatCadence(cadence: ScheduleCadence, t: TFunction): string {
   if (cadence.type === "every") {
-    return formatEvery(cadence.everyMs);
+    return formatEvery(cadence.everyMs, t);
   }
-  return describeCron(cadence) ?? cadence.expression;
+  return describeCron(cadence, t) ?? cadence.expression;
 }
 
 /**
@@ -95,9 +121,9 @@ export function formatCadence(cadence: ScheduleCadence): string {
  * expression is valid but not one of the recognized patterns (callers fall
  * back to showing the raw expression).
  */
-export function describeCron(cadence: CronCadence): string | null {
+export function describeCron(cadence: CronCadence, t: TFunction): string | null {
   const trimmed = cadence.expression.trim();
-  if (validateCron(trimmed) !== null) {
+  if (validateCron(trimmed, t) !== null) {
     return null;
   }
 
@@ -111,7 +137,7 @@ export function describeCron(cadence: CronCadence): string | null {
   const isWildcardDom = dayOfMonth === "*";
 
   if (minute === "*" && hour === "*" && isWildcardMonth && isWildcardDom && dayOfWeek === "*") {
-    return "Every minute";
+    return t("schedules.cadence.everyMinute");
   }
 
   if (!isLiteralMinute || !isWildcardMonth || !isWildcardDom) {
@@ -123,7 +149,9 @@ export function describeCron(cadence: CronCadence): string | null {
     if (dayOfWeek !== "*") {
       return null;
     }
-    return minuteNum === 0 ? "Every hour" : `Every hour at :${pad2(minuteNum)}`;
+    return minuteNum === 0
+      ? t("schedules.cadence.everyHour")
+      : t("schedules.cadence.everyHourAt", { minute: pad2(minuteNum) });
   }
 
   if (!/^\d+$/.test(hour)) {
@@ -131,35 +159,56 @@ export function describeCron(cadence: CronCadence): string | null {
   }
   const time = `${pad2(Number.parseInt(hour, 10))}:${pad2(minuteNum)}`;
   const timezone = cadence.timezone ?? "UTC";
-  const dayLabel = describeCronDay(dayOfWeek);
-  return dayLabel ? `${dayLabel} at ${time} ${timezone}` : null;
+  const dayLabel = describeCronDay(dayOfWeek, t);
+  return dayLabel ? t("schedules.cadence.atTime", { day: dayLabel, time, timezone }) : null;
 }
 
-function describeCronDay(dayOfWeek: string): string | null {
+function describeCronDay(dayOfWeek: string, t: TFunction): string | null {
   if (dayOfWeek === "*") {
-    return "Daily";
+    return t("schedules.cadence.days.daily");
   }
   if (dayOfWeek === "1-5") {
-    return "Weekdays";
+    return t("schedules.cadence.days.weekdays");
   }
   if (dayOfWeek === "0,6" || dayOfWeek === "6,0") {
-    return "Weekends";
+    return t("schedules.cadence.days.weekends");
   }
   if (/^\d$/.test(dayOfWeek)) {
-    const day = DAY_NAMES[Number.parseInt(dayOfWeek, 10)];
-    return day ? `${day}s` : null;
+    const dayKey = CRON_DAY_KEYS[Number.parseInt(dayOfWeek, 10)];
+    return dayKey ? t(`schedules.cadence.days.${dayKey}`) : null;
   }
   return null;
 }
 
-export function validateCron(expr: string): string | null {
+export function validateCron(expr: string, t: TFunction): string | null {
   const trimmed = expr.trim();
   if (!trimmed) {
-    return "Enter a cron expression";
+    return t("schedules.cadence.errors.enterExpression");
   }
 
   const error = validateCronExpression(trimmed);
-  return error?.replace(/^Invalid cron /, "Invalid ") ?? null;
+  if (!error) {
+    return null;
+  }
+  if (error === "Cron expressions must have 5 fields") {
+    return t("schedules.cadence.errors.fiveFields");
+  }
+  const match = error.match(/^Invalid cron (.+) (step|field|range|value)$/);
+  if (!match) {
+    return t("schedules.cadence.errors.invalidExpression");
+  }
+  const [, fieldName, kind] = match;
+  const field = t(CRON_FIELD_KEYS[fieldName] ?? fieldName);
+  if (kind === "step") {
+    return t("schedules.cadence.errors.invalidStep", { field });
+  }
+  if (kind === "field") {
+    return t("schedules.cadence.errors.invalidField", { field });
+  }
+  if (kind === "range") {
+    return t("schedules.cadence.errors.invalidRange", { field });
+  }
+  return t("schedules.cadence.errors.invalidValue", { field });
 }
 
 function pad2(value: number): string {
@@ -170,7 +219,7 @@ function pad2(value: number): string {
  * Forward-relative description of the next run, e.g. "in 3h", "in 2d", "soon".
  * Returns "" when there is no scheduled next run.
  */
-export function formatNextRun(iso: string | null): string {
+export function formatNextRun(iso: string | null, t: TFunction): string {
   if (!iso) {
     return "";
   }
@@ -181,16 +230,16 @@ export function formatNextRun(iso: string | null): string {
 
   const diffMs = target - Date.now();
   if (diffMs <= 0) {
-    return "soon";
+    return t("schedules.next.soon");
   }
   if (diffMs < MS_PER_MINUTE) {
-    return "soon";
+    return t("schedules.next.soon");
   }
   if (diffMs < MS_PER_HOUR) {
-    return `in ${Math.round(diffMs / MS_PER_MINUTE)}m`;
+    return t("schedules.next.inMinutes", { count: Math.round(diffMs / MS_PER_MINUTE) });
   }
   if (diffMs < MS_PER_DAY) {
-    return `in ${Math.round(diffMs / MS_PER_HOUR)}h`;
+    return t("schedules.next.inHours", { count: Math.round(diffMs / MS_PER_HOUR) });
   }
-  return `in ${Math.round(diffMs / MS_PER_DAY)}d`;
+  return t("schedules.next.inDays", { count: Math.round(diffMs / MS_PER_DAY) });
 }

@@ -1,13 +1,13 @@
 import { ProxyAgent, type Dispatcher } from "undici";
 
-interface QuotaProxyFetchOptions {
+interface ProxyFetchOptions {
   getProxyUrl(): string | null | undefined;
   fetch?: typeof fetch;
   createDispatcher?: (proxyUrl: string) => Dispatcher;
 }
 
-/** Routes provider quota requests through the currently configured PI_PROXY. */
-export function createQuotaProxyFetch(options: QuotaProxyFetchOptions): typeof fetch {
+/** Routes provider requests through the currently configured proxy. */
+export function createProxyFetch(options: ProxyFetchOptions): typeof fetch {
   const fetchApi = options.fetch ?? fetch;
   const createDispatcher = options.createDispatcher ?? ((proxyUrl) => new ProxyAgent(proxyUrl));
   const dispatchers = new Map<string, Dispatcher>();

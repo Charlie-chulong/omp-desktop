@@ -65,6 +65,11 @@ export interface FetchAggregatedSchedulesInput {
  * Offline hosts are skipped. A connected host that fails contributes to
  * `hostErrors` (surfaced as a banner) while the rest still render; only when
  * every connected host fails do we throw so the screen shows a full error.
+ *
+ * `connecting` is only for "nothing is askable yet". An online host that
+ * already answered empty must not block the screen on a sibling still
+ * settling — that sibling can stay `connecting` forever and the page would
+ * never leave the spinner.
  */
 export async function fetchAggregatedSchedules(
   input: FetchAggregatedSchedulesInput,
@@ -116,10 +121,6 @@ export async function fetchAggregatedSchedules(
     throw new Error(ALL_SCHEDULE_HOSTS_FAILED_MESSAGE);
   }
 
-  if (schedules.length === 0 && hasSettlingHost) {
-    return { status: "connecting" };
-  }
-
   return { status: "loaded", data: schedules, hostErrors };
 }
 
@@ -129,5 +130,5 @@ function isScheduleHostConnectionSettling(
   if (!snapshot) {
     return true;
   }
-  return snapshot.connectionStatus === "connecting" || snapshot.connectionStatus === "idle";
+  return snapshot.connectionStatus === "connecting";
 }

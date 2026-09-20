@@ -333,15 +333,18 @@ describe("DaemonConfigStore", () => {
       providers: {
         omp: {
           env: { PI_PROXY: "http://127.0.0.1:7890" },
+          params: { proxyEnabled: false },
         },
       },
     });
 
-    expect(store.get().providers.omp?.env).toEqual({
-      PI_PROXY: "http://127.0.0.1:7890",
+    expect(store.get().providers.omp).toMatchObject({
+      env: { PI_PROXY: "http://127.0.0.1:7890" },
+      params: { proxyEnabled: false },
     });
-    expect(loadPersistedConfig(paseoHome).agents?.providers?.omp?.env).toEqual({
-      PI_PROXY: "http://127.0.0.1:7890",
+    expect(loadPersistedConfig(paseoHome).agents?.providers?.omp).toMatchObject({
+      env: { PI_PROXY: "http://127.0.0.1:7890" },
+      params: { proxyEnabled: false },
     });
   });
 

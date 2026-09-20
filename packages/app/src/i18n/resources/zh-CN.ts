@@ -4,10 +4,12 @@ import { ompProviderSettings } from "./omp-provider-settings";
 import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
 import { backgroundProcesses } from "./background-processes";
+import { schedules } from "./schedules";
 
 export const zhCN: TranslationResources = {
   providerUsage: providerUsage["zh-CN"],
   backgroundProcesses: backgroundProcesses["zh-CN"],
+  schedules: schedules["zh-CN"],
   externalFilePreview: {
     title: "本地文件预览",
     localOnly: "只读预览。文件保留在此设备上，不会上传。",

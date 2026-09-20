@@ -3,10 +3,12 @@ import { ompPluginSettings, pluginSettings } from "./plugin-settings";
 import { ompProviderSettings } from "./omp-provider-settings";
 import { ompMemorySettings } from "./omp-memory-settings";
 import { providerUsage } from "./provider-usage";
+import { schedules } from "./schedules";
 
 export const es: TranslationResources = {
   providerUsage: providerUsage.es,
   backgroundProcesses: en.backgroundProcesses,
+  schedules: schedules.es,
   externalFilePreview: en.externalFilePreview,
   common: {
     back: "Atrás",

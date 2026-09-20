@@ -16,12 +16,25 @@ for arch in "${arches[@]}"; do
   esac
 done
 
+# electron-builder's supported Windows toolchain uses Intel Wine and NSIS on
+# macOS. Apple silicon hosts therefore need Rosetta; do not substitute a native
+# makensis because mixing it with electron-builder's pinned NSIS resources can
+# produce installers that Windows refuses to launch.
+host_platform_arch="$(node -p "process.platform + ':' + process.arch")"
+if [[ "$host_platform_arch" == "darwin:arm64" ]] &&
+  ! /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null; then
+  echo "Rosetta 2 is required to build Windows installers on macOS arm64." >&2
+  echo "Install it with: softwareupdate --install-rosetta --agree-to-license" >&2
+  exit 1
+fi
+
 # npm installs only the host platform's optional dependencies. Cross-building on
 # macOS therefore omits the Windows keyring bindings that the packaged daemon
 # loads at runtime. Fetch the requested Windows architectures directly without
 # reifying the workspace (which would remove the other architecture).
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
+
 keyring_version="$(node -p "require('./node_modules/@napi-rs/keyring/package.json').version")"
 
 for arch in "${arches[@]}"; do

@@ -66,6 +66,7 @@ import {
   type ProviderRuntimeSettings,
   type ResolvedProviderLaunch,
 } from "../../provider-launch-config.js";
+import { applyOmpProxyEnabled } from "@omp-desktop/protocol/provider-config";
 import { renderPromptAttachmentAsText } from "../../prompt-attachments.js";
 import { composeSystemPromptParts } from "../../system-prompt.js";
 import {
@@ -154,7 +155,7 @@ import {
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
 import { fetchCodexAccountQuota, type CodexAccountQuotaCredential } from "./codex-account-quota.js";
-import { createQuotaProxyFetch } from "../../../../services/quota-fetcher/proxy-fetch.js";
+import { createProxyFetch } from "../../../../services/quota-fetcher/proxy-fetch.js";
 
 const OMP_PROVIDER = "omp";
 const DEFAULT_OMP_BINARY = process.env.OMP_COMMAND?.trim() || "omp";
@@ -3776,7 +3777,7 @@ export class OmpAgentClient implements AgentClient {
     const { runtimeProviderParams, modelRoleParams } = resolveOmpProviderParams(
       options.providerParams,
     );
-    const runtimeSettings = mergeOmpRuntimeSettings(
+    const configuredRuntimeSettings = mergeOmpRuntimeSettings(
       {
         command: {
           mode: "replace",
@@ -3785,6 +3786,9 @@ export class OmpAgentClient implements AgentClient {
       },
       options.runtimeSettings,
     );
+    const runtimeSettings = applyOmpProxyEnabled(configuredRuntimeSettings, {
+      params: { proxyEnabled: runtimeProviderParams.proxyEnabled },
+    });
     this.logger = options.logger;
     this.runtimeSettings = runtimeSettings;
     this.providerParams = runtimeProviderParams;
@@ -3797,7 +3801,7 @@ export class OmpAgentClient implements AgentClient {
     this.automaticCredentialScheduler = options.automaticCredentialScheduler;
     this.quotaFetch =
       options.quotaFetch ??
-      createQuotaProxyFetch({
+      createProxyFetch({
         getProxyUrl: () => runtimeSettings?.env?.PI_PROXY,
       });
     this.quotaNow = options.quotaNow ?? Date.now;

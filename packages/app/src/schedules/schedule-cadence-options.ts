@@ -5,18 +5,17 @@ type CronCadence = Extract<ScheduleCadence, { type: "cron" }>;
 
 export interface CadencePresetOption {
   id: string;
-  label: string;
   expression: string;
 }
 
 export const CUSTOM_CRON_PRESET_ID = "custom";
 
 export const CADENCE_PRESET_OPTIONS: CadencePresetOption[] = [
-  { id: "every-minute", label: "Every minute", expression: "* * * * *" },
-  { id: "every-hour", label: "Every hour", expression: "0 * * * *" },
-  { id: "daily-9", label: "Daily 9:00", expression: "0 9 * * *" },
-  { id: "weekdays-9", label: "Weekdays 9:00", expression: "0 9 * * 1-5" },
-  { id: "mondays-9", label: "Mondays 9:00", expression: "0 9 * * 1" },
+  { id: "every-minute", expression: "* * * * *" },
+  { id: "every-hour", expression: "0 * * * *" },
+  { id: "daily-9", expression: "0 9 * * *" },
+  { id: "weekdays-9", expression: "0 9 * * 1-5" },
+  { id: "mondays-9", expression: "0 9 * * 1" },
 ];
 
 export function resolveCronPresetId(cadence: CronCadence): string {
@@ -27,12 +26,8 @@ export function resolveCronPresetId(cadence: CronCadence): string {
   );
 }
 
-export function resolveCronPresetDisplay(cadence: CronCadence): { label: string } {
-  return {
-    label:
-      CADENCE_PRESET_OPTIONS.find((option) => option.id === resolveCronPresetId(cadence))?.label ??
-      "Custom cron",
-  };
+export function cadencePresetLabelKey(presetId: string): string {
+  return `schedules.cadence.presets.${presetId}`;
 }
 
 export function normalizeScheduleFormCadence(

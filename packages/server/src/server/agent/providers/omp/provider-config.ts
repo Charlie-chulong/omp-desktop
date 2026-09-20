@@ -32,10 +32,12 @@ export const OmpProviderParamsSchema = z
     slowModel: z.string().min(1).optional(),
     planModel: z.string().min(1).optional(),
     agentShell: OmpAgentShellConfigSchema.optional(),
+    proxyEnabled: z.boolean().optional(),
   })
   .strict();
 
 export interface OmpRuntimeProviderParams {
+  proxyEnabled: boolean;
   sessionDir: string;
   agentShell: {
     mode: OmpAgentShellMode;
@@ -151,6 +153,7 @@ export function resolveOmpProviderParams(providerParams: unknown): {
   return {
     runtimeProviderParams: {
       sessionDir: params.sessionDir ?? OMP_SESSION_DIR,
+      proxyEnabled: params.proxyEnabled !== false,
       agentShell: params.agentShell ?? { mode: "auto" },
     },
     modelRoleParams: {

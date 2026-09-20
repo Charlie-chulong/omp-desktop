@@ -1,5 +1,6 @@
 import type { ScheduleSummary } from "@omp-desktop/protocol/schedule/types";
 import { describeScheduleCwd } from "@/schedules/schedule-project-targets";
+import { AGENT_UNAVAILABLE_LABEL, UNTITLED_AGENT_LABEL } from "@/utils/schedule-format";
 
 // Derived from existing fields only — no new protocol state. "active"/"paused"
 // mirror the stored status; the rest are computed truths the daemon does not
@@ -66,9 +67,9 @@ function resolveTarget(input: ResolveScheduleInput): ScheduleTargetResolution {
   if (schedule.target.type === "agent") {
     const agent = agentsByKey.get(agentKey(serverId, schedule.target.agentId));
     if (agent) {
-      return { label: agent.title?.trim() || "Untitled agent", provider: agent.provider };
+      return { label: agent.title?.trim() || UNTITLED_AGENT_LABEL, provider: agent.provider };
     }
-    return { label: "Agent unavailable", provider: null };
+    return { label: AGENT_UNAVAILABLE_LABEL, provider: null };
   }
   return {
     label: describeScheduleCwd({ serverId, cwd: schedule.target.config.cwd, projectNameByCwd }),
