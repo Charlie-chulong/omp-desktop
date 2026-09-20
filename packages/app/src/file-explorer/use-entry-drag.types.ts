@@ -16,7 +16,7 @@ export interface ExplorerEntryDropTarget {
   workspaceId: string;
   parentPath: string;
   blockedDescendantSelector?: string;
-  onMove(request: ExplorerEntryMoveRequest): void;
+  onMove(requests: ExplorerEntryMoveRequest[]): void;
 }
 
 export interface UseExplorerEntryDragInput {

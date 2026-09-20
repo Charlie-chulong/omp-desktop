@@ -27,21 +27,29 @@ interface MountedRootRoutingHarness extends MountedHarness {
 
 const mountedHarnesses: MountedHarness[] = [];
 
-function DragHarness({ moves }: { moves: ExplorerEntryMoveRequest[] }) {
-  const onMove = useCallback((request: ExplorerEntryMoveRequest) => moves.push(request), [moves]);
+function DragHarness({
+  moves,
+  entries = [{ path: "src/app.ts", kind: "file" }],
+}: {
+  moves: ExplorerEntryMoveRequest[];
+  entries?: Array<{ path: string; kind: "file" | "directory" }>;
+}) {
+  const onMove = useCallback(
+    (requests: ExplorerEntryMoveRequest[]) => moves.push(...requests),
+    [moves],
+  );
   const source = useMemo(
     () => ({
       payload: {
         version: 1 as const,
         serverId: "server-1",
         workspaceId: "workspace-1",
-        path: "src/app.ts",
-        kind: "file" as const,
+        entries,
       },
-      includeChatAttachment: true,
+      includeChatAttachment: entries.some((entry) => entry.kind === "file"),
       moveEnabled: true,
     }),
-    [],
+    [entries],
   );
   const target = useMemo(
     () => ({
@@ -72,11 +80,11 @@ function RootRoutingHarness({
   folderMoves: ExplorerEntryMoveRequest[];
 }) {
   const onRootMove = useCallback(
-    (request: ExplorerEntryMoveRequest) => rootMoves.push(request),
+    (requests: ExplorerEntryMoveRequest[]) => rootMoves.push(...requests),
     [rootMoves],
   );
   const onFolderMove = useCallback(
-    (request: ExplorerEntryMoveRequest) => folderMoves.push(request),
+    (requests: ExplorerEntryMoveRequest[]) => folderMoves.push(...requests),
     [folderMoves],
   );
   const source = useMemo(
@@ -85,8 +93,7 @@ function RootRoutingHarness({
         version: 1 as const,
         serverId: "server-1",
         workspaceId: "workspace-1",
-        path: "src/nested",
-        kind: "directory" as const,
+        entries: [{ path: "src/nested", kind: "directory" as const }],
       },
       includeChatAttachment: false,
       moveEnabled: true,
@@ -139,11 +146,14 @@ function requireElement(container: HTMLElement, testId: string): HTMLElement {
   return element;
 }
 
-function mountDragHarness(moves: ExplorerEntryMoveRequest[]): MountedDragHarness {
+function mountDragHarness(
+  moves: ExplorerEntryMoveRequest[],
+  entries?: Array<{ path: string; kind: "file" | "directory" }>,
+): MountedDragHarness {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  act(() => root.render(<DragHarness moves={moves} />));
+  act(() => root.render(<DragHarness moves={moves} entries={entries} />));
   const mounted = {
     root,
     container,
@@ -290,5 +300,29 @@ describe("explorer entry web drag", () => {
       );
     });
     expect(rootMoves).toEqual([{ path: "src/nested", parentPath: ".", kind: "directory" }]);
+  });
+
+  it("moves every selected entry onto a folder", () => {
+    const moves: ExplorerEntryMoveRequest[] = [];
+    const { source, target } = mountDragHarness(moves, [
+      { path: "src/app.ts", kind: "file" },
+      { path: "src/main.ts", kind: "file" },
+    ]);
+    const transfer = new DataTransfer();
+
+    act(() => {
+      source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: transfer }));
+      target.dispatchEvent(
+        new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer: transfer,
+        }),
+      );
+    });
+    expect(moves).toEqual([
+      { path: "src/app.ts", parentPath: "archive", kind: "file" },
+      { path: "src/main.ts", parentPath: "archive", kind: "file" },
+    ]);
   });
 });
