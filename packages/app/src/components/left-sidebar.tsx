@@ -647,10 +647,10 @@ function SidebarProviderUsageDetails({
   return (
     <>
       {usage.windows.map((window) => (
-        <ProviderUsageWindowBar key={window.id} window={window} />
+        <ProviderUsageWindowBar key={window.id} window={window} showReset={false} />
       ))}
       {balances.map((balance) => (
-        <ProviderUsageBalanceBar key={balance.id} balance={balance} />
+        <ProviderUsageBalanceBar key={balance.id} balance={balance} showReset={false} />
       ))}
     </>
   );

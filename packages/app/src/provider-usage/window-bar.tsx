@@ -37,7 +37,13 @@ function fillToneStyle(tone: ProviderUsageTone) {
   }
 }
 
-export function ProviderUsageWindowBar({ window }: { window: ProviderUsageWindow }) {
+export function ProviderUsageWindowBar({
+  window,
+  showReset = true,
+}: {
+  window: ProviderUsageWindow;
+  showReset?: boolean;
+}) {
   const { t } = useTranslation();
   const usedPct = resolveUsedPct(window);
   const remainingPct = resolveRemainingPct(window);
@@ -55,7 +61,9 @@ export function ProviderUsageWindowBar({ window }: { window: ProviderUsageWindow
   const isAtRisk = window.runsOutAt != null && window.shortfallPct != null;
   const trailing = isAtRisk
     ? formatRunsOutLabel(window.runsOutAt, t)
-    : formatResetLabel(window.resetsAt, t);
+    : showReset
+      ? formatResetLabel(window.resetsAt, t)
+      : null;
 
   return (
     <View style={styles.container}>

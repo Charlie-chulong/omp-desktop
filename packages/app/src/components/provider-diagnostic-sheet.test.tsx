@@ -12,17 +12,21 @@ import { ompAccountQuotaQueryKey, useOmpCodexAccountQuota } from "@/hooks/use-om
 type ManagementClient = Pick<
   DaemonClient,
   "getOmpProviderManagement" | "reorderOmpProviderAccounts"
->;
+> &
+  Partial<Pick<DaemonClient, "listProviderUsage">>;
 type ManagementResponse = Awaited<ReturnType<ManagementClient["getOmpProviderManagement"]>>;
 
 const runtime = vi.hoisted(() => ({
   client: null as ManagementClient | null,
   refresh: vi.fn(async () => undefined),
   translate: (key: string) => key,
+  isConnected: false,
+  providerUsageList: false,
 }));
 
 vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeClient: () => runtime.client,
+  useHostRuntimeIsConnected: () => runtime.isConnected,
 }));
 
 vi.mock("@/stores/session-store", () => ({
@@ -31,7 +35,12 @@ vi.mock("@/stores/session-store", () => ({
       sessions: {
         "server-1": {
           client: runtime.client,
-          serverInfo: { features: { ompProviderManagement: true } },
+          serverInfo: {
+            features: {
+              ompProviderManagement: true,
+              providerUsageList: runtime.providerUsageList,
+            },
+          },
         },
       },
     }),
@@ -89,6 +98,8 @@ afterEach(async () => {
   });
   for (const client of queryClients.splice(0)) client.clear();
   runtime.client = null;
+  runtime.isConnected = false;
+  runtime.providerUsageList = false;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -160,6 +171,24 @@ async function renderPanel(client: ManagementClient) {
   return queryClient;
 }
 
+async function mountPanel(client: ManagementClient) {
+  runtime.client = client;
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  queryClients.push(queryClient);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <OmpProviderConfigurationPanel serverId="server-1" />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(await screen.findByTestId("omp-signed-in-providers-toggle"));
+  return queryClient;
+}
+
 describe("OMP provider account reordering quota synchronization", () => {
   it("updates the mounted quota consumer and ignores a late pre-reorder refetch", async () => {
     const initial = management([1, 2]);
@@ -215,5 +244,60 @@ describe("OMP provider account reordering quota synchronization", () => {
     expect(screen.getByTestId("quota-account-order").textContent).toBe("1,2");
     expect(screen.getByTestId("quota-status").textContent).toBe("idle");
     expect(queryClient.getQueryData(ompAccountQuotaQueryKey("server-1"))).toEqual(initial);
+  });
+});
+
+describe("OMP provider usage reset in settings", () => {
+  it("shows Cursor reset timing on the signed-in provider card", async () => {
+    runtime.isConnected = true;
+    runtime.providerUsageList = true;
+    await mountPanel({
+      getOmpProviderManagement: vi.fn(async () => ({
+        requestId: "test-management",
+        configPath: "/tmp/models.yml",
+        configYaml: "providers: {}\n",
+        providerModels: [],
+        loginProviders: [
+          {
+            id: "cursor",
+            name: "Cursor (Claude, GPT, etc.)",
+            available: true,
+            authenticated: true,
+            accounts: [{ credentialId: 7, identityKey: "account:auth0|user_cursor" }],
+          },
+        ],
+      })),
+      reorderOmpProviderAccounts: vi.fn(),
+      listProviderUsage: vi.fn(async () => ({
+        fetchedAt: "2026-09-20T00:00:00.000Z",
+        providers: [
+          {
+            providerId: "cursor",
+            displayName: "Cursor",
+            status: "available",
+            planLabel: null,
+            sourceLabel: "Cursor",
+            windows: [],
+            balances: [
+              {
+                id: "team_spend",
+                label: "Monthly usage",
+                used: 480.13,
+                remaining: 519.87,
+                limit: 1000,
+                unit: "usd",
+                resetsAt: "2026-09-30T00:00:00.000Z",
+              },
+            ],
+            details: [],
+            error: null,
+          },
+        ],
+      })),
+    });
+    const usage = await screen.findByTestId("omp-provider-usage-cursor");
+    expect(usage.textContent).toContain("480.13");
+    expect(usage.textContent).toContain("providerUsage.resetsIn");
+    expect(screen.queryByTestId("omp-provider-usage-openai-codex")).toBeNull();
   });
 });
