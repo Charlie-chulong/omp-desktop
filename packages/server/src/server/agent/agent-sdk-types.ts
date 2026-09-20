@@ -349,6 +349,12 @@ export type ToolCallDetail =
       label?: string;
       text?: string;
       icon?: ToolCallIconName;
+      preview?: {
+        type: "image";
+        source: string;
+        mimeType?: string;
+        alt?: string;
+      };
     }
   | {
       type: "plan";

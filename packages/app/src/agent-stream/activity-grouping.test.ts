@@ -53,33 +53,36 @@ describe("agent activity grouping", () => {
     expect(history.groupsByHostId.get("thought-1")?.items).toEqual(items);
   });
 
-  it("keeps completed image previews visible outside collapsed activity", () => {
-    const image: ToolCallItem = {
-      kind: "tool_call",
-      id: "image-1",
-      turnId: "turn-1",
-      timestamp,
-      payload: {
-        source: "agent",
-        data: {
-          provider: "omp",
-          callId: "image-1",
-          name: "image_gen",
-          status: "completed",
-          error: null,
-          detail: {
-            type: "plain_text",
-            icon: "sparkles",
-            preview: { type: "image", source: "/tmp/generated.png" },
+  it.each(["image_gen", "present_image"] as const)(
+    "keeps completed %s image previews visible outside collapsed activity",
+    (name) => {
+      const image: ToolCallItem = {
+        kind: "tool_call",
+        id: "image-1",
+        turnId: "turn-1",
+        timestamp,
+        payload: {
+          source: "agent",
+          data: {
+            provider: "omp",
+            callId: "image-1",
+            name,
+            status: "completed",
+            error: null,
+            detail: {
+              type: "plain_text",
+              icon: "sparkles",
+              preview: { type: "image", source: "/tmp/qr.png" },
+            },
           },
         },
-      },
-    };
-    const history = prepareAgentActivityHistory([thought("thought-1"), image, tool("tool-1")]);
+      };
+      const history = prepareAgentActivityHistory([thought("thought-1"), image, tool("tool-1")]);
 
-    expect(history.tail.map((item) => item.id)).toEqual(["thought-1", "image-1", "tool-1"]);
-    expect(history.groupsByHostId.size).toBe(0);
-  });
+      expect(history.tail.map((item) => item.id)).toEqual(["thought-1", "image-1", "tool-1"]);
+      expect(history.groupsByHostId.size).toBe(0);
+    },
+  );
 
   it("keeps activity from different canonical turns in separate groups", () => {
     const history = prepareAgentActivityHistory([

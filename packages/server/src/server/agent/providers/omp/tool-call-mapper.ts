@@ -24,6 +24,9 @@ export function mapOmpToolDetail(
   if (toolCall.toolName === "image_gen") {
     return mapOmpImageGenerationDetail(toolCall.args, result);
   }
+  if (toolCall.toolName === "present_image") {
+    return mapOmpPresentImageDetail(toolCall.args, result);
+  }
   if (toolCall.toolName === "edit") {
     return mapOmpEditDetail(toolCall, result);
   }
@@ -67,6 +70,31 @@ function mapOmpImageGenerationDetail(args: unknown, result: OmpToolResult): Tool
             source: filePath,
             ...(mimeType ? { mimeType } : {}),
             ...(prompt ? { alt: prompt } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function mapOmpPresentImageDetail(args: unknown, result: OmpToolResult): ToolCallDetail {
+  const argRecord = isRecord(args) ? args : {};
+  const details = resultDetails(result);
+  const filePath = firstString(details?.filePath);
+  const mimeType = firstString(details?.mimeType);
+  const alt = firstString(details?.alt, argRecord.alt);
+  const published = firstString(details?.status) === "published" && filePath !== undefined;
+  return {
+    type: "plain_text",
+    label: published ? "Presented image" : "Presenting image",
+    text: published ? `Published ${filePath}` : firstString(argRecord.path, argRecord.alt),
+    icon: "sparkles",
+    ...(published && filePath
+      ? {
+          preview: {
+            type: "image",
+            source: filePath,
+            ...(mimeType ? { mimeType } : {}),
+            ...(alt ? { alt } : {}),
           },
         }
       : {}),

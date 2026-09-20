@@ -50,6 +50,7 @@ const toolsByCapability = {
   optional: [
     "speak",
     "image_gen",
+    "present_image",
     "browser_list_tabs",
     "browser_new_tab",
     "browser_snapshot",
@@ -150,5 +151,6 @@ describe("OMP Desktop tool capability switches", () => {
     expect(catalog.getTool("create_workspace")).toBeDefined();
     expect(catalog.getTool("create_agent")).toBeDefined();
     expect(catalog.getTool("image_gen")).toBeDefined();
+    expect(catalog.getTool("present_image")).toBeDefined();
   });
 });

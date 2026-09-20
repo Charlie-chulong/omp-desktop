@@ -77,18 +77,21 @@ describe("tool call detail-level projection", () => {
     expect(result.groupsByHostId.size).toBe(0);
   });
 
-  it("does not collapse inline image previews into overview groups", () => {
-    const image = toolCall(
-      "1",
-      {
-        type: "plain_text",
-        icon: "sparkles",
-        preview: { type: "image", source: "/tmp/generated.png" },
-      },
-      { name: "image_gen" },
-    );
-    expect(isGroupableToolCall(image)).toBe(false);
-  });
+  it.each(["image_gen", "present_image"] as const)(
+    "does not collapse %s inline image previews into overview groups",
+    (name) => {
+      const image = toolCall(
+        "1",
+        {
+          type: "plain_text",
+          icon: "sparkles",
+          preview: { type: "image", source: "/tmp/qr.png" },
+        },
+        { name },
+      );
+      expect(isGroupableToolCall(image)).toBe(false);
+    },
+  );
 
   it("keeps one stable overview host as a run grows", () => {
     const firstCall = toolCall("1", { type: "shell", command: "one" });
