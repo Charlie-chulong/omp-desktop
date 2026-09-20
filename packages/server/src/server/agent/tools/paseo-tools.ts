@@ -103,6 +103,7 @@ import type {
   PaseoToolExecutionContext,
   PaseoToolResult,
 } from "./types.js";
+import { inspectPresentImage, resolvePresentImagePath } from "./present-image.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -594,6 +595,7 @@ const TOOL_CAPABILITY_BY_NAME: Readonly<Record<string, OmpDesktopToolCapability>
   inspect_provider: "providers",
   speak: "optional",
   image_gen: "optional",
+  present_image: "optional",
   browser_list_tabs: "optional",
   browser_new_tab: "optional",
   browser_snapshot: "optional",
@@ -1306,7 +1308,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Generate image",
       description:
-        "Generate one new raster image from a text prompt. Use when the user asks to create a photo, illustration, texture, mockup, or other bitmap image. Do not use for SVG, existing code-native graphics, or deterministic diagrams. Use medium quality for ordinary requests; use high only when the user explicitly requests maximum quality and accepts multi-minute latency. The desktop renders successful output automatically; never return image base64.",
+        "Generate one new raster image from a text prompt. Use when the user asks to create a photo, illustration, texture, mockup, or other bitmap image. Do not use for SVG, existing code-native graphics, or deterministic diagrams. Do not use this to show an existing local image in the chat; use present_image. Use medium quality for ordinary requests; use high only when the user explicitly requests maximum quality and accepts multi-minute latency. The desktop renders successful output automatically; never return image base64.",
       inputSchema: {
         prompt: z
           .string()
@@ -1378,6 +1380,62 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           },
         ],
         structuredContent: ensureValidJson(generated),
+      };
+    },
+  );
+
+  registerTool(
+    "present_image",
+    {
+      title: "Present image",
+      description:
+        "Publish an existing local raster image into this conversation so the user can see it. `read` only shows the image to you, not the user. Successful results have status published; only then may you say you attached the image. Never tell the user to scan or look at an image based on `read` alone. Do not use for SVG. To generate a new image, use image_gen.",
+      inputSchema: {
+        path: z
+          .string()
+          .trim()
+          .min(1, "path is required")
+          .describe(
+            "Local raster image path. Relative paths resolve against the caller agent's workspace.",
+          ),
+        alt: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Accessible description shown with the image, such as WeChat login QR code."),
+      },
+      outputSchema: {
+        status: z.literal("published"),
+        filePath: z.string(),
+        mimeType: z.string(),
+        alt: z.string().optional(),
+      },
+    },
+    async (args) => {
+      if (!callerAgentId) {
+        throw new Error("present_image is only available to agent-scoped tool sessions");
+      }
+      const callerAgent = agentManager.getAgent?.(callerAgentId) ?? null;
+      const filePath = resolvePresentImagePath({
+        path: args.path,
+        cwd: callerAgent?.cwd ?? null,
+      });
+      const inspected = await inspectPresentImage(filePath);
+      const alt = typeof args.alt === "string" && args.alt.trim() ? args.alt.trim() : undefined;
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Published the image to the conversation (status=published). The desktop renders it in the chat. Never claim the user can see an image from `read` alone.",
+          },
+        ],
+        structuredContent: ensureValidJson({
+          status: "published",
+          filePath: inspected.filePath,
+          mimeType: inspected.mimeType,
+          ...(alt ? { alt } : {}),
+        }),
       };
     },
   );

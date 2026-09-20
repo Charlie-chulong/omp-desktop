@@ -161,6 +161,42 @@ describe("OMP tool call mapper", () => {
     });
   });
 
+  test("maps present_image published output to an inline preview", () => {
+    expect(
+      mapOmpToolDetail(
+        parseToolArgs("present_image", { path: "/tmp/qr.png", alt: "WeChat login QR code" }),
+        parseToolResult({
+          content: [{ type: "text", text: "Published the image" }],
+          details: {
+            status: "published",
+            filePath: "/tmp/qr.png",
+            mimeType: "image/png",
+            alt: "WeChat login QR code",
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "plain_text",
+      label: "Presented image",
+      text: "Published /tmp/qr.png",
+      icon: "sparkles",
+      preview: {
+        type: "image",
+        source: "/tmp/qr.png",
+        mimeType: "image/png",
+        alt: "WeChat login QR code",
+      },
+    });
+    expect(mapOmpToolDetail(parseToolArgs("present_image", { path: "/tmp/qr.png" }), null)).toEqual(
+      {
+        type: "plain_text",
+        label: "Presenting image",
+        text: "/tmp/qr.png",
+        icon: "sparkles",
+      },
+    );
+  });
+
   test("falls back to shared unknown detail for unmapped tools", () => {
     expect(mapOmpToolDetail(parseToolArgs("lsp", { op: "hover" }), null)).toEqual({
       type: "unknown",
