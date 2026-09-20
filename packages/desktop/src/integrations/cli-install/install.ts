@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { app } from "electron";
 import log from "electron-log/main";
 import { loadPersistedConfig, resolvePaseoHome } from "@omp-desktop/server";
+import { resolveOmpProxyUrl, type OmpProxyConfig } from "@omp-desktop/protocol/provider-config";
 import { resolveCliInstallSourcePath } from "./path.js";
 import {
   getBundledCliShimPath,
@@ -83,8 +84,13 @@ export async function getCliInstallStatus(): Promise<InstallStatus> {
 }
 
 function readCurrentOmpProxyUrl(): string | undefined {
-  const configuredProxy =
-    loadPersistedConfig(resolvePaseoHome()).agents?.providers?.omp?.env?.PI_PROXY;
+  const ompConfig = loadPersistedConfig(resolvePaseoHome()).agents?.providers?.omp as
+    | OmpProxyConfig
+    | undefined;
+  if (ompConfig?.params?.proxyEnabled === false) {
+    return undefined;
+  }
+  const configuredProxy = resolveOmpProxyUrl(ompConfig);
   for (const value of [
     configuredProxy,
     process.env.PI_PROXY,

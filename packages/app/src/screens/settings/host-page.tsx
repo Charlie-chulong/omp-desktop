@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { Alert, Text, View } from "react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import type { OmpInstallationStatus, TerminalProfile } from "@omp-desktop/protocol/messages";
+import { resolveOmpProxyUrl } from "@omp-desktop/protocol/provider-config";
 import {
   getTerminalProfileIcon,
   DEFAULT_TERMINAL_PROFILES,
@@ -30,6 +31,7 @@ import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
 import { Field, FormTextInput } from "@/components/ui/form-field";
+import { Switch } from "@/components/ui/switch";
 import {
   ProfileDraft,
   TerminalProfileEditModal,
@@ -1340,7 +1342,9 @@ function OmpProxyCard({ serverId }: { serverId: string }) {
   const { theme } = useUnistyles();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
-  const persistedProxy = config?.providers.omp?.env?.PI_PROXY ?? "";
+  const ompConfig = config?.providers.omp;
+  const persistedProxy = ompConfig?.env?.PI_PROXY ?? "";
+  const isProxyEnabled = resolveOmpProxyUrl(ompConfig) !== undefined;
   const [draft, setDraft] = useState(persistedProxy);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1371,6 +1375,30 @@ function OmpProxyCard({ serverId }: { serverId: string }) {
       .finally(() => setIsSaving(false));
   }, [normalizedDraft, patchConfig, t]);
 
+  const handleEnabledChange = useCallback(
+    (enabled: boolean) => {
+      setIsSaving(true);
+      void patchConfig({
+        providers: {
+          omp: {
+            params: {
+              proxyEnabled: enabled,
+            },
+          },
+        },
+      })
+        .catch((error) => {
+          console.error("[HostPage] Failed to toggle OMP proxy", error);
+          Alert.alert(
+            t("settings.host.orchestration.proxy.saveError"),
+            error instanceof Error ? error.message : String(error),
+          );
+        })
+        .finally(() => setIsSaving(false));
+    },
+    [patchConfig, t],
+  );
+
   if (!isConnected) return null;
 
   return (
@@ -1383,6 +1411,13 @@ function OmpProxyCard({ serverId }: { serverId: string }) {
           <Text style={styles.proxyTitle}>{t("settings.host.orchestration.proxy.title")}</Text>
           <Text style={styles.proxyHint}>{t("settings.host.orchestration.proxy.hint")}</Text>
         </View>
+        <Switch
+          value={isProxyEnabled}
+          onValueChange={handleEnabledChange}
+          disabled={!persistedProxy.trim() || hasChanges || isSaving}
+          accessibilityLabel={t("settings.host.orchestration.proxy.title")}
+          testID="host-page-omp-proxy-switch"
+        />
       </View>
       <View style={styles.proxyForm}>
         <Field label="PI_PROXY" testID="host-page-omp-proxy-field">

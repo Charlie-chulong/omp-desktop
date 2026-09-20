@@ -19,10 +19,24 @@ describe("file explorer visibility", () => {
     expect(filterVisibleExplorerEntries(entries, true)).toEqual(entries);
   });
 
+  it("hides .DS_Store even when hidden files are shown", () => {
+    const entries = [
+      makeEntry(".DS_Store", "file"),
+      makeEntry(".env", "file"),
+      makeEntry("src", "directory"),
+    ];
+
+    expect(filterVisibleExplorerEntries(entries, true).map((entry) => entry.name)).toEqual([
+      ".env",
+      "src",
+    ]);
+  });
+
   it("hides dot-prefixed files and directories when hidden files are not shown", () => {
     const entries = [
       makeEntry(".env", "file"),
       makeEntry(".git", "directory"),
+      makeEntry(".DS_Store", "file"),
       makeEntry("README.md", "file"),
       makeEntry("src", "directory"),
     ];

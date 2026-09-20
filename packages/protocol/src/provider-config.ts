@@ -28,6 +28,28 @@ export const ProviderRuntimeSettingsSchema = z.object({
   disallowedTools: z.array(z.string()).optional(),
 });
 
+export interface OmpProxyConfig {
+  env?: Record<string, string>;
+  params?: Record<string, unknown>;
+}
+
+export function resolveOmpProxyUrl(config: OmpProxyConfig | undefined): string | undefined {
+  if (config?.params?.proxyEnabled === false) return undefined;
+  const value = config?.env?.PI_PROXY?.trim();
+  return value || undefined;
+}
+
+export function applyOmpProxyEnabled(
+  runtimeSettings: ProviderRuntimeSettings | undefined,
+  config: OmpProxyConfig | undefined,
+): ProviderRuntimeSettings | undefined {
+  if (config?.params?.proxyEnabled !== false) return runtimeSettings;
+  return {
+    ...runtimeSettings,
+    env: { ...runtimeSettings?.env, PI_PROXY: "" },
+  };
+}
+
 const ProviderProfileThinkingOptionSchema = z.object({
   id: z.string(),
   label: z.string(),

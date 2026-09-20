@@ -13,7 +13,13 @@ export function resolveSchedulesScreenBodyState(input: {
   if (input.showLoadError) {
     return { kind: "load-error" };
   }
-  if (input.loadState.status === "connecting" || input.loadState.status === "loading") {
+  // `connecting` means no host is askable yet. Blocking the page on that
+  // leaves a spinner if a host never leaves `connecting`/`booting`.
+  // Empty CTA is usable immediately; rows appear when a host comes online.
+  if (input.loadState.status === "connecting") {
+    return { kind: "empty" };
+  }
+  if (input.loadState.status === "loading") {
     return { kind: "loading" };
   }
   if (input.loadState.data.length === 0) {

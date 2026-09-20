@@ -62,6 +62,26 @@ describe("fetchAggregatedSchedules load state", () => {
     expect(result).toEqual({ status: "connecting" });
   });
 
+  it("reports loaded empty when remaining hosts are idle rather than connecting", async () => {
+    const result = await fetchAggregatedSchedules({
+      hosts: [
+        { serverId: "host-a", serverName: "Host A" },
+        { serverId: "host-b", serverName: "Host B" },
+      ],
+      runtime: makeRuntime({
+        snapshots: {
+          "host-a": { connectionStatus: "online" },
+          "host-b": { connectionStatus: "idle" },
+        },
+        schedules: {
+          "host-a": [],
+        },
+      }),
+    });
+
+    expect(result).toEqual({ status: "loaded", data: [], hostErrors: [] });
+  });
+
   it("reports loaded empty after all reachable hosts answer with no schedules", async () => {
     const result = await fetchAggregatedSchedules({
       hosts: [
@@ -83,7 +103,7 @@ describe("fetchAggregatedSchedules load state", () => {
     expect(result).toEqual({ status: "loaded", data: [], hostErrors: [] });
   });
 
-  it("does not report loaded empty while another known host is still connecting", async () => {
+  it("reports loaded empty from reachable hosts while another host is still connecting", async () => {
     const result = await fetchAggregatedSchedules({
       hosts: [
         { serverId: "host-a", serverName: "Host A" },
@@ -100,7 +120,7 @@ describe("fetchAggregatedSchedules load state", () => {
       }),
     });
 
-    expect(result).toEqual({ status: "connecting" });
+    expect(result).toEqual({ status: "loaded", data: [], hostErrors: [] });
   });
 
   it("loads reachable host data when another known host is still connecting", async () => {

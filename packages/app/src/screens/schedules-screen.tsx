@@ -10,6 +10,8 @@ import { ScrollView, Text, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { CalendarClock, Plus } from "lucide-react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { HostFilter } from "@/components/hosts/host-filter";
 import { ALL_HOSTS_OPTION_ID } from "@/components/hosts/host-picker";
@@ -37,6 +39,7 @@ import {
   buildProjectNameByCwd,
   buildScheduleProjectTargets,
 } from "@/schedules/schedule-project-targets";
+import { localizeScheduleTargetLabel } from "@/utils/schedule-format";
 import type { ScheduleSummary } from "@omp-desktop/protocol/schedule/types";
 
 type FormState =
@@ -44,10 +47,14 @@ type FormState =
   | { mode: "create" }
   | { mode: "edit"; serverId: string; schedule: ScheduleSummary };
 
-const STATUS_FILTER_OPTIONS: { value: ScheduleBucket; label: string; testID: string }[] = [
-  { value: "runnable", label: "Active", testID: "schedules-filter-active" },
-  { value: "ended", label: "Ended", testID: "schedules-filter-ended" },
-];
+function statusFilterOptions(
+  t: TFunction,
+): { value: ScheduleBucket; label: string; testID: string }[] {
+  return [
+    { value: "runnable", label: t("schedules.filters.active"), testID: "schedules-filter-active" },
+    { value: "ended", label: t("schedules.filters.ended"), testID: "schedules-filter-ended" },
+  ];
+}
 
 const EMPTY_SCHEDULES: AggregatedSchedule[] = [];
 
@@ -62,6 +69,7 @@ export function SchedulesScreen(): ReactElement {
 }
 
 function SchedulesScreenContent(): ReactElement {
+  const { t } = useTranslation();
   const { loadState, hostErrors, isError, refetch } = useSchedules();
   const schedules = loadState.status === "loaded" ? loadState.data : EMPTY_SCHEDULES;
   const { agents } = useAggregatedAgents({ includeArchived: true });
@@ -151,20 +159,20 @@ function SchedulesScreenContent(): ReactElement {
       .sort((a, b) => Date.parse(b.schedule.createdAt) - Date.parse(a.schedule.createdAt))
       .map(({ schedule, resolved }) => ({
         schedule,
-        targetLabel: resolved.target.label,
+        targetLabel: localizeScheduleTargetLabel(resolved.target.label, t),
         provider: resolved.target.provider,
         state: resolved.state,
         serverName: schedule.serverName,
         singleHost,
       }));
-  }, [resolvedRows, selectedHost, statusFilter, hosts.length]);
+  }, [resolvedRows, selectedHost, statusFilter, hosts.length, t]);
 
   const showLoadError = isError && loadState.status !== "loaded";
   const showHostFilter = hosts.length > 1;
 
   return (
     <View style={styles.container}>
-      <MenuHeader title="Schedules" />
+      <MenuHeader title={t("schedules.title")} />
       <SchedulesScreenBody
         rows={visibleRows}
         loadState={loadState}
@@ -220,6 +228,8 @@ function SchedulesScreenBody({
   onCreate: () => void;
   onEdit: (schedule: AggregatedSchedule) => void;
 }): ReactElement {
+  const { t } = useTranslation();
+  const filterOptions = useMemo(() => statusFilterOptions(t), [t]);
   const bodyState = resolveSchedulesScreenBodyState({ loadState, showLoadError });
 
   if (bodyState.kind === "loading") {
@@ -233,9 +243,9 @@ function SchedulesScreenBody({
   if (bodyState.kind === "load-error") {
     return (
       <View style={styles.centered}>
-        <Text style={styles.message}>Unable to load schedules</Text>
+        <Text style={styles.message}>{t("schedules.loadError")}</Text>
         <Button variant="ghost" onPress={onRetry} testID="schedules-retry">
-          Try again
+          {t("schedules.tryAgain")}
         </Button>
       </View>
     );
@@ -279,7 +289,7 @@ function SchedulesScreenBody({
             size="sm"
             value={statusFilter}
             onValueChange={onStatusFilterChange}
-            options={STATUS_FILTER_OPTIONS}
+            options={filterOptions}
             testID="schedules-status-filter"
           />
         </View>
@@ -290,7 +300,7 @@ function SchedulesScreenBody({
           size="sm"
           testID="schedules-new"
         >
-          New schedule
+          {t("schedules.new")}
         </Button>
       </View>
       <ScrollView
@@ -314,38 +324,41 @@ function SchedulesEmptyState({
   onCreate: () => void;
   testID?: string;
 }): ReactElement {
+  const { t } = useTranslation();
   return (
     <View style={styles.emptyState} testID={testID}>
       <CalendarClock size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
       <View style={styles.emptyTextStack}>
-        <Text style={styles.emptyTitle}>No active schedules</Text>
-        <Text style={styles.emptyDescription}>Schedules run agents on a cadence.</Text>
+        <Text style={styles.emptyTitle}>{t("schedules.emptyTitle")}</Text>
+        <Text style={styles.emptyDescription}>{t("schedules.emptyDescription")}</Text>
       </View>
       <Button variant="outline" leftIcon={Plus} onPress={onCreate} testID="schedules-empty-new">
-        New schedule
+        {t("schedules.new")}
       </Button>
     </View>
   );
 }
 
 function SchedulesEndedEmptyState(): ReactElement {
+  const { t } = useTranslation();
   return (
     <View style={styles.filterEmpty}>
       <View style={styles.endedEmptyState}>
         <CalendarClock size={styles.emptyIcon.width} color={styles.emptyIcon.color} />
-        <Text style={styles.emptyTitle}>No ended schedules</Text>
+        <Text style={styles.emptyTitle}>{t("schedules.endedEmpty")}</Text>
       </View>
     </View>
   );
 }
 
 function ScheduleHostErrorsBanner({ errors }: { errors: ScheduleHostError[] }): ReactElement {
+  const { t } = useTranslation();
   return (
     <View style={styles.errorsBannerWrap}>
       <View style={styles.errorsBanner} testID="schedules-host-errors">
         {errors.map((error) => (
           <Text key={error.serverId} style={styles.errorsBannerText}>
-            {`${error.serverName}: Could not load schedules`}
+            {t("schedules.hostLoadFailed", { host: error.serverName })}
           </Text>
         ))}
       </View>

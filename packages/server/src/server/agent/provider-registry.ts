@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@omp-desktop/protocol/agent-types";
 import { z } from "zod";
+import { applyOmpProxyEnabled } from "@omp-desktop/protocol/provider-config";
 
 import type {
   AgentClient,
@@ -657,10 +658,14 @@ function buildResolvedBuiltinProviders(
   for (const definition of definitions) {
     const override = providerOverrides[definition.id];
     const factory = getProviderClientFactory(definition.id);
-    const mergedRuntimeSettings = mergeRuntimeSettings(
+    const configuredRuntimeSettings = mergeRuntimeSettings(
       runtimeSettings?.[definition.id],
       toRuntimeSettings(override),
     );
+    const mergedRuntimeSettings =
+      definition.id === "omp"
+        ? applyOmpProxyEnabled(configuredRuntimeSettings, override)
+        : configuredRuntimeSettings;
 
     resolvedProviders.set(definition.id, {
       definition: applyOverrideToDefinition(definition, override),

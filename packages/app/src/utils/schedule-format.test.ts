@@ -1,14 +1,19 @@
 import type { ScheduleSummary } from "@omp-desktop/protocol/schedule/types";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { createInstance, type TFunction } from "i18next";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { en } from "@/i18n/resources/en";
 import {
+  AGENT_UNAVAILABLE_LABEL,
+  UNTITLED_AGENT_LABEL,
   describeCron,
   everyMsToParts,
   formatCadence,
   formatNextRun,
   isNewAgentSchedule,
-  scheduleProductName,
+  localizeScheduleTargetLabel,
   partsToEveryMs,
   resolveScheduleTitle,
+  scheduleProductName,
   validateCron,
 } from "./schedule-format";
 
@@ -45,6 +50,23 @@ function createSchedule(input: {
   };
 }
 
+async function translator(): Promise<TFunction> {
+  const instance = createInstance();
+  await instance.init({
+    lng: "en",
+    fallbackLng: "en",
+    resources: { en: { translation: en } },
+    interpolation: { escapeValue: false },
+  });
+  return instance.t;
+}
+
+let t: TFunction;
+
+beforeAll(async () => {
+  t = await translator();
+});
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -62,17 +84,23 @@ describe("schedule title helpers", () => {
 
   it("resolves display titles by name, config title, prompt, then fallback", () => {
     expect(
-      resolveScheduleTitle(createSchedule({ name: "Morning run", title: "Config title" })),
+      resolveScheduleTitle(createSchedule({ name: "Morning run", title: "Config title" }), t),
     ).toBe("Morning run");
-    expect(resolveScheduleTitle(createSchedule({ name: " ", title: "Config title" }))).toBe(
+    expect(resolveScheduleTitle(createSchedule({ name: " ", title: "Config title" }), t)).toBe(
       "Config title",
     );
     expect(
-      resolveScheduleTitle(createSchedule({ name: " ", title: " ", prompt: "\nPrompt line" })),
+      resolveScheduleTitle(createSchedule({ name: " ", title: " ", prompt: "\nPrompt line" }), t),
     ).toBe("Prompt line");
-    expect(resolveScheduleTitle(createSchedule({ name: " ", title: " ", prompt: "\n  " }))).toBe(
+    expect(resolveScheduleTitle(createSchedule({ name: " ", title: " ", prompt: "\n  " }), t)).toBe(
       "Untitled schedule",
     );
+  });
+
+  it("localizes agent target sentinels at display time", () => {
+    expect(localizeScheduleTargetLabel(UNTITLED_AGENT_LABEL, t)).toBe("Untitled agent");
+    expect(localizeScheduleTargetLabel(AGENT_UNAVAILABLE_LABEL, t)).toBe("Agent unavailable");
+    expect(localizeScheduleTargetLabel("Nightly agent", t)).toBe("Nightly agent");
   });
 });
 
@@ -85,79 +113,89 @@ describe("interval formatting", () => {
 
     expect(partsToEveryMs(2, "hours")).toBe(2 * 60 * 60_000);
     expect(partsToEveryMs(0, "minutes")).toBe(60_000);
-    expect(formatCadence({ type: "every", everyMs: 2 * 60 * 60_000 })).toBe("Every 2 hours");
+    expect(formatCadence({ type: "every", everyMs: 2 * 60 * 60_000 }, t)).toBe("Every 2 hours");
   });
 });
 
 describe("describeCron", () => {
   it("humanizes common fixed-time cron shapes", () => {
-    expect(describeCron({ type: "cron", expression: "* * * * *" })).toBe("Every minute");
-    expect(describeCron({ type: "cron", expression: "0 * * * *" })).toBe("Every hour");
-    expect(describeCron({ type: "cron", expression: "15 * * * *" })).toBe("Every hour at :15");
-    expect(describeCron({ type: "cron", expression: "0 9 * * *" })).toBe("Daily at 09:00 UTC");
-    expect(describeCron({ type: "cron", expression: "0 9 * * 1-5" })).toBe("Weekdays at 09:00 UTC");
-    expect(describeCron({ type: "cron", expression: "0 9 * * 0,6" })).toBe("Weekends at 09:00 UTC");
-    expect(describeCron({ type: "cron", expression: "0 9 * * 1" })).toBe("Mondays at 09:00 UTC");
+    expect(describeCron({ type: "cron", expression: "* * * * *" }, t)).toBe("Every minute");
+    expect(describeCron({ type: "cron", expression: "0 * * * *" }, t)).toBe("Every hour");
+    expect(describeCron({ type: "cron", expression: "15 * * * *" }, t)).toBe("Every hour at :15");
+    expect(describeCron({ type: "cron", expression: "0 9 * * *" }, t)).toBe("Daily at 09:00 UTC");
+    expect(describeCron({ type: "cron", expression: "0 9 * * 1-5" }, t)).toBe(
+      "Weekdays at 09:00 UTC",
+    );
+    expect(describeCron({ type: "cron", expression: "0 9 * * 0,6" }, t)).toBe(
+      "Weekends at 09:00 UTC",
+    );
+    expect(describeCron({ type: "cron", expression: "0 9 * * 1" }, t)).toBe("Mondays at 09:00 UTC");
   });
 
   it("labels fixed-time cron cadences with their stored timezone", () => {
     expect(
-      describeCron({
-        type: "cron",
-        expression: "0 9 * * *",
-        timezone: "America/New_York",
-      }),
+      describeCron(
+        {
+          type: "cron",
+          expression: "0 9 * * *",
+          timezone: "America/New_York",
+        },
+        t,
+      ),
     ).toBe("Daily at 09:00 America/New_York");
     expect(
-      formatCadence({
-        type: "cron",
-        expression: "0 9 * * 1-5",
-        timezone: "Europe/Madrid",
-      }),
+      formatCadence(
+        {
+          type: "cron",
+          expression: "0 9 * * 1-5",
+          timezone: "Europe/Madrid",
+        },
+        t,
+      ),
     ).toBe("Weekdays at 09:00 Europe/Madrid");
   });
 
   it("keeps timezone-less fixed-time cron cadences labeled as UTC", () => {
-    expect(formatCadence({ type: "cron", expression: "0 9 * * *" })).toBe("Daily at 09:00 UTC");
+    expect(formatCadence({ type: "cron", expression: "0 9 * * *" }, t)).toBe("Daily at 09:00 UTC");
   });
 
   it("returns null for invalid or unrecognized valid cron expressions", () => {
-    expect(describeCron({ type: "cron", expression: "not a cron" })).toBeNull();
-    expect(describeCron({ type: "cron", expression: "*/5 * * * *" })).toBeNull();
-    expect(formatCadence({ type: "cron", expression: "0 9 * * *" })).toBe("Daily at 09:00 UTC");
+    expect(describeCron({ type: "cron", expression: "not a cron" }, t)).toBeNull();
+    expect(describeCron({ type: "cron", expression: "*/5 * * * *" }, t)).toBeNull();
+    expect(formatCadence({ type: "cron", expression: "0 9 * * *" }, t)).toBe("Daily at 09:00 UTC");
   });
 });
 
 describe("validateCron", () => {
   it("accepts structurally valid cron expressions", () => {
-    expect(validateCron("*/5 9-17 * 1,6 1-5")).toBeNull();
+    expect(validateCron("*/5 9-17 * 1,6 1-5", t)).toBeNull();
   });
 
   it("rejects step fields with extra slash tokens", () => {
-    expect(validateCron("*/5/2 * * * *")).toBe("Invalid minute step");
+    expect(validateCron("*/5/2 * * * *", t)).toBe("Invalid minute step");
   });
 
   it("rejects malformed fields with targeted messages", () => {
-    expect(validateCron("")).toBe("Enter a cron expression");
-    expect(validateCron("* * *")).toBe("Cron expressions must have 5 fields");
-    expect(validateCron("60 * * * *")).toBe("Invalid minute value");
-    expect(validateCron("* 24 * * *")).toBe("Invalid hour value");
-    expect(validateCron("* * 31-1 * *")).toBe("Invalid day-of-month range");
-    expect(validateCron("* * * */0 *")).toBe("Invalid month step");
-    expect(validateCron("* * * * mon")).toBe("Invalid day-of-week value");
+    expect(validateCron("", t)).toBe("Enter a cron expression");
+    expect(validateCron("* * *", t)).toBe("Cron expressions must have 5 fields");
+    expect(validateCron("60 * * * *", t)).toBe("Invalid minute value");
+    expect(validateCron("* 24 * * *", t)).toBe("Invalid hour value");
+    expect(validateCron("* * 31-1 * *", t)).toBe("Invalid day-of-month range");
+    expect(validateCron("* * * */0 *", t)).toBe("Invalid month step");
+    expect(validateCron("* * * * mon", t)).toBe("Invalid day-of-week value");
   });
 });
 
 describe("formatNextRun", () => {
-  it("formats next-run distance from the current clock", () => {
+  it("describes the next run relative to now", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
-    expect(formatNextRun(null)).toBe("");
-    expect(formatNextRun("not-a-date")).toBe("");
-    expect(formatNextRun("2026-01-01T00:00:15.000Z")).toBe("soon");
-    expect(formatNextRun("2026-01-01T00:30:00.000Z")).toBe("in 30m");
-    expect(formatNextRun("2026-01-01T03:00:00.000Z")).toBe("in 3h");
-    expect(formatNextRun("2026-01-03T00:00:00.000Z")).toBe("in 2d");
+    expect(formatNextRun(null, t)).toBe("");
+    expect(formatNextRun("not-a-date", t)).toBe("");
+    expect(formatNextRun("2026-01-01T00:00:15.000Z", t)).toBe("soon");
+    expect(formatNextRun("2026-01-01T00:30:00.000Z", t)).toBe("in 30m");
+    expect(formatNextRun("2026-01-01T03:00:00.000Z", t)).toBe("in 3h");
+    expect(formatNextRun("2026-01-03T00:00:00.000Z", t)).toBe("in 2d");
   });
 });
