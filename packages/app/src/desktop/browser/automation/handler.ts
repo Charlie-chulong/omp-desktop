@@ -12,6 +12,10 @@ import {
   useBrowserStore,
 } from "@/desktop/browser/store";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import {
+  getLastWorkspaceSelection,
+  type ActiveWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 
 type BrowserAutomationExecuteRequest = Extract<
@@ -39,6 +43,7 @@ export interface BrowserAutomationHandlerOptions {
   serverId?: string;
   getHost?: () => DesktopHostBridge | null;
   ensureResidentBrowserWebview?: typeof ensureResidentBrowserWebviewDefault;
+  getVisibleWorkspaceSelection?: () => ActiveWorkspaceSelection | null;
   registrationWaitTimeoutMs?: number;
   registrationPollIntervalMs?: number;
 }
@@ -55,6 +60,8 @@ export function mountBrowserAutomationHandler(
       serverId: options.serverId,
       ensureResidentBrowserWebview:
         options.ensureResidentBrowserWebview ?? ensureResidentBrowserWebviewDefault,
+      getVisibleWorkspaceSelection:
+        options.getVisibleWorkspaceSelection ?? getLastWorkspaceSelection,
       ...(options.registrationWaitTimeoutMs !== undefined
         ? { registrationWaitTimeoutMs: options.registrationWaitTimeoutMs }
         : {}),
@@ -84,6 +91,7 @@ async function handleBrowserAutomationRequest(params: {
   request: BrowserAutomationExecuteRequest;
   serverId?: string;
   ensureResidentBrowserWebview: typeof ensureResidentBrowserWebviewDefault;
+  getVisibleWorkspaceSelection: () => ActiveWorkspaceSelection | null;
   registrationWaitTimeoutMs?: number;
   registrationPollIntervalMs?: number;
 }): Promise<void> {
@@ -95,6 +103,7 @@ async function handleBrowserAutomationRequest(params: {
     ensureResidentBrowserWebview,
     registrationWaitTimeoutMs,
     registrationPollIntervalMs,
+    getVisibleWorkspaceSelection,
   } = params;
   const browserHost = getHost()?.browser;
   const executeAutomationCommand = browserHost?.executeAutomationCommand;
@@ -108,6 +117,7 @@ async function handleBrowserAutomationRequest(params: {
           serverId,
           browserHost,
           ensureResidentBrowserWebview,
+          getVisibleWorkspaceSelection,
           ...(registrationWaitTimeoutMs !== undefined ? { registrationWaitTimeoutMs } : {}),
           ...(registrationPollIntervalMs !== undefined ? { registrationPollIntervalMs } : {}),
         }),
@@ -184,7 +194,8 @@ function resizeBrowserTabForRequest(params: {
     { command: "resize" }
   >;
   const browserId = command.args.browserId;
-  if (!getBrowserRecord(browserId)) {
+  const browser = getBrowserRecord(browserId);
+  if (!browser) {
     return browserAutomationFailure({
       requestId: request.requestId,
       code: "browser_tab_not_found",
@@ -193,7 +204,11 @@ function resizeBrowserTabForRequest(params: {
   }
 
   const workspaceId = request.workspaceId;
-  if (serverId && workspaceId && !findWorkspaceBrowserTab({ serverId, workspaceId, browserId })) {
+  if (
+    serverId &&
+    workspaceId &&
+    !isBrowserOwnedByWorkspace({ serverId, workspaceId, browserId, browser })
+  ) {
     return browserAutomationFailure({
       requestId: request.requestId,
       code: "browser_tab_not_found",
@@ -241,9 +256,11 @@ async function closeBrowserTabForRequest(params: {
   >;
   const browserId = command.args.browserId;
   const workspaceId = request.workspaceId;
-  const workspaceTab = serverId
-    ? findWorkspaceBrowserTab({ serverId, workspaceId, browserId })
-    : null;
+  const browser = getBrowserRecord(browserId);
+  const workspaceTab =
+    serverId && workspaceId && browser
+      ? findBrowserTabForOwner({ serverId, workspaceId, browserId, browser })
+      : null;
   if (!workspaceTab && (!serverId || !workspaceId)) {
     return browserAutomationFailure({
       requestId: request.requestId,
@@ -251,7 +268,7 @@ async function closeBrowserTabForRequest(params: {
       message: "Cannot close a browser tab without a workspace context.",
     });
   }
-  if (!workspaceTab || !getBrowserRecord(browserId)) {
+  if (!workspaceTab || !browser) {
     return browserAutomationFailure({
       requestId: request.requestId,
       code: "browser_tab_not_found",
@@ -297,11 +314,84 @@ function findWorkspaceBrowserTab(input: {
   return tab ? { workspaceKey, tabId: tab.tabId } : null;
 }
 
+function findBrowserTabAcrossLayouts(
+  browserId: string,
+  serverId: string,
+): { workspaceKey: string; tabId: string } | null {
+  for (const [workspaceKey, layout] of Object.entries(
+    useWorkspaceLayoutStore.getState().layoutByWorkspace,
+  )) {
+    if (!workspaceKey.startsWith(`${serverId}:`)) {
+      continue;
+    }
+    const tab = collectAllTabs(layout.root).find(
+      (candidate) =>
+        candidate.target.kind === "browser" && candidate.target.browserId === browserId,
+    );
+    if (tab) return { workspaceKey, tabId: tab.tabId };
+  }
+  return null;
+}
+
+function isBrowserOwnedByWorkspace(input: {
+  serverId: string;
+  workspaceId: string;
+  browserId: string;
+  browser: NonNullable<ReturnType<typeof getBrowserRecord>>;
+}): boolean {
+  return input.browser.automationWorkspaceId
+    ? input.browser.automationWorkspaceId === input.workspaceId &&
+        (!input.browser.automationServerId || input.browser.automationServerId === input.serverId)
+    : Boolean(findWorkspaceBrowserTab(input));
+}
+
+function findBrowserTabForOwner(input: {
+  serverId: string;
+  workspaceId: string;
+  browserId: string;
+  browser: NonNullable<ReturnType<typeof getBrowserRecord>>;
+}): { workspaceKey: string; tabId: string } | null {
+  return isBrowserOwnedByWorkspace(input)
+    ? findBrowserTabAcrossLayouts(input.browserId, input.serverId)
+    : null;
+}
+
+function resolveBrowserTabHostWorkspace(input: {
+  serverId: string;
+  ownerWorkspaceId: string;
+  agentId?: string;
+  visibleWorkspace: ActiveWorkspaceSelection | null;
+}): { workspaceId: string; presented: boolean } {
+  const visible = input.visibleWorkspace;
+  if (!visible || visible.serverId !== input.serverId) {
+    return { workspaceId: input.ownerWorkspaceId, presented: false };
+  }
+  if (visible.workspaceId === input.ownerWorkspaceId) {
+    return { workspaceId: input.ownerWorkspaceId, presented: true };
+  }
+  if (!input.agentId) {
+    return { workspaceId: input.ownerWorkspaceId, presented: false };
+  }
+  const visibleWorkspaceKey = buildWorkspaceTabPersistenceKey(visible);
+  const visibleLayout = visibleWorkspaceKey
+    ? useWorkspaceLayoutStore.getState().layoutByWorkspace[visibleWorkspaceKey]
+    : null;
+  const hostsAgent = visibleLayout
+    ? collectAllTabs(visibleLayout.root).some(
+        (tab) => tab.target.kind === "agent" && tab.target.agentId === input.agentId,
+      )
+    : false;
+  return hostsAgent
+    ? { workspaceId: visible.workspaceId, presented: true }
+    : { workspaceId: input.ownerWorkspaceId, presented: false };
+}
+
 async function openBrowserTabForRequest(params: {
   request: BrowserAutomationExecuteRequest;
   serverId?: string;
   browserHost: DesktopHostBridge["browser"] | undefined;
   ensureResidentBrowserWebview: typeof ensureResidentBrowserWebviewDefault;
+  getVisibleWorkspaceSelection: () => ActiveWorkspaceSelection | null;
   registrationWaitTimeoutMs?: number;
   registrationPollIntervalMs?: number;
 }): Promise<BrowserAutomationResponsePayload> {
@@ -310,6 +400,7 @@ async function openBrowserTabForRequest(params: {
     serverId,
     browserHost,
     ensureResidentBrowserWebview,
+    getVisibleWorkspaceSelection,
     registrationWaitTimeoutMs,
     registrationPollIntervalMs,
   } = params;
@@ -327,8 +418,21 @@ async function openBrowserTabForRequest(params: {
   }
 
   const url = command.args.url ?? "https://example.com";
-  const { browserId, url: normalizedUrl } = createWorkspaceBrowser({ initialUrl: url });
-  const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+  const tabHost = resolveBrowserTabHostWorkspace({
+    serverId,
+    ownerWorkspaceId: workspaceId,
+    agentId: request.agentId,
+    visibleWorkspace: getVisibleWorkspaceSelection(),
+  });
+  const { browserId, url: normalizedUrl } = createWorkspaceBrowser({
+    initialUrl: url,
+    automationServerId: serverId,
+    automationWorkspaceId: workspaceId,
+  });
+  const workspaceKey = buildWorkspaceTabPersistenceKey({
+    serverId,
+    workspaceId: tabHost.workspaceId,
+  });
   if (!workspaceKey) {
     return browserAutomationFailure({
       requestId: request.requestId,
@@ -367,7 +471,15 @@ async function openBrowserTabForRequest(params: {
   return {
     requestId: request.requestId,
     ok: true,
-    result: { command: "new_tab", browserId, workspaceId, url: normalizedUrl },
+    result: {
+      command: "new_tab",
+      browserId,
+      workspaceId,
+      hostWorkspaceId: tabHost.workspaceId,
+      presented: tabHost.presented,
+      activated: false,
+      url: normalizedUrl,
+    },
   };
 }
 

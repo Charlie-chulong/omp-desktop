@@ -263,16 +263,28 @@ function useSyncWorkspaceActiveBrowser(input: {
     () => getFocusedBrowserId(input.workspaceLayout),
     [input.workspaceLayout],
   );
-
+  const automationWorkspaceId = useBrowserStore((state) =>
+    focusedBrowserId
+      ? (state.browsersById[focusedBrowserId]?.automationWorkspaceId ?? input.workspaceId)
+      : null,
+  );
   useEffect(() => {
-    if (!getIsElectron()) {
+    if (!getIsElectron() || !input.isRouteFocused) {
       return;
     }
-    void getDesktopHost()?.browser?.setWorkspaceActiveBrowser?.({
-      workspaceId: input.workspaceId,
+    const setActiveBrowser = getDesktopHost()?.browser?.setWorkspaceActiveBrowser;
+    if (!focusedBrowserId || !automationWorkspaceId) {
+      void setActiveBrowser?.({ workspaceId: input.workspaceId, browserId: null });
+      return;
+    }
+    void setActiveBrowser?.({
+      workspaceId: automationWorkspaceId,
       browserId: focusedBrowserId,
     });
-  }, [focusedBrowserId, input.workspaceId]);
+    return () => {
+      void setActiveBrowser?.({ workspaceId: automationWorkspaceId, browserId: null });
+    };
+  }, [automationWorkspaceId, focusedBrowserId, input.isRouteFocused, input.workspaceId]);
 }
 
 function getFallbackTabOptionLabel(

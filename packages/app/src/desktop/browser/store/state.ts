@@ -8,6 +8,8 @@ export const RESPONSIVE_BROWSER_VIEWPORT: BrowserViewport = { mode: "responsive"
 
 export interface BrowserRecord {
   browserId: string;
+  automationServerId: string | null;
+  automationWorkspaceId: string | null;
   url: string;
   title: string;
   isLoading: boolean;
@@ -36,6 +38,8 @@ const BrowserViewportSchema = z.discriminatedUnion("mode", [
 
 const BrowserRecordSchema = z.strictObject({
   browserId: z.string(),
+  automationServerId: z.string().nullable().optional().default(null),
+  automationWorkspaceId: z.string().nullable().optional().default(null),
   url: z.string(),
   title: z.string(),
   isLoading: z.boolean(),
@@ -107,10 +111,14 @@ export function normalizeBrowserUrl(value: string | null | undefined): string {
 export function createBrowserRecord(input: {
   browserId: string;
   initialUrl: string | null | undefined;
+  automationServerId?: string | null;
+  automationWorkspaceId?: string | null;
   now: number;
 }): BrowserRecord {
   return {
     browserId: input.browserId,
+    automationServerId: trimNonEmpty(input.automationServerId),
+    automationWorkspaceId: trimNonEmpty(input.automationWorkspaceId),
     url: normalizeBrowserUrl(input.initialUrl),
     title: "",
     isLoading: false,
@@ -155,6 +163,8 @@ export function applyBrowserPatch<S extends BrowserIndexState>(
     nextRecord.canGoForward === existing.canGoForward &&
     nextRecord.faviconUrl === existing.faviconUrl &&
     nextRecord.lastError === existing.lastError &&
+    nextRecord.automationServerId === existing.automationServerId &&
+    nextRecord.automationWorkspaceId === existing.automationWorkspaceId &&
     browserViewportsEqual(nextRecord.viewport, existing.viewport)
   ) {
     return state;
