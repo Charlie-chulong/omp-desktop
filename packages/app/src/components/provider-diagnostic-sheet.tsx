@@ -1220,6 +1220,10 @@ function OmpProviderModelEditor({
     (name: string) => onChange(model.key, { name }),
     [model.key, onChange],
   );
+  const updateApi = useCallback(
+    (api: OmpProviderApi) => onChange(model.key, { api }),
+    [model.key, onChange],
+  );
   const updateContextWindow = useCallback(
     (contextWindow: string) => onChange(model.key, { contextWindow }),
     [model.key, onChange],
@@ -1269,6 +1273,8 @@ function OmpProviderModelEditor({
         placeholder="GPT-5.4"
         style={sheetStyles.formInput}
       />
+      <Text style={sheetStyles.formLabel}>{t("settings.providers.omp.custom.apiFormat")}</Text>
+      <OmpApiFormatSelect value={model.api} onChange={updateApi} />
       <View style={sheetStyles.formColumns}>
         <View style={sheetStyles.formColumn}>
           <Text style={sheetStyles.formLabel}>
@@ -1358,10 +1364,6 @@ function OmpProviderForm({
     (apiKey: string) => setDraft((current) => ({ ...current, apiKey })),
     [],
   );
-  const updateApi = useCallback(
-    (api: OmpProviderApi) => setDraft((current) => ({ ...current, api })),
-    [],
-  );
   const updateModel = useCallback((key: string, patch: Partial<OmpProviderModelDraft>) => {
     setDraft((current) => ({
       ...current,
@@ -1385,6 +1387,7 @@ function OmpProviderForm({
           key,
           id: "",
           name: "",
+          api: "openai-responses",
           contextWindow: "",
           maxTokens: "",
           supportsImages: false,
@@ -1446,9 +1449,10 @@ function OmpProviderForm({
         providerId: draft.providerId.trim().toLowerCase(),
         baseUrl: draft.baseUrl.trim(),
         apiKey: draft.apiKey.trim(),
-        api: draft.api,
+        api: draft.models[0]?.api ?? "openai-responses",
         models: draft.models.map((model) => ({
           id: model.id.trim(),
+          api: model.api,
           ...(model.name.trim() ? { name: model.name.trim() } : {}),
           ...(model.contextWindow.trim()
             ? {
@@ -1540,8 +1544,6 @@ function OmpProviderForm({
         secureTextEntry
         style={sheetStyles.formInput}
       />
-      <Text style={sheetStyles.formLabel}>{t("settings.providers.omp.custom.apiFormat")}</Text>
-      <OmpApiFormatSelect value={draft.api} onChange={updateApi} />
       <Button
         variant="secondary"
         size="sm"
