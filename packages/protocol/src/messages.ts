@@ -1944,6 +1944,7 @@ export const OmpProviderApiSchema = z.enum([
 export const OmpCustomProviderModelInputSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1).optional(),
+  api: OmpProviderApiSchema.optional(),
   contextWindow: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
   supportsImages: z.boolean().optional(),
@@ -6717,6 +6718,10 @@ export const OmpProviderModelDiscoveryResponseMessageSchema = z.object({
       z.object({
         id: z.string(),
         name: z.string(),
+        supportedApis: z.array(OmpProviderApiSchema).optional(),
+        inputModalities: z.array(z.string()).optional(),
+        contextWindow: z.number().int().positive().optional(),
+        maxOutputTokens: z.number().int().positive().optional(),
       }),
     ),
   }),

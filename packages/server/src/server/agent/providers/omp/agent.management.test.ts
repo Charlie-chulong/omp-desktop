@@ -650,11 +650,12 @@ providers:
         {
           id: "gpt-test",
           name: "GPT Test",
+          api: "openai-responses",
           contextWindow: 128_000,
           maxTokens: 16_384,
           supportsImages: true,
         },
-        { id: "gpt-test-mini", name: "GPT Test Mini" },
+        { id: "gpt-test-mini", name: "GPT Test Mini", api: "anthropic-messages" },
       ],
     });
 
@@ -678,7 +679,7 @@ providers:
             {
               id: "gpt-test-mini",
               name: "GPT Test Mini",
-              api: "openai-responses",
+              api: "anthropic-messages",
               input: ["text"],
             },
           ],

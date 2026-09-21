@@ -4,6 +4,7 @@ import {
   configureDiscoveredProviderModels,
   parseCustomProviderDraft,
   updateCustomProviderConfigYaml,
+  resolveDiscoveredModelApi,
 } from "./omp-custom-provider-config";
 
 const configYaml = `# Keep this comment
@@ -33,12 +34,12 @@ describe("OMP custom provider editing", () => {
       providerId: "mintcat",
       baseUrl: "https://old.example.com/v1",
       apiKey: "old-key",
-      api: "openai-responses",
       models: [
         {
           key: "model-0",
           id: "gpt-old",
           name: "GPT Old",
+          api: "openai-responses",
           contextWindow: "128000",
           maxTokens: "8192",
           supportsImages: true,
@@ -53,7 +54,14 @@ describe("OMP custom provider editing", () => {
       baseUrl: "https://new.example.com/v1",
       apiKey: "new-key",
       api: "anthropic-messages",
-      models: [{ id: "claude-new", name: "Claude New", contextWindow: 200000 }],
+      models: [
+        {
+          id: "claude-new",
+          name: "Claude New",
+          api: "anthropic-messages",
+          contextWindow: 200000,
+        },
+      ],
     });
     const parsed = parse(updated) as {
       providers: Record<string, { baseUrl: string; apiKey: string; models: Array<{ id: string }> }>;
@@ -77,7 +85,10 @@ describe("OMP custom provider editing", () => {
       baseUrl: "https://new.example.com/v1",
       apiKey: "new-key",
       api: "openai-responses",
-      models: [{ id: "gpt-multimodal", supportsImages: true }, { id: "gpt-text-only" }],
+      models: [
+        { id: "gpt-multimodal", api: "openai-responses", supportsImages: true },
+        { id: "gpt-text-only", api: "anthropic-messages" },
+      ],
     });
     const parsed = parse(updated) as {
       providers: Record<string, { models: Array<{ id: string; input: string[] }> }>;
@@ -93,7 +104,7 @@ describe("OMP custom provider editing", () => {
       {
         id: "gpt-text-only",
         name: "gpt-text-only",
-        api: "openai-responses",
+        api: "anthropic-messages",
         input: ["text"],
       },
     ]);
@@ -107,6 +118,7 @@ describe("OMP custom provider editing", () => {
           key: "model-0",
           id: "gpt-existing",
           name: "",
+          api: "openai-responses",
           contextWindow: "128000",
           maxTokens: "8192",
           supportsImages: true,
@@ -115,6 +127,7 @@ describe("OMP custom provider editing", () => {
           key: "model-1",
           id: "gpt-text-only",
           name: "Text Only",
+          api: "anthropic-messages",
           contextWindow: "",
           maxTokens: "",
           supportsImages: false,
@@ -133,6 +146,7 @@ describe("OMP custom provider editing", () => {
         key: "model-0",
         id: "gpt-existing",
         name: "GPT Existing",
+        api: "openai-responses",
         contextWindow: "128000",
         maxTokens: "8192",
         supportsImages: true,
@@ -141,6 +155,7 @@ describe("OMP custom provider editing", () => {
         key: "model-1",
         id: "gpt-text-only",
         name: "Text Only",
+        api: "anthropic-messages",
         contextWindow: "",
         maxTokens: "",
         supportsImages: false,
@@ -149,10 +164,92 @@ describe("OMP custom provider editing", () => {
         key: "model-2",
         id: "gpt-new",
         name: "GPT New",
+        api: "openai-responses",
         contextWindow: "",
         maxTokens: "",
         supportsImages: true,
       },
+    ]);
+  });
+
+  it("applies discovered capabilities and resolves an API per model", () => {
+    const configured = configureDiscoveredProviderModels(
+      [],
+      [
+        {
+          id: "vision-model",
+          name: "Vision Model",
+          supportedApis: ["anthropic-messages", "openai-responses"],
+          inputModalities: ["text", "image"],
+          contextWindow: 200_000,
+          maxOutputTokens: 32_000,
+        },
+        {
+          id: "text-model",
+          name: "Text Model",
+          supportedApis: ["anthropic-messages"],
+          inputModalities: ["text"],
+          contextWindow: 64_000,
+          maxOutputTokens: 8_192,
+        },
+      ],
+      () => "model-new",
+    );
+
+    expect(configured).toEqual([
+      {
+        key: "model-new",
+        id: "vision-model",
+        name: "Vision Model",
+        api: "openai-responses",
+        contextWindow: "200000",
+        maxTokens: "32000",
+        supportsImages: true,
+      },
+      {
+        key: "model-new",
+        id: "text-model",
+        name: "Text Model",
+        api: "anthropic-messages",
+        contextWindow: "64000",
+        maxTokens: "8192",
+        supportsImages: false,
+      },
+    ]);
+    expect(
+      resolveDiscoveredModelApi("generic-model", "openai-completions", [
+        "anthropic-messages",
+        "openai-responses",
+      ]),
+    ).toBe("openai-responses");
+  });
+
+  it("prefers native API formats for recognized model families", () => {
+    const configured = configureDiscoveredProviderModels(
+      [],
+      [
+        { id: "claude-fable-5", name: "Claude Fable 5" },
+        {
+          id: "anthropic/claude-sonnet-5",
+          name: "Claude Sonnet 5",
+          supportedApis: ["openai-responses", "openai-completions", "anthropic-messages"],
+        },
+        {
+          id: "gemini-3-pro",
+          name: "Gemini 3 Pro",
+          supportedApis: ["openai-responses", "google-generative-ai"],
+        },
+      ],
+      (() => {
+        let key = 0;
+        return () => `model-${key++}`;
+      })(),
+    );
+
+    expect(configured.map((model) => model.api)).toEqual([
+      "anthropic-messages",
+      "anthropic-messages",
+      "google-generative-ai",
     ]);
   });
 });

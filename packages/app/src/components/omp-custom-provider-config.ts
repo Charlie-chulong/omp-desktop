@@ -17,6 +17,7 @@ export interface OmpProviderModelDraft {
   key: string;
   id: string;
   name: string;
+  api: OmpProviderApi;
   contextWindow: string;
   maxTokens: string;
   supportsImages: boolean;
@@ -26,7 +27,6 @@ export interface OmpProviderDraft {
   providerId: string;
   baseUrl: string;
   apiKey: string;
-  api: OmpProviderApi;
   models: OmpProviderModelDraft[];
 }
 
@@ -35,12 +35,12 @@ export function createEmptyProviderDraft(modelKey: string): OmpProviderDraft {
     providerId: "",
     baseUrl: "",
     apiKey: "",
-    api: "openai-responses",
     models: [
       {
         key: modelKey,
         id: "",
         name: "",
+        api: "openai-responses",
         contextWindow: "",
         maxTokens: "",
         supportsImages: false,
@@ -50,7 +50,14 @@ export function createEmptyProviderDraft(modelKey: string): OmpProviderDraft {
 }
 export function configureDiscoveredProviderModels(
   current: OmpProviderModelDraft[],
-  discovered: ReadonlyArray<{ id: string; name: string }>,
+  discovered: ReadonlyArray<{
+    id: string;
+    name: string;
+    supportedApis?: readonly OmpProviderApi[];
+    inputModalities?: readonly string[];
+    contextWindow?: number;
+    maxOutputTokens?: number;
+  }>,
   createKey: () => string,
 ): OmpProviderModelDraft[] {
   const currentById = new Map(
@@ -58,17 +65,53 @@ export function configureDiscoveredProviderModels(
   );
   return discovered.map((model) => {
     const existing = currentById.get(model.id);
-    return existing
-      ? { ...existing, name: existing.name.trim() || model.name }
-      : {
-          key: createKey(),
-          id: model.id,
-          name: model.name,
-          contextWindow: "",
-          maxTokens: "",
-          supportsImages: true,
-        };
+    if (existing) {
+      return {
+        ...existing,
+        name: existing.name.trim() || model.name,
+        api:
+          !model.supportedApis?.length || model.supportedApis.includes(existing.api)
+            ? existing.api
+            : resolveDiscoveredModelApi(model.id, existing.api, model.supportedApis),
+        contextWindow:
+          existing.contextWindow.trim() ||
+          (model.contextWindow !== undefined ? String(model.contextWindow) : ""),
+        maxTokens:
+          existing.maxTokens.trim() ||
+          (model.maxOutputTokens !== undefined ? String(model.maxOutputTokens) : ""),
+      };
+    }
+    return {
+      key: createKey(),
+      id: model.id,
+      name: model.name,
+      api: resolveDiscoveredModelApi(model.id, "openai-responses", model.supportedApis),
+      contextWindow: model.contextWindow !== undefined ? String(model.contextWindow) : "",
+      maxTokens: model.maxOutputTokens !== undefined ? String(model.maxOutputTokens) : "",
+      supportsImages: model.inputModalities ? model.inputModalities.includes("image") : true,
+    };
   });
+}
+
+function preferredApiForModel(modelId: string): OmpProviderApi | null {
+  if (/\bclaude\b/i.test(modelId)) return "anthropic-messages";
+  if (/\bgemini\b/i.test(modelId)) return "google-generative-ai";
+  return null;
+}
+
+export function resolveDiscoveredModelApi(
+  modelId: string,
+  current: OmpProviderApi,
+  supportedApis?: readonly OmpProviderApi[],
+): OmpProviderApi {
+  const preferred = preferredApiForModel(modelId);
+  if (preferred && (!supportedApis?.length || supportedApis.includes(preferred))) {
+    return preferred;
+  }
+  if (!supportedApis?.length || supportedApis.includes(current)) {
+    return current;
+  }
+  return OMP_PROVIDER_APIS.find((api) => supportedApis.includes(api)) ?? current;
 }
 
 export function parseCustomProviderDraft(
@@ -86,6 +129,7 @@ export function parseCustomProviderDraft(
           models?: Array<{
             id?: unknown;
             name?: unknown;
+            api?: unknown;
             contextWindow?: unknown;
             maxTokens?: unknown;
             input?: unknown;
@@ -105,6 +149,9 @@ export function parseCustomProviderDraft(
               key: `model-${index}`,
               id: model.id,
               name: typeof model.name === "string" ? model.name : "",
+              api: OMP_PROVIDER_APIS.includes(model.api as OmpProviderApi)
+                ? (model.api as OmpProviderApi)
+                : api,
               contextWindow:
                 typeof model.contextWindow === "number" ? String(model.contextWindow) : "",
               maxTokens: typeof model.maxTokens === "number" ? String(model.maxTokens) : "",
@@ -117,7 +164,6 @@ export function parseCustomProviderDraft(
       providerId,
       baseUrl: typeof provider.baseUrl === "string" ? provider.baseUrl : "",
       apiKey: typeof provider.apiKey === "string" ? provider.apiKey : "",
-      api,
       models: models.length > 0 ? models : createEmptyProviderDraft("model-0").models,
     };
   } catch {
@@ -129,12 +175,12 @@ function providerInputToYamlValue(provider: OmpCustomProviderInput) {
   return {
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey,
-    api: provider.api,
+    api: provider.models[0]?.api ?? "openai-responses",
     auth: "apiKey",
     models: provider.models.map((model) => ({
       id: model.id,
       name: model.name ?? model.id,
-      api: provider.api,
+      api: model.api ?? provider.api,
       input: model.supportsImages ? ["text", "image"] : ["text"],
       ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
       ...(model.maxTokens ? { maxTokens: model.maxTokens } : {}),

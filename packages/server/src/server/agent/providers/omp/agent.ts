@@ -4581,7 +4581,7 @@ export class OmpAgentClient implements AgentClient {
       models: input.models.map((model) => ({
         id: model.id,
         name: model.name ?? model.id,
-        api: input.api,
+        api: model.api ?? input.api,
         input: model.supportsImages ? ["text", "image"] : ["text"],
         ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
         ...(model.maxTokens ? { maxTokens: model.maxTokens } : {}),
