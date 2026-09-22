@@ -43,6 +43,7 @@ describe("sidebar view store", () => {
       groupMode: "project",
       hostFilters: [],
       projectFilters: [],
+      hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
   });
@@ -95,6 +96,7 @@ describe("sidebar view store", () => {
       groupMode: "status",
       hostFilters: [],
       projectFilters: [],
+      hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
   });
@@ -109,6 +111,7 @@ describe("sidebar view store", () => {
       groupMode: "status",
       hostFilters: ["host-a"],
       projectFilters: [],
+      hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
   });
@@ -123,6 +126,7 @@ describe("sidebar view store", () => {
       groupMode: "status",
       hostFilters: ["host-a", "host-b"],
       projectFilters: [],
+      hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
   });
@@ -232,15 +236,39 @@ describe("sidebar view store", () => {
     ).toEqual({
       groupMode: "project",
       hostFilters: ["host-a"],
+      hiddenProjectViewKeys: [],
       projectFilters: ["project-a", "project-b"],
       labelFilter: { labels: [] },
     });
+  });
+
+  it("hides and restores projects without changing filter state", () => {
+    useSidebarViewStore.setState({
+      projectFilters: ["project-a"],
+      hiddenProjectViewKeys: [],
+    });
+    const store = useSidebarViewStore.getState();
+
+    store.hideProject("project-a");
+    store.hideProject("project-a");
+    store.hideProject("project-b");
+    expect(useSidebarViewStore.getState()).toMatchObject({
+      projectFilters: ["project-a"],
+      hiddenProjectViewKeys: ["project-a", "project-b"],
+    });
+
+    store.showProject("project-a");
+    expect(useSidebarViewStore.getState().hiddenProjectViewKeys).toEqual(["project-b"]);
+
+    store.showAllProjects();
+    expect(useSidebarViewStore.getState().hiddenProjectViewKeys).toEqual([]);
   });
 
   it("never keeps project filters from state the schema rejects", () => {
     expect(migrateSidebarViewState({ projectFilters: "project-a" })).toEqual({
       groupMode: "project",
       hostFilters: [],
+      hiddenProjectViewKeys: [],
       projectFilters: [],
       labelFilter: { labels: [] },
     });

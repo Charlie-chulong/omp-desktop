@@ -10,6 +10,9 @@ export interface OmpDiscoveredProviderModel {
   inputModalities?: string[];
   contextWindow?: number;
   maxOutputTokens?: number;
+  reasoning?: boolean;
+  defaultReasoningLevel?: string;
+  supportedReasoningLevels?: string[];
 }
 
 interface DiscoveryInput {
@@ -43,6 +46,16 @@ function buildModelUrls(baseUrl: string): URL[] {
 
 function parsePositiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function parseReasoningLevels(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const levels = [
+    ...new Set(
+      value.flatMap((level) => (typeof level === "string" && level.trim() ? [level.trim()] : [])),
+    ),
+  ];
+  return levels.length > 0 ? levels : undefined;
 }
 
 function parseModels(value: unknown): OmpDiscoveredProviderModel[] {
@@ -99,6 +112,13 @@ function parseModels(value: unknown): OmpDiscoveredProviderModel[] {
       : undefined;
     const contextWindow = parsePositiveInteger(candidate?.context_window);
     const maxOutputTokens = parsePositiveInteger(candidate?.max_output_tokens);
+    const reasoning = typeof candidate?.reasoning === "boolean" ? candidate.reasoning : undefined;
+    const defaultReasoningLevel =
+      typeof candidate?.default_reasoning_level === "string" &&
+      candidate.default_reasoning_level.trim()
+        ? candidate.default_reasoning_level.trim()
+        : undefined;
+    const supportedReasoningLevels = parseReasoningLevels(candidate?.supported_reasoning_levels);
     seen.add(id);
     models.push({
       id,
@@ -107,6 +127,9 @@ function parseModels(value: unknown): OmpDiscoveredProviderModel[] {
       ...(inputModalities?.length ? { inputModalities } : {}),
       ...(contextWindow ? { contextWindow } : {}),
       ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      ...(reasoning !== undefined ? { reasoning } : {}),
+      ...(defaultReasoningLevel ? { defaultReasoningLevel } : {}),
+      ...(supportedReasoningLevels ? { supportedReasoningLevels } : {}),
     });
   }
 

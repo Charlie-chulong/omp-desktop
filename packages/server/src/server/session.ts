@@ -49,6 +49,7 @@ import {
 } from "./persistence-hooks.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent/agent-loading.js";
 import {
+  isSystemInjectedEnvelope,
   sendPromptToAgent,
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
@@ -110,6 +111,8 @@ import {
   resolveStoredAgentPayloadUpdatedAt,
   toAgentPayload,
 } from "./agent/agent-projections.js";
+import { InMemoryAgentTimelineStore } from "./agent/agent-timeline-store.js";
+import { limitAgentTimelineItemContent } from "./agent/agent-timeline-content.js";
 import {
   appendTimelineItemIfAgentKnown,
   emitLiveTimelineItemIfAgentKnown,
@@ -142,6 +145,7 @@ import {
   normalizeImportAgentRequest,
 } from "./agent/import-sessions.js";
 import { inspectOmpSessionHistoryAvailability } from "./agent/providers/omp/session-descriptor.js";
+import { streamOmpHistory } from "./agent/providers/omp/history.js";
 import {
   checkoutLiteFromGitSnapshot,
   checkoutFromPersistedWorkspacePlacement,
@@ -608,6 +612,13 @@ interface UnavailableAgentHistory {
   agent: AgentSnapshotPayload;
   reason: "missing" | "malformed";
   message: string;
+}
+
+interface AgentTimelineLoad {
+  agent: AgentSnapshotPayload;
+  provider: string;
+  controlTimeline: AgentTimelineFetchResult;
+  fullTimeline?: AgentTimelineFetchResult;
 }
 
 type RegistryTransition = "created" | "unarchived" | "existing";
@@ -4663,6 +4674,98 @@ export class Session {
     };
   }
 
+  private async readPersistedOmpHistory(
+    agentId: string,
+    options: {
+      direction: AgentTimelineFetchDirection;
+      cursor?: AgentTimelineCursor;
+      limit: number;
+    },
+  ): Promise<AgentTimelineLoad | null> {
+    if (this.agentManager.getAgent(agentId)) {
+      return null;
+    }
+    const record = await this.agentStorage.get(agentId);
+    const nativeHandle = record?.persistence?.nativeHandle;
+    if (
+      !record ||
+      record.internal ||
+      record.provider !== "omp" ||
+      typeof nativeHandle !== "string" ||
+      !nativeHandle.trim()
+    ) {
+      return null;
+    }
+    const availability = await inspectOmpSessionHistoryAvailability(nativeHandle);
+    if (availability.status !== "available") {
+      return null;
+    }
+
+    const timeline = new InMemoryAgentTimelineStore();
+    timeline.initialize(agentId, {
+      epoch: `persisted-omp:${agentId}:${record.updatedAt}`,
+      timestamp: record.updatedAt,
+    });
+    for await (const event of streamOmpHistory({
+      sessionFile: nativeHandle,
+      provider: record.provider,
+    })) {
+      if (event.type !== "timeline") {
+        continue;
+      }
+      if (event.item.type === "user_message" && isSystemInjectedEnvelope(event.item.text)) {
+        continue;
+      }
+      const turnId = getAgentStreamEventTurnId(event);
+      timeline.append(agentId, limitAgentTimelineItemContent(event.item), {
+        ...(event.timestamp ? { timestamp: event.timestamp } : {}),
+        ...(turnId ? { turnId } : {}),
+      });
+    }
+
+    return {
+      agent: this.buildStoredAgentPayload(record),
+      provider: record.provider,
+      controlTimeline: timeline.fetch(agentId, options),
+      fullTimeline: timeline.fetch(agentId, { direction: "tail", limit: 0 }),
+    };
+  }
+
+  private async loadAgentTimeline(
+    agentId: string,
+    options: {
+      direction: AgentTimelineFetchDirection;
+      cursor?: AgentTimelineCursor;
+      limit: number;
+      allowPersistedOmpFallback: boolean;
+    },
+  ): Promise<AgentTimelineLoad> {
+    try {
+      const snapshot = await ensureAgentLoaded(agentId, {
+        agentManager: this.agentManager,
+        agentStorage: this.agentStorage,
+        logger: this.sessionLogger,
+      });
+      return {
+        agent: await this.buildAgentPayload(snapshot),
+        provider: snapshot.provider,
+        controlTimeline: this.agentManager.fetchTimeline(agentId, options),
+      };
+    } catch (error) {
+      const persistedHistory = options.allowPersistedOmpFallback
+        ? await this.readPersistedOmpHistory(agentId, options)
+        : null;
+      if (!persistedHistory) {
+        throw error;
+      }
+      this.sessionLogger.warn(
+        { err: error, agentId },
+        "Provider resume failed; serving persisted OMP history",
+      );
+      return persistedHistory;
+    }
+  }
+
   private async resolveDelegationRootWorkspaceId(agentId: string): Promise<string | null> {
     const seen = new Set<string>();
     let currentAgentId = agentId;
@@ -7315,25 +7418,20 @@ export class Session {
         }
       }
 
-      const snapshot = await ensureAgentLoaded(msg.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-      });
-      const agentPayload = await this.buildAgentPayload(snapshot);
-
-      const fetchedControlTimeline = this.agentManager.fetchTimeline(msg.agentId, {
+      const loadedTimeline = await this.loadAgentTimeline(msg.agentId, {
         direction,
-        cursor,
+        ...(cursor ? { cursor } : {}),
         limit: pageLimit,
+        allowPersistedOmpFallback: supportsDegradedHistory,
       });
       const selectedTimeline = this.selectTimelineProjection({
         agentId: msg.agentId,
         projection,
-        controlTimeline: fetchedControlTimeline,
+        controlTimeline: loadedTimeline.controlTimeline,
         direction,
         ...(cursor ? { cursor } : {}),
         pageLimit,
+        ...(loadedTimeline.fullTimeline ? { fullTimeline: loadedTimeline.fullTimeline } : {}),
       });
       const startCursor =
         selectedTimeline.startSeq !== null
@@ -7350,13 +7448,13 @@ export class Session {
           payload: {
             requestId: msg.requestId,
             agentId: msg.agentId,
-            agent: agentPayload,
+            agent: loadedTimeline.agent,
             direction,
             projection,
             epoch: selectedTimeline.timeline.epoch,
-            reset: fetchedControlTimeline.reset,
-            staleCursor: fetchedControlTimeline.staleCursor,
-            gap: fetchedControlTimeline.gap,
+            reset: loadedTimeline.controlTimeline.reset,
+            staleCursor: loadedTimeline.controlTimeline.staleCursor,
+            gap: loadedTimeline.controlTimeline.gap,
             window: selectedTimeline.timeline.window,
             startCursor,
             endCursor,
@@ -7365,7 +7463,7 @@ export class Session {
             ...(msg.mergeWindow === true ? { mergeWindow: true } : {}),
             entries: selectedTimeline.entries.map((entry) => {
               const payloadEntry = {
-                provider: snapshot.provider,
+                provider: loadedTimeline.provider,
                 item: entry.item,
                 timestamp: entry.timestamp,
                 seqStart: entry.seqStart,

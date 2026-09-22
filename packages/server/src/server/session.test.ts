@@ -509,6 +509,125 @@ test("returns persisted metadata without resuming malformed OMP history", async 
   }
 });
 
+test("returns persisted OMP history when the configured model provider was removed", async () => {
+  const root = mkdtempSync(join(tmpdir(), "paseo-removed-model-provider-"));
+  const sessionFile = join(root, "session.jsonl");
+  writeFileSync(
+    sessionFile,
+    [
+      { type: "session", id: "session-root", parentId: null, cwd: root },
+      {
+        type: "model_change",
+        id: "model-change",
+        parentId: "session-root",
+        provider: "removed-provider",
+        modelId: "old-model",
+      },
+      {
+        type: "message",
+        id: "user-history",
+        parentId: "model-change",
+        timestamp: "2026-09-02T09:36:53.781Z",
+        message: { role: "user", content: "keep this question" },
+      },
+      {
+        type: "message",
+        id: "assistant-history",
+        parentId: "user-history",
+        timestamp: "2026-09-02T09:37:00.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "keep this answer" }],
+          responseId: "assistant-history",
+        },
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n"),
+    "utf8",
+  );
+  const agentId = "11111111-1111-4111-8111-111111111192";
+  const resumeAgentFromPersistence = vi
+    .fn()
+    .mockRejectedValue(new Error("Unknown provider 'removed-provider'"));
+  const record: StoredAgentRecord = {
+    id: agentId,
+    provider: "omp",
+    cwd: root,
+    workspaceId: "workspace-removed-provider",
+    createdAt: "2026-09-02T09:36:53.776Z",
+    updatedAt: "2026-09-06T01:13:04.526Z",
+    lastActivityAt: "2026-09-06T01:13:04.526Z",
+    lastUserMessageAt: "2026-09-02T09:36:53.781Z",
+    title: "Conversation using a removed provider",
+    labels: {},
+    lastStatus: "closed",
+    config: { model: "removed-provider/old-model", modeId: "full" },
+    persistence: {
+      provider: "omp",
+      sessionId: "removed-provider-session",
+      nativeHandle: sessionFile,
+    },
+  };
+  const messages: SessionOutboundMessage[] = [];
+  const session = createSessionForTest({
+    messages,
+    agentManager: {
+      getAgent: vi.fn(() => undefined),
+      waitForAgentClose: vi.fn().mockResolvedValue(undefined),
+      getRegisteredProviderIds: vi.fn(() => ["omp"]),
+      resumeAgentFromPersistence,
+    },
+    agentStorage: {
+      get: vi.fn().mockResolvedValue(record),
+    },
+  });
+  session.updateClientCapabilities({ [CLIENT_CAPS.degradedAgentHistory]: true });
+
+  try {
+    await session.handleMessage({
+      type: "fetch_agent_timeline_request",
+      agentId,
+      requestId: "removed-provider-history-request",
+      direction: "tail",
+    });
+
+    expect(resumeAgentFromPersistence).toHaveBeenCalledOnce();
+    expect(messages).toEqual([
+      expect.objectContaining({
+        type: "fetch_agent_timeline_response",
+        payload: expect.objectContaining({
+          requestId: "removed-provider-history-request",
+          agentId,
+          agent: expect.objectContaining({
+            id: agentId,
+            title: "Conversation using a removed provider",
+          }),
+          entries: [
+            expect.objectContaining({
+              provider: "omp",
+              item: expect.objectContaining({
+                type: "user_message",
+                text: "keep this question",
+              }),
+            }),
+            expect.objectContaining({
+              provider: "omp",
+              item: expect.objectContaining({
+                type: "assistant_message",
+                text: "keep this answer",
+              }),
+            }),
+          ],
+          error: null,
+        }),
+      }),
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("routes host-scoped agent skills requests through the daemon owner", async () => {
   const messages: SessionOutboundMessage[] = [];
   const status = {

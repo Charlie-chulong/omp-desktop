@@ -21,6 +21,11 @@ providers:
         input: [text, image]
         contextWindow: 128000
         maxTokens: 8192
+        reasoning: true
+        thinking:
+          mode: effort
+          efforts: [low, medium, high]
+          defaultLevel: medium
   untouched:
     baseUrl: https://untouched.example.com/v1
     apiKey: untouched-key
@@ -43,6 +48,9 @@ describe("OMP custom provider editing", () => {
           contextWindow: "128000",
           maxTokens: "8192",
           supportsImages: true,
+          reasoning: true,
+          defaultReasoningLevel: "medium",
+          supportedReasoningLevels: ["low", "medium", "high"],
         },
       ],
     });
@@ -86,7 +94,14 @@ describe("OMP custom provider editing", () => {
       apiKey: "new-key",
       api: "openai-responses",
       models: [
-        { id: "gpt-multimodal", api: "openai-responses", supportsImages: true },
+        {
+          id: "gpt-multimodal",
+          api: "openai-responses",
+          supportsImages: true,
+          reasoning: true,
+          defaultReasoningLevel: "medium",
+          supportedReasoningLevels: ["low", "medium", "high"],
+        },
         { id: "gpt-text-only", api: "anthropic-messages" },
       ],
     });
@@ -100,6 +115,12 @@ describe("OMP custom provider editing", () => {
         name: "gpt-multimodal",
         api: "openai-responses",
         input: ["text", "image"],
+        reasoning: true,
+        thinking: {
+          mode: "effort",
+          efforts: ["low", "medium", "high"],
+          defaultLevel: "medium",
+        },
       },
       {
         id: "gpt-text-only",
@@ -183,6 +204,9 @@ describe("OMP custom provider editing", () => {
           inputModalities: ["text", "image"],
           contextWindow: 200_000,
           maxOutputTokens: 32_000,
+          reasoning: true,
+          defaultReasoningLevel: "medium",
+          supportedReasoningLevels: ["low", "medium", "high"],
         },
         {
           id: "text-model",
@@ -205,6 +229,9 @@ describe("OMP custom provider editing", () => {
         contextWindow: "200000",
         maxTokens: "32000",
         supportsImages: true,
+        reasoning: true,
+        defaultReasoningLevel: "medium",
+        supportedReasoningLevels: ["low", "medium", "high"],
       },
       {
         key: "model-new",

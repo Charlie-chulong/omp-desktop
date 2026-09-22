@@ -34,6 +34,9 @@ export interface SidebarDisplayPreferences {
   projectFilters: readonly string[];
   toggleProjectFilter: (viewKey: string) => void;
   clearProjectFilters: () => void;
+  hiddenProjectViewKeys: readonly string[];
+  showProject: (viewKey: string) => void;
+  showAllProjects: () => void;
   labelFilter: SidebarLabelFilter;
   toggleLabelFilter: (name: string) => void;
   clearLabelFilter: () => void;
@@ -56,6 +59,9 @@ export function useSidebarDisplayPreferences(): SidebarDisplayPreferences {
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
   const toggleProjectFilter = useSidebarViewStore((state) => state.toggleProjectFilter);
   const clearProjectFilters = useSidebarViewStore((state) => state.clearProjectFilters);
+  const hiddenProjectViewKeys = useSidebarViewStore((state) => state.hiddenProjectViewKeys);
+  const showProject = useSidebarViewStore((state) => state.showProject);
+  const showAllProjects = useSidebarViewStore((state) => state.showAllProjects);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const toggleLabelFilter = useSidebarViewStore((state) => state.toggleLabelFilter);
   const clearLabelFilter = useSidebarViewStore((state) => state.clearLabelFilter);
@@ -123,6 +129,9 @@ export function useSidebarDisplayPreferences(): SidebarDisplayPreferences {
       labelFilter,
       toggleLabelFilter,
       clearLabelFilter,
+      hiddenProjectViewKeys,
+      showProject,
+      showAllProjects,
     }),
     [
       grouping,
@@ -144,6 +153,9 @@ export function useSidebarDisplayPreferences(): SidebarDisplayPreferences {
       labelFilter,
       toggleLabelFilter,
       clearLabelFilter,
+      hiddenProjectViewKeys,
+      showProject,
+      showAllProjects,
     ],
   );
 }

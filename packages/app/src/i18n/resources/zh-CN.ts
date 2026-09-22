@@ -387,6 +387,19 @@ export const zhCN: TranslationResources = {
     actions: {
       loadMore: "加载更多",
       clearSearch: "清除搜索",
+      select: "多选",
+    },
+    bulk: {
+      selected: "已选择 {{count}} 项",
+      selectAll: "全选",
+      clearSelection: "清除选择",
+      archive: "归档",
+      delete: "删除",
+      archiveTitle: "归档 {{count}} 个对话？",
+      archiveMessage: "正在运行的对话将会停止。",
+      deleteTitle: "删除 {{count}} 个对话？",
+      deleteMessage: "这会永久删除所选对话的历史记录。",
+      failed: "{{count}} 个对话处理失败",
     },
   },
   agentList: {
@@ -425,6 +438,8 @@ export const zhCN: TranslationResources = {
       resetZoom: "重置视图",
       viewSource: "查看源码",
       viewDiagram: "查看图表",
+      viewFullscreen: "全屏查看",
+      exitFullscreen: "退出全屏",
     },
     actions: {
       copyCode: "复制代码",
@@ -1222,6 +1237,10 @@ export const zhCN: TranslationResources = {
         label: "项目",
         all: "所有项目",
       },
+      hiddenProjects: {
+        label: "隐藏的项目",
+        restoreAll: "全部恢复显示",
+      },
     },
     filterEmpty: {
       title: "没有匹配的工作区",
@@ -1266,6 +1285,8 @@ export const zhCN: TranslationResources = {
         openSettings: "打开项目设置",
         openFolder: "打开目录",
         openFolderFailed: "无法打开文件夹",
+        copyPath: "复制路径",
+        hide: "隐藏项目",
         remove: "移除项目",
         removing: "正在移除...",
       },
@@ -1279,6 +1300,7 @@ export const zhCN: TranslationResources = {
         hostDisconnected: "主机未连接",
         removeFailed: "部分工作区移除失败",
         updateHostToRemove: "更新主机以移除项目。",
+        pathCopied: "项目路径已复制",
       },
       drop: {
         hint: "拖放文件夹以添加到项目列表",

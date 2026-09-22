@@ -387,6 +387,19 @@ export const en = {
     actions: {
       loadMore: "Load more",
       clearSearch: "Clear search",
+      select: "Select",
+    },
+    bulk: {
+      selected: "{{count}} selected",
+      selectAll: "Select all",
+      clearSelection: "Clear selection",
+      archive: "Archive",
+      delete: "Delete",
+      archiveTitle: "Archive {{count}} conversations?",
+      archiveMessage: "Running conversations will be stopped.",
+      deleteTitle: "Delete {{count}} conversations?",
+      deleteMessage: "This permanently deletes the selected conversation history.",
+      failed: "{{count}} conversations could not be processed",
     },
   },
   agentList: {
@@ -425,6 +438,8 @@ export const en = {
       resetZoom: "Reset view",
       viewSource: "View source",
       viewDiagram: "View diagram",
+      viewFullscreen: "View full screen",
+      exitFullscreen: "Exit full screen",
     },
     actions: {
       copyCode: "Copy code",
@@ -1241,6 +1256,10 @@ export const en = {
         label: "Project",
         all: "All projects",
       },
+      hiddenProjects: {
+        label: "Hidden projects",
+        restoreAll: "Restore all",
+      },
     },
     filterEmpty: {
       title: "No workspaces match",
@@ -1285,6 +1304,8 @@ export const en = {
         openSettings: "Open project settings",
         openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
+        copyPath: "Copy path",
+        hide: "Hide project",
         remove: "Remove project",
         removing: "Removing...",
       },
@@ -1299,6 +1320,7 @@ export const en = {
         hostDisconnected: "Host is not connected",
         removeFailed: "Failed to remove some workspaces",
         updateHostToRemove: "Update the host to remove projects.",
+        pathCopied: "Project path copied",
       },
       drop: {
         hint: "Drop a folder to add it as a project",

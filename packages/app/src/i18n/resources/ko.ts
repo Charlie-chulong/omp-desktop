@@ -363,6 +363,19 @@ export const ko: TranslationResources = {
     actions: {
       loadMore: "더 불러오기",
       clearSearch: "검색 지우기",
+      select: "선택",
+    },
+    bulk: {
+      selected: "{{count}}개 선택됨",
+      selectAll: "모두 선택",
+      clearSelection: "선택 지우기",
+      archive: "보관",
+      delete: "삭제",
+      archiveTitle: "대화 {{count}}개를 보관할까요?",
+      archiveMessage: "실행 중인 대화가 중지됩니다.",
+      deleteTitle: "대화 {{count}}개를 삭제할까요?",
+      deleteMessage: "선택한 대화 기록이 영구적으로 삭제됩니다.",
+      failed: "대화 {{count}}개를 처리하지 못했습니다",
     },
   },
   agentList: {
@@ -401,6 +414,8 @@ export const ko: TranslationResources = {
       resetZoom: "보기 초기화",
       viewSource: "소스 보기",
       viewDiagram: "다이어그램 보기",
+      viewFullscreen: "전체 화면으로 보기",
+      exitFullscreen: "전체 화면 종료",
     },
     actions: {
       copyCode: "코드 복사",
@@ -1212,6 +1227,10 @@ export const ko: TranslationResources = {
         label: "프로젝트",
         all: "모든 프로젝트",
       },
+      hiddenProjects: {
+        label: "숨긴 프로젝트",
+        restoreAll: "모두 복원",
+      },
     },
     filterEmpty: {
       title: "일치하는 워크스페이스가 없습니다",
@@ -1256,6 +1275,8 @@ export const ko: TranslationResources = {
         openSettings: "프로젝트 설정 열기",
         openFolder: "파일 관리자에서 열기",
         openFolderFailed: "폴더를 열 수 없습니다.",
+        copyPath: "경로 복사",
+        hide: "프로젝트 숨기기",
         remove: "프로젝트 제거",
         removing: "제거하는 중...",
       },
@@ -1270,6 +1291,7 @@ export const ko: TranslationResources = {
         hostDisconnected: "호스트가 연결되어 있지 않습니다",
         removeFailed: "일부 워크스페이스를 제거하지 못했습니다",
         updateHostToRemove: "프로젝트를 제거하려면 호스트를 업데이트하세요.",
+        pathCopied: "프로젝트 경로가 복사되었습니다",
       },
       drop: {
         hint: "폴더를 놓아 프로젝트로 추가",

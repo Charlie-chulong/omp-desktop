@@ -21,6 +21,9 @@ export interface OmpProviderModelDraft {
   contextWindow: string;
   maxTokens: string;
   supportsImages: boolean;
+  reasoning?: boolean;
+  defaultReasoningLevel?: string;
+  supportedReasoningLevels?: string[];
 }
 
 export interface OmpProviderDraft {
@@ -57,6 +60,9 @@ export function configureDiscoveredProviderModels(
     inputModalities?: readonly string[];
     contextWindow?: number;
     maxOutputTokens?: number;
+    reasoning?: boolean;
+    defaultReasoningLevel?: string;
+    supportedReasoningLevels?: readonly string[];
   }>,
   createKey: () => string,
 ): OmpProviderModelDraft[] {
@@ -79,6 +85,21 @@ export function configureDiscoveredProviderModels(
         maxTokens:
           existing.maxTokens.trim() ||
           (model.maxOutputTokens !== undefined ? String(model.maxOutputTokens) : ""),
+        ...(model.reasoning !== undefined
+          ? { reasoning: model.reasoning }
+          : existing.reasoning !== undefined
+            ? { reasoning: existing.reasoning }
+            : {}),
+        ...(model.defaultReasoningLevel
+          ? { defaultReasoningLevel: model.defaultReasoningLevel }
+          : existing.defaultReasoningLevel
+            ? { defaultReasoningLevel: existing.defaultReasoningLevel }
+            : {}),
+        ...(model.supportedReasoningLevels
+          ? { supportedReasoningLevels: [...model.supportedReasoningLevels] }
+          : existing.supportedReasoningLevels
+            ? { supportedReasoningLevels: existing.supportedReasoningLevels }
+            : {}),
       };
     }
     return {
@@ -89,6 +110,13 @@ export function configureDiscoveredProviderModels(
       contextWindow: model.contextWindow !== undefined ? String(model.contextWindow) : "",
       maxTokens: model.maxOutputTokens !== undefined ? String(model.maxOutputTokens) : "",
       supportsImages: model.inputModalities ? model.inputModalities.includes("image") : true,
+      ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+      ...(model.defaultReasoningLevel
+        ? { defaultReasoningLevel: model.defaultReasoningLevel }
+        : {}),
+      ...(model.supportedReasoningLevels
+        ? { supportedReasoningLevels: [...model.supportedReasoningLevels] }
+        : {}),
     };
   });
 }
@@ -133,6 +161,11 @@ export function parseCustomProviderDraft(
             contextWindow?: unknown;
             maxTokens?: unknown;
             input?: unknown;
+            reasoning?: unknown;
+            thinking?: {
+              efforts?: unknown;
+              defaultLevel?: unknown;
+            };
           }>;
         }
       >;
@@ -156,6 +189,16 @@ export function parseCustomProviderDraft(
                 typeof model.contextWindow === "number" ? String(model.contextWindow) : "",
               maxTokens: typeof model.maxTokens === "number" ? String(model.maxTokens) : "",
               supportsImages: Array.isArray(model.input) && model.input.includes("image"),
+              reasoning: typeof model.reasoning === "boolean" ? model.reasoning : undefined,
+              defaultReasoningLevel:
+                typeof model.thinking?.defaultLevel === "string"
+                  ? model.thinking.defaultLevel
+                  : undefined,
+              supportedReasoningLevels: Array.isArray(model.thinking?.efforts)
+                ? model.thinking.efforts.filter(
+                    (level): level is string => typeof level === "string" && level.length > 0,
+                  )
+                : undefined,
             },
           ]
         : [],
@@ -184,6 +227,18 @@ function providerInputToYamlValue(provider: OmpCustomProviderInput) {
       input: model.supportsImages ? ["text", "image"] : ["text"],
       ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
       ...(model.maxTokens ? { maxTokens: model.maxTokens } : {}),
+      ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+      ...(model.reasoning && (model.supportedReasoningLevels?.length || model.defaultReasoningLevel)
+        ? {
+            thinking: {
+              mode: "effort",
+              ...(model.supportedReasoningLevels?.length
+                ? { efforts: model.supportedReasoningLevels }
+                : {}),
+              ...(model.defaultReasoningLevel ? { defaultLevel: model.defaultReasoningLevel } : {}),
+            },
+          }
+        : {}),
     })),
   };
 }

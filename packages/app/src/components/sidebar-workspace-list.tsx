@@ -39,6 +39,8 @@ import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { type GestureType } from "react-native-gesture-handler";
 import * as Clipboard from "expo-clipboard";
 import {
+  Copy,
+  EyeOff,
   ExternalLink,
   GitPullRequest,
   Settings,
@@ -170,6 +172,8 @@ const ThemedPlus = withUnistyles(Plus);
 const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedSettings = withUnistyles(Settings);
+const ThemedCopy = withUnistyles(Copy);
+const ThemedEyeOff = withUnistyles(EyeOff);
 
 const foregroundColorMapping = (theme: Theme) => ({
   color: theme.colors.foreground,
@@ -480,6 +484,8 @@ function ProjectRowTrailingActions({
 
 const trash2LeadingIcon = <ThemedTrash2 size={14} uniProps={foregroundMutedColorMapping} />;
 const settingsLeadingIcon = <ThemedSettings size={14} uniProps={foregroundMutedColorMapping} />;
+const copyLeadingIcon = <ThemedCopy size={14} uniProps={foregroundMutedColorMapping} />;
+const hideLeadingIcon = <ThemedEyeOff size={14} uniProps={foregroundMutedColorMapping} />;
 
 function renderKebabTriggerIcon({ hovered }: { hovered?: boolean }) {
   return (
@@ -560,10 +566,19 @@ function ProjectMenuItems({
   removeProjectStatus: "idle" | "pending" | "success";
 }) {
   const { t } = useTranslation();
+  const toast = useToast();
+  const hideProject = useSidebarViewStore((state) => state.hideProject);
   const handleOpenProjectSettings = useCallback(() => {
     if (!settingsTarget) return;
     router.navigate(buildProjectSettingsRoute(settingsTarget.serverId, settingsTarget.projectId));
   }, [settingsTarget]);
+  const handleCopyProjectPath = useCallback(() => {
+    void Clipboard.setStringAsync(projectPath);
+    toast.copied(t("sidebar.project.toasts.pathCopied"));
+  }, [projectPath, t, toast]);
+  const handleHideProject = useCallback(() => {
+    hideProject(projectViewKey);
+  }, [hideProject, projectViewKey]);
 
   return (
     <>
@@ -582,6 +597,22 @@ function ProjectMenuItems({
         path={projectPath}
         testID={`sidebar-project-menu-open-folder-${projectViewKey}`}
       />
+      <ProjectMenuItem
+        surface={surface}
+        testID={`sidebar-project-menu-copy-path-${projectViewKey}`}
+        leading={copyLeadingIcon}
+        onSelect={handleCopyProjectPath}
+      >
+        {t("sidebar.project.actions.copyPath")}
+      </ProjectMenuItem>
+      <ProjectMenuItem
+        surface={surface}
+        testID={`sidebar-project-menu-hide-${projectViewKey}`}
+        leading={hideLeadingIcon}
+        onSelect={handleHideProject}
+      >
+        {t("sidebar.project.actions.hide")}
+      </ProjectMenuItem>
       <ProjectMenuItem
         surface={surface}
         testID={`sidebar-project-menu-remove-${projectViewKey}`}

@@ -365,6 +365,19 @@ export const ja: TranslationResources = {
     actions: {
       loadMore: "さらに読み込む",
       clearSearch: "検索をクリア",
+      select: "選択",
+    },
+    bulk: {
+      selected: "{{count}}件選択済み",
+      selectAll: "すべて選択",
+      clearSelection: "選択を解除",
+      archive: "アーカイブ",
+      delete: "削除",
+      archiveTitle: "{{count}}件の会話をアーカイブしますか？",
+      archiveMessage: "実行中の会話は停止します。",
+      deleteTitle: "{{count}}件の会話を削除しますか？",
+      deleteMessage: "選択した会話の履歴を完全に削除します。",
+      failed: "{{count}}件の会話を処理できませんでした",
     },
   },
   agentList: {
@@ -403,6 +416,8 @@ export const ja: TranslationResources = {
       resetZoom: "表示をリセット",
       viewSource: "ソースを表示",
       viewDiagram: "図を表示",
+      viewFullscreen: "全画面で表示",
+      exitFullscreen: "全画面表示を終了",
     },
     actions: {
       copyCode: "コードをコピー",
@@ -1216,6 +1231,10 @@ export const ja: TranslationResources = {
         label: "プロジェクト",
         all: "すべてのプロジェクト",
       },
+      hiddenProjects: {
+        label: "非表示のプロジェクト",
+        restoreAll: "すべて復元",
+      },
     },
     filterEmpty: {
       title: "一致するワークスペースがありません",
@@ -1261,6 +1280,8 @@ export const ja: TranslationResources = {
         openSettings: "プロジェクト設定を開く",
         openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
+        copyPath: "パスをコピー",
+        hide: "プロジェクトを非表示",
         remove: "プロジェクトを削除",
         removing: "削除中...",
       },
@@ -1275,6 +1296,7 @@ export const ja: TranslationResources = {
         hostDisconnected: "ホストが接続されていません",
         removeFailed: "一部のワークスペースの削除に失敗しました",
         updateHostToRemove: "プロジェクトを削除するにはホストを更新してください。",
+        pathCopied: "プロジェクトのパスをコピーしました",
       },
       drop: {
         hint: "フォルダをドロップしてプロジェクトに追加",

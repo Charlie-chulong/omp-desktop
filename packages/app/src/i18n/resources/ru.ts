@@ -374,6 +374,19 @@ export const ru: TranslationResources = {
     actions: {
       loadMore: "Загрузить ещё",
       clearSearch: "Очистить поиск",
+      select: "Выбрать",
+    },
+    bulk: {
+      selected: "Выбрано: {{count}}",
+      selectAll: "Выбрать все",
+      clearSelection: "Снять выделение",
+      archive: "Архивировать",
+      delete: "Удалить",
+      archiveTitle: "Архивировать {{count}} разговоров?",
+      archiveMessage: "Запущенные разговоры будут остановлены.",
+      deleteTitle: "Удалить {{count}} разговоров?",
+      deleteMessage: "История выбранных разговоров будет удалена безвозвратно.",
+      failed: "Не удалось обработать разговоры: {{count}}",
     },
   },
   agentList: {
@@ -412,6 +425,8 @@ export const ru: TranslationResources = {
       resetZoom: "Сбросить масштаб",
       viewSource: "Показать исходный код",
       viewDiagram: "Показать диаграмму",
+      viewFullscreen: "Открыть на весь экран",
+      exitFullscreen: "Выйти из полноэкранного режима",
     },
     actions: {
       copyCode: "Скопировать код",
@@ -1230,6 +1245,10 @@ export const ru: TranslationResources = {
         label: "Проект",
         all: "Все проекты",
       },
+      hiddenProjects: {
+        label: "Скрытые проекты",
+        restoreAll: "Восстановить все",
+      },
     },
     filterEmpty: {
       title: "Нет подходящих рабочих пространств",
@@ -1275,6 +1294,8 @@ export const ru: TranslationResources = {
         openSettings: "Открыть настройки проекта",
         openFolder: "Открыть в файловом менеджере",
         openFolderFailed: "Не удалось открыть папку",
+        copyPath: "Копировать путь",
+        hide: "Скрыть проект",
         remove: "Удалить проект",
         removing: "Удаление...",
       },
@@ -1289,6 +1310,7 @@ export const ru: TranslationResources = {
         hostDisconnected: "Хост не подключён",
         removeFailed: "Не удалось удалить некоторые рабочие пространства.",
         updateHostToRemove: "Обновите хост, чтобы удалять проекты.",
+        pathCopied: "Путь проекта скопирован",
       },
       drop: {
         hint: "Перетащите папку, чтобы добавить проект",

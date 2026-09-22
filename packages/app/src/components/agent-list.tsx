@@ -17,7 +17,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { formatTimeAgo } from "@/utils/time";
 import { type AggregatedAgent } from "@/hooks/use-aggregated-agents";
 import { useSessionStore } from "@/stores/session-store";
-import { Archive, ChevronRight, Trash2 } from "lucide-react-native";
+import { Archive, Check, ChevronRight, Trash2 } from "lucide-react-native";
 import { getProviderIcon } from "@/components/provider-icons";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
@@ -39,6 +39,9 @@ interface AgentListProps {
   showHostColumn?: boolean;
   /** Shows a destructive archive action on every row. */
   showDeleteButton?: boolean;
+  selectionMode?: boolean;
+  selectedAgentKeys?: ReadonlySet<string>;
+  onToggleAgentSelection?: (agent: AggregatedAgent) => void;
   /**
    * Where a search matched each row, keyed by `serverId:agentId`. Rows mark the
    * spans so the list can explain why a result is in it — the subsequence and
@@ -216,6 +219,8 @@ function SessionRow({
   showAttentionIndicator,
   showHostColumn,
   showDeleteButton,
+  selectionMode,
+  selectionChecked,
   onPress,
   onDelete,
   onLongPress,
@@ -227,6 +232,8 @@ function SessionRow({
   showAttentionIndicator: boolean;
   showHostColumn: boolean;
   showDeleteButton: boolean;
+  selectionMode: boolean;
+  selectionChecked: boolean;
   onPress: (agent: AggregatedAgent) => void;
   onLongPress: (agent: AggregatedAgent) => void;
   onDelete: (agent: AggregatedAgent) => void;
@@ -235,7 +242,7 @@ function SessionRow({
   const { t } = useTranslation();
   const timeAgo = formatTimeAgo(agent.lastActivityAt);
   const agentKey = `${agent.serverId}:${agent.id}`;
-  const isSelected = selectedAgentId === agentKey;
+  const isSelected = selectedAgentId === agentKey || selectionChecked;
   const projectName = agent.projectPlacement?.projectName ?? "";
   const branch = agent.projectPlacement?.checkout.currentBranch ?? "";
   const workspaceName = agent.projectPlacement?.workspaceName ?? "";
@@ -289,9 +296,18 @@ function SessionRow({
       <Pressable
         style={pressableStyle}
         onPress={handlePress}
-        onLongPress={handleLongPress}
+        onLongPress={selectionMode ? undefined : handleLongPress}
+        accessibilityRole={selectionMode ? "checkbox" : "button"}
+        accessibilityState={selectionMode ? { checked: selectionChecked } : undefined}
         testID={`agent-row-${agent.serverId}-${agent.id}`}
       >
+        {selectionMode ? (
+          <View
+            style={[styles.selectionControl, selectionChecked && styles.selectionControlChecked]}
+          >
+            {selectionChecked ? <Check size={12} color={theme.colors.accentForeground} /> : null}
+          </View>
+        ) : null}
         <View style={styles.rowContent}>
           <View style={styles.rowTitleRow}>
             <WorkspaceTitlePrefix
@@ -414,6 +430,9 @@ export function AgentList({
   showAttentionIndicator = true,
   showHostColumn = false,
   showDeleteButton = false,
+  selectionMode = false,
+  selectedAgentKeys,
+  onToggleAgentSelection,
   searchMatchesByAgentKey,
   flat = false,
 }: AgentListProps) {
@@ -434,6 +453,10 @@ export function AgentList({
 
   const handleAgentPress = useCallback(
     (agent: AggregatedAgent) => {
+      if (selectionMode) {
+        onToggleAgentSelection?.(agent);
+        return;
+      }
       if (isActionSheetVisible) {
         return;
       }
@@ -449,7 +472,7 @@ export function AgentList({
         pin: true,
       });
     },
-    [isActionSheetVisible, onAgentSelect],
+    [isActionSheetVisible, onAgentSelect, onToggleAgentSelection, selectionMode],
   );
 
   const handleAgentLongPress = useCallback(
@@ -544,7 +567,9 @@ export function AgentList({
           selectedAgentId={selectedAgentId}
           showAttentionIndicator={showAttentionIndicator}
           showHostColumn={showHostColumn}
-          showDeleteButton={showDeleteButton}
+          selectionMode={selectionMode}
+          selectionChecked={selectedAgentKeys?.has(item.key) ?? false}
+          showDeleteButton={showDeleteButton && !selectionMode}
           onPress={handleAgentPress}
           onLongPress={handleAgentLongPress}
           onDelete={handleAgentDelete}
@@ -556,6 +581,8 @@ export function AgentList({
       handleAgentLongPress,
       handleAgentPress,
       isMobile,
+      selectedAgentKeys,
+      selectionMode,
       searchMatchesByAgentKey,
       selectedAgentId,
       showAttentionIndicator,
@@ -735,6 +762,20 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPressed: {
     backgroundColor: theme.colors.surface2,
+  },
+  selectionControl: {
+    width: 18,
+    height: 18,
+    marginLeft: theme.spacing[3],
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.foregroundMuted,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectionControlChecked: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
   },
   deleteButton: {
     width: 32,
