@@ -1237,10 +1237,6 @@ export const zhCN: TranslationResources = {
         label: "项目",
         all: "所有项目",
       },
-      hiddenProjects: {
-        label: "隐藏的项目",
-        restoreAll: "全部恢复显示",
-      },
     },
     filterEmpty: {
       title: "没有匹配的工作区",

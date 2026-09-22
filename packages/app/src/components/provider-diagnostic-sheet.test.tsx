@@ -7,7 +7,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { DaemonClient } from "@omp-desktop/client/internal/daemon-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OmpProviderConfigurationPanel } from "@/components/provider-diagnostic-sheet";
-import { ompAccountQuotaQueryKey, useOmpCodexAccountQuota } from "@/hooks/use-omp-account-quota";
+import {
+  ompProviderManagementQueryKey,
+  useOmpCodexAccountQuota,
+} from "@/hooks/use-omp-account-quota";
 
 type ManagementClient = Pick<
   DaemonClient,
@@ -189,6 +192,64 @@ async function mountPanel(client: ManagementClient) {
   return queryClient;
 }
 
+describe("OMP provider management loading", () => {
+  it("reuses the cached result when settings is reopened", async () => {
+    const getOmpProviderManagement = vi.fn(async () => management([1]));
+    runtime.client = {
+      getOmpProviderManagement,
+      reorderOmpProviderAccounts: vi.fn(),
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    queryClients.push(queryClient);
+
+    const first = render(
+      <QueryClientProvider client={queryClient}>
+        <OmpProviderConfigurationPanel serverId="server-1" />
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("omp-signed-in-providers-toggle");
+    first.unmount();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OmpProviderConfigurationPanel serverId="server-1" />
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("omp-signed-in-providers-toggle");
+
+    expect(getOmpProviderManagement).toHaveBeenCalledOnce();
+    expect(runtime.refresh).not.toHaveBeenCalled();
+  });
+  it("bypasses the cache when the user refreshes", async () => {
+    const getOmpProviderManagement = vi.fn(async () => management([1]));
+    runtime.client = {
+      getOmpProviderManagement,
+      reorderOmpProviderAccounts: vi.fn(),
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    queryClients.push(queryClient);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OmpProviderConfigurationPanel serverId="server-1" />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByText("settings.providers.omp.refresh"));
+
+    await waitFor(() => expect(getOmpProviderManagement).toHaveBeenCalledTimes(2));
+  });
+});
+
 describe("OMP provider account reordering quota synchronization", () => {
   it("updates the mounted quota consumer and ignores a late pre-reorder refetch", async () => {
     const initial = management([1, 2]);
@@ -199,8 +260,8 @@ describe("OMP provider account reordering quota synchronization", () => {
       getOmpProviderManagement,
       reorderOmpProviderAccounts: vi.fn(async () => reordered),
     });
-    const quotaKey = ompAccountQuotaQueryKey("server-1");
-    const otherHostKey = ompAccountQuotaQueryKey("server-2");
+    const quotaKey = ompProviderManagementQueryKey("server-1");
+    const otherHostKey = ompProviderManagementQueryKey("server-2");
     const otherHost = management([3, 4]);
     queryClient.setQueryData(otherHostKey, otherHost);
 
@@ -243,7 +304,7 @@ describe("OMP provider account reordering quota synchronization", () => {
     expect(await screen.findByText("Account reorder failed")).toBeTruthy();
     expect(screen.getByTestId("quota-account-order").textContent).toBe("1,2");
     expect(screen.getByTestId("quota-status").textContent).toBe("idle");
-    expect(queryClient.getQueryData(ompAccountQuotaQueryKey("server-1"))).toEqual(initial);
+    expect(queryClient.getQueryData(ompProviderManagementQueryKey("server-1"))).toEqual(initial);
   });
 });
 
@@ -269,12 +330,13 @@ describe("OMP provider usage reset in settings", () => {
       })),
       reorderOmpProviderAccounts: vi.fn(),
       listProviderUsage: vi.fn(async () => ({
+        requestId: "test-usage",
         fetchedAt: "2026-09-20T00:00:00.000Z",
         providers: [
           {
             providerId: "cursor",
             displayName: "Cursor",
-            status: "available",
+            status: "available" as const,
             planLabel: null,
             sourceLabel: "Cursor",
             windows: [],
@@ -285,7 +347,7 @@ describe("OMP provider usage reset in settings", () => {
                 used: 480.13,
                 remaining: 519.87,
                 limit: 1000,
-                unit: "usd",
+                unit: "usd" as const,
                 resetsAt: "2026-09-30T00:00:00.000Z",
               },
             ],

@@ -227,6 +227,7 @@ export class ProviderSnapshotManager {
   private providerRegistry: Record<AgentProvider, ProviderDefinition>;
   private providerClients: Record<AgentProvider, AgentClient>;
   private readonly ownedClients = new Set<AgentClient>();
+  private ompProviderManagementRead: Promise<OmpProviderManagement> | null = null;
 
   constructor(options: ProviderSnapshotManagerOptions) {
     this.logger = options.logger;
@@ -481,7 +482,18 @@ export class ProviderSnapshotManager {
     if (!client.getOmpProviderManagement) {
       throw new Error("OMP provider management is unavailable");
     }
-    return await client.getOmpProviderManagement();
+    if (this.ompProviderManagementRead) {
+      return await this.ompProviderManagementRead;
+    }
+    const read = client.getOmpProviderManagement();
+    this.ompProviderManagementRead = read;
+    try {
+      return await read;
+    } finally {
+      if (this.ompProviderManagementRead === read) {
+        this.ompProviderManagementRead = null;
+      }
+    }
   }
 
   async saveOmpProviderConfig(configYaml: string): Promise<OmpProviderManagement> {

@@ -132,7 +132,7 @@ function SessionsScreenContent() {
     void refreshAll().finally(() => setIsManualRefresh(false));
   }, [refreshAll]);
 
-  // `useAgentHistory` owns the order: recency at rest, relevance under a query.
+  // Recency orders project sections and their rows; search keeps relevance order and stays flat.
   const emptyText = resolveEmptyText({
     t,
     isSearching,

@@ -11,7 +11,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { formatTimeAgo } from "@/utils/time";
@@ -49,68 +48,57 @@ interface AgentListProps {
    */
   searchMatchesByAgentKey?: Record<string, AgentSearchMatch[]>;
   /**
-   * Renders one flat list in the given order instead of grouping by day. Day
-   * headings claim the list is chronological, which is a lie once the caller
-   * has ordered it by something else — relevance, for instance.
+   * Renders one flat list in the given order. Search results use this because
+   * relevance must stay authoritative instead of being split into project groups.
    */
   flat?: boolean;
 }
 
-type DateSectionKey = "today" | "yesterday" | "thisWeek" | "thisMonth" | "older";
-
-const DATE_SECTION_ORDER = [
-  "today",
-  "yesterday",
-  "thisWeek",
-  "thisMonth",
-  "older",
-] as const satisfies readonly DateSectionKey[];
-
 type FlatListItem =
-  | { type: "header"; key: string; section: DateSectionKey }
+  | { type: "header"; key: string; label: string }
   | { type: "agent"; key: string; agent: AggregatedAgent };
 
-function deriveDateSectionKey(lastActivityAt: Date): DateSectionKey {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-  const activityStart = new Date(
-    lastActivityAt.getFullYear(),
-    lastActivityAt.getMonth(),
-    lastActivityAt.getDate(),
-  );
-
-  if (activityStart.getTime() >= todayStart.getTime()) {
-    return "today";
+function projectSectionIdentity(agent: AggregatedAgent): { key: string; label: string } {
+  const projectKey = agent.projectPlacement?.projectKey.trim();
+  const projectName = agent.projectPlacement?.projectName.trim();
+  if (projectKey) {
+    return {
+      key: JSON.stringify(["project", projectKey]),
+      label: projectName || agent.cwd || agent.serverLabel,
+    };
   }
-  if (activityStart.getTime() >= yesterdayStart.getTime()) {
-    return "yesterday";
-  }
-
-  const diffTime = todayStart.getTime() - activityStart.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  if (diffDays <= 7) {
-    return "thisWeek";
-  }
-  if (diffDays <= 30) {
-    return "thisMonth";
-  }
-  return "older";
+  return {
+    key: JSON.stringify(["cwd", agent.serverId, agent.cwd]),
+    label: projectName || agent.cwd || agent.serverLabel,
+  };
 }
 
-function formatDateSectionLabel(t: TFunction, section: DateSectionKey): string {
-  switch (section) {
-    case "today":
-      return t("agentList.dateSections.today");
-    case "yesterday":
-      return t("agentList.dateSections.yesterday");
-    case "thisWeek":
-      return t("agentList.dateSections.thisWeek");
-    case "thisMonth":
-      return t("agentList.dateSections.thisMonth");
-    case "older":
-      return t("agentList.dateSections.older");
+export function buildProjectGroupedAgentListItems(
+  agents: readonly AggregatedAgent[],
+): FlatListItem[] {
+  const groups = new Map<string, { label: string; agents: AggregatedAgent[] }>();
+  for (const agent of agents) {
+    const section = projectSectionIdentity(agent);
+    const group = groups.get(section.key);
+    if (group) {
+      group.agents.push(agent);
+    } else {
+      groups.set(section.key, { label: section.label, agents: [agent] });
+    }
   }
+
+  const result: FlatListItem[] = [];
+  for (const [sectionKey, group] of groups) {
+    result.push({ type: "header", key: `header:${sectionKey}`, label: group.label });
+    for (const agent of group.agents) {
+      result.push({
+        type: "agent",
+        key: `${agent.serverId}:${agent.id}`,
+        agent,
+      });
+    }
+  }
+  return result;
 }
 
 function SessionBadge({
@@ -218,6 +206,7 @@ function SessionRow({
   selectedAgentId,
   showAttentionIndicator,
   showHostColumn,
+  showProjectName,
   showDeleteButton,
   selectionMode,
   selectionChecked,
@@ -231,6 +220,7 @@ function SessionRow({
   selectedAgentId?: string;
   showAttentionIndicator: boolean;
   showHostColumn: boolean;
+  showProjectName: boolean;
   showDeleteButton: boolean;
   selectionMode: boolean;
   selectionChecked: boolean;
@@ -336,14 +326,18 @@ function SessionRow({
           </View>
           {isMobile ? (
             <View style={styles.rowMetaRow}>
-              <HighlightedText
-                text={projectName}
-                ranges={rangesFor("project")}
-                style={styles.sessionMetaText}
-                numberOfLines={1}
-                testID={`agent-row-project-${agent.serverId}-${agent.id}`}
-              />
-              <Text style={styles.sessionMetaSeparator}>·</Text>
+              {showProjectName ? (
+                <>
+                  <HighlightedText
+                    text={projectName}
+                    ranges={rangesFor("project")}
+                    style={styles.sessionMetaText}
+                    numberOfLines={1}
+                    testID={`agent-row-project-${agent.serverId}-${agent.id}`}
+                  />
+                  <Text style={styles.sessionMetaSeparator}>·</Text>
+                </>
+              ) : null}
               <HighlightedText
                 text={branch}
                 ranges={rangesFor("branch")}
@@ -374,13 +368,15 @@ function SessionRow({
         </View>
         {!isMobile ? (
           <View style={styles.rowColumns}>
-            <HighlightedText
-              text={projectName}
-              ranges={rangesFor("project")}
-              style={styles.columnMeta}
-              numberOfLines={1}
-              testID={`agent-row-project-${agent.serverId}-${agent.id}`}
-            />
+            {showProjectName ? (
+              <HighlightedText
+                text={projectName}
+                ranges={rangesFor("project")}
+                style={styles.columnMeta}
+                numberOfLines={1}
+                testID={`agent-row-project-${agent.serverId}-${agent.id}`}
+              />
+            ) : null}
             {showHostColumn ? (
               <Text style={styles.columnMetaHost} numberOfLines={1}>
                 {agent.serverLabel}
@@ -519,43 +515,26 @@ export function AgentList({
     setActionAgent(null);
   }, [actionAgent, actionClient, archiveAgent]);
 
-  const flatItems = useMemo((): FlatListItem[] => {
-    if (flat) {
-      return agents.map((agent) => ({
-        type: "agent" as const,
-        key: `${agent.serverId}:${agent.id}`,
-        agent,
-      }));
-    }
-
-    const buckets = new Map<DateSectionKey, AggregatedAgent[]>();
-    for (const agent of agents) {
-      const section = deriveDateSectionKey(agent.lastActivityAt);
-      const existing = buckets.get(section) ?? [];
-      existing.push(agent);
-      buckets.set(section, existing);
-    }
-
-    const result: FlatListItem[] = [];
-    for (const section of DATE_SECTION_ORDER) {
-      const data = buckets.get(section);
-      if (!data || data.length === 0) {
-        continue;
-      }
-      result.push({ type: "header", key: `header:${section}`, section });
-      for (const agent of data) {
-        result.push({ type: "agent", key: `${agent.serverId}:${agent.id}`, agent });
-      }
-    }
-    return result;
-  }, [agents, flat]);
+  const flatItems = useMemo(
+    (): FlatListItem[] =>
+      flat
+        ? agents.map((agent) => ({
+            type: "agent" as const,
+            key: `${agent.serverId}:${agent.id}`,
+            agent,
+          }))
+        : buildProjectGroupedAgentListItems(agents),
+    [agents, flat],
+  );
 
   const renderItem: ListRenderItem<FlatListItem> = useCallback(
     ({ item }) => {
       if (item.type === "header") {
         return (
           <View style={styles.sectionHeading}>
-            <Text style={styles.sectionTitle}>{formatDateSectionLabel(t, item.section)}</Text>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>
+              {item.label}
+            </Text>
           </View>
         );
       }
@@ -567,6 +546,7 @@ export function AgentList({
           selectedAgentId={selectedAgentId}
           showAttentionIndicator={showAttentionIndicator}
           showHostColumn={showHostColumn}
+          showProjectName={flat}
           selectionMode={selectionMode}
           selectionChecked={selectedAgentKeys?.has(item.key) ?? false}
           showDeleteButton={showDeleteButton && !selectionMode}
@@ -577,6 +557,7 @@ export function AgentList({
       );
     },
     [
+      flat,
       handleAgentDelete,
       handleAgentLongPress,
       handleAgentPress,
@@ -588,7 +569,6 @@ export function AgentList({
       showAttentionIndicator,
       showDeleteButton,
       showHostColumn,
-      t,
     ],
   );
 

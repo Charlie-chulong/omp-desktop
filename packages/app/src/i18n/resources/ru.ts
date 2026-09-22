@@ -1245,10 +1245,6 @@ export const ru: TranslationResources = {
         label: "Проект",
         all: "Все проекты",
       },
-      hiddenProjects: {
-        label: "Скрытые проекты",
-        restoreAll: "Восстановить все",
-      },
     },
     filterEmpty: {
       title: "Нет подходящих рабочих пространств",

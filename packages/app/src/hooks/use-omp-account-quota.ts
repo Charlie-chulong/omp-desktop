@@ -11,8 +11,11 @@ type OmpAccountQuotaAccount = NonNullable<
 
 export type OmpAccountQuotaDisplayAccount = OmpAccountQuotaAccount & { note?: string };
 
-export function ompAccountQuotaQueryKey(serverId: string) {
-  return ["ompWorkflowQuota", serverId] as const;
+export const OMP_PROVIDER_MANAGEMENT_STALE_TIME_MS = 300_000;
+export const OMP_PROVIDER_MANAGEMENT_GC_TIME_MS = 1_800_000;
+
+export function ompProviderManagementQueryKey(serverId: string) {
+  return ["ompProviderManagement", serverId] as const;
 }
 
 function isCodexProvider(provider: string | undefined, modelId: string | null): boolean {
@@ -71,7 +74,7 @@ export function useOmpCodexAccountQuota(
   const active = enabled && canFetch;
   const accountNotes = useOmpProviderAccountNotes(active ? serverId : null);
   const query = useFetchQuery({
-    queryKey: ompAccountQuotaQueryKey(serverId ?? ""),
+    queryKey: ompProviderManagementQueryKey(serverId ?? ""),
     queryFn: async () => {
       if (!client) throw new Error("OMP provider management is unavailable");
       return fetchOmpAccountQuotaManagement(client);
@@ -79,6 +82,7 @@ export function useOmpCodexAccountQuota(
     enabled: active,
     dataShape: "value",
     staleTimeMs: 0,
+    gcTime: OMP_PROVIDER_MANAGEMENT_GC_TIME_MS,
     refetchInterval: 300_000,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
