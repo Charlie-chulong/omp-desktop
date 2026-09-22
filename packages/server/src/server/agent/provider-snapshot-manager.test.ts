@@ -105,6 +105,7 @@ async function runTestCatalogActivities(
 }
 
 describe("ProviderSnapshotManager public surface", () => {
+
   test("validates complete Hub agent configurations through the current provider contract", async () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),

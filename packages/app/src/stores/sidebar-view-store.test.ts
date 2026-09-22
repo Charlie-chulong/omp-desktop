@@ -42,7 +42,6 @@ describe("sidebar view store", () => {
     useSidebarViewStore.setState({
       groupMode: "project",
       hostFilters: [],
-      projectFilters: [],
       hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
@@ -95,7 +94,6 @@ describe("sidebar view store", () => {
     ).toEqual({
       groupMode: "status",
       hostFilters: [],
-      projectFilters: [],
       hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
@@ -110,7 +108,6 @@ describe("sidebar view store", () => {
     ).toEqual({
       groupMode: "status",
       hostFilters: ["host-a"],
-      projectFilters: [],
       hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
@@ -125,7 +122,6 @@ describe("sidebar view store", () => {
     ).toEqual({
       groupMode: "status",
       hostFilters: ["host-a", "host-b"],
-      projectFilters: [],
       hiddenProjectViewKeys: [],
       labelFilter: { labels: [] },
     });
@@ -190,86 +186,48 @@ describe("sidebar view store", () => {
     ).toEqual({ labels: ["urgent", "blocked"] });
   });
 
-  it("toggles multiple projects into and out of the filter", () => {
-    const store = useSidebarViewStore.getState();
-    store.toggleProjectFilter("project-a");
-    store.toggleProjectFilter("project-b");
-
-    expect(useSidebarViewStore.getState().projectFilters).toEqual(["project-a", "project-b"]);
-
-    store.toggleProjectFilter("project-a");
-
-    expect(useSidebarViewStore.getState().projectFilters).toEqual(["project-b"]);
-
-    store.clearProjectFilters();
-
-    expect(useSidebarViewStore.getState().projectFilters).toEqual([]);
-  });
-
-  it("keeps the other facets when the project filter is cleared", () => {
-    useSidebarViewStore.setState({
-      groupMode: "status",
-      hostFilters: ["host-a"],
-      projectFilters: ["project-a"],
-      labelFilter: { labels: ["urgent"] },
-    });
-
-    useSidebarViewStore.getState().clearProjectFilters();
-
-    expect(useSidebarViewStore.getState()).toMatchObject({
-      groupMode: "status",
-      hostFilters: ["host-a"],
-      projectFilters: [],
-      labelFilter: { labels: ["urgent"] },
-    });
-  });
-
-  // The persisted schema is a `z.strictObject` behind `createValidatedPersistStorage`, so a key
-  // the schema does not list fails the parse and takes every other sidebar setting down with it.
-  it("carries a persisted project filter through the version migration", () => {
-    expect(
-      migrateSidebarViewState({
-        groupMode: "project",
-        hostFilters: ["host-a"],
-        projectFilters: ["project-a", "project-b"],
-      }),
-    ).toEqual({
-      groupMode: "project",
-      hostFilters: ["host-a"],
-      hiddenProjectViewKeys: [],
-      projectFilters: ["project-a", "project-b"],
-      labelFilter: { labels: [] },
-    });
-  });
-
-  it("hides and restores projects without changing filter state", () => {
-    useSidebarViewStore.setState({
-      projectFilters: ["project-a"],
-      hiddenProjectViewKeys: [],
-    });
+  it("hides projects from either entry point and restores them from the project menu", () => {
     const store = useSidebarViewStore.getState();
 
     store.hideProject("project-a");
     store.hideProject("project-a");
-    store.hideProject("project-b");
-    expect(useSidebarViewStore.getState()).toMatchObject({
-      projectFilters: ["project-a"],
-      hiddenProjectViewKeys: ["project-a", "project-b"],
-    });
+    store.toggleProjectVisibility("project-b");
+    expect(useSidebarViewStore.getState().hiddenProjectViewKeys).toEqual([
+      "project-a",
+      "project-b",
+    ]);
 
-    store.showProject("project-a");
+    store.toggleProjectVisibility("project-a");
     expect(useSidebarViewStore.getState().hiddenProjectViewKeys).toEqual(["project-b"]);
 
     store.showAllProjects();
     expect(useSidebarViewStore.getState().hiddenProjectViewKeys).toEqual([]);
   });
 
-  it("never keeps project filters from state the schema rejects", () => {
+  // v7 persisted the former project allowlist. It is accepted during migration so the remaining
+  // settings survive, but discarded because project visibility now has one inverse-semantics list.
+  it("discards the obsolete project filter without losing other persisted preferences", () => {
+    expect(
+      migrateSidebarViewState({
+        groupMode: "status",
+        hostFilters: ["host-a"],
+        projectFilters: ["project-a"],
+        hiddenProjectViewKeys: ["project-b"],
+        labelFilter: { labels: ["urgent"] },
+      }),
+    ).toEqual({
+      groupMode: "status",
+      hostFilters: ["host-a"],
+      hiddenProjectViewKeys: ["project-b"],
+      labelFilter: { labels: ["urgent"] },
+    });
+  });
+
+  it("rejects malformed legacy project filters", () => {
     expect(migrateSidebarViewState({ projectFilters: "project-a" })).toEqual({
       groupMode: "project",
       hostFilters: [],
       hiddenProjectViewKeys: [],
-      projectFilters: [],
       labelFilter: { labels: [] },
     });
   });

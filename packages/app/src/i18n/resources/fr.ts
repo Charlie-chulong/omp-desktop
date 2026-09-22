@@ -1253,10 +1253,6 @@ export const fr: TranslationResources = {
         label: "Projet",
         all: "Tous les projets",
       },
-      hiddenProjects: {
-        label: "Projets masqués",
-        restoreAll: "Tout restaurer",
-      },
     },
     filterEmpty: {
       title: "Aucun espace de travail ne correspond",

@@ -140,7 +140,7 @@ interface SidebarSharedProps {
   projectIconTargets: SidebarProjectIconTarget[];
   projects: SidebarProjectEntry[];
   hasProjectsBeforeFilter: boolean;
-  hasActiveProjectFilter: boolean;
+  hasHiddenProjects: boolean;
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   isInitialLoad: boolean;
   isRevalidating: boolean;
@@ -200,7 +200,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   const {
     projects,
     hasProjectsBeforeFilter,
-    resolvedProjectFilters,
+    hasHiddenProjects,
     workspaceEntriesByKey,
     isInitialLoad,
     isRevalidating,
@@ -338,7 +338,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     projectIconTargets,
     projects,
     hasProjectsBeforeFilter,
-    hasActiveProjectFilter: resolvedProjectFilters.length > 0,
+    hasHiddenProjects,
     workspaceEntriesByKey,
     isInitialLoad,
     isRevalidating,
@@ -1514,7 +1514,7 @@ function MobileSidebar({
   projectIconTargets,
   projects,
   hasProjectsBeforeFilter,
-  hasActiveProjectFilter,
+  hasHiddenProjects,
   workspaceEntriesByKey,
   isInitialLoad,
   isRevalidating,
@@ -1640,7 +1640,7 @@ function MobileSidebar({
             projectIconTargets={projectIconTargets}
             projects={projects}
             hasProjectsBeforeFilter={hasProjectsBeforeFilter}
-            hasActiveProjectFilter={hasActiveProjectFilter}
+            hasHiddenProjects={hasHiddenProjects}
             workspaceEntriesByKey={workspaceEntriesByKey}
             isRefreshing={isManualRefresh && isRevalidating}
             onRefresh={handleRefresh}
@@ -1670,7 +1670,7 @@ function DesktopSidebar({
   projectIconTargets,
   projects,
   hasProjectsBeforeFilter,
-  hasActiveProjectFilter,
+  hasHiddenProjects,
   workspaceEntriesByKey,
   isInitialLoad,
   isRevalidating,
@@ -1860,7 +1860,7 @@ function DesktopSidebar({
             projectIconTargets={projectIconTargets}
             projects={projects}
             hasProjectsBeforeFilter={hasProjectsBeforeFilter}
-            hasActiveProjectFilter={hasActiveProjectFilter}
+            hasHiddenProjects={hasHiddenProjects}
             workspaceEntriesByKey={workspaceEntriesByKey}
             isRefreshing={isManualRefresh && isRevalidating}
             onRefresh={handleRefresh}

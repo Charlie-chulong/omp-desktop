@@ -1256,10 +1256,6 @@ export const en = {
         label: "Project",
         all: "All projects",
       },
-      hiddenProjects: {
-        label: "Hidden projects",
-        restoreAll: "Restore all",
-      },
     },
     filterEmpty: {
       title: "No workspaces match",

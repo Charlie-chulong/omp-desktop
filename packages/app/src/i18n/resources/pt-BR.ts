@@ -1245,10 +1245,6 @@ export const ptBR: TranslationResources = {
         label: "Projeto",
         all: "Todos os projetos",
       },
-      hiddenProjects: {
-        label: "Projetos ocultos",
-        restoreAll: "Restaurar tudo",
-      },
     },
     filterEmpty: {
       title: "Nenhum espaço de trabalho corresponde",

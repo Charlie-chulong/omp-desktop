@@ -17,7 +17,6 @@ import {
   Clock,
   Diff,
   EyeOff,
-  Eye,
   Folder,
   GitBranch,
   GitPullRequest,
@@ -68,7 +67,6 @@ const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMute
 const ThemedSettings2 = withUnistyles(Settings2);
 /** CI's mark: the subject of the checks row, and the shape the icon-only option leaves behind. */
 const ThemedCircleCheck = withUnistyles(CircleCheck);
-const ThemedEye = withUnistyles(Eye);
 const ThemedCircle = withUnistyles(Circle);
 
 /** Fits the item's 16pt leading slot with a hair of room, matching the trailing check. */
@@ -170,9 +168,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   const { t } = useTranslation();
   const preferences = useSidebarDisplayPreferences();
   const hosts = useHosts();
-  // `allProjects`, never `projects`: the model's `projects` is already filtered, so a picker fed
-  // from it would lose the row that undoes the filter as soon as the filter narrowed to one.
-  const { allProjects, hiddenProjects, resolvedProjectFilters } = useSidebarModel();
+  const { allProjects } = useSidebarModel();
   const { labels } = useWorkspaceLabelProjection();
   const [managerOpen, setManagerOpen] = useState(false);
   const openManager = useCallback(() => setManagerOpen(true), []);
@@ -187,8 +183,8 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   );
 
   const showHostFilter = hosts.length > 1;
-  // One project is the whole sidebar, so filtering to it is a no-op with a menu row attached.
-  const showProjectFilter = allProjects.length > 1;
+  // This page is also the recovery path for a hidden project, so even one project is actionable.
+  const showProjectFilter = allProjects.length > 0;
   // Nothing to filter by means no row at all. The active-filter half is not redundant: the merged
   // catalog only counts hosts that are online, so a host dropping off would otherwise take away
   // the only way back to a filter that is still hiding workspaces.
@@ -256,20 +252,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
       definitions.push({
         id: "projectFilter",
         title: t("sidebar.display.projectFilter.label"),
-        content: (
-          <ProjectFilterPage
-            projects={allProjects}
-            resolvedProjectFilters={resolvedProjectFilters}
-            preferences={preferences}
-          />
-        ),
-      });
-    }
-    if (hiddenProjects.length > 0) {
-      definitions.push({
-        id: "hiddenProjects",
-        title: t("sidebar.display.hiddenProjects.label"),
-        content: <HiddenProjectsPage projects={hiddenProjects} preferences={preferences} />,
+        content: <ProjectFilterPage projects={allProjects} preferences={preferences} />,
       });
     }
     if (showLabelFilter) {
@@ -289,8 +272,6 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
     showHostFilter,
     showProjectFilter,
     allProjects,
-    resolvedProjectFilters,
-    hiddenProjects,
     showLabelFilter,
     labels,
     openManager,
@@ -353,17 +334,12 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
               {showHostFilter ? null : <MenuSeparator />}
               <MenuSubTrigger
                 id="projectFilter"
-                indicator={resolvedProjectFilters.length > 0}
+                indicator={preferences.hiddenProjectViewKeys.length > 0}
                 testID="sidebar-display-project-filter"
               >
                 {t("sidebar.display.projectFilter.label")}
               </MenuSubTrigger>
             </>
-          ) : null}
-          {hiddenProjects.length > 0 ? (
-            <MenuSubTrigger id="hiddenProjects" indicator testID="sidebar-display-hidden-projects">
-              {t("sidebar.display.hiddenProjects.label")}
-            </MenuSubTrigger>
           ) : null}
           {showLabelFilter ? (
             <>
@@ -619,21 +595,16 @@ function ChecksSubTrigger(): ReactElement {
 }
 
 /**
- * Every project the sidebar could show, one row each.
+ * Every project the sidebar can show, including hidden projects.
  *
- * A workspace belongs to exactly one project, so this is a plain allowlist — the same shape as the
- * host page, and deliberately not the label page's tri-state.
- *
- * Selection reads `resolvedProjectFilters`, not the stored list. A stored key whose project is not
- * currently visible filters nothing, so showing it as checked here would contradict the sidebar.
+ * A check means the project is visible. This is the same persisted visibility state changed by
+ * the project's "Hide project" action, so filtering and recovery no longer compete in two pages.
  */
 function ProjectFilterPage({
   projects,
-  resolvedProjectFilters,
   preferences,
 }: {
   projects: readonly SidebarProjectEntry[];
-  resolvedProjectFilters: readonly string[];
   preferences: Preferences;
 }): ReactElement {
   const { t } = useTranslation();
@@ -644,9 +615,9 @@ function ProjectFilterPage({
   return (
     <>
       <MenuItem
-        selected={resolvedProjectFilters.length === 0}
+        selected={preferences.hiddenProjectViewKeys.length === 0}
         closeOnSelect={false}
-        onSelect={preferences.clearProjectFilters}
+        onSelect={preferences.showAllProjects}
         testID="sidebar-project-filter-all"
       >
         {t("sidebar.display.projectFilter.all")}
@@ -657,8 +628,8 @@ function ProjectFilterPage({
           viewKey={project.viewKey}
           label={project.projectName}
           iconDataUri={iconByProjectViewKey.get(project.viewKey) ?? null}
-          selected={resolvedProjectFilters.includes(project.viewKey)}
-          onToggle={preferences.toggleProjectFilter}
+          selected={!preferences.hiddenProjectViewKeys.includes(project.viewKey)}
+          onToggle={preferences.toggleProjectVisibility}
         />
       ))}
     </>
@@ -699,76 +670,6 @@ function ProjectFilterItem({
       closeOnSelect={false}
       onSelect={handleSelect}
       testID={`sidebar-project-filter-${viewKey}`}
-    >
-      {label}
-    </MenuItem>
-  );
-}
-
-function HiddenProjectsPage({
-  projects,
-  preferences,
-}: {
-  projects: readonly SidebarProjectEntry[];
-  preferences: Preferences;
-}): ReactElement {
-  const { t } = useTranslation();
-  const iconTargets = useMemo(() => resolveSidebarProjectIconTargets(projects), [projects]);
-  const iconByProjectViewKey = useProjectIcons({ projects: iconTargets });
-
-  return (
-    <>
-      <MenuItem
-        leading={<ThemedEye size={OPTION_ICON_SIZE} uniProps={mutedIconMapping} />}
-        onSelect={preferences.showAllProjects}
-        testID="sidebar-hidden-projects-restore-all"
-      >
-        {t("sidebar.display.hiddenProjects.restoreAll")}
-      </MenuItem>
-      <MenuSeparator />
-      {projects.map((project) => (
-        <HiddenProjectItem
-          key={project.viewKey}
-          viewKey={project.viewKey}
-          label={project.projectName}
-          iconDataUri={iconByProjectViewKey.get(project.viewKey) ?? null}
-          onRestore={preferences.showProject}
-        />
-      ))}
-    </>
-  );
-}
-
-function HiddenProjectItem({
-  viewKey,
-  label,
-  iconDataUri,
-  onRestore,
-}: {
-  viewKey: string;
-  label: string;
-  iconDataUri: string | null;
-  onRestore: (viewKey: string) => void;
-}): ReactElement {
-  const handleSelect = useCallback(() => onRestore(viewKey), [onRestore, viewKey]);
-  const leading = useMemo(
-    () => (
-      <ProjectIconView
-        iconDataUri={iconDataUri}
-        initial={projectIconPlaceholderLabelFromDisplayName(label).charAt(0).toUpperCase()}
-        projectViewKey={viewKey}
-        size={OPTION_ICON_SIZE}
-        textStyle={styles.projectIconText}
-      />
-    ),
-    [iconDataUri, label, viewKey],
-  );
-
-  return (
-    <MenuItem
-      leading={leading}
-      onSelect={handleSelect}
-      testID={`sidebar-hidden-project-restore-${viewKey}`}
     >
       {label}
     </MenuItem>

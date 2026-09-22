@@ -1219,10 +1219,6 @@ export const ar: TranslationResources = {
         label: "المشروع",
         all: "كل المشاريع",
       },
-      hiddenProjects: {
-        label: "المشاريع المخفية",
-        restoreAll: "استعادة الكل",
-      },
     },
     filterEmpty: {
       title: "لا توجد مساحات عمل مطابقة",

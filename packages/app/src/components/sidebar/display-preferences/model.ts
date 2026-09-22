@@ -30,12 +30,8 @@ export interface SidebarDisplayPreferences {
   hostFilters: readonly string[];
   toggleHostFilter: (serverId: string) => void;
   clearHostFilters: () => void;
-  /** Raw stored selection. For anything the user sees, use the model's resolved list instead. */
-  projectFilters: readonly string[];
-  toggleProjectFilter: (viewKey: string) => void;
-  clearProjectFilters: () => void;
   hiddenProjectViewKeys: readonly string[];
-  showProject: (viewKey: string) => void;
+  toggleProjectVisibility: (viewKey: string) => void;
   showAllProjects: () => void;
   labelFilter: SidebarLabelFilter;
   toggleLabelFilter: (name: string) => void;
@@ -56,11 +52,8 @@ export function useSidebarDisplayPreferences(): SidebarDisplayPreferences {
   const hostFilters = useSidebarViewStore((state) => state.hostFilters);
   const toggleHostFilter = useSidebarViewStore((state) => state.toggleHostFilter);
   const clearHostFilters = useSidebarViewStore((state) => state.clearHostFilters);
-  const projectFilters = useSidebarViewStore((state) => state.projectFilters);
-  const toggleProjectFilter = useSidebarViewStore((state) => state.toggleProjectFilter);
-  const clearProjectFilters = useSidebarViewStore((state) => state.clearProjectFilters);
   const hiddenProjectViewKeys = useSidebarViewStore((state) => state.hiddenProjectViewKeys);
-  const showProject = useSidebarViewStore((state) => state.showProject);
+  const toggleProjectVisibility = useSidebarViewStore((state) => state.toggleProjectVisibility);
   const showAllProjects = useSidebarViewStore((state) => state.showAllProjects);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const toggleLabelFilter = useSidebarViewStore((state) => state.toggleLabelFilter);
@@ -123,15 +116,12 @@ export function useSidebarDisplayPreferences(): SidebarDisplayPreferences {
       hostFilters,
       toggleHostFilter,
       clearHostFilters,
-      projectFilters,
-      toggleProjectFilter,
-      clearProjectFilters,
+      hiddenProjectViewKeys,
+      toggleProjectVisibility,
+      showAllProjects,
       labelFilter,
       toggleLabelFilter,
       clearLabelFilter,
-      hiddenProjectViewKeys,
-      showProject,
-      showAllProjects,
     }),
     [
       grouping,
@@ -147,15 +137,12 @@ export function useSidebarDisplayPreferences(): SidebarDisplayPreferences {
       hostFilters,
       toggleHostFilter,
       clearHostFilters,
-      projectFilters,
-      toggleProjectFilter,
-      clearProjectFilters,
+      hiddenProjectViewKeys,
+      toggleProjectVisibility,
+      showAllProjects,
       labelFilter,
       toggleLabelFilter,
       clearLabelFilter,
-      hiddenProjectViewKeys,
-      showProject,
-      showAllProjects,
     ],
   );
 }

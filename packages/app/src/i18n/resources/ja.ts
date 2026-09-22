@@ -1231,10 +1231,6 @@ export const ja: TranslationResources = {
         label: "プロジェクト",
         all: "すべてのプロジェクト",
       },
-      hiddenProjects: {
-        label: "非表示のプロジェクト",
-        restoreAll: "すべて復元",
-      },
     },
     filterEmpty: {
       title: "一致するワークスペースがありません",

@@ -240,8 +240,8 @@ interface SidebarWorkspaceListProps {
   projectIconTargets: SidebarProjectIconTarget[];
   projects: SidebarProjectEntry[];
   hasProjectsBeforeFilter: boolean;
-  /** Whether a project filter is actually being applied — the resolved list, not the stored one. */
-  hasActiveProjectFilter: boolean;
+  /** Keeps the display controls reachable when every project is hidden. */
+  hasHiddenProjects: boolean;
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   collapsedProjectKeys: ReadonlySet<string>;
   onToggleProjectCollapsed: (projectViewKey: string) => void;
@@ -2006,7 +2006,7 @@ export function SidebarWorkspaceList({
   projectIconTargets,
   projects,
   hasProjectsBeforeFilter,
-  hasActiveProjectFilter,
+  hasHiddenProjects,
   workspaceEntriesByKey,
   collapsedProjectKeys,
   onToggleProjectCollapsed,
@@ -2046,9 +2046,8 @@ export function SidebarWorkspaceList({
   // this whole subtree, which unmounted the header — and the header is where the display menu's
   // trigger lives, so filtering the last row away closed the menu you were filtering from.
   //
-  // Only the label filter can get here. The project filter resolves against the projects it can
-  // see and falls back to "all projects" when nothing matches, so it either keeps at least one
-  // project or is not applied at all — it can narrow this list but never empty it.
+  // Project visibility is handled separately: a fully hidden list is intentional, and the header
+  // remains available below so projects can be shown again.
   const sidebarFilterEmpty =
     hasActiveLabelFilter && hasProjectsBeforeFilter && projects.length === 0;
 
@@ -2080,7 +2079,7 @@ export function SidebarWorkspaceList({
         listFooterComponent={listFooterComponent}
         listHeaderComponent={listHeaderComponent}
         sidebarFilterEmpty={sidebarFilterEmpty}
-        hasActiveProjectFilter={hasActiveProjectFilter}
+        hasHiddenProjects={hasHiddenProjects}
         parentGestureRef={parentGestureRef}
         dragGestureHostPresented={dragGestureHostPresented}
         pathname={pathname}
@@ -2150,7 +2149,7 @@ function ProjectModeList({
   listFooterComponent,
   listHeaderComponent,
   sidebarFilterEmpty,
-  hasActiveProjectFilter,
+  hasHiddenProjects,
   parentGestureRef,
   dragGestureHostPresented,
   pathname,
@@ -2416,10 +2415,8 @@ function ProjectModeList({
 
   const content = (
     <>
-      {/* The header carries the display menu, which is the only way back out of a filter, so it
-        stays for as long as a filter is what emptied the list. It is absent only when the
-        sidebar is genuinely empty, where a section heading would sit over nothing. */}
-      {projects.length > 0 || hasActiveHostFilter || hasActiveProjectFilter || sidebarFilterEmpty
+      {/* The header carries the display menu, including the way to show hidden projects again. */}
+      {projects.length > 0 || hasActiveHostFilter || hasHiddenProjects || sidebarFilterEmpty
         ? listHeaderComponent
         : null}
       {sidebarFilterEmpty ? <SidebarFilterEmptyState /> : projectBody}

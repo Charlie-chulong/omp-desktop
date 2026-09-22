@@ -1227,10 +1227,6 @@ export const ko: TranslationResources = {
         label: "프로젝트",
         all: "모든 프로젝트",
       },
-      hiddenProjects: {
-        label: "숨긴 프로젝트",
-        restoreAll: "모두 복원",
-      },
     },
     filterEmpty: {
       title: "일치하는 워크스페이스가 없습니다",

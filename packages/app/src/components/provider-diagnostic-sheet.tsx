@@ -44,7 +44,11 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useToast } from "@/contexts/toast-context";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
-import { ompAccountQuotaQueryKey } from "@/hooks/use-omp-account-quota";
+import {
+  OMP_PROVIDER_MANAGEMENT_GC_TIME_MS,
+  OMP_PROVIDER_MANAGEMENT_STALE_TIME_MS,
+  ompProviderManagementQueryKey,
+} from "@/hooks/use-omp-account-quota";
 import { useOmpProviderAccountNotes } from "@/hooks/use-omp-provider-account-notes";
 import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
 import { resolveLoginProviderUsage } from "@/provider-usage/login-usage";
@@ -1737,6 +1741,9 @@ function OmpManagementPanel({
   const { theme } = useUnistyles();
   const client = useHostRuntimeClient(serverId);
   const queryClient = useQueryClient();
+  const managementQueryKey = useMemo(() => ompProviderManagementQueryKey(serverId), [serverId]);
+  const cachedManagement =
+    queryClient.getQueryData<OmpProviderManagement>(managementQueryKey) ?? null;
   const {
     notes: accountNotes,
     save: saveAccountNotes,
@@ -1747,8 +1754,8 @@ function OmpManagementPanel({
     (state) => state.sessions[serverId]?.serverInfo?.features?.ompProviderManagement === true,
   );
   const { view: providerUsageView } = useProviderUsage(serverId, { enabled: visible });
-  const [management, setManagement] = useState<OmpProviderManagement | null>(null);
-  const [configYaml, setConfigYaml] = useState("");
+  const [management, setManagement] = useState<OmpProviderManagement | null>(cachedManagement);
+  const [configYaml, setConfigYaml] = useState(cachedManagement?.configYaml ?? "");
   const [activeTab, setActiveTab] = useState<OmpManagementTab>("sign-in");
   const [providerSearchQuery, setProviderSearchQuery] = useState("");
   const [signedInProvidersExpanded, setSignedInProvidersExpanded] = useState(false);
@@ -1782,26 +1789,56 @@ function OmpManagementPanel({
   loginFlowRef.current = loginFlow;
   visibleRef.current = visible;
 
+  const showManagement = useCallback((result: OmpProviderManagement) => {
+    setManagement(result);
+    setConfigYaml(result.configYaml);
+  }, []);
+  const storeManagement = useCallback(
+    (result: OmpProviderManagement) => {
+      queryClient.setQueryData(managementQueryKey, result);
+      showManagement(result);
+    },
+    [managementQueryKey, queryClient, showManagement],
+  );
   const applyManagement = useCallback(
     (result: OmpProviderManagement) => {
-      setManagement(result);
-      setConfigYaml(result.configYaml);
+      storeManagement(result);
       onSaved();
     },
-    [onSaved],
+    [onSaved, storeManagement],
   );
-  const load = useCallback(async () => {
-    if (!client || !supported) return;
-    setLoading(true);
-    setError(null);
-    try {
-      applyManagement(await client.getOmpProviderManagement());
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    } finally {
-      setLoading(false);
-    }
-  }, [applyManagement, client, supported]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!client || !supported) return;
+      const cachedState = queryClient.getQueryState<OmpProviderManagement>(managementQueryKey);
+      if (cachedState?.data) showManagement(cachedState.data);
+      if (
+        !force &&
+        cachedState?.data &&
+        Date.now() - cachedState.dataUpdatedAt < OMP_PROVIDER_MANAGEMENT_STALE_TIME_MS
+      ) {
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await queryClient.fetchQuery({
+          queryKey: managementQueryKey,
+          queryFn: () => client.getOmpProviderManagement(),
+          staleTime: force ? 0 : OMP_PROVIDER_MANAGEMENT_STALE_TIME_MS,
+          gcTime: OMP_PROVIDER_MANAGEMENT_GC_TIME_MS,
+        });
+        storeManagement(result);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [client, managementQueryKey, queryClient, showManagement, storeManagement, supported],
+  );
   const cancelLoginFlow = useCallback(
     async (flow: OmpProviderLoginFlowState) => {
       if (!client || cancellingLoginFlowIdRef.current === flow.flowId) return;
@@ -1979,17 +2016,15 @@ function OmpManagementPanel({
       setError(null);
       try {
         const result = await client.reorderOmpProviderAccounts(providerId, credentialIds);
-        const queryKey = ompAccountQuotaQueryKey(serverId);
-        await queryClient.cancelQueries({ queryKey, exact: true });
-        queryClient.setQueryData(queryKey, result);
-        applyManagement(result);
+        await queryClient.cancelQueries({ queryKey: managementQueryKey, exact: true });
+        storeManagement(result);
       } catch (reorderError) {
         setError(reorderError instanceof Error ? reorderError.message : String(reorderError));
       } finally {
         setReorderingProviderId(null);
       }
     },
-    [applyManagement, client, queryClient, serverId],
+    [client, managementQueryKey, queryClient, storeManagement],
   );
   const editAccountNote = useCallback(
     (credentialId: number) => {
@@ -2096,7 +2131,7 @@ function OmpManagementPanel({
     () => setNotSignedInProvidersExpanded((expanded) => !expanded),
     [],
   );
-  const handleRefreshPress = useCallback(() => void load(), [load]);
+  const handleRefreshPress = useCallback(() => void load(true), [load]);
   const handleSavePress = useCallback(() => void save(), [save]);
   const handleFinishLoginPress = useCallback(() => void finishLogin(), [finishLogin]);
   const handleOpenAuthorizationPress = useCallback(() => {
@@ -2481,7 +2516,7 @@ function OmpManagementPanel({
   return renderPanel();
 }
 export function OmpProviderConfigurationPanel({ serverId }: { serverId: string }) {
-  const { refresh } = useProvidersSnapshot(serverId);
+  const { refresh } = useProvidersSnapshot(serverId, { enabled: false });
   const handleSaved = useCallback(() => {
     void refresh(["omp"]);
   }, [refresh]);
