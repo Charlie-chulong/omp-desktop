@@ -366,6 +366,19 @@ export const fr: TranslationResources = {
     actions: {
       loadMore: "Charger plus",
       clearSearch: "Effacer la recherche",
+      select: "Sélectionner",
+    },
+    bulk: {
+      selected: "{{count}} sélectionnées",
+      selectAll: "Tout sélectionner",
+      clearSelection: "Effacer la sélection",
+      archive: "Archiver",
+      delete: "Supprimer",
+      archiveTitle: "Archiver {{count}} conversations ?",
+      archiveMessage: "Les conversations en cours seront arrêtées.",
+      deleteTitle: "Supprimer {{count}} conversations ?",
+      deleteMessage: "Cela supprime définitivement l’historique des conversations sélectionnées.",
+      failed: "{{count}} conversations n’ont pas pu être traitées",
     },
   },
   agentList: {
@@ -404,6 +417,8 @@ export const fr: TranslationResources = {
       resetZoom: "Réinitialiser la vue",
       viewSource: "Afficher la source",
       viewDiagram: "Afficher le diagramme",
+      viewFullscreen: "Afficher en plein écran",
+      exitFullscreen: "Quitter le plein écran",
     },
     actions: {
       copyCode: "Copier le code",
@@ -1238,6 +1253,10 @@ export const fr: TranslationResources = {
         label: "Projet",
         all: "Tous les projets",
       },
+      hiddenProjects: {
+        label: "Projets masqués",
+        restoreAll: "Tout restaurer",
+      },
     },
     filterEmpty: {
       title: "Aucun espace de travail ne correspond",
@@ -1283,6 +1302,8 @@ export const fr: TranslationResources = {
         openSettings: "Ouvrir les paramètres du projet",
         openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
+        copyPath: "Copier le chemin",
+        hide: "Masquer le projet",
         remove: "Supprimer le projet",
         removing: "Suppression...",
       },
@@ -1297,6 +1318,7 @@ export const fr: TranslationResources = {
         hostDisconnected: "Hostn'est pas connecté",
         removeFailed: "Échec de la suppression de certains espaces de travail",
         updateHostToRemove: "Mettez à jour le host pour supprimer des projets.",
+        pathCopied: "Chemin du projet copié",
       },
       drop: {
         hint: "Déposez un dossier pour l’ajouter comme projet",

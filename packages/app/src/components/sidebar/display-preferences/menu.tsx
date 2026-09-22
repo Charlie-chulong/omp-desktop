@@ -17,6 +17,7 @@ import {
   Clock,
   Diff,
   EyeOff,
+  Eye,
   Folder,
   GitBranch,
   GitPullRequest,
@@ -67,6 +68,7 @@ const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMute
 const ThemedSettings2 = withUnistyles(Settings2);
 /** CI's mark: the subject of the checks row, and the shape the icon-only option leaves behind. */
 const ThemedCircleCheck = withUnistyles(CircleCheck);
+const ThemedEye = withUnistyles(Eye);
 const ThemedCircle = withUnistyles(Circle);
 
 /** Fits the item's 16pt leading slot with a hair of room, matching the trailing check. */
@@ -170,7 +172,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
   const hosts = useHosts();
   // `allProjects`, never `projects`: the model's `projects` is already filtered, so a picker fed
   // from it would lose the row that undoes the filter as soon as the filter narrowed to one.
-  const { allProjects, resolvedProjectFilters } = useSidebarModel();
+  const { allProjects, hiddenProjects, resolvedProjectFilters } = useSidebarModel();
   const { labels } = useWorkspaceLabelProjection();
   const [managerOpen, setManagerOpen] = useState(false);
   const openManager = useCallback(() => setManagerOpen(true), []);
@@ -263,6 +265,13 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
         ),
       });
     }
+    if (hiddenProjects.length > 0) {
+      definitions.push({
+        id: "hiddenProjects",
+        title: t("sidebar.display.hiddenProjects.label"),
+        content: <HiddenProjectsPage projects={hiddenProjects} preferences={preferences} />,
+      });
+    }
     if (showLabelFilter) {
       definitions.push({
         id: "labelFilter",
@@ -281,6 +290,7 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
     showProjectFilter,
     allProjects,
     resolvedProjectFilters,
+    hiddenProjects,
     showLabelFilter,
     labels,
     openManager,
@@ -349,6 +359,11 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
                 {t("sidebar.display.projectFilter.label")}
               </MenuSubTrigger>
             </>
+          ) : null}
+          {hiddenProjects.length > 0 ? (
+            <MenuSubTrigger id="hiddenProjects" indicator testID="sidebar-display-hidden-projects">
+              {t("sidebar.display.hiddenProjects.label")}
+            </MenuSubTrigger>
           ) : null}
           {showLabelFilter ? (
             <>
@@ -684,6 +699,76 @@ function ProjectFilterItem({
       closeOnSelect={false}
       onSelect={handleSelect}
       testID={`sidebar-project-filter-${viewKey}`}
+    >
+      {label}
+    </MenuItem>
+  );
+}
+
+function HiddenProjectsPage({
+  projects,
+  preferences,
+}: {
+  projects: readonly SidebarProjectEntry[];
+  preferences: Preferences;
+}): ReactElement {
+  const { t } = useTranslation();
+  const iconTargets = useMemo(() => resolveSidebarProjectIconTargets(projects), [projects]);
+  const iconByProjectViewKey = useProjectIcons({ projects: iconTargets });
+
+  return (
+    <>
+      <MenuItem
+        leading={<ThemedEye size={OPTION_ICON_SIZE} uniProps={mutedIconMapping} />}
+        onSelect={preferences.showAllProjects}
+        testID="sidebar-hidden-projects-restore-all"
+      >
+        {t("sidebar.display.hiddenProjects.restoreAll")}
+      </MenuItem>
+      <MenuSeparator />
+      {projects.map((project) => (
+        <HiddenProjectItem
+          key={project.viewKey}
+          viewKey={project.viewKey}
+          label={project.projectName}
+          iconDataUri={iconByProjectViewKey.get(project.viewKey) ?? null}
+          onRestore={preferences.showProject}
+        />
+      ))}
+    </>
+  );
+}
+
+function HiddenProjectItem({
+  viewKey,
+  label,
+  iconDataUri,
+  onRestore,
+}: {
+  viewKey: string;
+  label: string;
+  iconDataUri: string | null;
+  onRestore: (viewKey: string) => void;
+}): ReactElement {
+  const handleSelect = useCallback(() => onRestore(viewKey), [onRestore, viewKey]);
+  const leading = useMemo(
+    () => (
+      <ProjectIconView
+        iconDataUri={iconDataUri}
+        initial={projectIconPlaceholderLabelFromDisplayName(label).charAt(0).toUpperCase()}
+        projectViewKey={viewKey}
+        size={OPTION_ICON_SIZE}
+        textStyle={styles.projectIconText}
+      />
+    ),
+    [iconDataUri, label, viewKey],
+  );
+
+  return (
+    <MenuItem
+      leading={leading}
+      onSelect={handleSelect}
+      testID={`sidebar-hidden-project-restore-${viewKey}`}
     >
       {label}
     </MenuItem>

@@ -4584,6 +4584,21 @@ export class OmpAgentClient implements AgentClient {
         api: model.api ?? input.api,
         input: model.supportsImages ? ["text", "image"] : ["text"],
         ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+        ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+        ...(model.reasoning &&
+        (model.supportedReasoningLevels?.length || model.defaultReasoningLevel)
+          ? {
+              thinking: {
+                mode: "effort",
+                ...(model.supportedReasoningLevels?.length
+                  ? { efforts: model.supportedReasoningLevels }
+                  : {}),
+                ...(model.defaultReasoningLevel
+                  ? { defaultLevel: model.defaultReasoningLevel }
+                  : {}),
+              },
+            }
+          : {}),
         ...(model.maxTokens ? { maxTokens: model.maxTokens } : {}),
       })),
     });

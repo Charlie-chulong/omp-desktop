@@ -1948,6 +1948,9 @@ export const OmpCustomProviderModelInputSchema = z.object({
   contextWindow: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
   supportsImages: z.boolean().optional(),
+  reasoning: z.boolean().optional(),
+  defaultReasoningLevel: z.string().trim().min(1).optional(),
+  supportedReasoningLevels: z.array(z.string().trim().min(1)).optional(),
 });
 
 export const OmpCustomProviderInputSchema = z.object({
@@ -6722,6 +6725,9 @@ export const OmpProviderModelDiscoveryResponseMessageSchema = z.object({
         inputModalities: z.array(z.string()).optional(),
         contextWindow: z.number().int().positive().optional(),
         maxOutputTokens: z.number().int().positive().optional(),
+        reasoning: z.boolean().optional(),
+        defaultReasoningLevel: z.string().trim().min(1).optional(),
+        supportedReasoningLevels: z.array(z.string().trim().min(1)).optional(),
       }),
     ),
   }),

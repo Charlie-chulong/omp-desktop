@@ -365,6 +365,19 @@ export const ptBR: TranslationResources = {
     actions: {
       loadMore: "Carregar mais",
       clearSearch: "Limpar busca",
+      select: "Selecionar",
+    },
+    bulk: {
+      selected: "{{count}} selecionadas",
+      selectAll: "Selecionar tudo",
+      clearSelection: "Limpar seleção",
+      archive: "Arquivar",
+      delete: "Excluir",
+      archiveTitle: "Arquivar {{count}} conversas?",
+      archiveMessage: "As conversas em execução serão interrompidas.",
+      deleteTitle: "Excluir {{count}} conversas?",
+      deleteMessage: "Isso exclui permanentemente o histórico das conversas selecionadas.",
+      failed: "Não foi possível processar {{count}} conversas",
     },
   },
   agentList: {
@@ -403,6 +416,8 @@ export const ptBR: TranslationResources = {
       resetZoom: "Redefinir visualização",
       viewSource: "Ver fonte",
       viewDiagram: "Ver diagrama",
+      viewFullscreen: "Ver em tela cheia",
+      exitFullscreen: "Sair da tela cheia",
     },
     actions: {
       copyCode: "Copiar código",
@@ -1230,6 +1245,10 @@ export const ptBR: TranslationResources = {
         label: "Projeto",
         all: "Todos os projetos",
       },
+      hiddenProjects: {
+        label: "Projetos ocultos",
+        restoreAll: "Restaurar tudo",
+      },
     },
     filterEmpty: {
       title: "Nenhum espaço de trabalho corresponde",
@@ -1274,6 +1293,8 @@ export const ptBR: TranslationResources = {
         openSettings: "Abrir configurações do projeto",
         openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
+        copyPath: "Copiar caminho",
+        hide: "Ocultar projeto",
         remove: "Remover projeto",
         removing: "Removendo...",
       },
@@ -1288,6 +1309,7 @@ export const ptBR: TranslationResources = {
         hostDisconnected: "Host não está conectado",
         removeFailed: "Falha ao remover alguns workspaces",
         updateHostToRemove: "Atualize o host para remover projetos.",
+        pathCopied: "Caminho do projeto copiado",
       },
       drop: {
         hint: "Solte uma pasta para adicioná-la como projeto",

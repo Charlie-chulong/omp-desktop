@@ -33,6 +33,8 @@ interface SidebarModel extends SidebarWorkspacesListResult {
    * narrowing the filter deletes the rows that would undo it.
    */
   allProjects: SidebarProjectEntry[];
+  /** Projects intentionally removed from the list, retained here so the display menu can restore them. */
+  hiddenProjects: SidebarProjectEntry[];
   /** The project filter as it is actually being applied — see `resolveActiveProjectFilters`. */
   resolvedProjectFilters: readonly string[];
   hasProjectsBeforeFilter: boolean;
@@ -57,6 +59,7 @@ export function SidebarModelProvider({
   const groupMode = useSidebarViewStore((state) => state.groupMode);
   const labelFilter = useSidebarViewStore((state) => state.labelFilter);
   const projectFilters = useSidebarViewStore((state) => state.projectFilters);
+  const hiddenProjectViewKeys = useSidebarViewStore((state) => state.hiddenProjectViewKeys);
   const reconcileLabelFilter = useSidebarViewStore((state) => state.reconcileLabelFilter);
   const { hosts: labelHosts } = useWorkspaceLabelProjection();
   const collapsedProjectKeys = useSidebarCollapsedSectionsStore(
@@ -79,13 +82,25 @@ export function SidebarModelProvider({
     reconcileLabelFilter(availableLabelNames);
   }, [availableLabelNames, hasAuthoritativeLabelCatalog, reconcileLabelFilter]);
   const hasActiveLabelFilter = hasActiveSidebarLabelFilter(labelFilter);
+  const hiddenProjectKeySet = useMemo(
+    () => new Set(hiddenProjectViewKeys),
+    [hiddenProjectViewKeys],
+  );
+  const visibleProjects = useMemo(
+    () => list.projects.filter((project) => !hiddenProjectKeySet.has(project.viewKey)),
+    [hiddenProjectKeySet, list.projects],
+  );
+  const hiddenProjects = useMemo(
+    () => list.projects.filter((project) => hiddenProjectKeySet.has(project.viewKey)),
+    [hiddenProjectKeySet, list.projects],
+  );
   const resolvedProjectFilters = useMemo(
     () =>
       resolveActiveProjectFilters(
         projectFilters,
-        new Set(list.projects.map((project) => project.viewKey)),
+        new Set(visibleProjects.map((project) => project.viewKey)),
       ),
-    [projectFilters, list.projects],
+    [projectFilters, visibleProjects],
   );
   const hasActiveProjectFilter = resolvedProjectFilters.length > 0;
   // The project filter is deliberately absent from this gate. It reads `projectViewKey`, which
@@ -99,13 +114,17 @@ export function SidebarModelProvider({
     active !== false || needsWorkspaceEntries,
   );
   const filteredWorkspaceEntriesByKey = useMemo(() => {
+    const visibleProjectKeys = new Set(visibleProjects.map((project) => project.viewKey));
+    const visibleWorkspaces = [...workspaceEntriesByKey.values()].filter((workspace) =>
+      visibleProjectKeys.has(workspace.projectViewKey),
+    );
     const byProject = filterWorkspacesByProjects({
-      workspaces: [...workspaceEntriesByKey.values()],
+      workspaces: visibleWorkspaces,
       projectFilters: resolvedProjectFilters,
     });
     const filtered = filterWorkspacesByLabels({ workspaces: byProject, ...labelFilter });
     return new Map(filtered.map((workspace) => [workspace.workspaceKey, workspace]));
-  }, [labelFilter, resolvedProjectFilters, workspaceEntriesByKey]);
+  }, [labelFilter, resolvedProjectFilters, visibleProjects, workspaceEntriesByKey]);
   const visibleWorkspaceKeys = useMemo(
     () => new Set(filteredWorkspaceEntriesByKey.keys()),
     [filteredWorkspaceEntriesByKey],
@@ -115,7 +134,7 @@ export function SidebarModelProvider({
   // a header row you can create your first workspace under. The label filter can only ask about
   // workspaces, so a project it empties has nothing left to show.
   const filteredProjects = useMemo(() => {
-    let projects = list.projects;
+    let projects = visibleProjects;
     if (hasActiveProjectFilter) {
       const included = new Set(resolvedProjectFilters);
       projects = projects.filter((project) => included.has(project.viewKey));
@@ -133,7 +152,7 @@ export function SidebarModelProvider({
     hasActiveLabelFilter,
     hasActiveProjectFilter,
     resolvedProjectFilters,
-    list.projects,
+    visibleProjects,
     visibleWorkspaceKeys,
   ]);
   const pinnedKeys = usePinnedSidebarKeys(filteredProjects);
@@ -164,9 +183,10 @@ export function SidebarModelProvider({
     () => ({
       ...list,
       projects: projection.projects,
-      allProjects: list.projects,
+      allProjects: visibleProjects,
+      hiddenProjects,
       resolvedProjectFilters,
-      hasProjectsBeforeFilter: list.projects.length > 0,
+      hasProjectsBeforeFilter: visibleProjects.length > 0,
       workspaceEntriesByKey: filteredWorkspaceEntriesByKey,
       groupMode,
       workspaceGroups: projection.workspaceGroups,
@@ -179,6 +199,8 @@ export function SidebarModelProvider({
       resolvedProjectFilters,
       collapsedProjectKeys,
       groupMode,
+      hiddenProjects,
+      visibleProjects,
       list,
       projection,
       toggleProjectCollapsed,

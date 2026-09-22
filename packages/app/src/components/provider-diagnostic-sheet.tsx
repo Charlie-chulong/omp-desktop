@@ -1475,6 +1475,13 @@ function OmpProviderForm({
               }
             : {}),
           ...(model.supportsImages ? { supportsImages: true } : {}),
+          ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+          ...(model.defaultReasoningLevel
+            ? { defaultReasoningLevel: model.defaultReasoningLevel }
+            : {}),
+          ...(model.supportedReasoningLevels
+            ? { supportedReasoningLevels: model.supportedReasoningLevels }
+            : {}),
         })),
       };
       const result =

@@ -654,6 +654,9 @@ providers:
           contextWindow: 128_000,
           maxTokens: 16_384,
           supportsImages: true,
+          reasoning: true,
+          defaultReasoningLevel: "medium",
+          supportedReasoningLevels: ["low", "medium", "high"],
         },
         { id: "gpt-test-mini", name: "GPT Test Mini", api: "anthropic-messages" },
       ],
@@ -675,6 +678,12 @@ providers:
               input: ["text", "image"],
               contextWindow: 128_000,
               maxTokens: 16_384,
+              reasoning: true,
+              thinking: {
+                mode: "effort",
+                efforts: ["low", "medium", "high"],
+                defaultLevel: "medium",
+              },
             },
             {
               id: "gpt-test-mini",

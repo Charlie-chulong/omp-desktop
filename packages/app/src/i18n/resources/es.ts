@@ -365,6 +365,20 @@ export const es: TranslationResources = {
     actions: {
       loadMore: "Cargar más",
       clearSearch: "Borrar búsqueda",
+      select: "Seleccionar",
+    },
+    bulk: {
+      selected: "{{count}} seleccionadas",
+      selectAll: "Seleccionar todo",
+      clearSelection: "Borrar selección",
+      archive: "Archivar",
+      delete: "Eliminar",
+      archiveTitle: "¿Archivar {{count}} conversaciones?",
+      archiveMessage: "Las conversaciones en ejecución se detendrán.",
+      deleteTitle: "¿Eliminar {{count}} conversaciones?",
+      deleteMessage:
+        "Esto elimina permanentemente el historial de las conversaciones seleccionadas.",
+      failed: "No se pudieron procesar {{count}} conversaciones",
     },
   },
   agentList: {
@@ -403,6 +417,8 @@ export const es: TranslationResources = {
       resetZoom: "Restablecer vista",
       viewSource: "Ver fuente",
       viewDiagram: "Ver diagrama",
+      viewFullscreen: "Ver en pantalla completa",
+      exitFullscreen: "Salir de pantalla completa",
     },
     actions: {
       copyCode: "Copiar código",
@@ -1240,6 +1256,10 @@ export const es: TranslationResources = {
         label: "Proyecto",
         all: "Todos los proyectos",
       },
+      hiddenProjects: {
+        label: "Proyectos ocultos",
+        restoreAll: "Restaurar todo",
+      },
     },
     filterEmpty: {
       title: "Ningún espacio de trabajo coincide",
@@ -1284,6 +1304,8 @@ export const es: TranslationResources = {
         openSettings: "Abrir la configuración del proyecto",
         openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
+        copyPath: "Copiar ruta",
+        hide: "Ocultar proyecto",
         remove: "Eliminar proyecto",
         removing: "Eliminando...",
       },
@@ -1298,6 +1320,7 @@ export const es: TranslationResources = {
         hostDisconnected: "Hostno está conectado",
         removeFailed: "No se pudieron eliminar algunos espacios de trabajo",
         updateHostToRemove: "Actualiza el host para eliminar proyectos.",
+        pathCopied: "Ruta del proyecto copiada",
       },
       drop: {
         hint: "Suelta una carpeta para añadirla como proyecto",

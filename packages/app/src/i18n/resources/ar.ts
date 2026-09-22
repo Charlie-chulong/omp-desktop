@@ -362,6 +362,19 @@ export const ar: TranslationResources = {
     actions: {
       loadMore: "تحميل المزيد",
       clearSearch: "مسح البحث",
+      select: "تحديد",
+    },
+    bulk: {
+      selected: "تم تحديد {{count}}",
+      selectAll: "تحديد الكل",
+      clearSelection: "مسح التحديد",
+      archive: "أرشفة",
+      delete: "حذف",
+      archiveTitle: "أرشفة {{count}} محادثة؟",
+      archiveMessage: "سيتم إيقاف المحادثات قيد التشغيل.",
+      deleteTitle: "حذف {{count}} محادثة؟",
+      deleteMessage: "يؤدي هذا إلى حذف سجل المحادثات المحددة نهائيًا.",
+      failed: "تعذرت معالجة {{count}} محادثة",
     },
   },
   agentList: {
@@ -400,6 +413,8 @@ export const ar: TranslationResources = {
       resetZoom: "إعادة تعيين العرض",
       viewSource: "عرض المصدر",
       viewDiagram: "عرض المخطط",
+      viewFullscreen: "عرض بملء الشاشة",
+      exitFullscreen: "الخروج من ملء الشاشة",
     },
     actions: {
       copyCode: "نسخ الرمز",
@@ -1204,6 +1219,10 @@ export const ar: TranslationResources = {
         label: "المشروع",
         all: "كل المشاريع",
       },
+      hiddenProjects: {
+        label: "المشاريع المخفية",
+        restoreAll: "استعادة الكل",
+      },
     },
     filterEmpty: {
       title: "لا توجد مساحات عمل مطابقة",
@@ -1248,6 +1267,8 @@ export const ar: TranslationResources = {
         openSettings: "افتح إعدادات المشروع",
         openFolder: "Open in file manager",
         openFolderFailed: "Couldn't open folder",
+        copyPath: "نسخ المسار",
+        hide: "إخفاء المشروع",
         remove: "إزالة المشروع",
         removing: "جارٍ الإزالة...",
       },
@@ -1262,6 +1283,7 @@ export const ar: TranslationResources = {
         hostDisconnected: "Host غير متصل",
         removeFailed: "فشل في إزالة بعض مساحات العمل",
         updateHostToRemove: "قم بتحديث Host لإزالة المشاريع.",
+        pathCopied: "تم نسخ مسار المشروع",
       },
       drop: {
         hint: "أفلت مجلدًا لإضافته كمشروع",
