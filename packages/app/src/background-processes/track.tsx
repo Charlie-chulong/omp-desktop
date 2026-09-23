@@ -1,4 +1,13 @@
-import { Square, Terminal } from "lucide-react-native";
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleDot,
+  CircleHelp,
+  CircleMinus,
+  CircleX,
+  Square,
+  Terminal,
+} from "lucide-react-native";
 import { Fragment, useCallback } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -9,6 +18,12 @@ import type { Theme } from "@/styles/theme";
 import type { BackgroundProcessesState } from "./query";
 
 const ThemedSquare = withUnistyles(Square);
+const ThemedCircleAlert = withUnistyles(CircleAlert);
+const ThemedCircleCheck = withUnistyles(CircleCheck);
+const ThemedCircleDot = withUnistyles(CircleDot);
+const ThemedCircleHelp = withUnistyles(CircleHelp);
+const ThemedCircleMinus = withUnistyles(CircleMinus);
+const ThemedCircleX = withUnistyles(CircleX);
 const ThemedTerminal = withUnistyles(Terminal);
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
@@ -16,6 +31,42 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 const destructiveColorMapping = (theme: Theme) => ({
   color: theme.colors.destructive,
 });
+const runningColorMapping = (theme: Theme) => ({ color: theme.colors.statusDotRunning });
+const successColorMapping = (theme: Theme) => ({ color: theme.colors.statusSuccess });
+const warningColorMapping = (theme: Theme) => ({ color: theme.colors.statusWarning });
+const dangerColorMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
+function ProcessStatusIcon({
+  status,
+  exitCode,
+}: {
+  status: BackgroundProcess["status"];
+  exitCode: number | null;
+}) {
+  switch (status) {
+    case "running":
+      return <ThemedCircleDot size={16} uniProps={runningColorMapping} />;
+    case "ready":
+      return <ThemedCircleCheck size={16} uniProps={successColorMapping} />;
+    case "starting":
+    case "restarting":
+    case "stopping":
+      return <ThemedCircleAlert size={16} uniProps={warningColorMapping} />;
+    case "failed":
+      return <ThemedCircleX size={16} uniProps={dangerColorMapping} />;
+    case "exited":
+      return exitCode === 0 ? (
+        <ThemedCircleCheck size={16} uniProps={successColorMapping} />
+      ) : exitCode === null ? (
+        <ThemedCircleMinus size={16} uniProps={foregroundMutedColorMapping} />
+      ) : (
+        <ThemedCircleX size={16} uniProps={dangerColorMapping} />
+      );
+    case "cancelled":
+      return <ThemedCircleMinus size={16} uniProps={foregroundMutedColorMapping} />;
+    case "unknown":
+      return <ThemedCircleHelp size={16} uniProps={foregroundMutedColorMapping} />;
+  }
+}
 const trackIcon = <ThemedTerminal size={14} uniProps={foregroundMutedColorMapping} />;
 const processScopes = ["agent", "workspace"] as const;
 const RUNNING_STATUSES: Partial<Record<BackgroundProcess["status"], true>> = {
@@ -25,6 +76,12 @@ const RUNNING_STATUSES: Partial<Record<BackgroundProcess["status"], true>> = {
   restarting: true,
   stopping: true,
 };
+export function hasVisibleBackgroundProcessState(state: BackgroundProcessesState): boolean {
+  return (
+    state.error !== null || state.processes.some((process) => RUNNING_STATUSES[process.status])
+  );
+}
+
 const idleStopAccessibilityState = { busy: false, disabled: false };
 const stoppingAccessibilityState = { busy: true, disabled: true };
 
@@ -51,7 +108,7 @@ function BackgroundProcessRow({
   return (
     <ComposerTrackRow
       testID={`background-process-${process.id}`}
-      accessibilityLabel={`${process.name}: ${t(`backgroundProcesses.status.${process.status}`)}`}
+      accessibilityLabel={`${process.name}: ${t(`backgroundProcesses.status.${status}`)}`}
     >
       <Pressable
         accessibilityRole="button"
@@ -61,12 +118,9 @@ function BackgroundProcessRow({
       >
         <ThemedTerminal size={14} uniProps={foregroundMutedColorMapping} />
         <View style={styles.body}>
-          <View style={styles.heading}>
-            <Text style={styles.name} numberOfLines={1}>
-              {process.name}
-            </Text>
-            <Text style={styles.detail}>{t(`backgroundProcesses.status.${status}`)}</Text>
-          </View>
+          <Text style={styles.name} numberOfLines={1}>
+            {process.name}
+          </Text>
           <Text style={styles.detail} numberOfLines={1}>
             {process.command}
           </Text>
@@ -80,20 +134,30 @@ function BackgroundProcessRow({
           ) : null}
         </View>
       </Pressable>
-      {canStop ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("backgroundProcesses.stopProcess", { name: process.name })}
-          accessibilityState={stopAccessibilityState}
-          disabled={stopping}
-          onPress={handleStop}
-          style={styles.stopButton}
-          testID={`background-process-stop-${process.id}`}
+      <View style={styles.actions}>
+        <View
+          accessibilityLabel={t(`backgroundProcesses.status.${status}`)}
+          accessibilityRole="text"
+          style={styles.status}
         >
-          <ThemedSquare size={12} uniProps={destructiveColorMapping} />
-          <Text style={styles.stopLabel}>{t("backgroundProcesses.stop")}</Text>
-        </Pressable>
-      ) : null}
+          <ProcessStatusIcon status={status} exitCode={process.exitCode} />
+        </View>
+        <View style={styles.stopSlot}>
+          {canStop ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("backgroundProcesses.stopProcess", { name: process.name })}
+              accessibilityState={stopAccessibilityState}
+              disabled={stopping}
+              onPress={handleStop}
+              style={styles.stopButton}
+              testID={`background-process-stop-${process.id}`}
+            >
+              <ThemedSquare size={14} uniProps={destructiveColorMapping} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
     </ComposerTrackRow>
   );
 }
@@ -112,9 +176,11 @@ export function BackgroundProcessesTrack({
     },
     [state],
   );
-  const running = state.processes.filter(
-    (process) => RUNNING_STATUSES[process.status] === true,
-  ).length;
+  const running = state.processes.reduce(
+    (count, process) => count + Number(RUNNING_STATUSES[process.status] === true),
+    0,
+  );
+  if (running === 0 && !state.error) return null;
   const bucket = !state.error && running > 0 ? ("running" as const) : null;
   let segmentText = t("backgroundProcesses.running", { count: running });
   if (state.error) {
@@ -144,7 +210,13 @@ export function BackgroundProcessesTrack({
         </ComposerTrackRow>
       ) : null}
       {processScopes.map((scope) => {
-        const rows = state.processes.filter((process) => process.scope === scope);
+        const rows = state.processes
+          .filter((process) => process.scope === scope)
+          .sort(
+            (a, b) =>
+              Number(RUNNING_STATUSES[b.status] === true) -
+              Number(RUNNING_STATUSES[a.status] === true),
+          );
         if (rows.length === 0) return null;
         return (
           <Fragment key={scope}>
@@ -170,20 +242,20 @@ export function BackgroundProcessesTrack({
 
 const styles = StyleSheet.create((theme) => ({
   body: { flex: 1, minWidth: 0, gap: 3 },
-  processLink: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  processLink: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start" },
+  status: { width: 20, alignItems: "center" },
+  stopSlot: { width: 30, alignItems: "center" },
   stopButton: {
-    flexDirection: "row",
+    width: 28,
+    height: 28,
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    justifyContent: "center",
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.destructive,
   },
-  stopLabel: { color: theme.colors.destructive, fontSize: 11, fontWeight: "600" },
-  heading: { flexDirection: "row", alignItems: "center", gap: 8 },
-  name: { flex: 1, color: theme.colors.foreground, fontSize: 12 },
+  name: { color: theme.colors.foreground, fontSize: 12 },
   detail: { color: theme.colors.foregroundMuted, fontSize: 11 },
   group: { color: theme.colors.foregroundMuted, fontSize: 11, fontWeight: "600" },
   error: { color: theme.colors.destructive, fontSize: 12, flexShrink: 1 },

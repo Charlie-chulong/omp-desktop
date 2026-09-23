@@ -39,6 +39,7 @@ interface ExplorerSidebarProps {
   workspaceRoot: string;
   isGit: boolean;
   onOpenFile?: (location: WorkspaceFileLocation) => void;
+  onOpenDiff?: (path: string) => void;
 }
 
 interface ExplorerSidebarSharedState {
@@ -69,6 +70,7 @@ export function CompactExplorerSidebar({
   workspaceRoot,
   isGit,
   onOpenFile,
+  onOpenDiff,
 }: ExplorerSidebarProps) {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -134,6 +136,7 @@ export function CompactExplorerSidebar({
           isGit={isGit}
           isOpen={isOpen}
           onOpenFile={onOpenFile}
+          onOpenDiff={onOpenDiff}
         />
       </MobilePanelOverlay>
     </RetainedPanelActivity>
@@ -146,6 +149,7 @@ export function DesktopExplorerSidebar({
   workspaceRoot,
   isGit,
   onOpenFile,
+  onOpenDiff,
   onClose,
 }: ExplorerSidebarProps & { onClose: () => void }) {
   const { explorerTab, handleTabPress } = useExplorerSidebarSharedState({
@@ -163,6 +167,7 @@ export function DesktopExplorerSidebar({
       workspaceRoot={workspaceRoot}
       isGit={isGit}
       isOpen
+      onOpenDiff={onOpenDiff}
       onOpenFile={onOpenFile}
     />
   );
@@ -206,6 +211,7 @@ interface SidebarContentProps {
   isGit: boolean;
   isOpen: boolean;
   onOpenFile?: (location: WorkspaceFileLocation) => void;
+  onOpenDiff?: (path: string) => void;
 }
 
 function ExplorerSidebarContent({
@@ -218,6 +224,7 @@ function ExplorerSidebarContent({
   isGit,
   isOpen,
   onOpenFile,
+  onOpenDiff,
 }: SidebarContentProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -320,6 +327,7 @@ function ExplorerSidebarContent({
               workspaceRoot={workspaceRoot}
               isOpen={isOpen}
               onOpenFile={onOpenFile}
+              onOpenDiff={onOpenDiff}
             />
           </RetainedPanel>
         ) : null}
@@ -354,9 +362,10 @@ function ChangedFilesPane({
   workspaceRoot,
   isOpen,
   onOpenFile,
+  onOpenDiff,
 }: Pick<
   SidebarContentProps,
-  "serverId" | "workspaceId" | "workspaceRoot" | "isOpen" | "onOpenFile"
+  "serverId" | "workspaceId" | "workspaceRoot" | "isOpen" | "onOpenFile" | "onOpenDiff"
 >) {
   const { addFile, canAddToChat } = useAddFileToChat({ serverId, workspaceId });
   const [changesState, setChangesState] = useState<ChangesState>(() =>
@@ -372,6 +381,7 @@ function ChangedFilesPane({
       enabled={isOpen}
       modeScope="compact-explorer"
       onOpenFile={handleOpenChangedFile}
+      onOpenDiff={onOpenDiff}
       onAddToChat={canAddToChat ? addFile : undefined}
       state={changesState}
       onStateChange={setChangesState}

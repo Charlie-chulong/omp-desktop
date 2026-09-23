@@ -1,7 +1,10 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
-import { useSidebarActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import {
+  useActiveWorkspaceSelection,
+  useSidebarActiveWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { CompactExplorerSidebar } from "@/components/compact-explorer-sidebar";
 import { useOpenFileExplorerGesture } from "@/mobile-panels/gestures";
@@ -46,6 +49,7 @@ function CompactExplorerOpenGestureSurface({
 function useActiveCompactExplorerSidebarModel(
   enabled: boolean,
 ): CompactExplorerSidebarHostModel | null {
+  const routeSelection = useActiveWorkspaceSelection();
   const selection = useSidebarActiveWorkspaceSelection();
   const workspace = useWorkspace(selection?.serverId ?? null, selection?.workspaceId ?? null);
   const isExplorerOpen = usePanelStore(selectIsCompactFileExplorerOpen);
@@ -65,11 +69,12 @@ function useActiveCompactExplorerSidebarModel(
     () =>
       resolveCompactExplorerSidebarHostModel({
         previous: isExplorerOpen ? retainedModelRef.current : null,
+        routeSelection,
         selection,
         workspace,
         isGit: checkoutQuery.data?.isGit ?? false,
       }),
-    [checkoutQuery.data?.isGit, isExplorerOpen, selection, workspace],
+    [checkoutQuery.data?.isGit, isExplorerOpen, routeSelection, selection, workspace],
   );
 
   useEffect(() => {
@@ -135,6 +140,23 @@ export function CompactExplorerSidebarHost({ children, enabled }: CompactExplore
     },
     [focusWorkspaceTab, model, openWorkspaceTabInFocusedPane, showMobileAgent],
   );
+  const handleOpenDiff = useCallback(
+    (path: string) => {
+      if (!model) {
+        return;
+      }
+      showMobileAgent();
+      const tabId = openWorkspaceTabInFocusedPane(model.persistenceKey, {
+        kind: "working_diff",
+        focusPath: path,
+        focusRequestId: Date.now(),
+      });
+      if (tabId) {
+        focusWorkspaceTab(model.persistenceKey, tabId);
+      }
+    },
+    [focusWorkspaceTab, model, openWorkspaceTabInFocusedPane, showMobileAgent],
+  );
 
   return (
     <>
@@ -151,6 +173,7 @@ export function CompactExplorerSidebarHost({ children, enabled }: CompactExplore
           workspaceRoot={model.workspaceRoot}
           isGit={model.isGit}
           onOpenFile={handleOpenFile}
+          onOpenDiff={handleOpenDiff}
         />
       ) : null}
     </>
