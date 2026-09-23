@@ -747,6 +747,7 @@ const styles = StyleSheet.create((theme) => ({
     width: 18,
     height: 18,
     marginLeft: theme.spacing[3],
+    marginRight: theme.spacing[2],
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.foregroundMuted,
     borderRadius: theme.borderRadius.sm,

@@ -7,6 +7,7 @@ import {
   buildSubagentRowPresentationData,
   countFinishedSubagents,
   resolveRowLabel,
+  sortWorkingSubagentsFirst,
 } from "./track-presentation";
 
 function row(
@@ -25,6 +26,44 @@ function row(
     createdAt: overrides.createdAt ?? new Date("2026-04-20T00:00:00.000Z"),
   };
 }
+
+describe("sortWorkingSubagentsFirst", () => {
+  it("moves working children ahead of finished ones while retaining their source order", () => {
+    const rows = [
+      row({ id: "finished-a", status: "idle" }),
+      row({ id: "working-a", status: "running" }),
+      row({ id: "finished-b", status: "error" }),
+      row({ id: "working-b", status: "running" }),
+    ];
+    expect(sortWorkingSubagentsFirst(rows).map(({ id }) => id)).toEqual([
+      "working-a",
+      "working-b",
+      "finished-a",
+      "finished-b",
+    ]);
+    expect(rows[0]?.id).toBe("finished-a");
+  });
+  it("places provider-owned running children before completed managed children", () => {
+    const managed = row({ id: "managed", status: "idle" });
+    const provider: ProviderSubagentRow = {
+      kind: "provider",
+      id: "provider",
+      parentAgentId: "parent",
+      provider: "claude",
+      title: "task",
+      description: null,
+      model: null,
+      subtitle: null,
+      status: "running",
+      requiresAttention: false,
+      createdAt: managed.createdAt,
+    };
+    expect(sortWorkingSubagentsFirst([managed, provider]).map(({ id }) => id)).toEqual([
+      "provider",
+      "managed",
+    ]);
+  });
+});
 
 describe("buildSubagentPillPresentation", () => {
   // The real instance, so a label that names a key nobody added renders as that key and fails.

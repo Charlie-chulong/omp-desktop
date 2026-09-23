@@ -12,6 +12,7 @@ export interface CompactExplorerSidebarHostModel {
 
 interface ResolveCompactExplorerSidebarHostModelInput {
   previous: CompactExplorerSidebarHostModel | null;
+  routeSelection: ActiveWorkspaceSelection | null;
   selection: ActiveWorkspaceSelection | null;
   workspace: WorkspaceDescriptor | null;
   isGit: boolean;
@@ -34,7 +35,10 @@ export function resolveCompactExplorerSidebarHostModel(
     return null;
   }
 
-  const persistenceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
+  // Tool data follows the conversation, but tabs belong to the visible route.
+  const persistenceKey = input.routeSelection
+    ? buildWorkspaceTabPersistenceKey(input.routeSelection)
+    : null;
   if (!persistenceKey) {
     return null;
   }

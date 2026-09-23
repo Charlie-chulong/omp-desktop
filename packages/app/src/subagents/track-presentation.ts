@@ -40,6 +40,14 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     }),
   };
 }
+/** Keep the source's chronological order within each group; only working children move first. */
+export function sortWorkingSubagentsFirst(rows: readonly SubagentRow[]): SubagentRow[] {
+  return [...rows].sort(
+    (left, right) =>
+      Number(presentationStatus(right) === "running") -
+      Number(presentationStatus(left) === "running"),
+  );
+}
 
 /** The reported model is explicit even when a provider has not supplied one yet. */
 export function buildSubagentMetadata(

@@ -93,10 +93,8 @@ import {
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
 import { WorkspaceDraftAgentTab } from "@/composer/draft/workspace-tab";
 import { AgentTracks, hasAgentTracks } from "@/panels/agent-tracks";
-import {
-  useBackgroundProcesses,
-  type BackgroundProcessesState,
-} from "@/background-processes/query";
+import { useBackgroundProcesses } from "@/background-processes/query";
+import { hasVisibleBackgroundProcessState } from "@/background-processes/track";
 import {
   AGENT_TASK_PANEL_DESKTOP_WIDTH,
   AgentTaskPanel,
@@ -128,10 +126,6 @@ import { runQuickAsk } from "@/quick-ask/run-quick-ask";
 
 function shouldPollBackgroundProcesses(hasComposer: boolean, workspaceFocused: boolean): boolean {
   return hasComposer && workspaceFocused;
-}
-
-function hasVisibleBackgroundProcessState(state: BackgroundProcessesState): boolean {
-  return state.processes.length > 0 || state.error !== null;
 }
 
 interface ChatAgentStateShape {

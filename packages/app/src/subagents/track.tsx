@@ -20,6 +20,7 @@ import {
   buildSubagentMetadata,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
+  sortWorkingSubagentsFirst,
 } from "./track-presentation";
 
 const ThemedArchive = withUnistyles(Archive);
@@ -67,6 +68,7 @@ export function SubagentsTrack({
 }: SubagentsTrackProps): ReactElement | null {
   const { t } = useTranslation();
   const icon = useMemo(() => <ThemedBot size={16} uniProps={foregroundMutedColorMapping} />, []);
+  const orderedRows = useMemo(() => sortWorkingSubagentsFirst(rows), [rows]);
 
   const isArchivingFinished = archiveFinishedStatus.kind === "archiving";
   const isArchiveFinishedFailed = archiveFinishedStatus.kind === "failed";
@@ -95,7 +97,7 @@ export function SubagentsTrack({
           />
         </ComposerTrackActions>
       ) : null}
-      {rows.map((row) => (
+      {orderedRows.map((row) => (
         <SubagentsTrackRow
           key={row.id}
           row={row}

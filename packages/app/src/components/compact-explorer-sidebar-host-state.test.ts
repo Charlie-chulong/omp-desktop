@@ -43,6 +43,7 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
 
     const result = resolveCompactExplorerSidebarHostModel({
       previous,
+      routeSelection: { serverId: "server-1", workspaceId: "workspace-a" },
       selection: { serverId: "server-1", workspaceId: "workspace-a" },
       workspace: null,
       isGit: false,
@@ -62,6 +63,7 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
 
     const result = resolveCompactExplorerSidebarHostModel({
       previous,
+      routeSelection: { serverId: "server-1", workspaceId: "workspace-b" },
       selection: { serverId: "server-1", workspaceId: "workspace-b" },
       workspace: null,
       isGit: false,
@@ -79,6 +81,7 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
   it("does not retain a previous owner when there is no active workspace selection", () => {
     const result = resolveCompactExplorerSidebarHostModel({
       previous: createModel(),
+      routeSelection: null,
       selection: null,
       workspace: null,
       isGit: false,
@@ -90,6 +93,7 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
   it("uses the current workspace directory when it is available", () => {
     const result = resolveCompactExplorerSidebarHostModel({
       previous: null,
+      routeSelection: { serverId: "server-1", workspaceId: "workspace-a" },
       selection: { serverId: "server-1", workspaceId: "workspace-a" },
       workspace: createWorkspace({ id: "workspace-a", workspaceDirectory: "/repo/current" }),
       isGit: true,
@@ -102,5 +106,22 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
       workspaceRoot: "/repo/current",
       isGit: true,
     });
+  });
+
+  it("opens tool tabs in the visible route while browsing the focused conversation's workspace", () => {
+    const result = resolveCompactExplorerSidebarHostModel({
+      previous: null,
+      routeSelection: { serverId: "server-1", workspaceId: "workspace-project" },
+      selection: { serverId: "server-1", workspaceId: "workspace-conversation" },
+      workspace: createWorkspace({
+        id: "workspace-conversation",
+        workspaceDirectory: "/repo/worktrees/conversation",
+      }),
+      isGit: true,
+    });
+
+    expect(result?.persistenceKey).toBe("server-1:workspace-project");
+    expect(result?.workspaceId).toBe("workspace-conversation");
+    expect(result?.workspaceRoot).toBe("/repo/worktrees/conversation");
   });
 });

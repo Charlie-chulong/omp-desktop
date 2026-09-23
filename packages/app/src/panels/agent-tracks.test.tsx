@@ -67,6 +67,14 @@ vi.mock("@/composer/tracks", () => ({
   ComposerTrackBar: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@/background-processes/track", () => ({
+  hasVisibleBackgroundProcessState: (state: {
+    processes: BackgroundProcess[];
+    error: string | null;
+  }) =>
+    state.error !== null ||
+    state.processes.some((process) =>
+      ["starting", "running", "ready", "restarting", "stopping"].includes(process.status),
+    ),
   BackgroundProcessesTrack: ({
     state,
     onOpen,
@@ -461,7 +469,10 @@ describe("background process output routing", () => {
       exitCode: 0,
       terminalId: null,
     };
-    const fixture = renderAgentTracks(OTHER_WORKSPACE_ID, providerRow, [process]);
+    const fixture = renderAgentTracks(OTHER_WORKSPACE_ID, providerRow, [
+      process,
+      { ...process, id: "active-build", name: "Active build", status: "running" },
+    ]);
     fireEvent.click(screen.getByRole("button", { name: process.name }));
     fireEvent.click(screen.getByRole("button", { name: process.name }));
     const store = useWorkspaceLayoutStore.getState();

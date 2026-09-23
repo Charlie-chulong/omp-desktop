@@ -1,7 +1,10 @@
 import { memo, useCallback, type ReactElement } from "react";
 import type { BackgroundProcess } from "@omp-desktop/protocol/background-processes";
 import type { BackgroundProcessesState } from "@/background-processes/query";
-import { BackgroundProcessesTrack } from "@/background-processes/track";
+import {
+  BackgroundProcessesTrack,
+  hasVisibleBackgroundProcessState,
+} from "@/background-processes/track";
 import { useBackgroundProcessTerminalTabs } from "@/background-processes/terminal-tabs";
 import { WorkspaceBranchPill } from "@/composer/branch-pill";
 import { useWorkspaceHasBranch } from "@/composer/workspace-branch";
@@ -127,8 +130,7 @@ export const AgentTracks = memo(function AgentTracks({
   if (
     !hasWorkspaceDiffStat &&
     !hasWorkspaceBranch &&
-    backgroundProcesses.processes.length === 0 &&
-    !backgroundProcesses.error &&
+    !hasVisibleBackgroundProcessState(backgroundProcesses) &&
     !hasAgentTracks({ subagentRows, archiveFinishedStatus })
   ) {
     return null;

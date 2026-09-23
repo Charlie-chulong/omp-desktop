@@ -84,6 +84,7 @@ import type { NewTabSelection } from "@/workspace-tabs/new-tab";
 import { createWorkspaceBrowser } from "@/desktop/browser/store";
 import { getIsElectron } from "@/constants/platform";
 import { DesktopExplorerSidebar } from "@/components/compact-explorer-sidebar";
+import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
 import {
   getWorkspaceNamingAttachments,
@@ -742,6 +743,8 @@ function DraftExplorerPane({
   workspaceRoot,
   isGit,
   onClose,
+  onOpenFile,
+  onOpenDiff,
 }: DraftExplorerPaneProps) {
   if (isCompact || !isOpen || !workspaceRoot) return null;
   return (
@@ -751,6 +754,8 @@ function DraftExplorerPane({
         workspaceRoot={workspaceRoot}
         isGit={isGit}
         onClose={onClose}
+        onOpenFile={onOpenFile}
+        onOpenDiff={onOpenDiff}
       />
     </View>
   );
@@ -1278,6 +1283,24 @@ export function NewWorkspaceScreen({
     },
     [ensureWorkspace, isPending, launchTerminal, selectedServerId, selectedSourceDirectory, toast],
   );
+  const handleOpenDraftFile = useCallback(
+    (location: WorkspaceFileLocation) => {
+      void launchHeaderTab({
+        kind: "target",
+        target: { kind: "file", ...location },
+      });
+    },
+    [launchHeaderTab],
+  );
+  const handleOpenDraftDiff = useCallback(
+    (path: string) => {
+      void launchHeaderTab({
+        kind: "target",
+        target: { kind: "working_diff", focusPath: path, focusRequestId: Date.now() },
+      });
+    },
+    [launchHeaderTab],
+  );
   const headerLauncher = useMemo<NewTabLauncher>(
     () => ({
       showChanges: false,
@@ -1455,6 +1478,8 @@ export function NewWorkspaceScreen({
           workspaceRoot={selectedSourceDirectory ?? ""}
           isGit={selectedProject?.projectKind === "git"}
           onClose={handleCloseDraftExplorer}
+          onOpenFile={handleOpenDraftFile}
+          onOpenDiff={handleOpenDraftDiff}
         />
       </View>
     </View>
