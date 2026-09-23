@@ -578,6 +578,13 @@ export const ja: TranslationResources = {
         failed: "変更の破棄に失敗しました",
       },
     },
+    fileSelection: {
+      cut: "切り取り",
+      copyAbsolutePath: "絶対パスをコピー",
+      copyRelativePath: "相対パスをコピー",
+      paste: "貼り付け",
+      selectAll: "すべて選択",
+    },
     fileExplorer: {
       sort: {
         name: "名前",

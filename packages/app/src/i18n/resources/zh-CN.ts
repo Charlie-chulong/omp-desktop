@@ -599,6 +599,13 @@ export const zhCN: TranslationResources = {
         failed: "放弃更改失败",
       },
     },
+    fileSelection: {
+      cut: "剪切",
+      copyAbsolutePath: "复制绝对路径",
+      copyRelativePath: "复制相对路径",
+      paste: "粘贴",
+      selectAll: "全选",
+    },
     fileExplorer: {
       sort: {
         name: "名称",

@@ -575,6 +575,13 @@ export const ko: TranslationResources = {
         failed: "변경 사항을 버리지 못했습니다",
       },
     },
+    fileSelection: {
+      cut: "잘라내기",
+      copyAbsolutePath: "절대 경로 복사",
+      copyRelativePath: "상대 경로 복사",
+      paste: "붙여넣기",
+      selectAll: "모두 선택",
+    },
     fileExplorer: {
       sort: {
         name: "이름",

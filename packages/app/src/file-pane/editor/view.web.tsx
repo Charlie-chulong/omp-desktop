@@ -1,10 +1,17 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import * as Clipboard from "expo-clipboard";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Annotation, Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { getLanguageForFile } from "@omp-desktop/highlight";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { isRenderedMarkdownFile } from "@/components/file-pane-render-mode";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
+import {
+  FileSelectionContextMenu,
+  getFileSelectionRange,
+  type FileSelectionRange,
+  type FileSelectionTextCommand,
+} from "@/components/file-selection-context-menu";
 import type { FileEditorModel } from "./model";
 import { editorBaseExtensions, editorTheme, type EditorVisualTheme } from "./extensions.web";
 
@@ -15,6 +22,7 @@ interface FileEditorViewProps {
   navigationRevision: number;
   vimEnabled: boolean;
   theme: EditorVisualTheme;
+  workspaceRoot: string;
   onCursorChange(position: { line: number; column: number }): void;
   onVimModeChange(mode: string | null): void;
 }
@@ -35,11 +43,35 @@ export function FileEditorView({
   navigationRevision,
   vimEnabled,
   theme,
+  workspaceRoot,
   onCursorChange,
   onVimModeChange,
 }: FileEditorViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const [selection, setSelection] = useState<FileSelectionRange | null>(null);
+  const handleTextCommand = useCallback(async (command: FileSelectionTextCommand) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const editorSelection = view.state.selection.main;
+    if (command === "copy") {
+      await Clipboard.setStringAsync(view.state.sliceDoc(editorSelection.from, editorSelection.to));
+      return;
+    }
+    if (command === "cut") {
+      await Clipboard.setStringAsync(view.state.sliceDoc(editorSelection.from, editorSelection.to));
+      view.dispatch({ changes: { from: editorSelection.from, to: editorSelection.to } });
+      return;
+    }
+    if (command === "paste") {
+      const text = await Clipboard.getStringAsync();
+      view.dispatch({
+        changes: { from: editorSelection.from, to: editorSelection.to, insert: text },
+      });
+      return;
+    }
+    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+  }, []);
   const snapshot = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot);
   const initial = useRef({ filename, model, theme, vimEnabled, content: snapshot.content });
   const onCursorChangeRef = useRef(onCursorChange);
@@ -70,6 +102,13 @@ export function FileEditorView({
               const head = update.state.selection.main.head;
               const line = update.state.doc.lineAt(head);
               onCursorChangeRef.current({ line: line.number, column: head - line.from + 1 });
+              setSelection(
+                getFileSelectionRange({
+                  from: update.state.selection.main.from,
+                  to: update.state.selection.main.to,
+                  lineAt: (position) => update.state.doc.lineAt(position),
+                }),
+              );
             }
           }),
         ],
@@ -141,13 +180,21 @@ export function FileEditorView({
   }, [onVimModeChange, vimEnabled]);
 
   return (
-    <div
-      ref={hostRef}
-      data-pmono=""
-      data-testid="file-source-editor"
-      aria-label={`Source editor for ${filename}`}
-      style={HOST_STYLE}
-    />
+    <FileSelectionContextMenu
+      path={location.path}
+      workspaceRoot={workspaceRoot}
+      selection={selection}
+      editable
+      onTextCommand={handleTextCommand}
+    >
+      <div
+        ref={hostRef}
+        data-pmono=""
+        data-testid="file-source-editor"
+        aria-label={`Source editor for ${filename}`}
+        style={HOST_STYLE}
+      />
+    </FileSelectionContextMenu>
   );
 }
 
