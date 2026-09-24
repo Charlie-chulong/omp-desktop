@@ -599,6 +599,13 @@ export const en = {
         failed: "Failed to discard changes",
       },
     },
+    fileSelection: {
+      cut: "Cut",
+      copyAbsolutePath: "Copy absolute path",
+      copyRelativePath: "Copy relative path",
+      paste: "Paste",
+      selectAll: "Select all",
+    },
     fileExplorer: {
       sort: {
         name: "Name",
