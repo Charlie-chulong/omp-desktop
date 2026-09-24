@@ -8,6 +8,7 @@ import type {
   ListImportableSessionsOptions,
 } from "../../agent-sdk-types.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
+import { resolveCreateAgentTitles } from "../../create-agent-title.js";
 import { createRealpathAwarePathMatcher } from "../../../../utils/path.js";
 
 const OMP_CONFIG_DIR_NAME = ".omp";
@@ -67,6 +68,7 @@ interface RankedSessionFile {
 }
 
 export interface OmpImportSessionConfig {
+  title?: string;
   model?: string;
   thinkingOptionId?: string;
 }
@@ -271,7 +273,7 @@ export async function readOmpSessionDescriptor(
     tailInfo.title ??
     headInfo.title ??
     readReadableSessionTitleFromPath(filePath) ??
-    headInfo.firstUserMessage;
+    resolveCreateAgentTitles({ initialPrompt: headInfo.firstUserMessage }).provisionalTitle;
   const model = tailInfo.model ?? headInfo.model;
   const thinkingOptionId = tailInfo.thinkingOptionId ?? headInfo.thinkingOptionId;
   const lastActivityAt =
@@ -289,6 +291,7 @@ export async function readOmpSessionDescriptor(
 }
 function toOmpImportSessionConfig(descriptor: OmpSessionDescriptor): OmpImportSessionConfig {
   return {
+    ...(descriptor.title ? { title: descriptor.title } : {}),
     ...(descriptor.model ? { model: descriptor.model } : {}),
     ...(descriptor.thinkingOptionId ? { thinkingOptionId: descriptor.thinkingOptionId } : {}),
   };

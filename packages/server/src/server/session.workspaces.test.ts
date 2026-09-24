@@ -1221,131 +1221,180 @@ test("create_agent_request launches from an exact subdirectory in a created work
   }
 });
 
-test("create_agent_request does not title an existing workspace from the agent prompt", async () => {
-  vi.useFakeTimers();
-  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-existing-title-"));
-  try {
-    const cwd = path.join(workdir, "repo");
-    mkdirSync(cwd, { recursive: true });
+test.each([
+  { title: null, generatedTitle: "Login repair", expectedTitle: "Login repair" },
+  { title: null, generatedTitle: null, expectedTitle: "Fix login bug" },
+  {
+    title: "Pinned conversation",
+    generatedTitle: "Login repair",
+    expectedTitle: "Pinned conversation",
+  },
+])(
+  "create_agent_request names an empty workspace without replacing a manual title ($title, $generatedTitle)",
+  async ({ title, generatedTitle, expectedTitle }) => {
+    vi.useFakeTimers();
+    const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-existing-title-"));
+    try {
+      const cwd = path.join(workdir, "repo");
+      mkdirSync(cwd, { recursive: true });
 
-    const logger = {
-      child: () => logger,
-      trace: vi.fn(),
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-    const agentStorage = new AgentStorage(path.join(workdir, "agents"), asSessionLogger(logger));
-    const agentManager = new AgentManager({
-      clients: { codex: new CreateAgentTestClient() },
-      registry: agentStorage,
-      logger: asSessionLogger(logger),
-      idFactory: () => "00000000-0000-4000-8000-000000000552",
-    });
-    const projectRegistry = new FileBackedProjectRegistry(
-      path.join(workdir, "projects.json"),
-      asSessionLogger(logger),
-    );
-    const workspaceRegistry = new FileBackedWorkspaceRegistry(
-      path.join(workdir, "workspaces.json"),
-      asSessionLogger(logger),
-    );
-
-    await projectRegistry.upsert(
-      createPersistedProjectRecord({
-        projectId: "proj-existing",
-        rootPath: cwd,
-        kind: "git",
-        displayName: "repo",
-        createdAt: "2026-05-07T00:00:00.000Z",
-        updatedAt: "2026-05-07T00:00:00.000Z",
-      }),
-    );
-    await workspaceRegistry.upsert(
-      createPersistedWorkspaceRecord({
-        workspaceId: "ws-existing",
-        projectId: "proj-existing",
-        cwd,
-        kind: "local_checkout",
-        displayName: "repo",
-        title: null,
-        createdAt: "2026-05-07T00:00:00.000Z",
-        updatedAt: "2026-05-07T00:00:00.000Z",
-      }),
-    );
-
-    let generateCalls = 0;
-    const session = asTestSession(
-      new Session({
-        clientId: "test-client",
-        scopes: ["*"],
-        appVersion: null,
-        onMessage: vi.fn(),
+      const logger = {
+        child: () => logger,
+        trace: vi.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const agentStorage = new AgentStorage(path.join(workdir, "agents"), asSessionLogger(logger));
+      let agentId = 552;
+      const agentManager = new AgentManager({
+        clients: { codex: new CreateAgentTestClient() },
+        registry: agentStorage,
         logger: asSessionLogger(logger),
-        downloadTokenStore: asDownloadTokenStore(),
-        pushNotifications: asPushNotifications(),
-        paseoHome: path.join(workdir, "paseo-home"),
-        agentManager,
-        agentStorage,
-        projectRegistry,
-        workspaceRegistry,
-        scheduleService: asScheduleService(),
-        checkoutDiffManager: asCheckoutDiffManager({
-          subscribe: async () => ({
-            initial: { cwd, files: [], error: null },
-            unsubscribe: () => {},
-          }),
-          scheduleRefreshForCwd: () => {},
-          onWorkspaceStateMayHaveChanged: () => {},
-          invalidateForge: () => {},
-          getMetrics: () => ({
-            checkoutDiffTargetCount: 0,
-            checkoutDiffSubscriptionCount: 0,
-            checkoutDiffWatcherCount: 0,
-            checkoutDiffFallbackRefreshTargetCount: 0,
-          }),
-          dispose: () => {},
-        }),
-        workspaceGitService: createNoopWorkspaceGitService(),
-        daemonConfigStore: asDaemonConfigStore({
-          get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
-          onChange: () => () => {},
-        }),
-        mcpBaseUrl: null,
-        stt: null,
-        tts: null,
-        generateWorkspaceName: async () => {
-          generateCalls += 1;
-          return { title: "Generated title that must not be written", branch: null };
-        },
-        providerSnapshotManager: createProviderSnapshotManagerStub().manager,
-        terminalManager: null,
-      }),
-    );
+        idFactory: () => `00000000-0000-4000-8000-${String(agentId++).padStart(12, "0")}`,
+      });
+      const projectRegistry = new FileBackedProjectRegistry(
+        path.join(workdir, "projects.json"),
+        asSessionLogger(logger),
+      );
+      const workspaceRegistry = new FileBackedWorkspaceRegistry(
+        path.join(workdir, "workspaces.json"),
+        asSessionLogger(logger),
+      );
 
-    await session.handleMessage({
-      type: "create_agent_request",
-      requestId: "req-create-existing-title",
-      workspaceId: "ws-existing",
-      config: { provider: "codex", cwd },
-      initialPrompt: "Fix login bug\nwith better validation",
-      attachments: [],
-    });
-    await vi.runAllTimersAsync();
+      await projectRegistry.upsert(
+        createPersistedProjectRecord({
+          projectId: "proj-existing",
+          rootPath: cwd,
+          kind: "git",
+          displayName: "repo",
+          createdAt: "2026-05-07T00:00:00.000Z",
+          updatedAt: "2026-05-07T00:00:00.000Z",
+        }),
+      );
+      await workspaceRegistry.upsert(
+        createPersistedWorkspaceRecord({
+          workspaceId: "ws-existing",
+          projectId: "proj-existing",
+          cwd,
+          kind: "local_checkout",
+          displayName: "main",
+          title,
+          createdAt: "2026-05-07T00:00:00.000Z",
+          updatedAt: "2026-05-07T00:00:00.000Z",
+        }),
+      );
 
-    const [createdAgent] = agentManager.listAgents();
-    expect(createdAgent?.workspaceId).toBe("ws-existing");
-    expect(generateCalls).toBe(0);
-    await expect(workspaceRegistry.get("ws-existing")).resolves.toMatchObject({
-      title: null,
-      updatedAt: "2026-05-07T00:00:00.000Z",
-    });
-  } finally {
-    vi.useRealTimers();
-    rmSync(workdir, { recursive: true, force: true });
-  }
-});
+      let generateCalls = 0;
+      const emitted: SessionOutboundMessage[] = [];
+      const session = asTestSession(
+        new Session({
+          clientId: "test-client",
+          scopes: ["*"],
+          appVersion: null,
+          onMessage: (message) => emitted.push(message),
+          logger: asSessionLogger(logger),
+          downloadTokenStore: asDownloadTokenStore(),
+          pushNotifications: asPushNotifications(),
+          paseoHome: path.join(workdir, "paseo-home"),
+          agentManager,
+          agentStorage,
+          projectRegistry,
+          workspaceRegistry,
+          scheduleService: asScheduleService(),
+          checkoutDiffManager: asCheckoutDiffManager({
+            subscribe: async () => ({
+              initial: { cwd, files: [], error: null },
+              unsubscribe: () => {},
+            }),
+            scheduleRefreshForCwd: () => {},
+            onWorkspaceStateMayHaveChanged: () => {},
+            invalidateForge: () => {},
+            getMetrics: () => ({
+              checkoutDiffTargetCount: 0,
+              checkoutDiffSubscriptionCount: 0,
+              checkoutDiffWatcherCount: 0,
+              checkoutDiffFallbackRefreshTargetCount: 0,
+            }),
+            dispose: () => {},
+          }),
+          workspaceGitService: createNoopWorkspaceGitService(),
+          daemonConfigStore: asDaemonConfigStore({
+            get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
+            onChange: () => () => {},
+          }),
+          mcpBaseUrl: null,
+          stt: null,
+          tts: null,
+          workspaceAutoName: new WorkspaceAutoName({
+            agentManager,
+            workspaceRegistry,
+            workspaceGitService: createNoopWorkspaceGitService(),
+            providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+            readDaemonConfig: () => ({ metadataGeneration: { providers: [] } }),
+            gitMutation: { notifyGitMutation: async () => {} },
+            emitWorkspaceUpdateForCwd: async () => {},
+            emitWorkspaceUpdateForWorkspaceId: async () => {},
+            logger: asSessionLogger(logger),
+            generateWorkspaceName: async () => {
+              generateCalls += 1;
+              return generatedTitle ? { title: generatedTitle, branch: null } : null;
+            },
+          }),
+          providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+          terminalManager: null,
+        }),
+      );
+
+      await session.handleMessage({
+        type: "create_agent_request",
+        requestId: "req-create-existing-title",
+        workspaceId: "ws-existing",
+        config: { provider: "codex", cwd },
+        initialPrompt: "Fix login bug\nwith better validation",
+        attachments: [],
+      });
+      await vi.runAllTimersAsync();
+
+      const [createdAgent] = agentManager.listAgents();
+      expect(createdAgent?.workspaceId).toBe("ws-existing");
+      expect(generateCalls).toBe(title ? 0 : 1);
+      await vi.waitFor(async () => {
+        expect(await workspaceRegistry.get("ws-existing")).toMatchObject({ title: expectedTitle });
+      });
+      const descriptors = await session.buildWorkspaceDescriptorMap({ includeGitData: false });
+      expect(descriptors.get("ws-existing")?.name).toBe(expectedTitle);
+      expect(
+        filterByType(emitted, "status").some(
+          (message) => message.payload.status === "agent_created",
+        ),
+      ).toBe(true);
+
+      // Clearing a conversation title must not make a later agent its "first" agent.
+      await workspaceRegistry.update("ws-existing", (current) => ({ ...current, title: null }));
+      await session.handleMessage({
+        type: "create_agent_request",
+        requestId: "req-create-second-agent",
+        workspaceId: "ws-existing",
+        config: { provider: "codex", cwd },
+        initialPrompt: "A different task",
+        attachments: [],
+      });
+      await vi.runAllTimersAsync();
+      await expect(workspaceRegistry.get("ws-existing")).resolves.toMatchObject({ title: null });
+      expect(generateCalls).toBe(title ? 0 : 1);
+      expect(
+        filterByType(emitted, "status").filter(
+          (message) => message.payload.status === "agent_created",
+        ),
+      ).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  },
+);
 
 test("unsupported persisted agents are excluded from active lists but preserved in history payloads", async () => {
   const session = createSessionForWorkspaceTests({ appVersion: "0.1.45" });
@@ -4192,7 +4241,7 @@ test("open_project_request registers a workspace before any agent exists", async
   expect(response?.payload.workspace?.id).toBe(registeredWorkspace?.workspaceId);
 });
 
-test("import_agent_request registers a workspace for a never-seen cwd", async () => {
+test("import_agent_request names the new workspace after the session instead of its branch", async () => {
   const emitted: SessionOutboundMessage[] = [];
   const session = createSessionForWorkspaceTests({
     onMessage: (message) => {
@@ -4216,6 +4265,13 @@ test("import_agent_request registers a workspace for a never-seen cwd", async ()
   ) => {
     workspaces.set(record.workspaceId, record);
   };
+  session.workspaceRegistry.update = async (workspaceId, updater) => {
+    const existing = workspaces.get(workspaceId);
+    if (!existing) return null;
+    const updated = updater(existing);
+    workspaces.set(workspaceId, updated);
+    return updated;
+  };
   session.projectRegistry.list = async () => Array.from(projects.values());
   session.workspaceRegistry.list = async () => Array.from(workspaces.values());
   session.buildProjectPlacement = async (cwd: string) => ({
@@ -4223,8 +4279,8 @@ test("import_agent_request registers a workspace for a never-seen cwd", async ()
     projectName: "imported",
     checkout: {
       cwd,
-      isGit: false,
-      currentBranch: null,
+      isGit: true,
+      currentBranch: "main",
       remoteUrl: null,
       worktreeRoot: null,
       isPaseoOwnedWorktree: false,
@@ -4243,7 +4299,14 @@ test("import_agent_request registers a workspace for a never-seen cwd", async ()
   session.agentManager.getTimeline = () => [];
   session.agentManager.setTitle = async () => undefined;
   session.agentStorage.list = async () => [];
-  session.agentStorage.get = async () => null;
+  session.agentStorage.get = async () => ({
+    ...makeStoredAgent({
+      id: managed.id,
+      cwd: importedCwd,
+      updatedAt: "2026-05-21T00:00:00.000Z",
+    }),
+    title: "Restore imported conversation",
+  });
   session.agentUpdates.forwardLiveAgent = async () => undefined;
 
   session.workspaceUpdatesSubscription = {
@@ -4271,7 +4334,7 @@ test("import_agent_request registers a workspace for a never-seen cwd", async ()
           workspaceDirectory: importedCwd,
           projectKind: "non_git",
           workspaceKind: "directory",
-          name: "imported-project",
+          name: workspace.title ?? workspace.branch ?? "imported-project",
           status: "done",
           activityAt: null,
         },
@@ -4290,14 +4353,14 @@ test("import_agent_request registers a workspace for a never-seen cwd", async ()
   const importedWorkspace = Array.from(workspaces.values()).find(
     (workspace) => workspace.cwd === importedCwd,
   );
-  expect(importedWorkspace).toBeTruthy();
+  expect(importedWorkspace?.title).toBe("Restore imported conversation");
   const workspaceUpdates = filterByType(emitted, "workspace_update");
-  expect(workspaceUpdates.length).toBeGreaterThan(0);
   expect(
     workspaceUpdates.some(
       (update) =>
         update.payload.kind === "upsert" &&
-        update.payload.workspace.workspaceDirectory === importedCwd,
+        update.payload.workspace.workspaceDirectory === importedCwd &&
+        update.payload.workspace.name === "Restore imported conversation",
     ),
   ).toBe(true);
 });
@@ -4307,6 +4370,9 @@ test("import_agent_request imports into the workspace that opened the import she
   const workspaceId = "ws-repo-running";
   let importedWorkspaceId: string | undefined;
   let workspaceCreated = false;
+  session.workspaceRegistry.update = async () => {
+    throw new Error("Import must not rename an existing workspace");
+  };
 
   session.projectRegistry.get = async () =>
     createPersistedProjectRecord({

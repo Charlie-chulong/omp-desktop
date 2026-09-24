@@ -82,6 +82,8 @@ export async function navigateToSidebarWorkspace(
 ): Promise<string> {
   const deps: NavigateToSidebarWorkspaceDeps = {
     ...navigateDeps(),
+    getWorkspaceTabs: (workspaceKey) =>
+      useWorkspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey),
     getSessionAgentsHydrated: (serverId) =>
       useSessionStore.getState().sessions[serverId]?.hasHydratedAgents ?? false,
     fetchWorkspaceAgentHistory: async (serverId, workspaceId) => {

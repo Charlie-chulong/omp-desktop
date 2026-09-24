@@ -6,6 +6,14 @@ import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-stor
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import { i18n } from "@/i18n/i18next";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { useDraftStore } from "@/stores/draft-store";
+import { buildDraftStoreKey } from "@/stores/draft-keys";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import {
+  buildDraftWorkspaceAttachmentScopeKey,
+  buildWorkspaceAttachmentScopeKey,
+  useWorkspaceAttachmentsStore,
+} from "@/attachments/workspace-attachments-store";
 
 export interface WorkspaceArchiveTarget {
   serverId: string;
@@ -110,10 +118,45 @@ export async function archiveEmptyWorkspace(input: {
   workspace: WorkspaceArchiveTarget;
   closedDraftId?: string;
   hasPendingTerminalCreate: boolean;
+  preserveDrafts?: boolean;
 }): Promise<void> {
   const { serverId, workspaceId } = input.workspace;
   if (input.hasPendingTerminalCreate) {
     return;
+  }
+  if (input.preserveDrafts) {
+    const attachments = useWorkspaceAttachmentsStore.getState().attachmentsByScope;
+    const workspaceScope = buildWorkspaceAttachmentScopeKey({ serverId, workspaceId, cwd: "" });
+    if (attachments[workspaceScope]?.length) {
+      return;
+    }
+    for (const tab of useWorkspaceLayoutStore
+      .getState()
+      .getWorkspaceTabs(`${serverId}:${workspaceId}`)) {
+      // A host can contain conversations belonging to other workspaces.
+      if (tab.target.kind === "agent") {
+        return;
+      }
+      if (tab.target.kind !== "draft") {
+        continue;
+      }
+      const pending = useCreateFlowStore.getState().pendingByDraftId[tab.target.draftId];
+      if (pending?.serverId === serverId) {
+        return;
+      }
+      const draft = useDraftStore
+        .getState()
+        .getDraftInput(
+          buildDraftStoreKey({ serverId, agentId: tab.tabId, draftId: tab.target.draftId }),
+        );
+      if (
+        draft?.text.trim() ||
+        draft?.attachments.length ||
+        attachments[buildDraftWorkspaceAttachmentScopeKey(tab.target.draftId)]?.length
+      ) {
+        return;
+      }
+    }
   }
   for (const pending of Object.values(useCreateFlowStore.getState().pendingByDraftId)) {
     if (

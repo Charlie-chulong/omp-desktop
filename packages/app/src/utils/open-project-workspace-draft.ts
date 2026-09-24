@@ -18,25 +18,15 @@ export async function openProjectWorkspaceDraft(input: {
   }
 
   const session = useSessionStore.getState().sessions[serverId];
-  const existing = Array.from(session?.workspaces.values() ?? []).find(
-    (workspace) =>
-      workspace.projectId === projectId &&
-      workspace.projectRootPath === projectRootPath &&
-      workspace.workspaceDirectory === projectRootPath &&
-      !workspace.archivingAt,
-  );
-  let workspace = existing;
-  if (!workspace) {
-    if (!session?.client) throw new Error("Host is unavailable");
-    const payload = await session.client.createWorkspace({
-      source: { kind: "directory", path: projectRootPath, projectId },
-    });
-    if (payload.error || !payload.workspace) {
-      throw new Error(payload.error ?? "Unable to create workspace");
-    }
-    workspace = normalizeWorkspaceDescriptor(payload.workspace);
-    useSessionStore.getState().mergeWorkspaces(serverId, [workspace]);
+  if (!session?.client) throw new Error("Host is unavailable");
+  const payload = await session.client.createWorkspace({
+    source: { kind: "directory", path: projectRootPath, projectId },
+  });
+  if (payload.error || !payload.workspace) {
+    throw new Error(payload.error ?? "Unable to create workspace");
   }
+  const workspace = normalizeWorkspaceDescriptor(payload.workspace);
+  useSessionStore.getState().mergeWorkspaces(serverId, [workspace]);
   const setup = input.setup
     ? {
         ...input.setup,

@@ -385,7 +385,7 @@ type QuickAskRequestMessage = Extract<SessionInboundMessage, { type: "quick_ask_
 interface ResolvedSessionCreateAgentIntent {
   config: AgentSessionConfig;
   intent: CreateAgentIntent;
-  createdDirectoryWorkspace: boolean;
+  shouldNameWorkspace: boolean;
 }
 
 type FetchWorkspacesRequestMessage = Extract<
@@ -3648,8 +3648,13 @@ export class Session {
         },
       );
       createdAgentId = snapshot.id;
-      await this.agentUpdates.forwardLiveAgent(snapshot);
-      if (resolvedIntent.createdDirectoryWorkspace && trimmedPrompt) {
+      if (resolvedIntent.shouldNameWorkspace && workspacePromptTitle) {
+        await this.workspaceRegistry.update(resolvedIntent.intent.workspaceId, (current) => ({
+          ...current,
+          title: current.title ?? workspacePromptTitle,
+          updatedAt: new Date().toISOString(),
+        }));
+        await this.emitWorkspaceUpdateForWorkspaceId(resolvedIntent.intent.workspaceId);
         this.workspaceAutoName.scheduleForDirectory(
           {
             workspaceId: resolvedIntent.intent.workspaceId,
@@ -3659,6 +3664,7 @@ export class Session {
           { currentSelection: this.getFocusedAgentSelectionForCwd(resolvedIntent.config.cwd) },
         );
       }
+      await this.agentUpdates.forwardLiveAgent(snapshot);
       this.createAgentLifecycleDispatch.registerAutoArchiveIfRequested({
         autoArchive,
         agentId: snapshot.id,
@@ -3725,6 +3731,7 @@ export class Session {
     }
 
     let config = request.config;
+    let shouldNameWorkspace = !createdWorktree && !request.workspaceId && !callerAgent;
 
     const intent = await resolveCreateAgentIntent({
       explicitWorkspaceId: createdWorktree?.workspace.workspaceId ?? request.workspaceId,
@@ -3739,6 +3746,14 @@ export class Session {
         const workspace = await this.workspaceRegistry.get(workspaceId);
         if (!workspace || workspace.archivedAt) {
           throw new Error(`Workspace ${workspaceId} not found`);
+        }
+        // A draft may create its workspace before its first agent. Name that
+        // conversation too, but never rename an existing conversation or child.
+        if (!callerAgent && input.workspacePromptTitle && !workspace.title) {
+          const history = await this.agentStorage.listByWorkspace(workspaceId);
+          shouldNameWorkspace =
+            history.length === 0 &&
+            !this.agentManager.listAgents().some((agent) => agent.workspaceId === workspaceId);
         }
         return { workspaceId, cwd: workspace.cwd };
       },
@@ -3756,7 +3771,7 @@ export class Session {
     return {
       config,
       intent,
-      createdDirectoryWorkspace: !createdWorktree && !request.workspaceId && !callerAgent,
+      shouldNameWorkspace,
     };
   }
 
@@ -3881,10 +3896,10 @@ export class Session {
         agentStorage: this.agentStorage,
         logger: this.sessionLogger,
       });
-      if (createdWorkspace) {
-        await this.registerWorkspaceForImportedAgent(createdWorkspace);
-      }
       const agentPayload = await this.buildAgentPayload(snapshot);
+      if (createdWorkspace) {
+        await this.registerWorkspaceForImportedAgent(createdWorkspace, agentPayload.title);
+      }
       this.emit({
         type: "status",
         payload: {
@@ -6174,8 +6189,18 @@ export class Session {
 
   private async registerWorkspaceForImportedAgent(
     workspace: PersistedWorkspaceRecord,
+    title: string | null,
   ): Promise<void> {
     try {
+      const importedTitle = title?.trim();
+      if (importedTitle) {
+        workspace =
+          (await this.workspaceRegistry.update(workspace.workspaceId, (existing) => ({
+            ...existing,
+            title: existing.title ?? importedTitle,
+            updatedAt: new Date().toISOString(),
+          }))) ?? workspace;
+      }
       await this.syncWorkspaceGitObserverForWorkspace(workspace);
       await this.describeWorkspaceRecord(workspace);
       await this.emitWorkspaceUpdateForWorkspaceId(workspace.workspaceId);

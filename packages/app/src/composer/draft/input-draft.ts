@@ -178,6 +178,12 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   );
 
   useEffect(() => {
+    if (composerOptions?.isVisible === false) {
+      textPublication.flush();
+    }
+  }, [composerOptions?.isVisible, textPublication]);
+
+  useEffect(() => {
     const flushWhenHidden = () => {
       if (document.visibilityState === "hidden") textPublication.flush();
     };
