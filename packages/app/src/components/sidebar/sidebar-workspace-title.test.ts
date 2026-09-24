@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveAgentTabPrimaryLabel,
   resolveSidebarWorkspaceAccessibilityLabel,
   resolveSidebarWorkspacePrimaryLabel,
-  resolveAgentTabPrimaryLabel,
 } from "@/components/sidebar/sidebar-workspace-title";
 
 describe("resolveSidebarWorkspacePrimaryLabel", () => {
@@ -34,37 +34,57 @@ describe("resolveSidebarWorkspacePrimaryLabel", () => {
   });
 });
 describe("resolveAgentTabPrimaryLabel", () => {
-  it("uses the owning conversation title for a root-agent tab", () => {
+  it("uses the new conversation label before a primary agent has a workspace label", () => {
     expect(
       resolveAgentTabPrimaryLabel({
-        agentTitle: "Raw agent prompt",
-        isRootAgent: true,
-        workspace: { name: "Generated conversation title", currentBranch: "feature/title" },
-        workspaceTitleSource: "title",
+        agentTitle: "New Agent",
+        isPrimaryAgent: true,
+        newConversationLabel: "新建对话",
       }),
-    ).toBe("Generated conversation title");
+    ).toBe("新建对话");
   });
 
-  it("follows the sidebar branch preference for a root-agent tab", () => {
-    expect(
-      resolveAgentTabPrimaryLabel({
-        agentTitle: "Raw agent prompt",
-        isRootAgent: true,
-        workspace: { name: "Generated conversation title", currentBranch: "feature/title" },
-        workspaceTitleSource: "branch",
-      }),
-    ).toBe("feature/title");
+  it("shows the sidebar's current workspace label on the primary tab, not its original prompt", () => {
+    const workspace = { name: "分析破解包广告修改", currentBranch: "fix/ads" };
+    for (const workspaceTitleSource of ["title", "branch"] as const) {
+      const workspaceLabel = resolveSidebarWorkspacePrimaryLabel({
+        workspace,
+        workspaceTitleSource,
+      });
+      expect(
+        resolveAgentTabPrimaryLabel({
+          agentTitle: "帮我使用 jadx 分析",
+          isPrimaryAgent: true,
+          workspaceLabel,
+          newConversationLabel: "新建对话",
+        }),
+      ).toBe(workspaceLabel);
+      expect(
+        resolveAgentTabPrimaryLabel({
+          agentTitle: "子任务",
+          isPrimaryAgent: false,
+          workspaceLabel,
+          newConversationLabel: "新建对话",
+        }),
+      ).toBe("子任务");
+    }
   });
 
-  it("keeps a child agent's own title", () => {
+  it("preserves a named agent's title and does not name an untitled child conversation", () => {
     expect(
       resolveAgentTabPrimaryLabel({
-        agentTitle: "Child agent",
-        isRootAgent: false,
-        workspace: { name: "Parent conversation", currentBranch: null },
-        workspaceTitleSource: "title",
+        agentTitle: "Investigate failure",
+        isPrimaryAgent: true,
+        newConversationLabel: "新建对话",
       }),
-    ).toBe("Child agent");
+    ).toBe("Investigate failure");
+    expect(
+      resolveAgentTabPrimaryLabel({
+        agentTitle: null,
+        isPrimaryAgent: false,
+        newConversationLabel: "新建对话",
+      }),
+    ).toBeNull();
   });
 });
 

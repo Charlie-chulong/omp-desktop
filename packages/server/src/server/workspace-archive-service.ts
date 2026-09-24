@@ -74,6 +74,48 @@ export interface ArchiveByScopeRequest {
   requestId: string;
 }
 
+export interface ArchiveUnusedWorkspaceDependencies {
+  workspaceRegistry: Pick<WorkspaceRegistry, "get" | "archiveIfUnused">;
+  agentStorage: Pick<AgentStorage, "listByWorkspace" | "hasWorkspaceHistory">;
+  agentManager: Pick<AgentManager, "listAgents" | "hasPendingAgentRegistrations">;
+  hasWorkspaceActivity: (workspaceId: string) => boolean;
+  killTerminalsForWorkspace: (workspaceId: string) => Promise<void>;
+}
+
+// Retire empty conversations and their auxiliary terminals, never project directories.
+// The registry rechecks this synchronous predicate on both sides of its disk write.
+export async function archiveUnusedWorkspace(
+  dependencies: ArchiveUnusedWorkspaceDependencies,
+  workspaceId: string,
+): Promise<PersistedWorkspaceRecord | null> {
+  if (!dependencies.workspaceRegistry.archiveIfUnused) {
+    throw new Error("Workspace registry does not support safe conditional archive");
+  }
+  // Load all history, including archived and closed agents, before checking the cache.
+  if ((await dependencies.agentStorage.listByWorkspace(workspaceId)).length > 0) return null;
+  const archivedWorkspace = await dependencies.workspaceRegistry.archiveIfUnused(
+    workspaceId,
+    new Date().toISOString(),
+    (workspace) =>
+      workspace.kind !== "worktree" &&
+      !workspace.mainRepoRoot &&
+      !workspace.isPaseoOwnedWorktree &&
+      !workspace.title &&
+      !workspace.pinnedAt &&
+      !workspace.labels?.length &&
+      !dependencies.agentStorage.hasWorkspaceHistory(workspaceId) &&
+      !dependencies.agentManager.hasPendingAgentRegistrations() &&
+      !dependencies.agentManager
+        .listAgents({ includeInternal: true })
+        .some((agent) => agent.workspaceId === workspaceId) &&
+      !dependencies.hasWorkspaceActivity(workspaceId),
+  );
+  if (archivedWorkspace) {
+    await dependencies.killTerminalsForWorkspace(workspaceId);
+  }
+  return archivedWorkspace;
+}
+
 export async function requireActiveWorkspaceForArchive(
   dependencies: Pick<ArchiveDependencies, "listActiveWorkspaces">,
   workspaceId: string,

@@ -157,6 +157,11 @@ export interface WorkspaceRegistry {
     archivedAt: string,
     context?: WorkspaceArchiveContext,
   ): Promise<void>;
+  archiveIfUnused?(
+    workspaceId: string,
+    archivedAt: string,
+    isUnused: (workspace: PersistedWorkspaceRecord) => boolean,
+  ): Promise<PersistedWorkspaceRecord | null>;
   remove(workspaceId: string): Promise<void>;
   /** Central lifecycle seam for daemon-global workspace observers. */
   subscribeToMutations?(
@@ -260,6 +265,36 @@ class FileBackedRegistry<TRecord extends RegistryRecord> {
     });
   }
 
+  protected async archiveConditionally(
+    id: string,
+    archivedAt: string,
+    predicate: (record: TRecord) => boolean,
+  ): Promise<TRecord | null> {
+    const canceled = new Error("Conditional archive canceled");
+    let original: TRecord | null = null;
+    try {
+      return await this.mutateCache(
+        (records) => {
+          const existing = records.get(id);
+          if (!existing || existing.archivedAt || !predicate(existing)) return null;
+          original = existing;
+          const next = this.schema.parse({ ...existing, updatedAt: archivedAt, archivedAt });
+          records.set(id, next);
+          return next;
+        },
+        {
+          beforeCommit: () => {
+            // No await between this final usage check and publishing the new cache.
+            if (original && !predicate(original)) throw canceled;
+          },
+        },
+      );
+    } catch (error) {
+      if (error === canceled) return null;
+      throw error;
+    }
+  }
+
   async remove(id: string): Promise<void> {
     await this.removeIfPresent(id);
   }
@@ -312,6 +347,7 @@ class FileBackedRegistry<TRecord extends RegistryRecord> {
       forcePersist?: (result: TResult) => boolean;
       beforeWrite?: (records: readonly TRecord[]) => Promise<void>;
       afterWrite?: () => Promise<void>;
+      beforeCommit?: () => void;
       afterCommit?: () => void;
     },
   ): Promise<TResult> {
@@ -334,6 +370,19 @@ class FileBackedRegistry<TRecord extends RegistryRecord> {
       await hooks?.beforeWrite?.(records);
       if (recordsChanged) await this.writeRecords(this.filePath, records);
       await hooks?.afterWrite?.();
+      try {
+        hooks?.beforeCommit?.();
+      } catch (error) {
+        // Roll back disk before releasing the mutation queue; observers never see
+        // the canceled archive. A failed rollback makes further writes unsafe.
+        try {
+          await this.writeRecords(this.filePath, Array.from(this.cache.values()));
+        } catch (rollbackError) {
+          this.freezeMutationsUntilRestart();
+          throw rollbackError;
+        }
+        throw error;
+      }
       if (recordsChanged) {
         this.cache.clear();
         for (const [id, record] of staged) this.cache.set(id, record);
@@ -569,6 +618,18 @@ export class FileBackedWorkspaceRegistry
     }));
     if (!workspace) return;
     await this.notifyMutation({ kind: "archive", workspaceId, workspace });
+  }
+
+  async archiveIfUnused(
+    workspaceId: string,
+    archivedAt: string,
+    isUnused: (workspace: PersistedWorkspaceRecord) => boolean,
+  ): Promise<PersistedWorkspaceRecord | null> {
+    const workspace = await this.archiveConditionally(workspaceId, archivedAt, isUnused);
+    if (workspace) {
+      await this.notifyMutation({ kind: "archive", workspaceId, workspace });
+    }
+    return workspace;
   }
 
   override async remove(workspaceId: string): Promise<void> {

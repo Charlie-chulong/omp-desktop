@@ -13,6 +13,7 @@ describe("workspace tool selection", () => {
     const focused = resolveWorkspaceToolSelection({
       current: null,
       routeSelection: ROUTE,
+      focusedTarget: { kind: "agent", agentId: "agent-1" },
       focusedAgentWorkspaceId: "workspace-conversation",
     });
 
@@ -24,6 +25,7 @@ describe("workspace tool selection", () => {
       resolveWorkspaceToolSelection({
         current: focused,
         routeSelection: ROUTE,
+        focusedTarget: { kind: "files" },
         focusedAgentWorkspaceId: null,
       }),
     ).toBe(focused);
@@ -33,6 +35,7 @@ describe("workspace tool selection", () => {
     const current = resolveWorkspaceToolSelection({
       current: null,
       routeSelection: ROUTE,
+      focusedTarget: { kind: "agent", agentId: "agent-1" },
       focusedAgentWorkspaceId: "workspace-conversation",
     });
 
@@ -40,9 +43,52 @@ describe("workspace tool selection", () => {
       resolveWorkspaceToolSelection({
         current,
         routeSelection: { serverId: "server-1", workspaceId: "workspace-next" },
+        focusedTarget: { kind: "files" },
         focusedAgentWorkspaceId: null,
       })?.activeSelection,
     ).toEqual({ serverId: "server-1", workspaceId: "workspace-next" });
+  });
+
+  it.each<WorkspaceTabTarget>([
+    { kind: "draft", draftId: "draft-new-conversation" },
+    { kind: "new_tab" },
+  ])("resets a cross-workspace conversation scope when focusing $kind", (focusedTarget) => {
+    const conversation = resolveWorkspaceToolSelection({
+      current: null,
+      routeSelection: ROUTE,
+      focusedTarget: { kind: "agent", agentId: "agent-1" },
+      focusedAgentWorkspaceId: "workspace-conversation",
+    });
+    const tool = resolveWorkspaceToolSelection({
+      current: conversation,
+      routeSelection: ROUTE,
+      focusedTarget: { kind: "files" },
+      focusedAgentWorkspaceId: null,
+    });
+    const draft = resolveWorkspaceToolSelection({
+      current: tool,
+      routeSelection: ROUTE,
+      focusedTarget,
+      focusedAgentWorkspaceId: null,
+    });
+
+    expect(draft?.activeSelection).toEqual(ROUTE);
+    expect(
+      resolveWorkspaceToolSelection({
+        current: draft,
+        routeSelection: ROUTE,
+        focusedTarget: { kind: "terminal", terminalId: "terminal-1" },
+        focusedAgentWorkspaceId: null,
+      })?.activeSelection,
+    ).toEqual(ROUTE);
+    expect(
+      resolveWorkspaceToolSelection({
+        current: draft,
+        routeSelection: ROUTE,
+        focusedTarget: { kind: "agent", agentId: "agent-1" },
+        focusedAgentWorkspaceId: "workspace-conversation",
+      })?.activeSelection,
+    ).toEqual({ serverId: "server-1", workspaceId: "workspace-conversation" });
   });
 
   it("scopes filesystem and terminal panels without rebinding conversations", () => {

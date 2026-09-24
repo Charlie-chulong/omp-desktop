@@ -160,6 +160,7 @@ export function createWorkerTerminalManager(
   const recordsById = new Map<string, WorkerTerminalRecord>();
   const terminalIdsByCwd = new Map<string, Set<string>>();
   const terminalActivityTokenById = new Map<string, string>();
+  const pendingWorkspaceByTerminalId = new Map<string, string>();
   const terminalsChangedListeners = new Set<TerminalsChangedListener>();
   const terminalActivityListeners = new Set<TerminalActivityListener>();
   const terminalWorkspaceContributionChangedListeners =
@@ -665,6 +666,16 @@ export function createWorkerTerminalManager(
   }
 
   return {
+    hasWorkspaceTerminals(workspaceId: string): boolean {
+      for (const pendingWorkspaceId of pendingWorkspaceByTerminalId.values()) {
+        if (pendingWorkspaceId === workspaceId) return true;
+      }
+      for (const record of recordsById.values()) {
+        if (record.session.workspaceId === workspaceId) return true;
+      }
+      return false;
+    },
+
     async getTerminals(
       cwd: string,
       options?: { workspaceId?: string },
@@ -708,6 +719,7 @@ export function createWorkerTerminalManager(
         terminal: RequiredWorkerTerminalInfo;
         state: TerminalState;
       };
+      pendingWorkspaceByTerminalId.set(terminalId, options.workspaceId);
       try {
         result = (await sendRequest({
           type: "createTerminal",
@@ -724,6 +736,8 @@ export function createWorkerTerminalManager(
       } catch (error) {
         terminalActivityTokenById.delete(terminalId);
         throw error;
+      } finally {
+        pendingWorkspaceByTerminalId.delete(terminalId);
       }
       const session = registerRecord({ info: result.terminal, state: result.state });
       return session;

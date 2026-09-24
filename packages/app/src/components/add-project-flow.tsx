@@ -101,7 +101,8 @@ import { useRecommendedProjectPaths } from "@/stores/session-store-hooks";
 import type { AddProjectFlowRequest } from "@/stores/add-project-flow-store";
 import type { Theme } from "@/styles/theme";
 import { shortenPath } from "@/utils/shorten-path";
-import { buildNewWorkspaceRoute, buildSettingsAddHostRoute } from "@/utils/host-routes";
+import { buildSettingsAddHostRoute } from "@/utils/host-routes";
+import { openProjectWorkspaceDraft } from "@/utils/open-project-workspace-draft";
 
 interface AddProjectFlowProps {
   request: AddProjectFlowRequest;
@@ -500,16 +501,13 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
   }, [onClose]);
 
   const openNewWorkspaceForProject = useCallback(
-    (serverId: string, project: WorkspaceProjectDescriptorPayload) => {
+    async (serverId: string, project: WorkspaceProjectDescriptorPayload) => {
+      await openProjectWorkspaceDraft({
+        serverId,
+        projectId: project.projectId,
+        projectRootPath: project.projectRootPath,
+      });
       onClose();
-      router.push(
-        buildNewWorkspaceRoute({
-          serverId,
-          projectId: project.projectId,
-          sourceDirectory: project.projectRootPath,
-          displayName: project.projectDisplayName,
-        }),
-      );
     },
     [onClose],
   );
@@ -524,7 +522,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       try {
         const result = await openProject(path);
         if (result.ok) {
-          openNewWorkspaceForProject(hostId, result.project);
+          await openNewWorkspaceForProject(hostId, result.project);
           return;
         }
         const reason = getOpenProjectFailureReason(result);
@@ -617,7 +615,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         );
         if (result.ok) {
           lastCloneParentByHost.set(locationPage.hostId, parentPath);
-          openNewWorkspaceForProject(locationPage.hostId, result.project);
+          await openNewWorkspaceForProject(locationPage.hostId, result.project);
           return;
         }
         setState((current) =>
@@ -825,7 +823,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         upsertProject,
         setHasHydratedWorkspaces,
       });
-      openNewWorkspaceForProject(page.hostId, payload.project);
+      await openNewWorkspaceForProject(page.hostId, payload.project);
     } catch {
       setState((current) =>
         setPageStatus(current, "new-directory-name", {

@@ -11,19 +11,21 @@ export function resolveSidebarWorkspacePrimaryLabel(input: {
   }
   return input.workspace.name;
 }
+
 export function resolveAgentTabPrimaryLabel(input: {
   agentTitle: string | null | undefined;
-  isRootAgent: boolean;
-  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch"> | null;
-  workspaceTitleSource: WorkspaceTitleSource;
-}): string | null | undefined {
-  if (input.isRootAgent && input.workspace) {
-    return resolveSidebarWorkspacePrimaryLabel({
-      workspace: input.workspace,
-      workspaceTitleSource: input.workspaceTitleSource,
-    });
+  isPrimaryAgent: boolean;
+  workspaceLabel?: string | null;
+  newConversationLabel: string;
+}): string | null {
+  if (input.isPrimaryAgent && input.workspaceLabel) {
+    return input.workspaceLabel;
   }
-  return input.agentTitle;
+  const title = input.agentTitle?.trim();
+  if (title && title.toLowerCase() !== "new agent") {
+    return title;
+  }
+  return input.isPrimaryAgent ? input.newConversationLabel : null;
 }
 
 export function resolveSidebarWorkspaceAccessibilityLabel(input: {

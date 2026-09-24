@@ -222,6 +222,33 @@ describe("workspace navigation", () => {
     expect(remembered).toEqual([{ serverId: "server-1", workspaceId: "workspace-a" }]);
   });
 
+  it("selects the same oldest root regardless of directory order", async () => {
+    const workspace = {
+      id: "workspace-a",
+      workspaceDirectory: "/repo/workspace-a",
+    } as WorkspaceDescriptor;
+    const newer = {
+      id: "newer",
+      workspaceId: workspace.id,
+      parentAgentId: null,
+      createdAt: new Date("2026-03-05"),
+      archivedAt: null,
+    } as Agent;
+    const primary = {
+      id: "primary",
+      workspaceId: workspace.id,
+      parentAgentId: null,
+      createdAt: new Date("2026-03-04"),
+      archivedAt: null,
+    } as Agent;
+    const { deps, navigations } = createSidebarFakeDeps({
+      getSessionWorkspaces: () => new Map([[workspace.id, workspace]]),
+      getSessionAgents: () => [newer, primary],
+    });
+    await navigateToSidebarWorkspace({ serverId: "server-1", workspaceId: workspace.id }, deps);
+    expect(navigations).toEqual(["/h/server-1/workspace/workspace-a?open=agent%3Aprimary"]);
+  });
+
   it("opens a sidebar conversation in the current center tab host without navigating", async () => {
     const hostWorkspace = {
       id: "workspace-host",

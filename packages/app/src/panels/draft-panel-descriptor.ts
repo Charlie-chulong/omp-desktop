@@ -8,7 +8,7 @@ export function buildDraftPanelDescriptor(input: {
   icon: ComponentType<PanelIconProps>;
 }): PanelDescriptor {
   const { icon, isCreating, pendingPrompt } = input;
-  const newAgentLabel = i18n.t("panels.draft.newAgent");
+  const newAgentLabel = i18n.t("newWorkspace.title");
   const creatingLabel = pendingPrompt?.trim() || newAgentLabel;
   if (isCreating) {
     return {

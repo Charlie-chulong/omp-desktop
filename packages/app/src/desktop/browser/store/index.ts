@@ -26,7 +26,11 @@ export {
 } from "./state";
 
 interface BrowserStoreState extends BrowserIndexState {
-  createBrowser: (input?: { initialUrl?: string; automationWorkspaceId?: string | null }) => string;
+  createBrowser: (input?: {
+    initialUrl?: string;
+    automationServerId?: string | null;
+    automationWorkspaceId?: string | null;
+  }) => string;
   updateBrowser: (browserId: string, patch: BrowserRecordPatch) => void;
   setBrowserViewport: (browserId: string, viewport: BrowserViewport) => void;
   removeBrowser: (browserId: string) => void;

@@ -29,15 +29,15 @@ describe("buildDraftPanelDescriptor", () => {
       icon: TestIcon,
     });
 
-    expect(descriptor.label).toBe("New Agent");
+    expect(descriptor.label).toBe("New workspace");
   });
 
-  it("keeps ordinary draft tabs labeled as new agents", () => {
+  it("labels a new conversation before an agent exists", () => {
     const descriptor = buildDraftPanelDescriptor({ isCreating: false, icon: TestIcon });
 
     expect(descriptor).toMatchObject({
-      label: "New Agent",
-      subtitle: "New Agent",
+      label: "New workspace",
+      subtitle: "New workspace",
       titleState: "ready",
       statusBucket: null,
     });
@@ -56,11 +56,11 @@ describe("buildDraftPanelDescriptor", () => {
     });
 
     expect(idleDescriptor).toMatchObject({
-      label: "新建 Agent",
-      subtitle: "新建 Agent",
+      label: "新建对话",
+      subtitle: "新建对话",
     });
     expect(creatingDescriptor).toMatchObject({
-      label: "新建 Agent",
+      label: "新建对话",
       subtitle: "正在创建 Agent",
     });
     await i18n.changeLanguage("en");

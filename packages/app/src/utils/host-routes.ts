@@ -432,43 +432,6 @@ export function buildOpenProjectRoute() {
   return "/open-project" as const;
 }
 
-interface NewWorkspaceRouteOptions {
-  serverId?: string;
-  sourceDirectory?: string;
-  displayName?: string;
-  projectId?: string;
-  draftId?: string;
-}
-
-function buildNewWorkspaceSearch(options: NewWorkspaceRouteOptions): string {
-  const params = new URLSearchParams();
-  const serverId = trimNonEmpty(options.serverId);
-  if (serverId) {
-    params.set("serverId", serverId);
-  }
-  if (options.sourceDirectory) {
-    params.set("dir", options.sourceDirectory);
-  }
-  if (options.displayName) {
-    params.set("name", options.displayName);
-  }
-  if (options.projectId) {
-    params.set("projectId", options.projectId);
-  }
-  if (options.draftId) {
-    params.set("draftId", options.draftId);
-  }
-  return params.toString();
-}
-
-export function buildNewWorkspaceRoute(options: NewWorkspaceRouteOptions = {}) {
-  const query = buildNewWorkspaceSearch(options);
-  if (!query) {
-    return "/new" as const;
-  }
-  return `/new?${query}` as const;
-}
-
 export type KnownHostRouteResolution =
   | { kind: "render" }
   | { kind: "redirect"; href: ReturnType<typeof buildOpenProjectRoute> | "/welcome" };

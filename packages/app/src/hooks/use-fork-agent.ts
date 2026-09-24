@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import type {
   AgentForkContextOptions,
@@ -10,14 +9,13 @@ import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useHostFeature } from "@/runtime/host-features";
 import { generateDraftId } from "@/stores/draft-keys";
+import { openProjectWorkspaceDraft } from "@/utils/open-project-workspace-draft";
 import { useSessionStore } from "@/stores/session-store";
 import {
   buildDraftWorkspaceAttachmentScopeKey,
   useWorkspaceAttachmentsStore,
 } from "@/attachments/workspace-attachments-store";
-import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { toErrorMessage } from "@/utils/error-messages";
-import { buildNewWorkspaceRoute } from "@/utils/host-routes";
 import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
 
 /**
@@ -106,7 +104,6 @@ function buildForkDraftSetup(agent: ForkAgentSource): WorkspaceDraftTabSetup | u
   };
 }
 
-
 /**
  * Shared fork driver behind both turn-footer fork affordances: the completed
  * turn's footer (which supplies a boundary pinned to that turn) and the
@@ -118,7 +115,6 @@ export function useForkAgent(
 ): (request: ForkAgentRequest) => Promise<void> {
   const { serverId, toast, readOnly = false } = input;
   const { t } = useTranslation();
-  const router = useRouter();
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const supportsAgentForkContext = useHostFeature(serverId, "agentForkContext") && !readOnly;
 
@@ -132,6 +128,27 @@ export function useForkAgent(
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
       const draftSetup = buildForkDraftSetup(agent);
+      const sourceDirectory =
+        agent.projectPlacement?.checkout?.cwd?.trim() || agent.cwd.trim() || undefined;
+      const session = useSessionStore.getState().sessions[serverId];
+      const projectKey = agent.projectPlacement?.projectKey;
+      const project =
+        Array.from(session?.projects.values() ?? []).find(
+          (candidate) =>
+            projectKey &&
+            (candidate.projectKey === projectKey || candidate.projectId === projectKey),
+        ) ??
+        Array.from(session?.workspaces.values() ?? [])
+          .filter(
+            (workspace) =>
+              sourceDirectory &&
+              (sourceDirectory === workspace.workspaceDirectory ||
+                sourceDirectory.startsWith(`${workspace.workspaceDirectory}/`)),
+          )
+          .sort(
+            (left, right) => right.workspaceDirectory.length - left.workspaceDirectory.length,
+          )[0];
+      if (!project) throw new Error(t("message.actions.forkFailed"));
       const prepareForkDraft = async () => {
         const draftId = generateDraftId();
         const payload = await client.buildAgentForkContext(agentId, boundary);
@@ -149,26 +166,21 @@ export function useForkAgent(
         return draftId;
       };
 
-
       const draftId = await prepareForkDraft();
-      const sourceDirectory =
-        agent.projectPlacement?.checkout?.cwd?.trim() || agent.cwd.trim() || undefined;
-      if (draftSetup) {
-        useWorkspaceDraftSubmissionStore.getState().setDraftSetup({
-          draftId,
-          setup: draftSetup,
-          sourceDirectory,
-        });
-      }
-      router.push(
-        buildNewWorkspaceRoute({
+      try {
+        await openProjectWorkspaceDraft({
           serverId,
-          sourceDirectory,
-          displayName: agent.projectPlacement?.projectName,
-          projectId: agent.projectPlacement?.projectKey,
+          projectId: project.projectId,
+          projectRootPath: project.projectRootPath,
           draftId,
-        }),
-      );
+          ...(draftSetup ? { setup: draftSetup, sourceDirectory } : {}),
+        });
+      } catch (error) {
+        useWorkspaceAttachmentsStore.getState().clearWorkspaceAttachments({
+          scopeKey: buildDraftWorkspaceAttachmentScopeKey(draftId),
+        });
+        throw error;
+      }
     } catch (error) {
       toast?.error(toErrorMessage(error) || t("message.actions.forkFailed"));
     }

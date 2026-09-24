@@ -70,8 +70,8 @@ export const FormPreferencesSchema = z.strictObject({
     )
     .optional(),
   isolation: z.enum(["local", "worktree"]).optional(),
-  // What the New workspace composer submits to: the chat agent (default) or a
-  // terminal profile. See `@/new-workspace-launch` for resolution/fallback.
+  // Keep previously saved launch targets readable until persisted preferences
+  // are migrated; current draft tabs no longer use this setting.
   launchTarget: launchTargetSchema.optional(),
 }) satisfies z.ZodType<FormPreferences>;
 

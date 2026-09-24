@@ -4,7 +4,6 @@ import {
   buildHostRootRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
-  buildNewWorkspaceRoute,
   buildOpenProjectRoute,
   resolveKnownHostRoute,
   buildSessionsRoute,
@@ -156,7 +155,7 @@ describe("workspace route parsing", () => {
     expect(stripHostWorkspaceRouteEchoSearch("/h/local/workspace/164?pop=false")).toBe(
       "/h/local/workspace/164?pop=false",
     );
-    expect(stripHostWorkspaceRouteEchoSearch("/new?pop=true")).toBe("/new?pop=true");
+    expect(stripHostWorkspaceRouteEchoSearch("/sessions?pop=true")).toBe("/sessions?pop=true");
   });
 
   it("strips encoded workspace route echoes", () => {
@@ -211,35 +210,6 @@ describe("projects settings routes", () => {
 describe("global routes", () => {
   it("buildSessionsRoute returns the all-host Sessions route", () => {
     expect(buildSessionsRoute()).toBe("/sessions");
-  });
-
-  it("buildNewWorkspaceRoute returns the all-host New Workspace route", () => {
-    expect(buildNewWorkspaceRoute()).toBe("/new");
-  });
-
-  it("buildNewWorkspaceRoute accepts an initial host", () => {
-    expect(buildNewWorkspaceRoute({ serverId: "local" })).toBe("/new?serverId=local");
-  });
-
-  it("buildNewWorkspaceRoute accepts initial project context", () => {
-    expect(
-      buildNewWorkspaceRoute({
-        serverId: "local",
-        sourceDirectory: "/repo/project",
-        displayName: "Project",
-        projectId: "project-1",
-      }),
-    ).toBe("/new?serverId=local&dir=%2Frepo%2Fproject&name=Project&projectId=project-1");
-  });
-
-  it("buildNewWorkspaceRoute carries a draft context id", () => {
-    expect(
-      buildNewWorkspaceRoute({
-        serverId: "local",
-        sourceDirectory: "/repo/project",
-        draftId: "draft-1",
-      }),
-    ).toBe("/new?serverId=local&dir=%2Frepo%2Fproject&draftId=draft-1");
   });
 });
 

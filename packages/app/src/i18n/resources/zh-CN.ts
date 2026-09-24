@@ -1354,6 +1354,9 @@ export const zhCN: TranslationResources = {
         referenceContentFailed: "引用对话内容失败",
         hideFailed: "隐藏工作区失败",
         archiveFailed: "归档工作区失败",
+        emptyArchiveFailed:
+          "未能回收空工作区：{{reason}}。工作区已保留在侧栏，可重新打开并关闭空白标签页以重试。",
+        updateHostToArchiveEmpty: "请更新主机，以安全回收未使用的工作区",
         deleteFailed: "删除工作区失败",
       },
     },

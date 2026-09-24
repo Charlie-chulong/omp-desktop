@@ -54,6 +54,7 @@ export type TerminalWorkspaceContributionChangedListener = (
 
 export interface TerminalManager {
   getTerminals(cwd: string, options?: { workspaceId?: string }): Promise<TerminalSession[]>;
+  hasWorkspaceTerminals?(workspaceId: string): boolean;
   createTerminal(options: {
     id?: string;
     cwd: string;
@@ -109,6 +110,7 @@ export function createTerminalManager(
 ): TerminalManager {
   const terminalsByCwd = new Map<string, TerminalSession[]>();
   const terminalsById = new Map<string, TerminalSession>();
+  const pendingWorkspaceByTerminalId = new Map<string, string>();
   const terminalExitUnsubscribeById = new Map<string, () => void>();
   const terminalTitleUnsubscribeById = new Map<string, () => void>();
   const terminalActivityUnsubscribeById = new Map<string, () => void>();
@@ -286,6 +288,16 @@ export function createTerminalManager(
   }
 
   return {
+    hasWorkspaceTerminals(workspaceId: string): boolean {
+      for (const pendingWorkspaceId of pendingWorkspaceByTerminalId.values()) {
+        if (pendingWorkspaceId === workspaceId) return true;
+      }
+      for (const session of terminalsById.values()) {
+        if (session.workspaceId === workspaceId) return true;
+      }
+      return false;
+    },
+
     async getTerminals(
       cwd: string,
       options?: { workspaceId?: string },
@@ -345,6 +357,7 @@ export function createTerminalManager(
       };
       terminalActivityTokenById.set(terminalId, activityToken);
       let session: TerminalSession;
+      pendingWorkspaceByTerminalId.set(terminalId, options.workspaceId);
       try {
         session = registerSession(
           await createTerminal({
@@ -364,6 +377,8 @@ export function createTerminalManager(
       } catch (error) {
         terminalActivityTokenById.delete(terminalId);
         throw error;
+      } finally {
+        pendingWorkspaceByTerminalId.delete(terminalId);
       }
 
       terminals.push(session);

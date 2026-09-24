@@ -3033,6 +3033,7 @@ export const ArchiveWorkspaceRequestSchema = z.object({
   type: z.literal("archive_workspace_request"),
   workspaceId: z.string(),
   requestId: z.string(),
+  onlyIfEmpty: z.boolean().optional(),
 });
 
 export const DeleteWorkspaceRequestSchema = z.object({
@@ -4018,6 +4019,8 @@ export const ServerInfoStatusPayloadSchema = z
         worktreeRestore: z.boolean().optional(),
         // COMPAT(workspaceRecovery): added in v0.1.105, remove after 2027-01-11 once daemon floor >= v0.1.105.
         workspaceRecovery: z.boolean().optional(),
+        // Older daemons ignore onlyIfEmpty and would archive unconditionally.
+        workspaceArchiveIfEmpty: z.boolean().optional(),
         // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
         workspaceFileEditing: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
@@ -4884,6 +4887,7 @@ export const ArchiveWorkspaceResponseMessageSchema = z.object({
     workspaceId: z.string(),
     archivedAt: z.string().nullable(),
     error: z.string().nullable(),
+    skipped: z.boolean().optional(),
   }),
 });
 

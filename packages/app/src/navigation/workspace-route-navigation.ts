@@ -124,7 +124,7 @@ function dispatchHostWorkspacePopTo(route: string): boolean {
         },
         // React Navigation consumes this nested hint when resolving the host child screen.
         // The browser-route canonicalizer strips the resulting ?pop=true URL artifact.
-        // Removing it lets repeated /new -> workspace hops append hidden deck entries.
+        // Removing it lets repeated workspace hops avoid hidden deck entries.
         pop: true,
       },
     },

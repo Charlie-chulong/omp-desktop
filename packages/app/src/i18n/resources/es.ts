@@ -1375,6 +1375,10 @@ export const es: TranslationResources = {
         referenceContentFailed: "No se pudo referenciar el contenido de la conversación",
         hideFailed: "No se pudo ocultar el espacio de trabajo",
         archiveFailed: "No se pudo archivar el espacio de trabajo",
+        emptyArchiveFailed:
+          "No se pudo eliminar el espacio de trabajo sin usar: {{reason}}. Sigue en la barra lateral; vuelve a abrirlo y cierra la pestaña vacía para reintentar.",
+        updateHostToArchiveEmpty:
+          "Actualiza el host para eliminar de forma segura los espacios de trabajo sin usar",
         deleteFailed: "No se pudo eliminar el espacio de trabajo",
       },
     },

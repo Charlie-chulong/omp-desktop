@@ -1373,6 +1373,10 @@ export const fr: TranslationResources = {
         referenceContentFailed: "Impossible de référencer le contenu de la conversation",
         hideFailed: "Échec du masquage de l'espace de travail",
         archiveFailed: "Échec de l'archivage de l'espace de travail",
+        emptyArchiveFailed:
+          "Impossible de supprimer l’espace de travail inutilisé : {{reason}}. Il reste dans la barre latérale ; rouvrez-le et fermez l’onglet vide pour réessayer.",
+        updateHostToArchiveEmpty:
+          "Mettez à jour l’hôte pour supprimer les espaces de travail inutilisés en toute sécurité",
         deleteFailed: "Échec de la suppression de l’espace de travail",
       },
     },

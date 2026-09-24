@@ -1351,6 +1351,10 @@ export const ja: TranslationResources = {
         referenceContentFailed: "会話内容を参照できませんでした",
         hideFailed: "ワークスペースの非表示に失敗しました",
         archiveFailed: "ワークスペースのアーカイブに失敗しました",
+        emptyArchiveFailed:
+          "未使用のワークスペースを削除できませんでした：{{reason}}。サイドバーに残っています。再度開いて空のタブを閉じると再試行できます。",
+        updateHostToArchiveEmpty:
+          "未使用のワークスペースを安全に削除するにはホストを更新してください",
         deleteFailed: "ワークスペースの削除に失敗しました",
       },
     },

@@ -10,6 +10,12 @@ An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). 
 
 Packaged macOS, Linux, and Windows applications include OMP and do not require a system OMP installation.
 
+## Closing unused conversations
+
+Closing the last empty conversation tab returns to the project creation page. On supported hosts, the daemon also archives the unused workspace record so it does not remain in the sidebar under its branch name. This does not delete project files or the project itself.
+
+Cleanup preserves workspaces with agent history (including archived agents), live or pending resources, a custom title, pins, labels, or worktree ownership. Older hosts must be updated before automatic cleanup is available. An existing empty sidebar entry can be reopened and its empty tab closed to retry cleanup; entries are never bulk-removed merely because they are named `main`.
+
 ## File drag and drop
 
 - Drop files onto the message input to add attachments without sending a message.

@@ -1165,6 +1165,10 @@ export class AgentManager {
     return this.providerSubagents.fetchTimeline(parentAgentId, subagentId, options);
   }
 
+  hasPendingAgentRegistrations(): boolean {
+    return this.agentRegistrationTasks.size > 0;
+  }
+
   createAgent(
     config: AgentSessionConfig,
     agentId: string | undefined,

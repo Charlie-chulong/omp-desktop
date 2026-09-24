@@ -197,6 +197,7 @@ import type { PushNotifications } from "./push/index.js";
 import {
   archivePersistedWorkspaceRecord,
   archiveWorkspaceContents,
+  archiveUnusedWorkspace,
 } from "./workspace-archive-service.js";
 import type { ServiceProxySubsystem } from "./service-proxy.js";
 import { renameCurrentBranch as renameCurrentBranchDefault } from "../utils/checkout-git.js";
@@ -665,6 +666,10 @@ function workspaceLabelErrorCode(error: unknown): string {
   }
   return "workspace_label_failed";
 }
+
+// Covers request preparation before agent/terminal managers register their runtimes,
+// shared across client sessions using the same daemon registry.
+const workspaceContentMutations = new WeakMap<WorkspaceRegistry, number>();
 
 export class Session {
   private readonly clientId: string;
@@ -1885,6 +1890,23 @@ export class Session {
    * Main entry point for processing session messages
    */
   public async handleMessage(msg: SessionInboundMessage, source?: object): Promise<void> {
+    const createsWorkspaceContent =
+      msg.type === "create_agent_request" ||
+      msg.type === "resume_agent_request" ||
+      msg.type === "import_agent_request" ||
+      msg.type === "create_terminal_request" ||
+      msg.type === "start_workspace_script_request" ||
+      msg.type === "workspace.script.start.request" ||
+      msg.type === "workspace.title.set.request" ||
+      msg.type === "workspace.pin.set.request" ||
+      msg.type === "workspace.label.assignment.set.request" ||
+      msg.type === "hub.execution.agent.create.request";
+    if (createsWorkspaceContent) {
+      workspaceContentMutations.set(
+        this.workspaceRegistry,
+        (workspaceContentMutations.get(this.workspaceRegistry) ?? 0) + 1,
+      );
+    }
     this.inflightRequests++;
     if (this.inflightRequests > this.peakInflightRequests) {
       this.peakInflightRequests = this.inflightRequests;
@@ -1948,6 +1970,11 @@ export class Session {
       }
     } finally {
       this.inflightRequests--;
+      if (createsWorkspaceContent) {
+        const remaining = (workspaceContentMutations.get(this.workspaceRegistry) ?? 1) - 1;
+        if (remaining === 0) workspaceContentMutations.delete(this.workspaceRegistry);
+        else workspaceContentMutations.set(this.workspaceRegistry, remaining);
+      }
     }
   }
 
@@ -6971,6 +6998,39 @@ export class Session {
       const existing = await this.workspaceRegistry.get(request.workspaceId);
       if (!existing) {
         throw new Error(`Workspace not found: ${request.workspaceId}`);
+      }
+
+      if (request.onlyIfEmpty) {
+        const archivedWorkspace = await archiveUnusedWorkspace(
+          {
+            workspaceRegistry: this.workspaceRegistry,
+            agentStorage: this.agentStorage,
+            agentManager: this.agentManager,
+            hasWorkspaceActivity: (workspaceId) =>
+              (workspaceContentMutations.get(this.workspaceRegistry) ?? 0) > 0 ||
+              this.workspaceSetupRuntime.isRunning(workspaceId) ||
+              (this.scriptRuntimeStore?.listForWorkspace(workspaceId).length ?? 0) > 0,
+            killTerminalsForWorkspace: (workspaceId) =>
+              this.terminalController.killTerminalsForWorkspace(workspaceId),
+          },
+          request.workspaceId,
+        );
+        // The empty record and auxiliary terminals are retired; project files remain.
+        if (archivedWorkspace) {
+          this.workspaceGitObserver.removeForWorkspaceId(request.workspaceId);
+          await this.emitWorkspaceUpdatesForWorkspaceIds([request.workspaceId]);
+        }
+        this.emit({
+          type: "archive_workspace_response",
+          payload: {
+            requestId: request.requestId,
+            workspaceId: request.workspaceId,
+            archivedAt: archivedWorkspace?.archivedAt ?? null,
+            skipped: !archivedWorkspace,
+            error: null,
+          },
+        });
+        return;
       }
 
       await archiveByScope(

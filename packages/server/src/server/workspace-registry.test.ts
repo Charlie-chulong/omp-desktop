@@ -100,6 +100,73 @@ describe("workspace registries", () => {
     expect(await projectRegistry.list()).toEqual([]);
   });
 
+  test("conditional archive rolls back disk state when usage starts during persistence", async () => {
+    const filePath = path.join(tmpDir, "conditional-workspaces.json");
+    let unused = true;
+    let startUsageOnWrite = false;
+    const registry = new FileBackedWorkspaceRegistry(filePath, logger, {
+      writeRecords: async (target, records) => {
+        await writeJsonFileAtomic(target, records);
+        if (startUsageOnWrite) {
+          startUsageOnWrite = false;
+          unused = false;
+        }
+      },
+    });
+    const workspace = createPersistedWorkspaceRecord({
+      workspaceId: "ws-race",
+      projectId: "project",
+      cwd: tmpDir,
+      kind: "directory",
+      displayName: "project",
+      createdAt: "2026-09-23T00:00:00.000Z",
+      updatedAt: "2026-09-23T00:00:00.000Z",
+    });
+    await registry.upsert(workspace);
+    const mutations: string[] = [];
+    registry.subscribeToMutations((mutation) => {
+      mutations.push(mutation.kind);
+    });
+    startUsageOnWrite = true;
+
+    expect(
+      await registry.archiveIfUnused("ws-race", "2026-09-23T01:00:00.000Z", () => unused),
+    ).toBeNull();
+    expect(await registry.get("ws-race")).toEqual(workspace);
+    expect(await new FileBackedWorkspaceRegistry(filePath, logger).get("ws-race")).toEqual(
+      workspace,
+    );
+    expect(mutations).toEqual([]);
+  });
+
+  test("conditional archive evaluates the latest serialized workspace title", async () => {
+    const workspace = createPersistedWorkspaceRecord({
+      workspaceId: "ws-renamed",
+      projectId: "project",
+      cwd: tmpDir,
+      kind: "directory",
+      displayName: "project",
+      createdAt: "2026-09-23T00:00:00.000Z",
+      updatedAt: "2026-09-23T00:00:00.000Z",
+    });
+    await workspaceRegistry.upsert(workspace);
+    const rename = workspaceRegistry.update("ws-renamed", (record) => ({
+      ...record,
+      title: "Keep me",
+    }));
+    const archive = workspaceRegistry.archiveIfUnused(
+      "ws-renamed",
+      "2026-09-23T01:00:00.000Z",
+      (record) => !record.title,
+    );
+    await rename;
+    expect(await archive).toBeNull();
+    expect(await workspaceRegistry.get("ws-renamed")).toMatchObject({
+      title: "Keep me",
+      archivedAt: null,
+    });
+  });
+
   test("preserves a concurrent project update when archiving", async () => {
     let pauseNextWrite = false;
     let releaseWrite!: () => void;

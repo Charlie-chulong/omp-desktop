@@ -10,7 +10,7 @@ export interface SidebarProjectHostTarget {
 }
 
 export type SidebarProjectTrailingAction =
-  | { kind: "new_workspace"; target: SidebarProjectHostTarget }
+  | { kind: "new_agent"; target: SidebarProjectHostTarget }
   | { kind: "none" };
 
 export interface SidebarProjectSectionRowModel {
@@ -21,7 +21,6 @@ export interface SidebarProjectSectionRowModel {
 
 export type SidebarProjectRowModel = SidebarProjectSectionRowModel;
 
-const EMPTY_MULTIPLICITY_MAP: ReadonlyMap<string, boolean> = new Map();
 function hostTarget(input: {
   serverId: string;
   projectId: string;
@@ -76,48 +75,16 @@ export function resolveSidebarProjectLocalPath(
   return project.hosts.find((host) => host.serverId === localServerId)?.iconWorkingDir.trim() ?? "";
 }
 
-// A project can host a brand-new workspace on a host when that host can create a
-// git worktree (git projects) OR the host supports running multiple independent
-// workspaces per directory (`workspaceMultiplicity`), which is what lets non-git
-// directories add a second workspace. Mirrors the gate used by the global "New
-// workspace" affordances (use-global-new-workspace-action.ts and left-sidebar's
-// SidebarNewWorkspaceHeaderRow): `canCreateWorktree || supportsMultiplicity`.
-function resolveNewWorkspaceTarget(
-  project: SidebarProjectEntry,
-  supportsMultiplicityByServerId: ReadonlyMap<string, boolean>,
-): SidebarProjectHostTarget | null {
-  for (const host of project.hosts) {
-    if (
-      host.worktreeSupport === "unsupported" &&
-      !supportsMultiplicityByServerId.get(host.serverId)
-    ) {
-      continue;
-    }
-    const target = hostTarget(host);
-    if (target) return target;
-  }
-  return null;
-}
-
-function projectTrailingAction(
-  project: SidebarProjectEntry,
-  supportsMultiplicityByServerId: ReadonlyMap<string, boolean>,
-): SidebarProjectTrailingAction {
-  const target = resolveNewWorkspaceTarget(project, supportsMultiplicityByServerId);
-  return target ? { kind: "new_workspace", target } : { kind: "none" };
-}
-
+// Agent drafts can be opened in the project's existing checkout. Creating a second
+// workspace is only necessary when that checkout has not yet been provisioned.
 export function buildSidebarProjectRowModel(input: {
   project: SidebarProjectEntry;
   collapsed: boolean;
-  supportsMultiplicityByServerId?: ReadonlyMap<string, boolean>;
 }): SidebarProjectRowModel {
+  const target = resolveSidebarProjectIconTarget(input.project);
   return {
     kind: "project_section",
     chevron: input.collapsed ? "expand" : "collapse",
-    trailingAction: projectTrailingAction(
-      input.project,
-      input.supportsMultiplicityByServerId ?? EMPTY_MULTIPLICITY_MAP,
-    ),
+    trailingAction: target ? { kind: "new_agent", target } : { kind: "none" },
   };
 }

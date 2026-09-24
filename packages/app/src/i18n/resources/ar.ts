@@ -1338,6 +1338,9 @@ export const ar: TranslationResources = {
         referenceContentFailed: "تعذرت الإشارة إلى محتوى المحادثة",
         hideFailed: "فشل في إخفاء مساحة العمل",
         archiveFailed: "فشل في أرشفة مساحة العمل",
+        emptyArchiveFailed:
+          "تعذر إزالة مساحة العمل غير المستخدمة: {{reason}}. ما زالت في الشريط الجانبي؛ أعد فتحها وأغلق علامة التبويب الفارغة للمحاولة مجددًا.",
+        updateHostToArchiveEmpty: "حدّث المضيف لإزالة مساحات العمل غير المستخدمة بأمان",
         deleteFailed: "فشل حذف مساحة العمل",
       },
     },
