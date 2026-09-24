@@ -24,9 +24,10 @@ import {
   type PropsWithChildren,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { router, useGlobalSearchParams, usePathname, type Href } from "expo-router";
+import { router, usePathname, type Href } from "expo-router";
 import {
   navigateToSidebarWorkspace,
+  navigateToWorkspace,
   useActiveWorkspaceSelection,
   useSidebarActiveWorkspaceSelection,
   type ActiveWorkspaceSelection,
@@ -60,7 +61,6 @@ import { useHostFeatureMap } from "@/runtime/host-features";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIcons } from "@/projects/icons";
 import {
-  buildNewWorkspaceRoute,
   buildProjectSettingsRoute,
   parseHostWorkspaceRouteFromPathname,
 } from "@/utils/host-routes";
@@ -150,19 +150,18 @@ import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constant
 import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu-item";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import type { HostBadgeModel } from "@/hosts/appearance";
-import { generateDraftId } from "@/stores/draft-keys";
-import {
-  useSidebarConversationDraftStore,
-  type SidebarConversationDraft,
-} from "@/stores/sidebar-conversation-draft-store";
-import { STATUS_INDICATOR_FILLED_DOT_SIZE } from "@/utils/status-indicator-geometry";
 import { useHostBadges } from "@/hosts/use-host-badges";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
+import { openProjectWorkspaceDraft } from "@/utils/open-project-workspace-draft";
+import {
+  collectAllTabs,
+  findPaneById,
+  useWorkspaceLayoutStore,
+} from "@/stores/workspace-layout-store";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
 const projectViewKeyExtractor = (project: SidebarProjectEntry) => project.viewKey;
-const EMPTY_CONVERSATION_DRAFTS: readonly SidebarConversationDraft[] = [];
 
 const WORKSPACE_STATUS_DOT_WIDTH = 14;
 const ThemedExternalLink = withUnistyles(ExternalLink);
@@ -312,10 +311,11 @@ interface WorkspaceRowInnerProps {
   reserveIdleStatusIndicatorSpace?: boolean;
 }
 
-type SidebarConversationDraftSource = Pick<
-  SidebarConversationDraft,
-  "serverId" | "projectViewKey" | "sourceDirectory" | "displayName" | "projectId"
->;
+type SidebarConversationDraftSource = {
+  serverId: string;
+  sourceDirectory: string;
+  projectId: string;
+};
 export function PrBadge({ hint, style }: { hint: PrHint; style?: StyleProp<ViewStyle> }) {
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
@@ -816,56 +816,53 @@ function NewWorkspaceButton({
   );
 }
 
-function SidebarConversationDraftRow({
-  draft,
+function SidebarAgentDraftRow({
+  serverId,
+  workspaceId,
+  draftId,
   selected,
-  onPress,
+  onWorkspacePress,
 }: {
-  draft: SidebarConversationDraft;
+  serverId: string;
+  workspaceId: string;
+  draftId: string;
   selected: boolean;
-  onPress: (draft: SidebarConversationDraft) => void;
+  onWorkspacePress?: () => void;
 }) {
   const { t } = useTranslation();
   const handlePress = useCallback(() => {
-    onPress(draft);
-  }, [draft, onPress]);
+    onWorkspacePress?.();
+    navigateToWorkspace({
+      serverId,
+      workspaceId,
+      target: { kind: "draft", draftId },
+    });
+  }, [draftId, onWorkspacePress, serverId, workspaceId]);
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.newConversationDraftRow,
+      styles.agentDraftRow,
       selected && styles.sidebarRowSelected,
-      hovered && !pressed && styles.newConversationDraftRowHovered,
-      pressed && styles.newConversationDraftRowPressed,
+      hovered && !pressed && styles.workspaceRowHovered,
+      pressed && styles.workspaceRowPressed,
     ],
     [selected],
   );
-  const accessibilityState = useMemo(() => ({ selected }), [selected]);
 
   return (
     <Pressable
-      accessibilityRole={platformIsWeb ? undefined : "button"}
-      accessibilityLabel={t("sidebar.workspace.actions.newWorkspace")}
-      accessibilityState={accessibilityState}
+      accessibilityRole="button"
+      accessibilityLabel={t("newWorkspace.title")}
+      accessibilityState={{ selected }}
       onPress={handlePress}
       style={rowStyle}
-      testID={`sidebar-conversation-draft-row-${draft.id}`}
+      testID={`sidebar-agent-draft-${draftId}`}
     >
-      {({ hovered, pressed }) => (
-        <>
-          <View style={styles.newConversationDraftStatusSlot}>
-            <View style={styles.newConversationDraftStatusDot} />
-          </View>
-          <Text
-            style={
-              selected || hovered || pressed
-                ? styles.newConversationDraftTextActive
-                : styles.newConversationDraftText
-            }
-            numberOfLines={1}
-          >
-            {t("sidebar.workspace.actions.newWorkspace")}
-          </Text>
-        </>
-      )}
+      <View style={styles.agentDraftStatusSlot}>
+        <View style={styles.agentDraftStatusDot} />
+      </View>
+      <Text style={styles.agentDraftText} numberOfLines={1}>
+        {t("newWorkspace.title")}
+      </Text>
     </Pressable>
   );
 }
@@ -1634,8 +1631,6 @@ function WorkspaceRow({
 function ProjectBlock({
   project,
   workspaceEntriesByKey,
-  conversationDrafts,
-  activeConversationDraftId,
   collapsed,
   displayName,
   iconDataUri,
@@ -1647,7 +1642,6 @@ function ProjectBlock({
   onWorkspacePress,
   onWorkspaceReorder,
   onCreateConversationDraft,
-  onOpenConversationDraft,
   drag,
   isDragging,
   dragHandleProps,
@@ -1655,14 +1649,11 @@ function ProjectBlock({
   dragGestureHostPresented,
   activeWorkspaceSelection,
   hostBadgeByServerId,
-  supportsMultiplicityByServerId,
   supportsPinningByServerId,
   onToggleWorkspacePin,
 }: {
   project: SidebarProjectEntry;
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
-  conversationDrafts: readonly SidebarConversationDraft[];
-  activeConversationDraftId: string | null;
   collapsed: boolean;
   displayName: string;
   iconDataUri: string | null;
@@ -1674,7 +1665,6 @@ function ProjectBlock({
   onWorkspacePress?: () => void;
   onWorkspaceReorder: (projectViewKey: string, workspaces: SidebarWorkspacePlacement[]) => void;
   onCreateConversationDraft: (draft: SidebarConversationDraftSource) => void;
-  onOpenConversationDraft: (draft: SidebarConversationDraft) => void;
   drag: () => void;
   isDragging: boolean;
   dragHandleProps?: DraggableListDragHandleProps;
@@ -1682,25 +1672,55 @@ function ProjectBlock({
   dragGestureHostPresented?: boolean;
   activeWorkspaceSelection: ActiveWorkspaceSelection | null;
   hostBadgeByServerId: ReadonlyMap<string, HostBadgeModel>;
-  supportsMultiplicityByServerId: ReadonlyMap<string, boolean>;
   supportsPinningByServerId: ReadonlyMap<string, boolean>;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
 }) {
+  const rowModel = useMemo(
+    () => buildSidebarProjectRowModel({ project, collapsed }),
+    [collapsed, project],
+  );
+  const workspaceLayouts = useWorkspaceLayoutStore((state) => state.layoutByWorkspace);
+  const agentDrafts = useMemo(() => {
+    if (collapsed) return [];
+    const drafts: Array<{
+      serverId: string;
+      workspaceId: string;
+      draftId: string;
+      selected: boolean;
+    }> = [];
+    for (const workspace of project.workspaces) {
+      const layout = workspaceLayouts[workspace.workspaceKey];
+      if (!layout) continue;
+      const focusedPane = findPaneById(layout.root, layout.focusedPaneId);
+      for (const tab of collectAllTabs(layout.root)) {
+        if (tab.target.kind !== "draft") continue;
+        drafts.push({
+          serverId: workspace.serverId,
+          workspaceId: workspace.workspaceId,
+          draftId: tab.target.draftId,
+          selected:
+            activeWorkspaceSelection?.serverId === workspace.serverId &&
+            activeWorkspaceSelection.workspaceId === workspace.workspaceId &&
+            focusedPane?.focusedTabId === tab.tabId,
+        });
+      }
+    }
+    return drafts;
+  }, [activeWorkspaceSelection, collapsed, project.workspaces, workspaceLayouts]);
+  const workspaceRows = useMemo(() => {
+    const draftWorkspaceKeys = new Set(
+      agentDrafts.map((draft) => `${draft.serverId}:${draft.workspaceId}`),
+    );
+    return project.workspaces.filter(
+      (workspace) => !draftWorkspaceKeys.has(workspace.workspaceKey),
+    );
+  }, [agentDrafts, project.workspaces]);
   const {
     visibleItems: visibleWorkspaces,
     expanded: workspacesExpanded,
     canToggle: canToggleWorkspaces,
     toggleExpanded: toggleWorkspacesExpanded,
-  } = useLimitedSidebarGroup(project.workspaces);
-  const rowModel = useMemo(
-    () =>
-      buildSidebarProjectRowModel({
-        project,
-        collapsed,
-        supportsMultiplicityByServerId,
-      }),
-    [collapsed, project, supportsMultiplicityByServerId],
-  );
+  } = useLimitedSidebarGroup(workspaceRows);
 
   // Collapsed rows hide their workspace rows, so the project row carries the most urgent
   // status among them; expanded rows leave the signal to the child rows themselves.
@@ -1715,7 +1735,7 @@ function ProjectBlock({
     enabled: selectionEnabled,
   });
   const handleBeginWorkspaceSetup = useCallback(() => {
-    if (rowModel.trailingAction.kind !== "new_workspace") {
+    if (rowModel.trailingAction.kind !== "new_agent") {
       return;
     }
     if (collapsed) {
@@ -1723,14 +1743,11 @@ function ProjectBlock({
     }
     onCreateConversationDraft({
       serverId: rowModel.trailingAction.target.serverId,
-      projectViewKey: project.viewKey,
       sourceDirectory: rowModel.trailingAction.target.iconWorkingDir,
-      displayName,
       projectId: rowModel.trailingAction.target.projectId,
     });
   }, [
     collapsed,
-    displayName,
     onCreateConversationDraft,
     onToggleCollapsed,
     project.viewKey,
@@ -1863,41 +1880,36 @@ function ProjectBlock({
   }, [onToggleCollapsed, project.viewKey]);
 
   let projectChildren = null;
-  if (!collapsed && (conversationDrafts.length > 0 || project.workspaces.length > 0)) {
+  if (!collapsed && project.workspaces.length > 0) {
     projectChildren = (
       <>
-        {conversationDrafts.map((draft) => (
-          <SidebarConversationDraftRow
-            key={draft.id}
-            draft={draft}
-            selected={draft.id === activeConversationDraftId}
-            onPress={onOpenConversationDraft}
+        {agentDrafts.map((draft) => (
+          <SidebarAgentDraftRow
+            key={draft.draftId}
+            {...draft}
+            onWorkspacePress={onWorkspacePress}
           />
         ))}
-        {project.workspaces.length > 0 ? (
-          <>
-            <DraggableList
-              testID={`sidebar-workspace-list-${project.viewKey}`}
-              data={visibleWorkspaces}
-              keyExtractor={workspaceKeyExtractor}
-              renderItem={renderWorkspace}
-              onDragEnd={handleWorkspaceDragEnd}
-              extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
-              scrollEnabled={false}
-              useDragHandle
-              nestable={useNestable}
-              simultaneousGestureRef={parentGestureRef}
-              gestureHostPresented={dragGestureHostPresented}
-              containerStyle={styles.workspaceListContainer}
-            />
-            {canToggleWorkspaces ? (
-              <SidebarGroupToggleRow
-                expanded={workspacesExpanded}
-                onPress={toggleWorkspacesExpanded}
-                testID={`sidebar-project-show-more-${project.viewKey}`}
-              />
-            ) : null}
-          </>
+        <DraggableList
+          testID={`sidebar-workspace-list-${project.viewKey}`}
+          data={visibleWorkspaces}
+          keyExtractor={workspaceKeyExtractor}
+          renderItem={renderWorkspace}
+          onDragEnd={handleWorkspaceDragEnd}
+          extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
+          scrollEnabled={false}
+          useDragHandle
+          nestable={useNestable}
+          simultaneousGestureRef={parentGestureRef}
+          gestureHostPresented={dragGestureHostPresented}
+          containerStyle={styles.workspaceListContainer}
+        />
+        {canToggleWorkspaces ? (
+          <SidebarGroupToggleRow
+            expanded={workspacesExpanded}
+            onPress={toggleWorkspacesExpanded}
+            testID={`sidebar-project-show-more-${project.viewKey}`}
+          />
         ) : null}
       </>
     );
@@ -1918,12 +1930,10 @@ function ProjectBlock({
         chevron={rowModel.chevron}
         onPress={handleToggleCollapsed}
         workspaceTarget={
-          rowModel.trailingAction.kind === "new_workspace" ? rowModel.trailingAction.target : null
+          rowModel.trailingAction.kind === "new_agent" ? rowModel.trailingAction.target : null
         }
         onBeginWorkspaceSetup={handleBeginWorkspaceSetup}
-        isProjectActive={
-          active || conversationDrafts.some((draft) => draft.id === activeConversationDraftId)
-        }
+        isProjectActive={active}
         drag={drag}
         isDragging={isDragging}
         isArchiving={isRemovingProject}
@@ -1945,9 +1955,6 @@ function areProjectBlockPropsEqual(previous: ProjectBlockProps, next: ProjectBlo
   return (
     previous.project === next.project &&
     previous.workspaceEntriesByKey === next.workspaceEntriesByKey &&
-    previous.conversationDrafts.length === next.conversationDrafts.length &&
-    previous.conversationDrafts.every((draft, index) => draft === next.conversationDrafts[index]) &&
-    previous.activeConversationDraftId === next.activeConversationDraftId &&
     previous.collapsed === next.collapsed &&
     previous.displayName === next.displayName &&
     previous.iconDataUri === next.iconDataUri &&
@@ -1955,7 +1962,6 @@ function areProjectBlockPropsEqual(previous: ProjectBlockProps, next: ProjectBlo
     previous.showShortcutBadges === next.showShortcutBadges &&
     previous.shortcutIndexByWorkspaceKey === next.shortcutIndexByWorkspaceKey &&
     previous.hostBadgeByServerId === next.hostBadgeByServerId &&
-    previous.supportsMultiplicityByServerId === next.supportsMultiplicityByServerId &&
     previous.supportsPinningByServerId === next.supportsPinningByServerId &&
     previous.onToggleWorkspacePin === next.onToggleWorkspacePin &&
     previous.parentGestureRef === next.parentGestureRef &&
@@ -1963,7 +1969,6 @@ function areProjectBlockPropsEqual(previous: ProjectBlockProps, next: ProjectBlo
     previous.onWorkspacePress === next.onWorkspacePress &&
     previous.onWorkspaceReorder === next.onWorkspaceReorder &&
     previous.onCreateConversationDraft === next.onCreateConversationDraft &&
-    previous.onOpenConversationDraft === next.onOpenConversationDraft &&
     previous.drag === next.drag &&
     previous.isDragging === next.isDragging &&
     previous.dragHandleProps === next.dragHandleProps &&
@@ -2031,7 +2036,6 @@ export function SidebarWorkspaceList({
     enabled: rowItems.host && shouldShowSidebarHostLabels(projects),
   });
   const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
-  const supportsMultiplicityByServerId = useHostFeatureMap(serverIds, "workspaceMultiplicity");
   const supportsPinningByServerId = useHostFeatureMap(serverIds, "workspacePinning");
   const onToggleWorkspacePin = useSidebarWorkspacePinController();
   const hasActiveLabelFilter = useSidebarViewStore((state) =>
@@ -2084,7 +2088,6 @@ export function SidebarWorkspaceList({
         dragGestureHostPresented={dragGestureHostPresented}
         pathname={pathname}
         hostBadgeByServerId={hostBadgeByServerId}
-        supportsMultiplicityByServerId={supportsMultiplicityByServerId}
         supportsPinningByServerId={supportsPinningByServerId}
         onToggleWorkspacePin={onToggleWorkspacePin}
       />
@@ -2154,7 +2157,6 @@ function ProjectModeList({
   dragGestureHostPresented,
   pathname,
   hostBadgeByServerId,
-  supportsMultiplicityByServerId,
   supportsPinningByServerId,
   onToggleWorkspacePin,
 }: Omit<
@@ -2171,39 +2173,11 @@ function ProjectModeList({
   projectIconByProjectViewKey: ReadonlyMap<string, string | null>;
   pathname: string;
   hostBadgeByServerId: ReadonlyMap<string, HostBadgeModel>;
-  supportsMultiplicityByServerId: ReadonlyMap<string, boolean>;
   supportsPinningByServerId: ReadonlyMap<string, boolean>;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
 }) {
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
-  const newWorkspaceParams = useGlobalSearchParams<{ draftId?: string | string[] }>();
-  const routeConversationDraftId = useMemo(() => {
-    if (pathname !== "/new") {
-      return null;
-    }
-    const value = newWorkspaceParams.draftId;
-    return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
-  }, [newWorkspaceParams.draftId, pathname]);
-  const conversationDraftsById = useSidebarConversationDraftStore((state) => state.drafts);
-  const addConversationDraft = useSidebarConversationDraftStore((state) => state.addDraft);
-  const removeEmptyConversationDrafts = useSidebarConversationDraftStore(
-    (state) => state.removeEmptyDrafts,
-  );
-  const conversationDraftsByProject = useMemo(() => {
-    const draftsByProject = new Map<string, SidebarConversationDraft[]>();
-    for (const draft of Object.values(conversationDraftsById)) {
-      const projectDrafts = draftsByProject.get(draft.projectViewKey);
-      if (projectDrafts) {
-        projectDrafts.push(draft);
-      } else {
-        draftsByProject.set(draft.projectViewKey, [draft]);
-      }
-    }
-    for (const drafts of draftsByProject.values()) {
-      drafts.sort((left, right) => right.createdAt - left.createdAt);
-    }
-    return draftsByProject;
-  }, [conversationDraftsById]);
+  const toast = useToast();
   const showShortcutBadges = useShowShortcutBadges();
 
   const getProjectOrder = useSidebarOrderStore((state) => state.getProjectOrder);
@@ -2231,49 +2205,18 @@ function ProjectModeList({
     [parentGestureRef],
   );
 
-  const handleConversationPress = useCallback(() => {
-    removeEmptyConversationDrafts();
-    onWorkspacePress?.();
-  }, [onWorkspacePress, removeEmptyConversationDrafts]);
-
   const handleCreateConversationDraft = useCallback(
     (source: SidebarConversationDraftSource) => {
-      removeEmptyConversationDrafts();
-      const id = generateDraftId();
-      addConversationDraft({
-        ...source,
-        id,
-        createdAt: Date.now(),
+      onWorkspacePress?.();
+      void openProjectWorkspaceDraft({
+        serverId: source.serverId,
+        projectId: source.projectId,
+        projectRootPath: source.sourceDirectory,
+      }).catch((error) => {
+        toast.error(error instanceof Error ? error.message : String(error));
       });
-      onWorkspacePress?.();
-      router.navigate(
-        buildNewWorkspaceRoute({
-          serverId: source.serverId,
-          sourceDirectory: source.sourceDirectory,
-          displayName: source.displayName,
-          projectId: source.projectId,
-          draftId: id,
-        }) as Href,
-      );
     },
-    [addConversationDraft, onWorkspacePress, removeEmptyConversationDrafts],
-  );
-
-  const handleOpenConversationDraft = useCallback(
-    (draft: SidebarConversationDraft) => {
-      removeEmptyConversationDrafts(draft.id);
-      onWorkspacePress?.();
-      router.navigate(
-        buildNewWorkspaceRoute({
-          serverId: draft.serverId,
-          sourceDirectory: draft.sourceDirectory,
-          displayName: draft.displayName,
-          projectId: draft.projectId,
-          draftId: draft.id,
-        }) as Href,
-      );
-    },
-    [onWorkspacePress, removeEmptyConversationDrafts],
+    [onWorkspacePress, toast],
   );
   const handleProjectDragEnd = useCallback(
     (reorderedProjects: SidebarProjectEntry[]) => {
@@ -2336,10 +2279,6 @@ function ProjectModeList({
           key={item.viewKey}
           project={item}
           workspaceEntriesByKey={workspaceEntriesByKey}
-          conversationDrafts={
-            conversationDraftsByProject.get(item.viewKey) ?? EMPTY_CONVERSATION_DRAFTS
-          }
-          activeConversationDraftId={routeConversationDraftId}
           collapsed={collapsedProjectKeys.has(item.viewKey)}
           displayName={item.projectName}
           iconDataUri={projectIconByProjectViewKey.get(item.viewKey) ?? null}
@@ -2348,10 +2287,9 @@ function ProjectModeList({
           shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
           parentGestureRef={parentGestureRef}
           onToggleCollapsed={onToggleProjectCollapsed}
-          onWorkspacePress={handleConversationPress}
+          onWorkspacePress={onWorkspacePress}
           onWorkspaceReorder={handleWorkspaceReorder}
           onCreateConversationDraft={handleCreateConversationDraft}
-          onOpenConversationDraft={handleOpenConversationDraft}
           drag={dragState.drag}
           isDragging={dragState.isDragging}
           dragHandleProps={dragState.dragHandleProps}
@@ -2359,23 +2297,18 @@ function ProjectModeList({
           dragGestureHostPresented={dragGestureHostPresented}
           activeWorkspaceSelection={activeWorkspaceSelection}
           hostBadgeByServerId={hostBadgeByServerId}
-          supportsMultiplicityByServerId={supportsMultiplicityByServerId}
           supportsPinningByServerId={supportsPinningByServerId}
           onToggleWorkspacePin={onToggleWorkspacePin}
         />
       );
     },
     [
-      conversationDraftsByProject,
-      routeConversationDraftId,
       collapsedProjectKeys,
       activeWorkspaceSelection,
-      handleConversationPress,
+      onWorkspacePress,
       handleCreateConversationDraft,
-      handleOpenConversationDraft,
       handleWorkspaceReorder,
       hostBadgeByServerId,
-      supportsMultiplicityByServerId,
       supportsPinningByServerId,
       onToggleWorkspacePin,
       onToggleProjectCollapsed,
@@ -2403,7 +2336,7 @@ function ProjectModeList({
         keyExtractor={projectViewKeyExtractor}
         renderItem={renderProject}
         onDragEnd={handleProjectDragEnd}
-        extraData={`${activeWorkspaceSelectionKey(activeWorkspaceSelection)}:${routeConversationDraftId ?? ""}:${Object.keys(conversationDraftsById).join(",")}`}
+        extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
         scrollEnabled={false}
         useDragHandle
         nestable={platformIsNative}
@@ -2477,54 +2410,30 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[2],
   },
   workspaceListContainer: {},
-  // Draft conversations occupy the same nested row rail as persisted conversations. The row is
-  // client-side until the first message creates a workspace, but it must not look like a second
-  // add button: the only add affordance belongs to the project header.
-  newConversationDraftRow: {
-    minHeight: 32,
-    marginBottom: 0,
-    paddingVertical: theme.spacing[1.5],
-    paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[2],
+  agentDraftRow: {
+    minHeight: buttonControlHeight.xs,
+    paddingVertical: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
     borderRadius: theme.borderRadius.md,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
     userSelect: "none",
   },
-  newConversationDraftRowHovered: {
-    backgroundColor: theme.colors.surfaceSidebarHover,
-  },
-  newConversationDraftRowPressed: {
-    backgroundColor: theme.colors.surface2,
-  },
-  newConversationDraftStatusSlot: {
+  agentDraftStatusSlot: {
     width: theme.iconSize.md,
-    height: 20,
     alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
-  newConversationDraftStatusDot: {
-    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
+  agentDraftStatusDot: {
+    width: 6,
+    height: 6,
     borderRadius: theme.borderRadius.full,
     backgroundColor: theme.colors.foregroundExtraMuted,
-    opacity: 0.3,
   },
-  newConversationDraftText: {
+  agentDraftText: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     lineHeight: 20,
-    minWidth: 0,
-    flexShrink: 1,
-    opacity: 0.76,
-  },
-  newConversationDraftTextActive: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    lineHeight: 20,
-    minWidth: 0,
     flexShrink: 1,
   },
   projectRow: {

@@ -12,39 +12,11 @@ import { useHostFeature } from "@/runtime/host-features";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useSessionStore } from "@/stores/session-store";
+import { pickWorkspacePrimaryAgentId } from "@/subagents/policies";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import {
-  normalizeWorkspaceOpaqueId,
-  resolveWorkspaceMapKeyByIdentity,
-} from "@/utils/workspace-identity";
+import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { getParentAgentIdFromLabels } from "@omp-desktop/protocol/agent-labels";
-
-interface WorkspaceConversationAgent {
-  id: string;
-  workspaceId?: string | null;
-  parentAgentId: string | null;
-}
-
-export function findWorkspaceConversationAgentId(
-  agents: readonly WorkspaceConversationAgent[],
-  workspaceId: string,
-): string | null {
-  const normalizedWorkspaceId = normalizeWorkspaceOpaqueId(workspaceId);
-  if (!normalizedWorkspaceId) return null;
-
-  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-  for (const agent of agents) {
-    if (normalizeWorkspaceOpaqueId(agent.workspaceId) !== normalizedWorkspaceId) continue;
-    if (!agent.parentAgentId) return agent.id;
-
-    const parent = agentsById.get(agent.parentAgentId);
-    if (parent && normalizeWorkspaceOpaqueId(parent.workspaceId) !== normalizedWorkspaceId) {
-      return agent.id;
-    }
-  }
-  return null;
-}
 
 export function useReferenceWorkspaceContent(workspace: SidebarWorkspaceEntry) {
   const { t } = useTranslation();
@@ -79,14 +51,16 @@ export function useReferenceWorkspaceContent(workspace: SidebarWorkspaceEntry) {
 
       const history = await client.fetchAgentHistory({
         filter: { includeArchived: true, workspaceIds: [workspace.workspaceId] },
-        sort: [{ key: "updated_at", direction: "desc" }],
+        sort: [{ key: "created_at", direction: "asc" }],
         page: { limit: 200 },
       });
-      const agentId = findWorkspaceConversationAgentId(
+      const agentId = pickWorkspacePrimaryAgentId(
         history.entries.map(({ agent }) => ({
           id: agent.id,
           workspaceId: agent.workspaceId,
           parentAgentId: getParentAgentIdFromLabels(agent.labels),
+          createdAt: agent.createdAt,
+          archivedAt: agent.archivedAt,
         })),
         workspace.workspaceId,
       );

@@ -2469,13 +2469,21 @@ export class DaemonClient {
 
   async archiveWorkspace(
     workspaceId: string,
+    options?: { onlyIfEmpty?: boolean },
     requestId?: string,
   ): Promise<ArchiveWorkspacePayload> {
+    if (
+      options?.onlyIfEmpty &&
+      this.lastServerInfoMessage?.features?.workspaceArchiveIfEmpty !== true
+    ) {
+      throw new Error("Update the host to safely archive an unused workspace.");
+    }
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
         type: "archive_workspace_request",
         workspaceId,
+        ...(options?.onlyIfEmpty !== undefined ? { onlyIfEmpty: options.onlyIfEmpty } : {}),
       },
       responseType: "archive_workspace_response",
     });

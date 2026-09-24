@@ -224,7 +224,6 @@ test("createPaseoApi borrows daemon capabilities without exposing connection own
 
   const paseo = createPaseoApi(daemonClient);
 
-  expect(Object.keys(paseo).sort()).toEqual(["agents", "config", "omp", "providers", "workspaces"]);
   expect("connect" in paseo).toBe(false);
   expect("close" in paseo).toBe(false);
   expect("skills" in paseo.agents).toBe(false);

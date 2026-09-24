@@ -554,6 +554,46 @@ it("lists subdirectory terminals when querying the workspace root", async () => 
   expect(rootTerminals.map((terminal) => terminal.id)).toEqual([created.id]);
 });
 
+it("protects workspace ownership during worker creation and until terminal exit", async () => {
+  const worker = new FakeTerminalWorker();
+  manager = createWorkerTerminalManager({ forkWorker: () => worker });
+  expect(manager.hasWorkspaceTerminals?.("ws-owned")).toBe(false);
+  const created = manager.createTerminal({
+    id: "terminal-owned",
+    cwd: "/workspace/subdirectory",
+    workspaceId: "ws-owned",
+  });
+  expect(manager.hasWorkspaceTerminals?.("ws-owned")).toBe(true);
+  expect(manager.hasWorkspaceTerminals?.("ws-sibling")).toBe(false);
+
+  const request = worker.sentMessages.find((message) => message.type === "createTerminal");
+  if (!request) throw new Error("createTerminal request not sent");
+  worker.emitWorkerMessage({
+    type: "response",
+    requestId: request.requestId,
+    ok: true,
+    result: {
+      terminal: {
+        id: "terminal-owned",
+        name: "Shell",
+        cwd: "/workspace/subdirectory",
+        workspaceId: "ws-owned",
+        activity: null,
+      },
+      state: createTerminalState(),
+    },
+  });
+  await created;
+  expect(manager.hasWorkspaceTerminals?.("ws-owned")).toBe(true);
+
+  worker.emitWorkerMessage({
+    type: "terminalExit",
+    terminalId: "terminal-owned",
+    info: { exitCode: 0, signal: null, lastOutputLines: [] },
+  });
+  expect(manager.hasWorkspaceTerminals?.("ws-owned")).toBe(false);
+});
+
 it("lists terminals locally without waiting on the worker", async () => {
   const worker = new FakeTerminalWorker();
   manager = createWorkerTerminalManager({

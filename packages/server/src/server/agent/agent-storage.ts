@@ -144,6 +144,15 @@ export class AgentStorage {
     return Array.from(this.cache.values()).filter((record) => record.workspaceId === workspaceId);
   }
 
+  hasWorkspaceHistory(workspaceId: string): boolean {
+    // Fail closed before initialization and while persistence is in flight.
+    if (!this.loaded || this.pendingWrites.size > 0) return true;
+    for (const record of this.cache.values()) {
+      if (record.workspaceId === workspaceId) return true;
+    }
+    return false;
+  }
+
   async findByDaemonExecution(owner: DaemonAgentOwner): Promise<StoredAgentRecord | null> {
     await this.load();
     const agentId = this.daemonAgentIdsByExecution.get(daemonExecutionKey(owner));

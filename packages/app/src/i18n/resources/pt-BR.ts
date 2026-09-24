@@ -1364,6 +1364,10 @@ export const ptBR: TranslationResources = {
         referenceContentFailed: "Falha ao referenciar o conteúdo da conversa",
         hideFailed: "Falha ao ocultar workspace",
         archiveFailed: "Falha ao arquivar workspace",
+        emptyArchiveFailed:
+          "Não foi possível remover o workspace não utilizado: {{reason}}. Ele permanece na barra lateral; reabra-o e feche a aba vazia para tentar novamente.",
+        updateHostToArchiveEmpty:
+          "Atualize o host para remover com segurança os workspaces não utilizados",
         deleteFailed: "Falha ao excluir workspace",
       },
     },

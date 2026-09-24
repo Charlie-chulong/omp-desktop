@@ -1479,6 +1479,62 @@ test("honors explicit getDaemonPairingOffer timeout below the session RPC defaul
   await expect(responsePromise).rejects.toThrow("Timeout waiting for message (1500ms)");
 });
 
+test("never sends conditional workspace archive to an older daemon", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connected = client.connect();
+  mock.triggerOpen();
+  await connected;
+
+  await expect(client.archiveWorkspace("workspace", { onlyIfEmpty: true })).rejects.toThrow(
+    "Update the host",
+  );
+  expect(mock.sent).toEqual([]);
+});
+
+test("conditional workspace archive preserves a daemon refusal", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connected = client.connect();
+  mock.triggerOpen({ features: { workspaceArchiveIfEmpty: true } });
+  await connected;
+
+  const response = client.archiveWorkspace("workspace", { onlyIfEmpty: true }, "archive-unused");
+  expect(parseSentFrame(mock.sent[0])).toEqual({
+    type: "archive_workspace_request",
+    workspaceId: "workspace",
+    requestId: "archive-unused",
+    onlyIfEmpty: true,
+  });
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "archive_workspace_response",
+      payload: {
+        workspaceId: "workspace",
+        requestId: "archive-unused",
+        skipped: true,
+        archivedAt: null,
+        error: null,
+      },
+    }),
+  );
+  await expect(response).resolves.toMatchObject({ skipped: true, archivedAt: null, error: null });
+});
+
 test("gates config reload on the daemon capability", async () => {
   const mock = createMockTransport();
   const client = new DaemonClient({

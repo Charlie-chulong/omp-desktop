@@ -65,7 +65,7 @@ function project(overrides: ProjectOverrides = {}): SidebarProjectEntry {
 }
 
 describe("buildSidebarProjectRowModel", () => {
-  it("renders a non-git single-workspace project as an expandable section", () => {
+  it("keeps the Agent entry for a non-git project without workspace multiplicity", () => {
     const result = buildSidebarProjectRowModel({
       project: project({
         projectKind: "directory",
@@ -77,136 +77,26 @@ describe("buildSidebarProjectRowModel", () => {
     expect(result).toEqual({
       kind: "project_section",
       chevron: "collapse",
-      trailingAction: { kind: "none" },
-    });
-  });
-
-  it("renders a single-workspace git project as an expandable section with the new workspace action", () => {
-    const result = buildSidebarProjectRowModel({
-      project: project({
-        projectKind: "git",
-        workspaces: [workspace({ workspaceId: "ws-main", workspaceKind: "checkout" })],
-      }),
-      collapsed: true,
-    });
-
-    expect(result).toEqual({
-      kind: "project_section",
-      chevron: "expand",
       trailingAction: {
-        kind: "new_workspace",
+        kind: "new_agent",
         target: { serverId: "srv", projectId: "project-srv", iconWorkingDir: "/repo" },
       },
     });
   });
-
-  it("shows the new workspace action for a non-git project when the host supports workspace multiplicity", () => {
-    const result = buildSidebarProjectRowModel({
-      project: project({ projectKind: "directory", workspaces: [] }),
-      collapsed: false,
-      supportsMultiplicityByServerId: new Map([["srv", true]]),
-    });
-
-    expect(result.trailingAction).toEqual({
-      kind: "new_workspace",
-      target: { serverId: "srv", projectId: "project-srv", iconWorkingDir: "/repo" },
-    });
-  });
-
-  it("hides the new workspace action for a non-git project when the host lacks workspace multiplicity", () => {
-    const result = buildSidebarProjectRowModel({
-      project: project({ projectKind: "directory", workspaces: [] }),
-      collapsed: false,
-      supportsMultiplicityByServerId: new Map([["srv", false]]),
-    });
-
-    expect(result.trailingAction).toEqual({ kind: "none" });
-  });
-
-  it("still shows the new workspace action for a git project regardless of multiplicity", () => {
-    const result = buildSidebarProjectRowModel({
-      project: project({ projectKind: "git" }),
-      collapsed: false,
-      supportsMultiplicityByServerId: new Map([["srv", false]]),
-    });
-
-    expect(result.trailingAction).toEqual({
-      kind: "new_workspace",
-      target: { serverId: "srv", projectId: "project-srv", iconWorkingDir: "/repo" },
-    });
-  });
-
-  it("targets the project host, not route state, for new workspace actions", () => {
+  it("targets the project's first host even without worktree support", () => {
     const result = buildSidebarProjectRowModel({
       project: project({
         hosts: [
-          {
-            serverId: "host-a",
-            iconWorkingDir: "/repo/a",
-            worktreeSupport: "unsupported" as const,
-          },
-          { serverId: "host-b", iconWorkingDir: "/repo/b", worktreeSupport: "supported" as const },
+          { serverId: "host-a", iconWorkingDir: "/repo/a", worktreeSupport: "unsupported" },
+          { serverId: "host-b", iconWorkingDir: "/repo/b", worktreeSupport: "supported" },
         ],
       }),
       collapsed: false,
     });
 
-    expect(result).toMatchObject({
-      trailingAction: {
-        kind: "new_workspace",
-        target: { serverId: "host-b", iconWorkingDir: "/repo/b" },
-      },
-    });
-  });
-
-  it("targets the first multiplicity-capable host for a non-git project", () => {
-    const result = buildSidebarProjectRowModel({
-      project: project({
-        projectKind: "directory",
-        hosts: [
-          {
-            serverId: "host-a",
-            iconWorkingDir: "/repo/a",
-            worktreeSupport: "unsupported" as const,
-          },
-          {
-            serverId: "host-b",
-            iconWorkingDir: "/repo/b",
-            worktreeSupport: "unsupported" as const,
-          },
-        ],
-      }),
-      collapsed: false,
-      supportsMultiplicityByServerId: new Map([["host-b", true]]),
-    });
-
-    expect(result).toMatchObject({
-      trailingAction: {
-        kind: "new_workspace",
-        target: { serverId: "host-b", iconWorkingDir: "/repo/b" },
-      },
-    });
-  });
-
-  it("renders a multi-workspace git project as an expandable section with a new workspace action", () => {
-    const result = buildSidebarProjectRowModel({
-      project: project({
-        projectKind: "git",
-        workspaces: [
-          workspace({ workspaceId: "ws-main", workspaceKind: "checkout" }),
-          workspace({ workspaceId: "ws-feature", workspaceKind: "worktree" }),
-        ],
-      }),
-      collapsed: true,
-    });
-
-    expect(result).toEqual({
-      kind: "project_section",
-      chevron: "expand",
-      trailingAction: {
-        kind: "new_workspace",
-        target: { serverId: "srv", projectId: "project-srv", iconWorkingDir: "/repo" },
-      },
+    expect(result.trailingAction).toEqual({
+      kind: "new_agent",
+      target: { serverId: "host-a", projectId: "project-host-a", iconWorkingDir: "/repo/a" },
     });
   });
 
@@ -278,7 +168,7 @@ describe("buildSidebarProjectRowModel", () => {
       kind: "project_section",
       chevron: "collapse",
       trailingAction: {
-        kind: "new_workspace",
+        kind: "new_agent",
         target: { serverId: "srv", projectId: "project-srv", iconWorkingDir: "/repo" },
       },
     });

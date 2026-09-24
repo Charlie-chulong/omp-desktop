@@ -701,6 +701,48 @@ describe("OMP agent client and session", () => {
     ]);
   });
 
+  test("continues a standard turn when DeepSeek exhausts its output on reasoning", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ featureValues: { workflow_mode: "standard", workflow_locale: "zh-CN" } });
+    await omp.requireStartTurn("finish the task");
+    const runtime = omp.runtime();
+    runtime.beginTurn();
+    runtime.acceptPrompt("finish the task", "user-1");
+    const message = {
+      role: "assistant" as const,
+      content: [{ type: "thinking" as const, thinking: "working through the task" }],
+      responseId: "reasoning-only",
+      stopReason: "length",
+    };
+    runtime.emit({ type: "message_start", message });
+    runtime.emit({
+      type: "message_update",
+      message,
+      assistantMessageEvent: { type: "thinking_delta", delta: "working through the task" },
+    });
+    runtime.finishTurn(message);
+    await waitForImmediate();
+
+    expect(omp.completedTurnCount()).toBe(0);
+    expect(runtime.followUpRequests).toEqual([{ message: "继续", imageCount: 0 }]);
+    runtime.beginTurn();
+    runtime.streamAssistantText("task completed", "answer");
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: "task completed" }],
+      responseId: "answer",
+      stopReason: "stop",
+    });
+    await waitForImmediate();
+    expect(omp.completedTurnCount()).toBe(1);
+    expect(omp.timeline()).toContainEqual({ type: "reasoning", text: "working through the task" });
+    expect(omp.timeline()).toContainEqual({
+      type: "assistant_message",
+      text: "task completed",
+      messageId: "answer",
+    });
+  });
+
   test("automatically continues length-limited responses in enhanced workflow", async () => {
     const omp = new OmpHarness();
     await omp.start({

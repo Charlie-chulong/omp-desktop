@@ -13,11 +13,13 @@ function selectionsEqual(left: ActiveWorkspaceSelection, right: ActiveWorkspaceS
 /**
  * Workspace tabs can host conversations from another workspace without changing the
  * route. Tools follow the focused conversation and keep that scope while a tool has
- * pane focus; a real route change resets the scope to the new route workspace.
+ * pane focus. Drafts and new tabs belong to the route workspace, as does the initial
+ * scope after a route change.
  */
 export function resolveWorkspaceToolSelection(input: {
   current: WorkspaceToolSelection | null;
   routeSelection: ActiveWorkspaceSelection | null;
+  focusedTarget: WorkspaceTabTarget | null;
   focusedAgentWorkspaceId: string | null;
 }): WorkspaceToolSelection | null {
   const routeSelection = input.routeSelection;
@@ -29,7 +31,12 @@ export function resolveWorkspaceToolSelection(input: {
   let activeSelection = routeSelection;
   if (focusedWorkspaceId) {
     activeSelection = { serverId: routeSelection.serverId, workspaceId: focusedWorkspaceId };
-  } else if (input.current && selectionsEqual(input.current.routeSelection, routeSelection)) {
+  } else if (
+    input.focusedTarget?.kind !== "draft" &&
+    input.focusedTarget?.kind !== "new_tab" &&
+    input.current &&
+    selectionsEqual(input.current.routeSelection, routeSelection)
+  ) {
     activeSelection = input.current.activeSelection;
   }
 

@@ -9,15 +9,20 @@ import type { ForgeService } from "../services/forge-service.js";
 import { createRealpathAwarePathMatcher } from "../utils/path.js";
 import { createWorktree, type WorktreeConfig } from "../utils/worktree.js";
 import type { ManagedAgent } from "./agent/agent-manager.js";
-import type { AgentStorage, StoredAgentRecord } from "./agent/agent-storage.js";
+import { AgentStorage, type StoredAgentRecord } from "./agent/agent-storage.js";
 import type { WorkspaceGitService } from "./workspace-git-service.js";
 import {
   archiveByScope,
+  archiveUnusedWorkspace,
   type ActiveWorkspaceRef,
   type ArchiveDependencies,
   type ArchiveResult,
   resolveWorkspaceIdAtPath,
 } from "./workspace-archive-service.js";
+import {
+  createPersistedWorkspaceRecord,
+  FileBackedWorkspaceRegistry,
+} from "./workspace-registry.js";
 
 const cleanupPaths: string[] = [];
 
@@ -186,6 +191,103 @@ function assertArchiveResult(
   expect(result.archivedWorkspaceIds).toEqual(expected.archivedWorkspaceIds);
   expect(result.removedDirectory).toBe(expected.removedDirectory);
 }
+
+describe("archiveUnusedWorkspace", () => {
+  async function createUnusedWorkspace() {
+    const root = mkdtempSync(path.join(tmpdir(), "unused-workspace-"));
+    cleanupPaths.push(root);
+    const logger = createLogger();
+    const workspaceRegistry = new FileBackedWorkspaceRegistry(
+      path.join(root, "workspaces.json"),
+      logger,
+    );
+    const agentStorage = new AgentStorage(path.join(root, "agents"), logger);
+    const workspace = createPersistedWorkspaceRecord({
+      workspaceId: "unused",
+      projectId: "project",
+      cwd: root,
+      kind: "local_checkout",
+      displayName: "main",
+      worktreeRoot: root,
+      createdAt: "2026-09-23T00:00:00.000Z",
+      updatedAt: "2026-09-23T00:00:00.000Z",
+    });
+    await workspaceRegistry.upsert(workspace);
+    writeFileSync(path.join(root, "keep.txt"), "project content");
+    return {
+      root,
+      workspace,
+      dependencies: {
+        workspaceRegistry,
+        agentStorage,
+        agentManager: {
+          listAgents: (): ManagedAgent[] => [],
+          hasPendingAgentRegistrations: () => false,
+        },
+        hasWorkspaceActivity: () => false,
+        killTerminalsForWorkspace: vi.fn(async (_workspaceId: string) => {}),
+      },
+    };
+  }
+
+  test("retires an unused workspace and its terminals while preserving project files", async () => {
+    const { root, dependencies } = await createUnusedWorkspace();
+    const archived = await archiveUnusedWorkspace(dependencies, "unused");
+    expect(archived?.archivedAt).toEqual(expect.any(String));
+    expect((await dependencies.workspaceRegistry.get("unused"))?.archivedAt).toBe(
+      archived?.archivedAt,
+    );
+    expect(readFileSync(path.join(root, "keep.txt"), "utf8")).toBe("project content");
+    expect(dependencies.killTerminalsForWorkspace).toHaveBeenCalledWith("unused");
+  });
+
+  test("preserves archived agent history even when no agents are loaded", async () => {
+    const { dependencies } = await createUnusedWorkspace();
+    await dependencies.agentStorage.upsert({
+      id: "historical",
+      provider: "claude",
+      cwd: "/repo",
+      workspaceId: "unused",
+      createdAt: "2026-09-23T00:00:00.000Z",
+      updatedAt: "2026-09-23T00:00:00.000Z",
+      archivedAt: "2026-09-23T00:00:00.000Z",
+      lastStatus: "closed",
+      labels: {},
+    });
+    expect(await archiveUnusedWorkspace(dependencies, "unused")).toBeNull();
+    expect((await dependencies.workspaceRegistry.get("unused"))?.archivedAt).toBeNull();
+    expect(dependencies.killTerminalsForWorkspace).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { title: "My workspace" },
+    { pinnedAt: "2026-09-23T00:00:00.000Z" },
+    { labels: ["important"] },
+    { kind: "worktree" as const },
+    { isPaseoOwnedWorktree: true },
+    { mainRepoRoot: "/main-repository" },
+  ])("preserves explicitly retained or worktree-backed records: %j", async (changes) => {
+    const { workspace, dependencies } = await createUnusedWorkspace();
+    await dependencies.workspaceRegistry.upsert({ ...workspace, ...changes });
+    expect(await archiveUnusedWorkspace(dependencies, "unused")).toBeNull();
+    expect((await dependencies.workspaceRegistry.get("unused"))?.archivedAt).toBeNull();
+  });
+
+  test("preserves in-flight agent creation before runtime registration", async () => {
+    const { dependencies } = await createUnusedWorkspace();
+    dependencies.agentManager.hasPendingAgentRegistrations = () => true;
+    expect(await archiveUnusedWorkspace(dependencies, "unused")).toBeNull();
+    expect((await dependencies.workspaceRegistry.get("unused"))?.archivedAt).toBeNull();
+  });
+
+  test("preserves setup and script activity without teardown", async () => {
+    const { dependencies } = await createUnusedWorkspace();
+    dependencies.hasWorkspaceActivity = () => true;
+    expect(await archiveUnusedWorkspace(dependencies, "unused")).toBeNull();
+    expect((await dependencies.workspaceRegistry.get("unused"))?.archivedAt).toBeNull();
+    expect(dependencies.killTerminalsForWorkspace).not.toHaveBeenCalled();
+  });
+});
 
 describe("archiveByScope", () => {
   test("workspace scope archives the record and removes the directory on last reference", async () => {

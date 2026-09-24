@@ -1375,6 +1375,9 @@ export const en = {
         referenceContentFailed: "Failed to reference conversation content",
         hideFailed: "Failed to hide workspace",
         archiveFailed: "Failed to archive workspace",
+        emptyArchiveFailed:
+          "Could not remove the unused workspace: {{reason}}. It remains in the sidebar; reopen it and close the empty tab to retry.",
+        updateHostToArchiveEmpty: "Update the host to safely remove unused workspaces",
         deleteFailed: "Failed to delete workspace",
       },
     },

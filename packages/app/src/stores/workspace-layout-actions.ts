@@ -607,6 +607,26 @@ function listPaneIds(node: SplitNodeInternal): string[] {
   return next;
 }
 
+function findFirstPane(node: SplitNodeInternal): SplitPaneInternal | null {
+  if (node.kind === "pane") {
+    return node.pane;
+  }
+  for (const child of node.group.children) {
+    const pane = findFirstPane(child);
+    if (pane) {
+      return pane;
+    }
+  }
+  return null;
+}
+
+function hasVisiblePaneOtherThan(node: SplitNodeInternal, paneId: string): boolean {
+  if (node.kind === "pane") {
+    return node.pane.hidden !== true && node.pane.id !== paneId;
+  }
+  return node.group.children.some((child) => hasVisiblePaneOtherThan(child, paneId));
+}
+
 function findNearestSiblingPaneId(root: SplitNodeInternal, paneId: string): string | null {
   const path = findPanePathById(root, paneId);
   if (!path || path.length === 0) {
@@ -1296,13 +1316,16 @@ function resolvePlacementPane(input: {
     return requestedPane as SplitPaneInternal;
   }
 
-  // `collectAllPanes` skips hidden panes, so a focused-but-hidden pane — the side
-  // panel between a reveal and a hide — falls through to a pane the user can see.
+  // Prefer visible panes, but never return a pane from a different layout. A
+  // transient all-hidden tree can occur while the final visible tab is closing.
+  // Reconciliation may use the hidden retained pane before zone enforcement
+  // restores a visible workspace pane.
   const focusedCandidate = findPaneById(input.layout.root, input.layout.focusedPaneId);
   const focusedPane =
     (focusedCandidate?.hidden === true ? null : focusedCandidate) ??
     collectAllPanes(input.layout.root)[0] ??
-    findPaneById(createDefaultLayout().root, DEFAULT_PANE_ID);
+    focusedCandidate ??
+    findFirstPane(input.layout.root);
   invariant(focusedPane, "Workspace layout must always have a pane");
   if (focusedPane.id !== input.sidePanelPaneId || isWorkspaceSidePanelToolTarget(input.target)) {
     return focusedPane as SplitPaneInternal;
@@ -1501,7 +1524,11 @@ export function closeTabInLayout(input: CloseTabInLayoutInput): WorkspaceLayout 
   }
   const preserveEmptyPaneId =
     input.preserveEmptyPaneId ??
-    (pane.id === DEFAULT_PANE_ID || pane.id === SIDE_PANEL_PANE_ID ? pane.id : null);
+    (pane.id === DEFAULT_PANE_ID ||
+    pane.id === SIDE_PANEL_PANE_ID ||
+    (pane.hidden !== true && !hasVisiblePaneOtherThan(internalLayout.root, pane.id))
+      ? pane.id
+      : null);
 
   const closeSuccessorTabId = getCloseSuccessorTabId({
     pane,

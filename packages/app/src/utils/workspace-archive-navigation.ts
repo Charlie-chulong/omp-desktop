@@ -1,32 +1,30 @@
-import type { Href } from "expo-router";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
-import { buildHostRootRoute, buildNewWorkspaceRoute } from "@/utils/host-routes";
 import { resolveWorkspaceRouteId } from "@/utils/workspace-identity";
 
-export function buildWorkspaceArchiveRedirectRoute(input: {
-  serverId: string;
+export type WorkspaceArchiveDestination =
+  | { kind: "workspace"; workspaceId: string }
+  | { kind: "open-project" };
+
+export function resolveWorkspaceArchiveDestination(input: {
   archivedWorkspaceId: string;
   workspaces: Iterable<WorkspaceDescriptor>;
-}): Href {
+}): WorkspaceArchiveDestination {
   const archivedWorkspaceId = resolveWorkspaceRouteId({
     routeWorkspaceId: input.archivedWorkspaceId,
   });
-  if (!archivedWorkspaceId) {
-    return buildHostRootRoute(input.serverId);
-  }
+  const workspaces = Array.from(input.workspaces);
+  const archivedWorkspace = workspaces.find((workspace) => workspace.id === archivedWorkspaceId);
+  if (!archivedWorkspace) return { kind: "open-project" };
 
-  const archivedWorkspace =
-    Array.from(input.workspaces).find((workspace) => workspace.id === archivedWorkspaceId) ?? null;
-  const sourceDirectory =
-    archivedWorkspace?.projectRootPath || archivedWorkspace?.workspaceDirectory;
-  if (!sourceDirectory) {
-    return buildHostRootRoute(input.serverId);
-  }
-
-  return buildNewWorkspaceRoute({
-    serverId: input.serverId,
-    sourceDirectory,
-    displayName: archivedWorkspace.projectDisplayName,
-    projectId: archivedWorkspace.projectId,
-  });
+  const siblings = workspaces.filter(
+    (workspace) =>
+      workspace.id !== archivedWorkspaceId &&
+      workspace.projectId === archivedWorkspace.projectId &&
+      !workspace.archivingAt,
+  );
+  const sibling =
+    siblings.find(
+      (workspace) => workspace.workspaceDirectory === archivedWorkspace.projectRootPath,
+    ) ?? siblings[0];
+  return sibling ? { kind: "workspace", workspaceId: sibling.id } : { kind: "open-project" };
 }

@@ -5,6 +5,7 @@ import {
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import { i18n } from "@/i18n/i18next";
+import { useCreateFlowStore } from "@/stores/create-flow-store";
 
 export interface WorkspaceArchiveTarget {
   serverId: string;
@@ -12,7 +13,10 @@ export interface WorkspaceArchiveTarget {
 }
 
 interface WorkspaceArchiveClient {
-  archiveWorkspace: (workspaceId: string) => Promise<{ error: string | null }>;
+  archiveWorkspace: (
+    workspaceId: string,
+    options?: { onlyIfEmpty?: boolean },
+  ) => Promise<{ error: string | null; skipped?: boolean; archivedAt?: string | null }>;
 }
 
 interface OptimisticWorkspaceArchiveSnapshot {
@@ -97,6 +101,51 @@ export async function archiveWorkspaceOptimistically(input: {
     });
     throw error;
   }
+}
+
+// Unlike explicit archives, closing an unused conversation must not hide anything
+// until the server has checked its persisted history and live resources.
+export async function archiveEmptyWorkspace(input: {
+  client: WorkspaceArchiveClient | null;
+  workspace: WorkspaceArchiveTarget;
+  closedDraftId?: string;
+  hasPendingTerminalCreate: boolean;
+}): Promise<void> {
+  const { serverId, workspaceId } = input.workspace;
+  if (input.hasPendingTerminalCreate) {
+    return;
+  }
+  for (const pending of Object.values(useCreateFlowStore.getState().pendingByDraftId)) {
+    if (
+      pending.serverId === serverId &&
+      (pending.workspaceId === workspaceId || pending.draftId === input.closedDraftId)
+    ) {
+      // Even an abandoned request may still be creating an agent on the server.
+      return;
+    }
+  }
+  if (!input.client) {
+    throw new Error(i18n.t("sidebar.workspace.toasts.hostDisconnected"));
+  }
+  if (
+    useSessionStore.getState().sessions[serverId]?.serverInfo?.features?.workspaceArchiveIfEmpty !==
+    true
+  ) {
+    // Older daemons strip unknown request fields and would archive unconditionally.
+    throw new Error(i18n.t("sidebar.workspace.toasts.updateHostToArchiveEmpty"));
+  }
+  const payload = await input.client.archiveWorkspace(workspaceId, { onlyIfEmpty: true });
+  if (payload.error) {
+    throw new Error(payload.error);
+  }
+  if (payload.skipped) {
+    return;
+  }
+  if (!payload.archivedAt) {
+    throw new Error(i18n.t("sidebar.workspace.toasts.archiveFailed"));
+  }
+  markWorkspaceArchivePending(input.workspace);
+  useSessionStore.getState().removeWorkspace(serverId, workspaceId);
 }
 
 export async function archiveWorkspacesOptimistically(input: {

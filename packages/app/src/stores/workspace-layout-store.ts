@@ -101,6 +101,7 @@ export type {
 };
 
 export type WorkspaceTabOpenIntent = "new" | "reveal" | "background";
+export type WorkspaceTabCloseResult = "closed" | "workspace-empty" | null;
 export interface OpenWorkspaceTabInput {
   workspaceKey: string;
   target: WorkspaceTabTarget;
@@ -122,7 +123,7 @@ interface WorkspaceLayoutStore {
   /** Reveals the side panel without putting anything in it. Returns its pane id. */
   showSidePanel: (workspaceKey: string) => string | null;
   hideSidePanel: (workspaceKey: string) => void;
-  closeTab: (workspaceKey: string, tabId: string) => void;
+  closeTab: (workspaceKey: string, tabId: string) => WorkspaceTabCloseResult;
   focusTab: (workspaceKey: string, tabId: string) => void;
   replaceTab: (
     workspaceKey: string,
@@ -875,8 +876,21 @@ function ensurePersistedSidePanelPane(input: {
   const migratedLayout = migrateLegacyWorkingDiffDocumentIds(input.layout);
   const existingPaneId = resolveSidePanelPaneId(migratedLayout, input.registeredPaneId);
   if (existingPaneId) {
+    const mainPane = ensureMainWorkspacePane({
+      layout: migratedLayout,
+      sidePanelPaneId: existingPaneId,
+      ids: input.ids,
+    });
+    const repairedLayout = relocateContentOutOfSidePanel(
+      mainPane?.layout ?? migratedLayout,
+      existingPaneId,
+    );
+    const focusedPane = findPaneById(repairedLayout.root, repairedLayout.focusedPaneId);
     return {
-      layout: relocateContentOutOfSidePanel(migratedLayout, existingPaneId),
+      layout:
+        focusedPane && focusedPane.hidden !== true
+          ? repairedLayout
+          : { ...repairedLayout, focusedPaneId: mainPane?.paneId ?? null },
       paneId: existingPaneId,
     };
   }
@@ -1198,9 +1212,10 @@ export function createWorkspaceLayoutStore(
           const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
           const normalizedTabId = trimNonEmpty(tabId);
           if (!normalizedWorkspaceKey || !normalizedTabId) {
-            return;
+            return null;
           }
 
+          let result: WorkspaceTabCloseResult = null;
           set((state) => {
             const layout = getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey);
             const sidePanelPaneId = resolveSidePanelPaneId(
@@ -1211,22 +1226,28 @@ export function createWorkspaceLayoutStore(
             const closingTab = collectAllTabs(layout.root).find(
               (tab) => tab.tabId === normalizedTabId,
             );
+            const isLastContentPane = collectAllPanes(layout.root).every(
+              (pane) =>
+                pane.id === closingPane?.id ||
+                getPaneWorkspaceTabZone({ layout, paneId: pane.id, sidePanelPaneId }) !== "workspace",
+            );
             if (
               closingPane?.tabIds.length === 1 &&
               closingTab?.target.kind === "new_tab" &&
-              closingPane.id !== sidePanelPaneId
+              closingPane.id !== sidePanelPaneId &&
+              !isLastContentPane
             ) {
               const nextLayout = closePaneInLayout({ layout, paneId: closingPane.id });
-              if (!nextLayout) {
-                return state;
+              if (nextLayout) {
+                result = "closed";
+                return {
+                  ...withoutFocusRestoration(state, normalizedWorkspaceKey),
+                  layoutByWorkspace: {
+                    ...state.layoutByWorkspace,
+                    [normalizedWorkspaceKey]: nextLayout,
+                  },
+                };
               }
-              return {
-                ...withoutFocusRestoration(state, normalizedWorkspaceKey),
-                layoutByWorkspace: {
-                  ...state.layoutByWorkspace,
-                  [normalizedWorkspaceKey]: nextLayout,
-                },
-              };
             }
             const preserveEmptyPaneId =
               closingPane?.id === DEFAULT_PANE_ID || closingPane?.id === sidePanelPaneId
@@ -1249,6 +1270,14 @@ export function createWorkspaceLayoutStore(
               return state;
             }
 
+            result =
+              closingPane?.hidden !== true &&
+              closingPane?.id !== sidePanelPaneId &&
+              closingPane?.tabIds.length === 1 &&
+              (closingTab?.target.kind === "new_tab" || closingTab?.target.kind === "draft") &&
+              isLastContentPane
+                ? "workspace-empty"
+                : "closed";
             return {
               ...withoutFocusRestoration(state, normalizedWorkspaceKey),
               layoutByWorkspace: {
@@ -1257,6 +1286,7 @@ export function createWorkspaceLayoutStore(
               },
             };
           });
+          return result;
         },
         focusTab: (workspaceKey, tabId) => {
           const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);

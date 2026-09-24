@@ -1,5 +1,6 @@
 import type { Agent, WorkspaceDescriptor } from "@/stores/session-store";
 import { pickAttentionAgent } from "@/utils/agent-attention";
+import { pickWorkspacePrimaryAgentId } from "@/subagents/policies";
 import {
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
@@ -47,6 +48,8 @@ export interface WorkspaceHistoryAgent {
   id: string;
   workspaceId?: string | null;
   parentAgentId: string | null;
+  createdAt?: Date | string | null;
+  archivedAt?: Date | string | null;
 }
 
 export interface NavigateToSidebarWorkspaceDeps extends NavigateToWorkspaceDeps {
@@ -146,30 +149,6 @@ export function navigateToWorkspace(
   return route;
 }
 
-function pickWorkspaceRootAgentId(
-  agents: readonly WorkspaceHistoryAgent[],
-  workspaceId: string,
-): string | null {
-  const normalizedWorkspaceId = normalizeWorkspaceOpaqueId(workspaceId);
-  if (!normalizedWorkspaceId) {
-    return null;
-  }
-  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-  for (const agent of agents) {
-    if (normalizeWorkspaceOpaqueId(agent.workspaceId) !== normalizedWorkspaceId) {
-      continue;
-    }
-    if (!agent.parentAgentId) {
-      return agent.id;
-    }
-    const parent = agentsById.get(agent.parentAgentId);
-    if (parent && normalizeWorkspaceOpaqueId(parent.workspaceId) !== normalizedWorkspaceId) {
-      return agent.id;
-    }
-  }
-  return null;
-}
-
 function resolveSidebarTabHost(
   input: NavigateToSidebarWorkspaceInput,
   deps: NavigateToSidebarWorkspaceDeps,
@@ -228,10 +207,7 @@ export async function navigateToSidebarWorkspace(
     (agent) => !agent.archivedAt && normalizeWorkspaceOpaqueId(agent.workspaceId) === workspaceId,
   );
   if (activeWorkspaceAgents.length > 0) {
-    const agentId =
-      pickWorkspaceRootAgentId(activeWorkspaceAgents, workspaceId) ??
-      activeWorkspaceAgents[0]?.id ??
-      null;
+    const agentId = pickWorkspacePrimaryAgentId(activeWorkspaceAgents, workspaceId);
     if (agentId && tabHost) {
       return revealSidebarAgentInTabHost(tabHost, agentId, deps);
     }
@@ -251,7 +227,7 @@ export async function navigateToSidebarWorkspace(
 
   try {
     const history = await deps.fetchWorkspaceAgentHistory(input.serverId, workspaceId);
-    const agentId = pickWorkspaceRootAgentId(history, workspaceId);
+    const agentId = pickWorkspacePrimaryAgentId(history, workspaceId);
     if (agentId) {
       if (tabHost) {
         return revealSidebarAgentInTabHost(tabHost, agentId, deps);

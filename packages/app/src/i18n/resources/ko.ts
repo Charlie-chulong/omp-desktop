@@ -1346,6 +1346,10 @@ export const ko: TranslationResources = {
         referenceContentFailed: "대화 내용을 참조하지 못했습니다",
         hideFailed: "워크스페이스를 숨기지 못했습니다",
         archiveFailed: "워크스페이스를 보관하지 못했습니다.",
+        emptyArchiveFailed:
+          "사용하지 않은 워크스페이스를 제거하지 못했습니다: {{reason}}. 사이드바에 남아 있습니다. 다시 열고 빈 탭을 닫아 재시도하세요.",
+        updateHostToArchiveEmpty:
+          "사용하지 않은 워크스페이스를 안전하게 제거하려면 호스트를 업데이트하세요",
         deleteFailed: "워크스페이스를 삭제하지 못했습니다",
       },
     },

@@ -634,7 +634,7 @@ const OMP_PLAN_APPROVAL_REQUEST_ID = "omp-plan-approval";
 const OMP_PLAN_APPROVAL_REQUEST_NAME = "OmpPlanApproval";
 type OmpWorkflowMode = "plan" | "goal";
 type OmpWorkflowSelection = "standard" | "enhanced" | OmpWorkflowMode;
-const OMP_ENHANCED_CONTINUATION_BY_LOCALE = {
+const OMP_LENGTH_CONTINUATION_BY_LOCALE = {
   ar: "تابع",
   en: "Continue",
   es: "Continúa",
@@ -645,7 +645,7 @@ const OMP_ENHANCED_CONTINUATION_BY_LOCALE = {
   ru: "Продолжай",
   "zh-CN": "继续",
 } as const;
-type OmpWorkflowLocale = keyof typeof OMP_ENHANCED_CONTINUATION_BY_LOCALE;
+type OmpWorkflowLocale = keyof typeof OMP_LENGTH_CONTINUATION_BY_LOCALE;
 
 function normalizeOmpWorkflowSelection(value: unknown): OmpWorkflowSelection {
   return value === "enhanced" || value === "plan" || value === "goal" ? value : "standard";
@@ -2049,7 +2049,7 @@ export class OmpAgentSession implements AgentSession {
     if (featureId === OMP_WORKFLOW_LOCALE_FEATURE_ID) {
       if (
         typeof value !== "string" ||
-        !Object.prototype.hasOwnProperty.call(OMP_ENHANCED_CONTINUATION_BY_LOCALE, value)
+        !Object.prototype.hasOwnProperty.call(OMP_LENGTH_CONTINUATION_BY_LOCALE, value)
       ) {
         throw new Error(`Invalid OMP workflow locale '${String(value)}'`);
       }
@@ -3359,7 +3359,7 @@ export class OmpAgentSession implements AgentSession {
         );
         const selectedWorkflowMode = normalizeOmpWorkflowSelection(this.features[0]?.value);
         if (
-          selectedWorkflowMode === "enhanced" &&
+          (selectedWorkflowMode === "standard" || selectedWorkflowMode === "enhanced") &&
           terminalAssistant?.stopReason === "length" &&
           !terminalAssistant.errorMessage?.trim()
         ) {
@@ -3369,12 +3369,12 @@ export class OmpAgentSession implements AgentSession {
           const locale: OmpWorkflowLocale =
             typeof configuredLocale === "string" &&
             Object.prototype.hasOwnProperty.call(
-              OMP_ENHANCED_CONTINUATION_BY_LOCALE,
+              OMP_LENGTH_CONTINUATION_BY_LOCALE,
               configuredLocale,
             )
               ? (configuredLocale as OmpWorkflowLocale)
               : "en";
-          this.runtimeSession.followUp(OMP_ENHANCED_CONTINUATION_BY_LOCALE[locale]);
+          this.runtimeSession.followUp(OMP_LENGTH_CONTINUATION_BY_LOCALE[locale]);
           return;
         }
         // A state request is processed after OMP's RPC loop becomes promptable,

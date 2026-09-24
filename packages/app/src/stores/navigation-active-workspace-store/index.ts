@@ -94,13 +94,15 @@ export async function navigateToSidebarWorkspace(
           includeArchived: true,
           workspaceIds: [workspaceId],
         },
-        sort: [{ key: "updated_at", direction: "desc" }],
+        sort: [{ key: "created_at", direction: "asc" }],
         page: { limit: 200 },
       });
       return payload.entries.map(({ agent }) => ({
         id: agent.id,
         workspaceId: agent.workspaceId,
         parentAgentId: getParentAgentIdFromLabels(agent.labels),
+        createdAt: agent.createdAt,
+        archivedAt: agent.archivedAt,
       }));
     },
   };
@@ -164,9 +166,10 @@ export function useSidebarActiveWorkspaceSelection(): ActiveWorkspaceSelection |
       resolveWorkspaceToolSelection({
         current: lastToolSelection,
         routeSelection,
+        focusedTarget,
         focusedAgentWorkspaceId,
       }),
-    [focusedAgentWorkspaceId, lastToolSelection, routeSelection],
+    [focusedAgentWorkspaceId, focusedTarget, lastToolSelection, routeSelection],
   );
 
   useEffect(() => {

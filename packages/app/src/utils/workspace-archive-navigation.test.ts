@@ -1,7 +1,6 @@
-import type { Href } from "expo-router";
-import { describe, expect, it } from "vitest";
-import { buildWorkspaceArchiveRedirectRoute } from "@/utils/workspace-archive-navigation";
+import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
+import { resolveWorkspaceArchiveDestination } from "@/utils/workspace-archive-navigation";
 import {
   redirectIfArchivingActiveWorkspace,
   type RedirectIfArchivingActiveWorkspaceDeps,
@@ -13,129 +12,95 @@ function workspace(
   return {
     id: input.id,
     projectId: input.projectId ?? "project-1",
-    projectDisplayName: input.projectDisplayName ?? "Project",
+    projectDisplayName: "Project",
     projectRootPath: input.projectRootPath ?? "/repo",
-    workspaceDirectory: input.workspaceDirectory ?? input.projectRootPath ?? "/repo",
-    projectKind: input.projectKind ?? "git",
+    workspaceDirectory: input.workspaceDirectory ?? "/repo",
+    projectKind: "git",
     workspaceKind: input.workspaceKind ?? "worktree",
     name: input.name ?? input.id,
     status: input.status ?? "done",
     archivingAt: input.archivingAt ?? null,
     statusEnteredAt: null,
-    diffStat: input.diffStat ?? null,
-    scripts: input.scripts ?? [],
+    diffStat: null,
+    scripts: [],
   };
 }
 
-describe("buildWorkspaceArchiveRedirectRoute", () => {
-  it("redirects an archived worktree to the new workspace screen for the same project", () => {
-    const workspaces = [
-      workspace({ id: "/repo", workspaceKind: "checkout", name: "main" }),
-      workspace({ id: "/repo/.paseo/worktrees/feature", name: "feature" }),
-    ];
-
-    expect(
-      buildWorkspaceArchiveRedirectRoute({
-        serverId: "server-1",
-        archivedWorkspaceId: "/repo/.paseo/worktrees/feature",
-        workspaces,
-      }),
-    ).toBe("/new?serverId=server-1&dir=%2Frepo&name=Project&projectId=project-1");
+it("routes an archived worktree to the surviving root workspace, not another project", () => {
+  const destination = resolveWorkspaceArchiveDestination({
+    archivedWorkspaceId: "feature",
+    workspaces: [
+      workspace({ id: "unrelated", projectId: "project-2" }),
+      workspace({ id: "feature", workspaceDirectory: "/repo/worktrees/feature" }),
+      workspace({ id: "main", workspaceKind: "checkout" }),
+    ],
   });
-
-  it("redirects to the new workspace route when no sibling workspace target exists", () => {
-    const workspaces = [
-      workspace({
-        id: "/repo/.paseo/worktrees/feature",
-        name: "feature",
-        projectRootPath: "/repo",
-      }),
-    ];
-
-    expect(
-      buildWorkspaceArchiveRedirectRoute({
-        serverId: "server-1",
-        archivedWorkspaceId: "/repo/.paseo/worktrees/feature",
-        workspaces,
-      }),
-    ).toBe("/new?serverId=server-1&dir=%2Frepo&name=Project&projectId=project-1");
-  });
-
-  it("redirects to the new workspace route instead of another workspace", () => {
-    const workspaces = [
-      workspace({
-        id: "/notes",
-        projectId: "notes",
-        projectRootPath: "/notes",
-        projectKind: "directory",
-        workspaceKind: "checkout",
-      }),
-    ];
-
-    expect(
-      buildWorkspaceArchiveRedirectRoute({
-        serverId: "server-1",
-        archivedWorkspaceId: "/notes",
-        workspaces,
-      }),
-    ).toBe("/new?serverId=server-1&dir=%2Fnotes&name=Project&projectId=notes");
-  });
+  expect(destination).toEqual({ kind: "workspace", workspaceId: "main" });
 });
 
-function createFakeRouter(workspaces: WorkspaceDescriptor[]): {
-  deps: RedirectIfArchivingActiveWorkspaceDeps;
-  routes: Href[];
-} {
-  const routes: Href[] = [];
-  return {
-    routes,
-    deps: {
-      navigateToRoute: (route) => {
-        routes.push(route);
-      },
-      readWorkspaces: () => workspaces,
-    },
-  };
-}
+it("returns the project chooser when archiving the project's last workspace", () => {
+  expect(
+    resolveWorkspaceArchiveDestination({
+      archivedWorkspaceId: "main",
+      workspaces: [workspace({ id: "main", workspaceKind: "checkout" })],
+    }),
+  ).toEqual({ kind: "open-project" });
+});
 
 describe("redirectIfArchivingActiveWorkspace", () => {
-  it("does not replace the route when archiving an inactive workspace", () => {
-    const { deps, routes } = createFakeRouter([
-      workspace({ id: "main", workspaceKind: "local_checkout" }),
-      workspace({ id: "feature", name: "feature" }),
-    ]);
+  const input = {
+    serverId: "server-1",
+    workspaceId: "feature",
+    activeWorkspaceSelection: { serverId: "server-1", workspaceId: "feature" },
+  };
 
+  it("leaves an inactive workspace's route untouched", () => {
+    const navigateToDraft = vi.fn();
+    const navigateToOpenProject = vi.fn();
+    const deps: RedirectIfArchivingActiveWorkspaceDeps = {
+      navigateToDraft,
+      navigateToOpenProject,
+      readWorkspaces: () => [workspace({ id: "feature" })],
+    };
     expect(
       redirectIfArchivingActiveWorkspace(
         {
-          serverId: "server-1",
-          workspaceId: "feature",
-          activeWorkspaceSelection: { serverId: "server-1", workspaceId: "main" },
+          ...input,
+          activeWorkspaceSelection: { serverId: "server-1", workspaceId: "other" },
         },
         deps,
       ),
     ).toBe(false);
-
-    expect(routes).toEqual([]);
+    expect(navigateToDraft).not.toHaveBeenCalled();
+    expect(navigateToOpenProject).not.toHaveBeenCalled();
   });
 
-  it("replaces the route at action time when archiving the active workspace", () => {
-    const { deps, routes } = createFakeRouter([
-      workspace({ id: "main", workspaceKind: "local_checkout" }),
-      workspace({ id: "feature", name: "feature" }),
-    ]);
+  it("opens a new draft in the surviving workspace", () => {
+    const navigateToDraft = vi.fn();
+    const deps: RedirectIfArchivingActiveWorkspaceDeps = {
+      navigateToDraft,
+      navigateToOpenProject: vi.fn(),
+      readWorkspaces: () => [
+        workspace({ id: "feature", workspaceDirectory: "/repo/worktrees/feature" }),
+        workspace({ id: "main", workspaceKind: "checkout" }),
+      ],
+    };
+    expect(redirectIfArchivingActiveWorkspace(input, deps)).toBe(true);
+    expect(navigateToDraft).toHaveBeenCalledWith({
+      serverId: "server-1",
+      workspaceId: "main",
+      draftId: expect.any(String),
+    });
+  });
 
-    expect(
-      redirectIfArchivingActiveWorkspace(
-        {
-          serverId: "server-1",
-          workspaceId: "feature",
-          activeWorkspaceSelection: { serverId: "server-1", workspaceId: "feature" },
-        },
-        deps,
-      ),
-    ).toBe(true);
-
-    expect(routes).toEqual(["/new?serverId=server-1&dir=%2Frepo&name=Project&projectId=project-1"]);
+  it("opens project selection rather than racing archive with workspace creation", () => {
+    const navigateToOpenProject = vi.fn();
+    const deps: RedirectIfArchivingActiveWorkspaceDeps = {
+      navigateToDraft: vi.fn(),
+      navigateToOpenProject,
+      readWorkspaces: () => [workspace({ id: "feature" })],
+    };
+    expect(redirectIfArchivingActiveWorkspace(input, deps)).toBe(true);
+    expect(navigateToOpenProject).toHaveBeenCalledOnce();
   });
 });

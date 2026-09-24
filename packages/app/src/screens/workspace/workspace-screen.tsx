@@ -108,6 +108,7 @@ import { useWorkspaceTerminalSessionRetention } from "@/terminal/hooks/use-works
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
+import { archiveEmptyWorkspace } from "@/workspace/workspace-archive";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { removeResidentBrowserWebview } from "@/desktop/browser/resident-webviews";
@@ -185,7 +186,11 @@ import { findAdjacentPane } from "@/utils/split-navigation";
 import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
 import { getIsElectron, isNative, isWeb } from "@/constants/platform";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
-import { buildHostRootRoute, buildSettingsHostRoute } from "@/utils/host-routes";
+import {
+  buildHostRootRoute,
+  buildOpenProjectRoute,
+  buildSettingsHostRoute,
+} from "@/utils/host-routes";
 import { useWorkspaceTerminals } from "@/screens/workspace/terminals/use-workspace-terminals";
 import {
   resolveWorkspaceTabWorkspaceId,
@@ -1343,9 +1348,10 @@ function useWorkspaceToolScope(input: {
       resolveWorkspaceToolSelection({
         current: lastSelection,
         routeSelection,
+        focusedTarget: input.focusedTarget,
         focusedAgentWorkspaceId,
       }),
-    [focusedAgentWorkspaceId, lastSelection, routeSelection],
+    [focusedAgentWorkspaceId, input.focusedTarget, lastSelection, routeSelection],
   );
   useEffect(() => {
     setLastSelection((current) => (current === selection ? current : selection));
@@ -1406,6 +1412,8 @@ function WorkspaceScreenContent({
   recoveryAgentId,
 }: WorkspaceScreenContentProps) {
   const { t } = useTranslation();
+  const router = useRouter();
+  const leavingWorkspaceRef = useRef(false);
   const _insets = useSafeAreaInsets();
   const toast = useToast();
   const isMobile = useIsCompactFormFactor();
@@ -1735,6 +1743,12 @@ function WorkspaceScreenContent({
       if (!normalizedTabId || !persistenceKey) {
         return;
       }
+      const closingTarget =
+        input.target ??
+        useWorkspaceLayoutStore
+          .getState()
+          .getWorkspaceTabs(persistenceKey)
+          .find((tab) => tab.tabId === normalizedTabId)?.target;
 
       if (input.target?.kind === "agent") {
         unpinWorkspaceAgent(persistenceKey, input.target.agentId);
@@ -1757,9 +1771,45 @@ function WorkspaceScreenContent({
         removeResidentBrowserWebview(browserId);
         void getDesktopHost()?.browser?.unregisterWorkspaceBrowser?.(browserId);
       }
-      closeWorkspaceTab(persistenceKey, normalizedTabId);
+      if (closeWorkspaceTab(persistenceKey, normalizedTabId) === "workspace-empty") {
+        leavingWorkspaceRef.current = true;
+        void archiveEmptyWorkspace({
+          client,
+          workspace: { serverId: normalizedServerId, workspaceId: normalizedWorkspaceId },
+          closedDraftId: closingTarget?.kind === "draft" ? closingTarget.draftId : undefined,
+          hasPendingTerminalCreate:
+            createTerminalMutation.isPending || pendingTerminalCreateInput !== null,
+        }).catch((error: unknown) => {
+          console.error("[WorkspaceScreen] Failed to archive empty workspace", {
+            error,
+            workspaceId: normalizedWorkspaceId,
+          });
+          toast.error(
+            t("sidebar.workspace.toasts.emptyArchiveFailed", {
+              reason:
+                error instanceof Error
+                  ? error.message
+                  : t("sidebar.workspace.toasts.archiveFailed"),
+            }),
+          );
+        });
+        router.replace(buildOpenProjectRoute());
+      }
     },
-    [closeWorkspaceTab, hideWorkspaceAgent, persistenceKey, unpinWorkspaceAgent],
+    [
+      client,
+      closeWorkspaceTab,
+      createTerminalMutation.isPending,
+      hideWorkspaceAgent,
+      normalizedServerId,
+      normalizedWorkspaceId,
+      pendingTerminalCreateInput,
+      persistenceKey,
+      router,
+      t,
+      toast,
+      unpinWorkspaceAgent,
+    ],
   );
 
   const viewedTimelineSync = useSessionStore(
@@ -1862,6 +1912,12 @@ function WorkspaceScreenContent({
   );
   useLayoutEffect(() => {
     if (!isRouteFocused) {
+      leavingWorkspaceRef.current = false;
+      return;
+    }
+    // Closing the final conversation leaves this route; do not seed its replacement
+    // while the navigation is committing.
+    if (leavingWorkspaceRef.current) {
       return;
     }
     if (!normalizedServerId || !normalizedWorkspaceId || !persistenceKey) {
@@ -2104,6 +2160,7 @@ function WorkspaceScreenContent({
     useWorkspaceTabRename({
       client,
       normalizedServerId,
+      workspaceId: normalizedWorkspaceId,
       queryClient,
       terminalsData: terminalsQuery.data,
       terminalsQueryKey,
