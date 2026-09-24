@@ -578,6 +578,13 @@ export const fr: TranslationResources = {
         failed: "Échec de l'abandon des modifications",
       },
     },
+    fileSelection: {
+      cut: "Couper",
+      copyAbsolutePath: "Copier le chemin absolu",
+      copyRelativePath: "Copier le chemin relatif",
+      paste: "Coller",
+      selectAll: "Tout sélectionner",
+    },
     fileExplorer: {
       sort: {
         name: "Nom",

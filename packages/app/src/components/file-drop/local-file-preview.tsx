@@ -153,6 +153,7 @@ function LocalPreviewBody({
       size={entry.file?.size ?? 0}
       theme={visualTheme}
       tooLargeMessage={t("externalFilePreview.errors.tooLarge")}
+      workspaceRoot=""
     />
   );
 }

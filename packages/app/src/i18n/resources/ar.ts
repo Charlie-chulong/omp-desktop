@@ -574,6 +574,13 @@ export const ar: TranslationResources = {
         failed: "فشل تجاهل التغييرات",
       },
     },
+    fileSelection: {
+      cut: "قص",
+      copyAbsolutePath: "نسخ المسار المطلق",
+      copyRelativePath: "نسخ المسار النسبي",
+      paste: "لصق",
+      selectAll: "تحديد الكل",
+    },
     fileExplorer: {
       sort: {
         name: "اسم",

@@ -578,6 +578,13 @@ export const ptBR: TranslationResources = {
         failed: "Falha ao descartar alterações",
       },
     },
+    fileSelection: {
+      cut: "Recortar",
+      copyAbsolutePath: "Copiar caminho absoluto",
+      copyRelativePath: "Copiar caminho relativo",
+      paste: "Colar",
+      selectAll: "Selecionar tudo",
+    },
     fileExplorer: {
       sort: {
         name: "Nome",
