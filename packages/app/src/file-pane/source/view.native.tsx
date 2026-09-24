@@ -15,6 +15,7 @@ interface FileSourceViewProps {
   size: number;
   theme: EditorVisualTheme;
   tooLargeMessage: string;
+  workspaceRoot?: string;
 }
 
 interface SourceLine {
@@ -55,7 +56,7 @@ function VirtualizedSource({
   location,
   navigationRevision,
   presentation,
-}: Omit<FileSourceViewProps, "size" | "theme" | "tooLargeMessage"> & {
+}: Omit<FileSourceViewProps, "size" | "theme" | "tooLargeMessage" | "workspaceRoot"> & {
   presentation: "highlighted" | "plain";
 }) {
   const listRef = useRef<FlatList<SourceLine>>(null);

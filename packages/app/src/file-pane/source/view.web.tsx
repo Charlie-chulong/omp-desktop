@@ -1,10 +1,17 @@
-import { useEffect, useRef } from "react";
+import * as Clipboard from "expo-clipboard";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { getLanguageForFile } from "@omp-desktop/highlight";
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import type { EditorVisualTheme } from "../editor/extensions.web";
 import { editorTheme } from "../editor/extensions.web";
+import {
+  FileSelectionContextMenu,
+  getFileSelectionRange,
+  type FileSelectionRange,
+  type FileSelectionTextCommand,
+} from "@/components/file-selection-context-menu";
 import { selectSourcePresentation, type SourcePresentation } from "./presentation";
 
 interface FileSourceViewProps {
@@ -15,6 +22,7 @@ interface FileSourceViewProps {
   size: number;
   theme: EditorVisualTheme;
   tooLargeMessage: string;
+  workspaceRoot?: string;
 }
 
 const languageCompartment = new Compartment();
@@ -28,6 +36,7 @@ export function FileSourceView({
   size,
   theme,
   tooLargeMessage,
+  workspaceRoot,
 }: FileSourceViewProps) {
   const presentation = selectSourcePresentation({ size, platform: "web" });
   if (presentation === "unsupported") {
@@ -45,6 +54,7 @@ export function FileSourceView({
       navigationRevision={navigationRevision}
       presentation={presentation}
       theme={theme}
+      workspaceRoot={workspaceRoot ?? ""}
     />
   );
 }
@@ -56,11 +66,25 @@ function ReadonlyCodeMirror({
   navigationRevision,
   presentation,
   theme,
+  workspaceRoot,
 }: Omit<FileSourceViewProps, "size" | "tooLargeMessage"> & {
   presentation: Exclude<SourcePresentation, "unsupported">;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const handleTextCommand = useCallback(async (command: FileSelectionTextCommand) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const selection = view.state.selection.main;
+    if (command === "copy") {
+      await Clipboard.setStringAsync(view.state.sliceDoc(selection.from, selection.to));
+      return;
+    }
+    if (command === "selectAll") {
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+    }
+  }, []);
+  const [selection, setSelection] = useState<FileSelectionRange | null>(null);
   const initial = useRef({ content, filename, presentation, theme });
 
   useEffect(() => {
@@ -77,6 +101,16 @@ function ReadonlyCodeMirror({
             languageFor({ filename: values.filename, presentation: values.presentation }),
           ),
           themeCompartment.of(editorTheme(values.theme)),
+          EditorView.updateListener.of((update) => {
+            if (!update.selectionSet && !update.docChanged) return;
+            setSelection(
+              getFileSelectionRange({
+                from: update.state.selection.main.from,
+                to: update.state.selection.main.to,
+                lineAt: (position) => update.state.doc.lineAt(position),
+              }),
+            );
+          }),
         ],
       }),
     });
@@ -110,7 +144,16 @@ function ReadonlyCodeMirror({
     view.dispatch({ effects: EditorView.scrollIntoView(from, { y: "center" }) });
   }, [location.lineStart, navigationRevision]);
 
-  return <div ref={hostRef} data-testid="file-source-editor" style={HOST_STYLE} />;
+  return (
+    <FileSelectionContextMenu
+      path={location.path}
+      workspaceRoot={workspaceRoot ?? ""}
+      selection={selection}
+      onTextCommand={handleTextCommand}
+    >
+      <div ref={hostRef} data-testid="file-source-editor" style={HOST_STYLE} />
+    </FileSelectionContextMenu>
+  );
 }
 
 function languageFor(input: {

@@ -62,7 +62,13 @@ if (-not $env:PASEO_HOME) {
 }
 New-Item -ItemType Directory -Force -Path $env:PASEO_HOME, $env:PASEO_ELECTRON_USER_DATA_DIR | Out-Null
 
-$DevDaemonPort = if ($env:PASEO_DEV_DAEMON_PORT) { $env:PASEO_DEV_DAEMON_PORT } else { "6788" }
+$DevDaemonPort = if ($env:PASEO_DEV_DAEMON_PORT) {
+    $env:PASEO_DEV_DAEMON_PORT
+} elseif ($env:PASEO_LISTEN -match '^[^:]+:(\d+)$') {
+    $Matches[1]
+} else {
+    "6788"
+}
 if (-not $env:PASEO_LISTEN) { $env:PASEO_LISTEN = "127.0.0.1:$DevDaemonPort" }
 
 # Seed the isolated daemon config. The desktop daemon-manager decides whether a

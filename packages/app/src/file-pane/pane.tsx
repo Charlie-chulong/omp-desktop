@@ -53,6 +53,7 @@ interface FilePreviewBodyProps {
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
+  workspaceRoot: string;
 }
 
 type TextExplorerFile = ExplorerFile & { kind: "text" };
@@ -80,11 +81,13 @@ function ReadonlySource({
   filename,
   location,
   navigationRevision,
+  workspaceRoot,
 }: {
   preview: ExplorerFile;
   filename: string;
   location: WorkspaceFileLocation;
   navigationRevision: number;
+  workspaceRoot: string;
 }) {
   const theme = UnistylesRuntime.getTheme();
   const { t } = useTranslation();
@@ -112,6 +115,7 @@ function ReadonlySource({
       size={preview.size}
       theme={visualTheme}
       tooLargeMessage={t("panels.file.tooLargeToDisplay")}
+      workspaceRoot={workspaceRoot}
     />
   );
 }
@@ -134,6 +138,7 @@ function FilePreviewBody({
   location,
   navigationRevision,
   imagePreviewUri,
+  workspaceRoot,
 }: FilePreviewBodyProps) {
   const { t } = useTranslation();
   const filePath = location.path;
@@ -198,6 +203,7 @@ function FilePreviewBody({
         filename={filePath}
         location={location}
         navigationRevision={navigationRevision}
+        workspaceRoot={workspaceRoot}
       />
     );
   }
@@ -335,6 +341,7 @@ export function FilePane({
       location={location}
       navigationRevision={navigationRevision}
       imagePreviewUri={imagePreviewUri}
+      workspaceRoot={normalizedWorkspaceRoot}
     />
   );
 }
@@ -376,6 +383,7 @@ function FilePanePresentation({
   location,
   navigationRevision,
   imagePreviewUri,
+  workspaceRoot,
 }: {
   serverId: string;
   client: DaemonClient | null;
@@ -397,6 +405,7 @@ function FilePanePresentation({
   location: WorkspaceFileLocation;
   navigationRevision: number;
   imagePreviewUri: string | null;
+  workspaceRoot: string;
 }) {
   if (!client && readTarget) {
     return (
@@ -426,6 +435,7 @@ function FilePanePresentation({
         isMobile={isMobile}
         location={location}
         navigationRevision={navigationRevision}
+        workspaceRoot={workspaceRoot}
       />
     );
   }
@@ -468,6 +478,7 @@ function FilePanePresentation({
         location={location}
         navigationRevision={navigationRevision}
         imagePreviewUri={imagePreviewUri}
+        workspaceRoot={workspaceRoot}
       />
     </View>
   );
@@ -482,6 +493,7 @@ function EditableFilePane({
   onRetryRead,
   retryingRead,
   filename,
+  workspaceRoot,
   mode,
   onModeChange,
   isLoading,
@@ -497,6 +509,7 @@ function EditableFilePane({
   onRetryRead: () => void;
   retryingRead: boolean;
   filename: string;
+  workspaceRoot: string;
   mode?: "preview" | "source";
   onModeChange?: (mode: "preview" | "source") => void;
   isLoading: boolean;
@@ -631,6 +644,7 @@ function EditableFilePane({
           theme={visualTheme}
           onCursorChange={setCursor}
           onVimModeChange={handleVimModeChange}
+          workspaceRoot={workspaceRoot}
         />
       ) : (
         <FilePreviewBody
@@ -641,6 +655,7 @@ function EditableFilePane({
           location={location}
           navigationRevision={navigationRevision}
           imagePreviewUri={null}
+          workspaceRoot={workspaceRoot}
         />
       )}
     </View>
