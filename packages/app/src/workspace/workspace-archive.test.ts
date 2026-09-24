@@ -6,12 +6,30 @@ import {
 } from "@/contexts/session-workspace-upserts";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
+import { useDraftStore } from "@/stores/draft-store";
+import { buildDraftStoreKey } from "@/stores/draft-keys";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import {
   archiveEmptyWorkspace,
   archiveWorkspaceOptimistically,
   archiveWorkspacesOptimistically,
   type WorkspaceArchiveTarget,
 } from "@/workspace/workspace-archive";
+
+vi.mock("@react-native-async-storage/async-storage", () => {
+  const storage = new Map<string, string>();
+  return {
+    default: {
+      getItem: vi.fn(async (key: string) => storage.get(key) ?? null),
+      setItem: vi.fn(async (key: string, value: string) => {
+        storage.set(key, value);
+      }),
+      removeItem: vi.fn(async (key: string) => {
+        storage.delete(key);
+      }),
+    },
+  };
+});
 
 const SERVER_ID = "workspace-archive-test";
 const SECOND_SERVER_ID = "workspace-archive-test-2";
@@ -184,6 +202,44 @@ describe("archiveEmptyWorkspace", () => {
     await archive;
     expect(storedWorkspace("workspace-1")).toBeUndefined();
     expect(isWorkspaceArchivePending(target())).toBe(true);
+  });
+
+  it("releases an unused draft workspace on leave but preserves unsent text and attachments", async () => {
+    const workspaceKey = `${SERVER_ID}:workspace-1`;
+    const draftId = "leave-draft";
+    const draftKey = buildDraftStoreKey({ serverId: SERVER_ID, agentId: "", draftId });
+    useWorkspaceLayoutStore.getState().openTab({
+      workspaceKey,
+      target: { kind: "draft", draftId },
+      intent: "reveal",
+    });
+    const client = createClient(async () => archivePayload({ workspaceId: "workspace-1" }));
+    const leave = () =>
+      archiveEmptyWorkspace({
+        client,
+        workspace: target(),
+        hasPendingTerminalCreate: false,
+        preserveDrafts: true,
+      });
+    try {
+      useDraftStore.getState().saveDraftInput({
+        draftKey,
+        draft: { text: "Do not lose this", attachments: [] },
+      });
+      await leave();
+      expect(storedWorkspace("workspace-1")).toBeDefined();
+      useDraftStore.getState().saveDraftInput({
+        draftKey,
+        draft: { text: "", attachments: [{ kind: "directory", path: "/repo/context" }] },
+      });
+      await leave();
+      expect(storedWorkspace("workspace-1")).toBeDefined();
+      useDraftStore.getState().clearDraftInput({ draftKey, lifecycle: "abandoned" });
+      await leave();
+      expect(storedWorkspace("workspace-1")).toBeUndefined();
+    } finally {
+      useDraftStore.getState().clearDraftInput({ draftKey, lifecycle: "abandoned" });
+    }
   });
 
   it("retains a workspace when the server finds history or other protected resources", async () => {

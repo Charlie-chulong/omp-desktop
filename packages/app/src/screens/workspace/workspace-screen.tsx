@@ -1812,6 +1812,43 @@ function WorkspaceScreenContent({
     ],
   );
 
+  const cancelArchiveOnLeave = useRef<(() => void) | null>(null);
+  const archiveOnLeave = useStableEvent(() => {
+    void archiveEmptyWorkspace({
+      client,
+      workspace: { serverId: normalizedServerId, workspaceId: normalizedWorkspaceId },
+      hasPendingTerminalCreate:
+        createTerminalMutation.isPending || pendingTerminalCreateInput !== null,
+      preserveDrafts: true,
+    }).catch((error: unknown) => {
+      console.error("[WorkspaceScreen] Failed to release empty workspace on leave", {
+        error,
+        workspaceId: normalizedWorkspaceId,
+      });
+      toast.error(
+        t("sidebar.workspace.toasts.emptyArchiveFailed", {
+          reason:
+            error instanceof Error ? error.message : t("sidebar.workspace.toasts.archiveFailed"),
+        }),
+      );
+    });
+  });
+  useEffect(() => {
+    if (!isRouteFocused) {
+      return;
+    }
+    if (cancelArchiveOnLeave.current) {
+      cancelArchiveOnLeave.current();
+      cancelArchiveOnLeave.current = null;
+    }
+    return () => {
+      // Let composer cleanup flush staged input first. A strict-mode remount or
+      // immediate refocus cancels this release before it reaches the daemon.
+      const timer = setTimeout(archiveOnLeave, 0);
+      cancelArchiveOnLeave.current = () => clearTimeout(timer);
+    };
+  }, [archiveOnLeave, isRouteFocused]);
+
   const viewedTimelineSync = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.viewedTimelineSync ?? null,
   );

@@ -79,6 +79,7 @@ import {
 import {
   formatOmpVersionSupport,
   mergeOmpRuntimeSettings,
+  readOmpImportMode,
   resolveOmpDiagnosticPaths,
   resolveOmpLaunchMode,
   resolveOmpProviderParams,
@@ -4245,12 +4246,24 @@ export class OmpAgentClient implements AgentClient {
 
   async importSession(input: ImportProviderSessionInput, context: ImportProviderSessionContext) {
     const importConfig = await readOmpImportSessionConfig(input.providerHandleId);
+    const modeId =
+      context.config.modeId ??
+      context.storedConfig.modeId ??
+      (await readOmpImportMode(
+        input.cwd,
+        {
+          ...process.env,
+          ...this.runtimeSettings?.env,
+          ...context.launchContext?.env,
+        },
+        this.runtimeSettings?.command,
+      ));
     return importSessionFromPersistence({
       provider: this.provider,
       request: input,
       context,
       resumeSession: this.resumeSession.bind(this),
-      config: importConfig,
+      config: { ...importConfig, ...(modeId !== undefined ? { modeId } : {}) },
     });
   }
 

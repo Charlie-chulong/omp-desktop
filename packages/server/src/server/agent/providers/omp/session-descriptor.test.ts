@@ -118,7 +118,22 @@ describe("OMP session descriptor", () => {
       }),
     ]);
     await expect(readOmpImportSessionConfig(sessionFile)).resolves.toEqual({
+      title: "Deploy Paseo and verify",
       model: "openai-codex/gpt-5.1",
+    });
+  });
+
+  test("derives a bounded conversation title when the native session is unnamed", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "paseo-omp-session-unnamed-"));
+    const prompt = `Fix the import workflow ${"without changing existing sessions ".repeat(8)}`;
+    const sessionFile = await writeSession(root, "project/2026-09-24T00-00-00-session.jsonl", [
+      { type: "title", title: "" },
+      { type: "session", id: "unnamed-session", cwd: root },
+      { type: "message", message: { role: "user", content: prompt } },
+    ]);
+
+    await expect(readOmpImportSessionConfig(sessionFile)).resolves.toMatchObject({
+      title: prompt.slice(0, 60).trim(),
     });
   });
 

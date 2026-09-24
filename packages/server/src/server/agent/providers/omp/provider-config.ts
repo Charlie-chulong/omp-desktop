@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { OMP_MODES } from "@omp-desktop/protocol/provider-manifest";
+import { parseDocument } from "yaml";
 import { z } from "zod";
 
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
@@ -73,6 +74,72 @@ export function resolveOmpLaunchMode(
     default:
       throw new Error(`Unsupported OMP mode '${resolvedModeId}'`);
   }
+}
+
+/**
+ * CLI approval flags are runtime-only and are not recorded in session JSONL.
+ * Recover an explicitly configured native default for imports, never the CLI's
+ * permissive schema default. Creation keeps its existing desktop default.
+ */
+export async function readOmpImportMode(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  command?: ProviderRuntimeSettings["command"],
+): Promise<string | undefined> {
+  const args =
+    command?.mode === "replace"
+      ? command.argv.slice(1)
+      : command?.mode === "append"
+        ? (command.args ?? [])
+        : [];
+  // Custom CLI overlays/approval switches may override the files below. Until
+  // the native CLI exposes its effective settings, do not infer a grant from a
+  // partial configuration view.
+  if (
+    args.some((arg) => /^(?:--config|--approval-mode)(?:=|$)|^(?:--yolo|--auto-approve)$/.test(arg))
+  ) {
+    return undefined;
+  }
+  const agentDir = resolveOmpDiagnosticPaths(env).agentDir;
+  const ymlPath = join(agentDir, "config.yml");
+  const globalPath = existsSync(ymlPath) ? ymlPath : join(agentDir, "config.yaml");
+  const configPaths = [
+    globalPath,
+    join(cwd, ".omp", "settings.json"),
+    join(cwd, ".omp", "config.yml"),
+    ...(env.PI_CONFIG_FILES?.split(delimiter).filter(Boolean) ?? []).map((file) =>
+      resolve(cwd, file.startsWith("~/") ? join(homedir(), file.slice(2)) : file),
+    ),
+  ];
+  let modeId: string | undefined;
+  for (const configPath of configPaths) {
+    const raw = await fs
+      .readFile(configPath, "utf8")
+      .catch((error: NodeJS.ErrnoException) =>
+        error.code === "ENOENT" ? undefined : Promise.reject(error),
+      );
+    if (raw === undefined) continue;
+    const document = parseDocument(raw);
+    if (document.errors.length > 0) {
+      throw new Error(`Invalid OMP config: ${configPath}: ${document.errors[0]?.message}`);
+    }
+    const approvalMode: unknown = document.getIn(["tools", "approvalMode"]);
+    if (approvalMode === undefined) continue;
+    switch (approvalMode) {
+      case "always-ask":
+        modeId = "ask";
+        break;
+      case "write":
+        modeId = "write";
+        break;
+      case "yolo":
+        modeId = "full";
+        break;
+      default:
+        throw new Error(`Invalid OMP tools.approvalMode in ${configPath}`);
+    }
+  }
+  return modeId;
 }
 
 function resolveOmpModelRoleArgs(modelRoleParams: OmpModelRoleParams): string[] {

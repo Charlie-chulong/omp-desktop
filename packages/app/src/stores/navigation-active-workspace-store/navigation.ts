@@ -12,7 +12,7 @@ import {
   resolveWorkspaceMapKeyByIdentity,
 } from "@/utils/workspace-identity";
 import type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection";
-import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
+import type { WorkspaceTab, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { prepareWorkspaceTab, type PrepareWorkspaceTabDeps } from "@/utils/prepare-workspace-tab";
 
 export interface RouteSelectionInput {
@@ -54,6 +54,7 @@ export interface WorkspaceHistoryAgent {
 
 export interface NavigateToSidebarWorkspaceDeps extends NavigateToWorkspaceDeps {
   getSessionAgentsHydrated: (serverId: string) => boolean;
+  getWorkspaceTabs: (workspaceKey: string) => readonly WorkspaceTab[];
   fetchWorkspaceAgentHistory: (
     serverId: string,
     workspaceId: string,
@@ -162,6 +163,17 @@ function resolveSidebarTabHost(
       workspaces: deps.getSessionWorkspaces(tabHost.serverId),
       workspaceId: tabHost.workspaceId,
     }) ?? normalizeWorkspaceOpaqueId(tabHost.workspaceId);
+  if (workspaceId) {
+    const tabs = deps.getWorkspaceTabs(`${tabHost.serverId}:${workspaceId}`);
+    if (
+      tabs.some((tab) => tab.target.kind === "draft") &&
+      !tabs.some((tab) => tab.target.kind === "agent")
+    ) {
+      // Navigate away so the draft workspace's leave cleanup can release it.
+      // Hosting the destination here would keep the route focused indefinitely.
+      return null;
+    }
+  }
   return workspaceId ? { serverId: tabHost.serverId, workspaceId } : null;
 }
 
@@ -246,9 +258,7 @@ export async function navigateToSidebarWorkspace(
     // History is a best-effort fallback. The workspace itself must remain navigable.
   }
 
-  return tabHost
-    ? buildHostWorkspaceRoute(tabHost.serverId, tabHost.workspaceId)
-    : navigateToWorkspace(input, deps);
+  return navigateToWorkspace(input, deps);
 }
 
 export function navigateToLastWorkspace(deps: NavigateToLastWorkspaceDeps): boolean {
