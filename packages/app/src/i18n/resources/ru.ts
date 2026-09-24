@@ -587,6 +587,13 @@ export const ru: TranslationResources = {
         failed: "Не удалось отменить изменения",
       },
     },
+    fileSelection: {
+      cut: "Вырезать",
+      copyAbsolutePath: "Копировать абсолютный путь",
+      copyRelativePath: "Копировать относительный путь",
+      paste: "Вставить",
+      selectAll: "Выбрать всё",
+    },
     fileExplorer: {
       sort: {
         name: "Имя",

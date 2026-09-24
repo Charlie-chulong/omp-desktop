@@ -20,6 +20,7 @@ export function FileEditorView(_props: {
     codeFontSize: number;
     syntax: Record<HighlightStyle, string>;
   };
+  workspaceRoot: string;
   onCursorChange(position: { line: number; column: number }): void;
   onVimModeChange(mode: string | null): void;
 }) {

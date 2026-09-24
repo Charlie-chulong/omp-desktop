@@ -579,6 +579,13 @@ export const es: TranslationResources = {
         failed: "No se pudieron descartar los cambios",
       },
     },
+    fileSelection: {
+      cut: "Cortar",
+      copyAbsolutePath: "Copiar ruta absoluta",
+      copyRelativePath: "Copiar ruta relativa",
+      paste: "Pegar",
+      selectAll: "Seleccionar todo",
+    },
     fileExplorer: {
       sort: {
         name: "Nombre",
