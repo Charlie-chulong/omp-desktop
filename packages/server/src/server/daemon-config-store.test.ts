@@ -101,6 +101,30 @@ describe("applyMutableProviderConfigToOverrides", () => {
       },
     });
   });
+
+  test("preserves existing OMP params when saving a built-in tool restriction", () => {
+    expect(
+      applyMutableProviderConfigToOverrides(
+        {
+          omp: {
+            command: ["omp"],
+            params: {
+              proxyEnabled: false,
+              agentShell: { mode: "custom", path: "/bin/bash" },
+            },
+          },
+        },
+        { omp: { params: { disabledBuiltInTools: ["bash"] } } },
+      )?.omp,
+    ).toMatchObject({
+      command: ["omp"],
+      params: {
+        proxyEnabled: false,
+        agentShell: { mode: "custom", path: "/bin/bash" },
+        disabledBuiltInTools: ["bash"],
+      },
+    });
+  });
 });
 
 describe("DaemonConfigStore", () => {
@@ -345,6 +369,30 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).agents?.providers?.omp).toMatchObject({
       env: { PI_PROXY: "http://127.0.0.1:7890" },
       params: { proxyEnabled: false },
+    });
+  });
+
+  test("saves a disabled OMP tool using the stock 18.3.0 CLI flags", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const help = "  --tools <names>  Enable specified tools\n  --no-tools  Disable all tools";
+    const script = `process.stdout.write(process.argv[1] === "--version" ? "omp/18.3.0" : ${JSON.stringify(help)})`;
+    const command = [process.execPath, "-e", script, "--"];
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: { omp: { command } },
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({ providers: { omp: { params: { disabledBuiltInTools: ["write"] } } } });
+
+    expect(loadPersistedConfig(paseoHome).agents?.providers?.omp?.params).toMatchObject({
+      disabledBuiltInTools: ["write"],
     });
   });
 

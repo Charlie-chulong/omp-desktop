@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeWorkspaceTabLayout,
+  resolveMeasuredWorkspaceTabs,
   retainWorkspaceTabMeasuredWidth,
 } from "@/screens/workspace/workspace-tab-layout";
 
@@ -119,6 +120,26 @@ describe("computeWorkspaceTabLayout", () => {
     });
 
     expect(result.items.map((item) => item.width)).toEqual([102, 138]);
+  });
+});
+
+describe("resolveMeasuredWorkspaceTabs", () => {
+  it("keeps renamed titles and current selection while label measurements lag behind", () => {
+    const measured = [
+      { tab: { key: "primary" }, label: "Original workspace", isActive: true },
+      { tab: { key: "extra" }, label: "Original conversation", isActive: false },
+    ];
+    const current = [
+      { tab: { key: "extra" }, label: "Renamed conversation", isActive: true },
+      { tab: { key: "primary" }, label: "Renamed workspace", isActive: false },
+    ];
+
+    const displayed = resolveMeasuredWorkspaceTabs(measured, current);
+
+    expect(displayed.map(({ tab, label, isActive }) => [tab.key, label, isActive])).toEqual([
+      ["primary", "Renamed workspace", false],
+      ["extra", "Renamed conversation", true],
+    ]);
   });
 });
 

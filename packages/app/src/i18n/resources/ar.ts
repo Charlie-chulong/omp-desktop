@@ -2569,6 +2569,7 @@ export const ar: TranslationResources = {
           saving: "جارٍ الحفظ...",
         },
       },
+      ompBuiltinTools: en.settings.host.ompBuiltinTools,
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

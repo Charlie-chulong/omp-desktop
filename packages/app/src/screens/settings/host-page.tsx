@@ -83,6 +83,7 @@ import { PaseoToolsCard } from "./paseo-tools-card";
 import { hasDaemonReconnectedAfter, type DaemonConnectionMarker } from "./daemon-reconnect";
 import { restartDaemonFromSettings } from "./daemon-restart";
 import { OmpAgentShellCard } from "./omp-agent-shell-card";
+import { OmpBuiltinToolsCard } from "./omp-builtin-tools-card";
 
 const ThemedArrowUp = withUnistyles(ArrowUp);
 const ThemedArrowDown = withUnistyles(ArrowDown);
@@ -567,6 +568,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
         <SettingsSection title={t("settings.hostSections.agents")}>
           <OmpInstallationCard serverId={serverId} />
           <OmpAgentShellCard serverId={serverId} />
+          <OmpBuiltinToolsCard serverId={serverId} />
           <PaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />

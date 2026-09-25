@@ -5,6 +5,11 @@ import {
 } from "./persisted-config.js";
 import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import {
+  OmpProviderParamsSchema,
+  validateOmpBuiltinToolConfigSync,
+} from "./agent/providers/omp/provider-config.js";
+import { ensureManagedOmpOnPath } from "./agent/providers/omp/installer.js";
+import {
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
 } from "@omp-desktop/protocol/messages";
@@ -511,9 +516,13 @@ export function applyMutableProviderConfigToOverrides(
 
   const nextOverrides: Record<string, ProviderOverride> = { ...baseOverrides };
   for (const [providerId, providerConfig] of Object.entries(mutableProviders ?? {})) {
+    const parsed = ProviderOverrideSchema.strip().parse(providerConfig);
     nextOverrides[providerId] = {
       ...nextOverrides[providerId],
-      ...ProviderOverrideSchema.strip().parse(providerConfig),
+      ...parsed,
+      ...(parsed.params
+        ? { params: { ...nextOverrides[providerId]?.params, ...parsed.params } }
+        : {}),
     };
   }
 
@@ -634,6 +643,20 @@ export class DaemonConfigStore {
         removedProviders,
       ),
     );
+    if (parsedPatch.providers?.omp?.params?.disabledBuiltInTools !== undefined) {
+      const disabled = OmpProviderParamsSchema.shape.disabledBuiltInTools.parse(
+        next.providers.omp?.params?.disabledBuiltInTools,
+      );
+      if (disabled) {
+        ensureManagedOmpOnPath(process.platform, this.env);
+        const provider = ProviderOverrideSchema.strip().parse(next.providers.omp);
+        validateOmpBuiltinToolConfigSync(
+          disabled,
+          provider.command ?? [this.env.OMP_COMMAND?.trim() || "omp"],
+          { ...this.env, ...provider.env },
+        );
+      }
+    }
 
     const configChanged = !isEqualValue(this.current, next);
 

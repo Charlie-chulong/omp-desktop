@@ -10,6 +10,18 @@ An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). 
 
 Packaged macOS, Linux, and Windows applications include OMP and do not require a system OMP installation.
 
+## OMP built-in tools
+
+Open **Host Settings → Agents → OMP built-in tools** to request a tool list for new or resumed sessions. The tool list starts collapsed; expand it to edit switches, request all off, or reset. Choices are saved per host. Desktop passes `--no-tools` when every tool is switched off, or `--tools <enabled names>` for a partial selection; resetting removes the extra tool flag. The list follows the installed OMP version (18.2.10 or 18.3.x), and checkpoint and rewind share one switch. Running sessions do not change.
+
+This is not a strict denylist: OMP may automatically add tools excluded from `--tools` or even `--no-tools`, and child agents may use a different tool list. Builds reporting the same version may also expose different tools; for a partial selection, Desktop briefly starts an ephemeral OMP session to request only tools in that build's current active roster. OMP's own settings may disable selected tools. These controls do not change standalone OMP sessions or Desktop-injected tools and extensions, and do not replace filesystem permissions or approval rules. Custom OMP commands cannot combine this setting with their own `--tools` or `--no-tools` flags. No custom OMP build is required for supported versions.
+
+## Conversation names
+
+Rename a conversation from its tab's context menu. Renaming the workspace's primary conversation changes the workspace name; additional conversations keep their own titles. Saved names remain visible when switching tabs, including when a conversation is not loaded or its provider history is unavailable.
+
+Tab-width measurements do not own titles or selection state. The daemon publishes saved metadata changes for unloaded conversations, and loading a provider session preserves any rename made during initialization.
+
 ## Closing unused conversations
 
 Closing the last empty conversation tab returns to the project creation page. On supported hosts, the daemon also archives the unused workspace record so it does not remain in the sidebar under its branch name. This does not delete project files or the project itself.

@@ -21,8 +21,8 @@ import {
 import { isSessionRpcAllowed, Session } from "./session.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { StructuredAgentFallbackError } from "./agent/agent-response-loop.js";
-import type { StoredAgentRecord } from "./agent/agent-storage.js";
-import type { AgentManagerEvent } from "./agent/agent-manager.js";
+import { AgentStorage, type StoredAgentRecord } from "./agent/agent-storage.js";
+import { AgentManager, type AgentManagerEvent } from "./agent/agent-manager.js";
 import type { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import { WorkspaceLabelError, type WorkspaceLabelService } from "./workspace-labels/index.js";
 import { createPersistedProjectRecord } from "./workspace-registry.js";
@@ -1697,6 +1697,114 @@ function createStoredAgentRecord(
     archivedAt: overrides.archivedAt ?? null,
   };
 }
+
+test("renaming an unloaded agent publishes its persisted title to the subscribed directory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "session-unloaded-rename-"));
+  const logger = pino({ level: "silent" });
+  const storage = new AgentStorage(join(root, "agents"), logger);
+  const manager = new AgentManager({ clients: {}, registry: storage, logger });
+  const record = createStoredAgentRecord({
+    id: "11111111-1111-4111-8111-111111111192",
+    provider: "omp",
+    cwd: root,
+    workspaceId: "workspace-rename",
+    title: "Original conversation",
+    lastStatus: "closed",
+  });
+  const workspace = {
+    workspaceId: record.workspaceId!,
+    projectId: "project-rename",
+    cwd: root,
+    kind: "worktree" as const,
+    displayName: "Rename workspace",
+    title: null,
+    branch: "rename",
+    baseBranch: null,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    archivedAt: null,
+  };
+  const project = { ...createProjectRecord(root), projectId: workspace.projectId };
+  const messages: SessionOutboundMessage[] = [];
+  const providers = createProviderSnapshotManagerStub();
+  providers.listRegisteredProviderIds.mockReturnValue(["omp"]);
+  const session = createSessionForTest({
+    messages,
+    providerSnapshotManager: providers.manager,
+    agentManager: {
+      getAgent: manager.getAgent.bind(manager),
+      updateAgentMetadata: manager.updateAgentMetadata.bind(manager),
+    },
+    agentStorage: {
+      get: storage.get.bind(storage),
+      list: storage.list.bind(storage),
+    },
+    workspaceRegistry: {
+      get: vi.fn().mockResolvedValue(workspace),
+      list: vi.fn().mockResolvedValue([workspace]),
+    },
+    projectRegistry: {
+      get: vi.fn().mockResolvedValue(project),
+      list: vi.fn().mockResolvedValue([project]),
+    },
+  });
+
+  try {
+    await storage.upsert(record);
+    await session.handleMessage({
+      type: "fetch_agents_request",
+      requestId: "subscribe-rename",
+      subscribe: { subscriptionId: "rename-sub" },
+    });
+    expect(messages).toContainEqual({
+      type: "fetch_agents_response",
+      payload: expect.objectContaining({
+        subscriptionId: "rename-sub",
+        entries: [
+          expect.objectContaining({
+            agent: expect.objectContaining({ id: record.id, title: "Original conversation" }),
+          }),
+        ],
+      }),
+    });
+    messages.splice(0);
+
+    await session.handleMessage({
+      type: "update_agent_request",
+      requestId: "rename-unloaded",
+      agentId: record.id,
+      name: "  Renamed conversation  ",
+    });
+
+    expect(messages).toContainEqual({
+      type: "agent_update",
+      payload: {
+        kind: "upsert",
+        agent: expect.objectContaining({
+          id: record.id,
+          title: "Renamed conversation",
+          status: "closed",
+        }),
+        project: expect.objectContaining({ projectKey: workspace.projectId }),
+      },
+    });
+    expect(messages).toContainEqual({
+      type: "update_agent_response",
+      payload: {
+        requestId: "rename-unloaded",
+        agentId: record.id,
+        accepted: true,
+        error: null,
+      },
+    });
+    expect((await storage.get(record.id))?.title).toBe("Renamed conversation");
+    expect(manager.getAgent(record.id)).toBeNull();
+  } finally {
+    await session.cleanup();
+    await manager.flush();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 describe("agent detach RPC", () => {
   test("detaches a stored subagent and emits the updated standalone agent", async () => {

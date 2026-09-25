@@ -1667,6 +1667,8 @@ export class VoiceAssistantWebSocketServer {
         ompSubagentSettings: true,
         // COMPAT(ompMemoryManagement): added 2026-09-12, remove gate after 2027-03-12.
         ompMemoryManagement: true,
+        // COMPAT(ompBuiltinToolSettings): added 2026-09-24; older daemons do not honor this policy.
+        ompBuiltinToolSettings: true,
         // COMPAT(ompInstall): added in v0.5.1, remove gate after 2027-03-13.
         ompInstall: true,
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.1.106, remove old

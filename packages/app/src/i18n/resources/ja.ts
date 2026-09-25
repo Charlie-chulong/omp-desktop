@@ -2592,6 +2592,7 @@ export const ja: TranslationResources = {
           saving: "保存中...",
         },
       },
+      ompBuiltinTools: en.settings.host.ompBuiltinTools,
       agents: {
         unavailable: "エージェントを管理するにはこのホストに接続してください",
       },

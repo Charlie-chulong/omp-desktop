@@ -248,7 +248,7 @@ export class AgentStorage {
 
   async applySnapshot(
     agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
+    options?: { title?: string | null; initialTitle?: string | null; internal?: boolean },
   ): Promise<void> {
     await this.load();
     const hasTitleOverride =
@@ -257,7 +257,13 @@ export class AgentStorage {
       options !== undefined && Object.prototype.hasOwnProperty.call(options, "internal");
     await this.queueRecordMutation(agent.id, (existing) => {
       const record = toStoredAgentRecord(agent, {
-        title: hasTitleOverride ? (options?.title ?? null) : (existing?.title ?? null),
+        // Resolve the initial title inside the write queue, not before provider
+        // initialization, so loading a session cannot undo a concurrent rename.
+        title: hasTitleOverride
+          ? (options?.title ?? null)
+          : existing
+            ? (existing.title ?? null)
+            : (options?.initialTitle ?? null),
         createdAt: existing?.createdAt,
         internal: hasInternalOverride ? options?.internal : (agent.internal ?? existing?.internal),
       });

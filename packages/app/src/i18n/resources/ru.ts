@@ -2627,6 +2627,7 @@ export const ru: TranslationResources = {
           saving: "Сохранение...",
         },
       },
+      ompBuiltinTools: en.settings.host.ompBuiltinTools,
       agents: {
         unavailable: "Подключитесь к этому хосту, чтобы управлять агентами",
       },

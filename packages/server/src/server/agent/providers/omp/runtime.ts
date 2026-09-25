@@ -101,10 +101,13 @@ export function buildOmpLaunch(input: {
   runtimeSettings?: ProviderRuntimeSettings;
   session: OmpStartSessionInput;
 }): OmpRuntimeLaunch {
-  const command =
-    input.runtimeSettings?.command?.mode === "replace" && input.runtimeSettings.command.argv[0]
-      ? input.runtimeSettings.command.argv
-      : input.command;
+  const configuredCommand = input.runtimeSettings?.command;
+  let command: readonly string[] = input.command;
+  if (configuredCommand?.mode === "replace" && configuredCommand.argv[0]) {
+    command = configuredCommand.argv;
+  } else if (configuredCommand?.mode === "append") {
+    command = [...input.command, ...(configuredCommand.args ?? [])];
+  }
   const argv = [...command];
 
   const protocolMode = input.session.protocolMode ?? "rpc";
