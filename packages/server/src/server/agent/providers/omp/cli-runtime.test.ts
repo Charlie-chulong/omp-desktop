@@ -54,11 +54,13 @@ function createRuntime(
   child: OmpChild,
   launches: OmpRuntimeLaunch[] = [],
   runtimeSettings?: ProviderRuntimeSettings,
+  disabledBuiltInTools?: readonly string[],
 ): OmpCliRuntime {
   return new OmpCliRuntime({
     logger: pino({ level: "silent" }),
     command: ["omp"],
     runtimeSettings,
+    disabledBuiltInTools,
     commandsRpcName: "get_available_commands",
     spawnProcess: (launch) => {
       launches.push(launch);
@@ -120,6 +122,75 @@ describe("OMP CLI runtime", () => {
     expect(launches[0]?.env).toEqual({
       PI_PROXY: "http://127.0.0.1:7890",
     });
+  });
+
+  test("rejects custom tool flags in command and session options while a policy is set", async () => {
+    const child = createOmpChild();
+    const runtime = createRuntime(
+      child,
+      [],
+      { command: { mode: "append", args: ["--tools=read"] } },
+      ["write"],
+    );
+    await expect(runtime.startSession({ cwd: "/workspace/project" })).rejects.toThrow("conflict");
+    const optionsRuntime = createRuntime(child, [], undefined, ["write"]);
+    await expect(
+      optionsRuntime.startSession({
+        cwd: "/workspace/project",
+        extraArgs: ["--no-tools"],
+      }),
+    ).rejects.toThrow("conflict");
+  });
+
+  test("starts with a release build whose registered tools are a subset of the version catalog", async () => {
+    const binary = `
+      const args = process.argv.slice(1);
+      if (args.includes("--version")) {
+        process.stdout.write("omp/18.3.0");
+        process.exit();
+      }
+      if (args.includes("--help")) {
+        process.stdout.write("--tools <names> --no-tools");
+        process.exit();
+      }
+      const selection = args.indexOf("--tools");
+      if (selection >= 0 && args[selection + 1] !== "read") {
+        process.stderr.write("Unknown tools in --tools");
+        process.exit(2);
+      }
+      process.stdout.write(JSON.stringify({ type: "ready", protocolVersion: 1 }) + "\\n");
+      let buffer = "";
+      process.stdin.on("data", (chunk) => {
+        buffer += chunk.toString();
+        let end;
+        while ((end = buffer.indexOf("\\n")) >= 0) {
+          const command = JSON.parse(buffer.slice(0, end));
+          buffer = buffer.slice(end + 1);
+          process.stdout.write(JSON.stringify({
+            type: "response", id: command.id, command: command.type, success: true,
+            data: {
+              model: null, thinkingLevel: "off", isStreaming: false, isCompacting: false,
+              sessionId: selection >= 0 ? "selected-release-build" : "inventory-only",
+              messageCount: 0, queuedMessageCount: 0,
+              dumpTools: [{ name: "read" }, { name: "write" }],
+            },
+          }) + "\\n");
+        }
+      });
+    `;
+    const runtime = new OmpCliRuntime({
+      logger: pino({ level: "silent" }),
+      command: [process.execPath, "-e", binary, "--"],
+      disabledBuiltInTools: ["write"],
+    });
+    const session = await runtime.startSession({ cwd: process.cwd() });
+    try {
+      await expect(session.getState()).resolves.toMatchObject({
+        sessionId: "selected-release-build",
+      });
+    } finally {
+      await session.close();
+    }
   });
 
   test("validates session state with the documented queued message count", async () => {

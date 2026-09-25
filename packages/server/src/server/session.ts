@@ -3069,6 +3069,18 @@ export class Session {
         return;
       }
 
+      // Live metadata changes publish agent_state; unloaded sessions have no
+      // runtime to emit that event, so publish their persisted snapshot here.
+      if (!this.agentManager.getAgent(agentId)) {
+        const record = await this.agentStorage.get(agentId);
+        if (record) {
+          const payload = await this.agentUpdates.emitStoredRecord(record);
+          if (payload.workspaceId) {
+            await this.emitWorkspaceUpdateForWorkspaceId(payload.workspaceId);
+          }
+        }
+      }
+
       this.emit({
         type: "update_agent_response",
         payload: { requestId, agentId, accepted: true, error: null },

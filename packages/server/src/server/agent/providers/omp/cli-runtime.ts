@@ -25,6 +25,7 @@ import {
   type OmpRuntimeSession,
   type OmpStartSessionInput,
 } from "./runtime.js";
+import { resolveOmpBuiltinToolArgsForLaunch } from "./provider-config.js";
 import {
   OmpBranchMessagesResultSchema,
   OmpBranchResultSchema,
@@ -61,6 +62,9 @@ const DEFAULT_OMP_COMMAND: [string, ...string[]] = [process.env.OMP_COMMAND ?? "
 const DEFAULT_COMMANDS_RPC_NAME = "get_available_commands";
 /** Allow cold OMP starts the same 30-second budget as other control-plane RPCs. */
 const OMP_READY_TIMEOUT_MS = JSONL_RPC_DEFAULT_TIMEOUT_MS;
+const OmpToolInventorySchema = z.object({
+  dumpTools: z.array(z.object({ name: z.string() })),
+});
 
 export function resolveOmpBackgroundJobsExtensionPath(
   moduleUrl: string | URL = import.meta.url,
@@ -84,6 +88,7 @@ export class OmpReadyTimeoutError extends Error {
 export interface OmpCliRuntimeOptions {
   logger: Logger;
   runtimeSettings?: ProviderRuntimeSettings;
+  disabledBuiltInTools?: readonly string[];
   command?: [string, ...string[]];
   commandsRpcName?: "get_available_commands";
   spawnProcess?: (launch: OmpRuntimeLaunch) => ChildProcessWithoutNullStreams;
@@ -106,6 +111,42 @@ export class OmpCliRuntime implements OmpRuntime {
       runtimeSettings: this.options.runtimeSettings,
       session: input,
     });
+    if (this.options.disabledBuiltInTools?.length) {
+      const configuredCommand = this.options.runtimeSettings?.command;
+      let command: readonly string[] = this.command;
+      if (configuredCommand?.mode === "replace") {
+        command = configuredCommand.argv;
+      } else if (configuredCommand?.mode === "append") {
+        command = [...this.command, ...(configuredCommand.args ?? [])];
+      }
+      if (
+        launch.argv
+          .slice(command.length)
+          .some((arg) => /^(?:--tools(?:=.*)?|--no-tools)$/.test(arg))
+      ) {
+        throw new Error(
+          "OMP built-in tool settings conflict with a configured --tools or --no-tools argument. Remove the custom tool flag first.",
+        );
+      }
+      let policyArgs = await resolveOmpBuiltinToolArgsForLaunch(
+        this.options.disabledBuiltInTools,
+        command,
+        { ...globalThis.process.env, ...launch.env },
+      );
+      if (policyArgs[0] === "--tools") {
+        // OMP validates --tools against the tools actually registered for this configuration.
+        // A version number alone cannot identify them: even builds with the same version and
+        // tools disabled by OMP settings have different registries.
+        const available = await inspectOmpActiveTools(launch, this.options.logger);
+        if (!this.options.disabledBuiltInTools.some((name) => available.has(name))) {
+          policyArgs = [];
+        } else {
+          const enabled = policyArgs[1]!.split(",").filter((name) => available.has(name));
+          policyArgs = enabled.length ? ["--tools", enabled.join(",")] : ["--no-tools"];
+        }
+      }
+      launch.argv.push(...policyArgs);
+    }
     if (input.protocolMode === "rpc-ui") {
       launch.argv.push("--extension", resolveOmpBackgroundJobsExtensionPath());
     }
@@ -193,6 +234,32 @@ function waitForOmpReadyFrame(process: JsonlRpcProcess): Promise<Record<string, 
       OMP_READY_TIMEOUT_MS,
     );
   });
+}
+
+async function inspectOmpActiveTools(
+  launch: OmpRuntimeLaunch,
+  logger: Logger,
+): Promise<Set<string>> {
+  const probeArgv = [...launch.argv];
+  const sessionIndex = probeArgv.indexOf("--session");
+  if (sessionIndex >= 0) probeArgv.splice(sessionIndex, 2);
+  if (!probeArgv.includes("--no-session")) probeArgv.push("--no-session");
+  const [command, ...args] = probeArgv;
+  const process = new JsonlRpcProcess({
+    launch: { command, args, cwd: launch.cwd, env: launch.env },
+    logger,
+    diagnosticName: "OMP tool inventory",
+  });
+  try {
+    const response = await process.request({ type: "get_state" }, OMP_READY_TIMEOUT_MS);
+    const inventory = OmpToolInventorySchema.safeParse(response);
+    if (!inventory.success) {
+      throw new Error("OMP get_state did not return a tool inventory");
+    }
+    return new Set(inventory.data.dumpTools.map((tool) => tool.name));
+  } finally {
+    await process.close();
+  }
 }
 
 class OmpCliRuntimeSession implements OmpRuntimeSession {

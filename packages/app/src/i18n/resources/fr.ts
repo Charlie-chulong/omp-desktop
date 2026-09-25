@@ -2631,6 +2631,7 @@ export const fr: TranslationResources = {
           saving: "Sauvegarde...",
         },
       },
+      ompBuiltinTools: en.settings.host.ompBuiltinTools,
       agents: {
         unavailable: "Connect to this host to manage agents",
       },

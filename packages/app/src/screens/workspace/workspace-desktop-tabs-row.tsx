@@ -57,7 +57,10 @@ import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
-import { retainWorkspaceTabMeasuredWidth } from "@/screens/workspace/workspace-tab-layout";
+import {
+  resolveMeasuredWorkspaceTabs,
+  retainWorkspaceTabMeasuredWidth,
+} from "@/screens/workspace/workspace-tab-layout";
 import {
   WorkspaceTabPresentationResolver,
   WorkspaceTabIcon,
@@ -1107,14 +1110,8 @@ function ResolvedWorkspaceDesktopTabsRow({
     if (!trackSnapshot) {
       return EMPTY_RESOLVED_TAB_ROWS;
     }
-    const currentTabs = new Map(
-      tabs.map((tab, index) => [tab.tab.key, { tab, label: tabLabels[index]?.label }]),
-    );
-    return trackSnapshot.tabs.map((snapshotTab, index) => {
-      const current = currentTabs.get(snapshotTab.tab.key);
-      return current?.label === trackSnapshot.labels[index]?.label ? current.tab : snapshotTab;
-    });
-  }, [tabLabels, tabs, trackSnapshot]);
+    return resolveMeasuredWorkspaceTabs(trackSnapshot.tabs, tabs);
+  }, [tabs, trackSnapshot]);
 
   const { layout } = useWorkspaceTabLayout({
     tabLabelWidths: trackSnapshot?.labelWidths ?? [],

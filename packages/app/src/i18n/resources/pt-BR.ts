@@ -2610,6 +2610,7 @@ export const ptBR: TranslationResources = {
           saving: "Salvando...",
         },
       },
+      ompBuiltinTools: en.settings.host.ompBuiltinTools,
       agents: {
         unavailable: "Conecte-se a este host para gerenciar agentes",
       },

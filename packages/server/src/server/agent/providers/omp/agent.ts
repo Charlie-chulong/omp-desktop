@@ -1536,10 +1536,12 @@ function buildExtensionUiResponse(
 function createRuntime(
   logger: Logger,
   runtimeSettings: ProviderRuntimeSettings | undefined,
+  disabledBuiltInTools: readonly string[] | undefined,
 ): OmpRuntime {
   return new OmpCliRuntime({
     logger,
     runtimeSettings,
+    disabledBuiltInTools,
     command: [DEFAULT_OMP_BINARY],
     commandsRpcName: "get_available_commands",
   });
@@ -3806,7 +3808,9 @@ export class OmpAgentClient implements AgentClient {
         getProxyUrl: () => runtimeSettings?.env?.PI_PROXY,
       });
     this.quotaNow = options.quotaNow ?? Date.now;
-    this.runtime = options.runtime ?? createRuntime(options.logger, runtimeSettings);
+    this.runtime =
+      options.runtime ??
+      createRuntime(options.logger, runtimeSettings, runtimeProviderParams.disabledBuiltInTools);
     this.sessionCredentialReader = options.sessionCredentialReader;
     this.oauthAccountsOverride = options.oauthAccounts;
   }

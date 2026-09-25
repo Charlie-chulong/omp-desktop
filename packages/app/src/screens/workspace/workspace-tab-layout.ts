@@ -30,6 +30,15 @@ export interface WorkspaceTabLayoutResult {
   requiresHorizontalScrollFallback: boolean;
 }
 
+export function resolveMeasuredWorkspaceTabs<T extends { tab: { key: string } }>(
+  measuredTabs: readonly T[],
+  currentTabs: readonly T[],
+): T[] {
+  const currentByKey = new Map(currentTabs.map((tab) => [tab.tab.key, tab]));
+  // Measurements own geometry and order, not the title or selection state.
+  return measuredTabs.map((tab) => currentByKey.get(tab.tab.key) ?? tab);
+}
+
 export function retainWorkspaceTabMeasuredWidth(
   currentWidth: number,
   measuredWidth: number,

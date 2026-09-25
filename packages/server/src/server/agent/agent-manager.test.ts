@@ -4190,6 +4190,49 @@ test("reloadAgentSession preserves current title when config title is unset", as
   expect(afterReload?.config?.title).toBeUndefined();
 });
 
+test("loading a session preserves a rename made while provider initialization is pending", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-load-rename-"));
+  const storagePath = join(workdir, "agents");
+  const storage = new AgentStorage(storagePath, logger);
+  const resumedSession = new HeldRuntimeInfoSession({ provider: "codex", cwd: workdir });
+  const client = new (class extends TestAgentClient {
+    override async resumeSession(): Promise<AgentSession> {
+      return resumedSession;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  let agentId: string | undefined;
+  let loading: Promise<ManagedAgent> | undefined;
+
+  try {
+    const agent = await manager.createAgent(
+      { provider: "codex", cwd: workdir, title: "Original title" },
+      undefined,
+      { workspaceId: undefined },
+    );
+    agentId = agent.id;
+    await manager.closeAgent(agent.id);
+    loading = ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger });
+    await resumedSession.waitForRuntimeInfo();
+
+    await manager.updateAgentMetadata(agent.id, { title: "Renamed conversation" });
+    expect((await storage.get(agent.id))?.title).toBe("Renamed conversation");
+    resumedSession.finishRuntimeInfo();
+    await loading;
+    await manager.flush();
+
+    expect((await storage.get(agent.id))?.title).toBe("Renamed conversation");
+    const reopenedStorage = new AgentStorage(storagePath, logger);
+    expect((await reopenedStorage.get(agent.id))?.title).toBe("Renamed conversation");
+  } finally {
+    resumedSession.finishRuntimeInfo();
+    await loading?.catch(() => undefined);
+    if (agentId) await manager.closeAgent(agentId);
+    await manager.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("setTitle bumps updatedAt and persists title in the same snapshot write", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-set-title-updated-at-"));
   const storagePath = join(workdir, "agents");

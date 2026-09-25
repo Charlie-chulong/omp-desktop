@@ -2583,6 +2583,7 @@ export const ko: TranslationResources = {
           saving: "저장하는 중...",
         },
       },
+      ompBuiltinTools: en.settings.host.ompBuiltinTools,
       agents: {
         unavailable: "에이전트를 관리하려면 이 호스트에 연결하세요",
       },

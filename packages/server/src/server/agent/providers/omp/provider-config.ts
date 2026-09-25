@@ -1,7 +1,14 @@
 import { existsSync, promises as fs } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { OMP_MODES } from "@omp-desktop/protocol/provider-manifest";
+import {
+  getOmpBuiltinToolNames,
+  OMP_BUILTIN_TOOL_NAMES,
+  OMP_LEGACY_BUILTIN_TOOL_NAMES,
+} from "@omp-desktop/protocol/omp-builtin-tools";
+import { execCommand } from "../../../../utils/spawn.js";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 
@@ -33,12 +40,14 @@ export const OmpProviderParamsSchema = z
     slowModel: z.string().min(1).optional(),
     planModel: z.string().min(1).optional(),
     agentShell: OmpAgentShellConfigSchema.optional(),
+    disabledBuiltInTools: z.array(z.string()).optional(),
     proxyEnabled: z.boolean().optional(),
   })
   .strict();
 
 export interface OmpRuntimeProviderParams {
   proxyEnabled: boolean;
+  disabledBuiltInTools?: readonly string[];
   sessionDir: string;
   agentShell: {
     mode: OmpAgentShellMode;
@@ -86,12 +95,12 @@ export async function readOmpImportMode(
   env: NodeJS.ProcessEnv,
   command?: ProviderRuntimeSettings["command"],
 ): Promise<string | undefined> {
-  const args =
-    command?.mode === "replace"
-      ? command.argv.slice(1)
-      : command?.mode === "append"
-        ? (command.args ?? [])
-        : [];
+  let args: readonly string[] = [];
+  if (command?.mode === "replace") {
+    args = command.argv.slice(1);
+  } else if (command?.mode === "append") {
+    args = command.args ?? [];
+  }
   // Custom CLI overlays/approval switches may override the files below. Until
   // the native CLI exposes its effective settings, do not infer a grant from a
   // partial configuration view.
@@ -222,6 +231,9 @@ export function resolveOmpProviderParams(providerParams: unknown): {
       sessionDir: params.sessionDir ?? OMP_SESSION_DIR,
       proxyEnabled: params.proxyEnabled !== false,
       agentShell: params.agentShell ?? { mode: "auto" },
+      ...(params.disabledBuiltInTools !== undefined
+        ? { disabledBuiltInTools: params.disabledBuiltInTools }
+        : {}),
     },
     modelRoleParams: {
       ...(params.smolModel ? { smolModel: params.smolModel } : {}),
@@ -229,6 +241,126 @@ export function resolveOmpProviderParams(providerParams: unknown): {
       ...(params.planModel ? { planModel: params.planModel } : {}),
     },
   };
+}
+
+const KNOWN_BUILTIN_TOOLS: Record<string, true> = Object.fromEntries(
+  [...OMP_BUILTIN_TOOL_NAMES, ...OMP_LEGACY_BUILTIN_TOOL_NAMES].map((name) => [name, true]),
+);
+const TOOL_FLAGS = /^(?:--tools(?:=.*)?|--no-tools)$/;
+
+export function assertOmpBuiltinToolNames(disabled: readonly string[]): void {
+  const unknown = disabled.filter((name) => !Object.hasOwn(KNOWN_BUILTIN_TOOLS, name));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown OMP built-in tools: ${unknown.join(", ")}`);
+  }
+  if (new Set(disabled).size !== disabled.length) {
+    throw new Error("Disabled OMP built-in tools must not contain duplicates");
+  }
+}
+
+export function resolveOmpBuiltinToolArgs(
+  disabled: readonly string[],
+  versionOutput: string,
+  helpOutput: string,
+  configuredArgs: readonly string[],
+): string[] {
+  assertOmpBuiltinToolNames(disabled);
+  if (disabled.length === 0) return [];
+  if (configuredArgs.some((arg) => TOOL_FLAGS.test(arg))) {
+    throw new Error(
+      "OMP built-in tool settings conflict with a configured --tools or --no-tools argument. Remove the custom tool flag first.",
+    );
+  }
+  const version = /\b(\d+\.\d+\.\d+)\b/.exec(versionOutput)?.[1];
+  const manifest = getOmpBuiltinToolNames(version);
+  if (!manifest) {
+    throw new Error(
+      `OMP built-in tool settings require a verified OMP version (18.2.10 or 18.3.x); detected ${versionOutput.trim() || "unknown"}. Update OMP or clear the disabled tools.`,
+    );
+  }
+  if (!/--tools(?:[=\s]|$)/.test(helpOutput) || !/--no-tools(?:[\s]|$)/.test(helpOutput)) {
+    throw new Error(
+      "This OMP binary does not support --tools and --no-tools. Update OMP to a supported version or clear the disabled tools.",
+    );
+  }
+  const activeDisabled = new Set(disabled.filter((name) => manifest.includes(name)));
+  if (activeDisabled.size === 0) return [];
+  const enabled = manifest.filter((name) => !activeDisabled.has(name));
+  return enabled.length === 0 ? ["--no-tools"] : ["--tools", enabled.join(",")];
+}
+
+/** Validate before persisting, so an unsupported executable cannot yield a false success. */
+export function validateOmpBuiltinToolConfigSync(
+  disabled: readonly string[],
+  command: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  assertOmpBuiltinToolNames(disabled);
+  if (disabled.length === 0) return;
+  if (!command[0]) throw new Error("OMP built-in tool settings require an executable command");
+  const [binary, ...configuredArgs] = command;
+  if (configuredArgs.some((arg) => TOOL_FLAGS.test(arg))) {
+    throw new Error(
+      "OMP built-in tool settings conflict with a configured tool-selection argument",
+    );
+  }
+  const run = (flag: string): string => {
+    const result = spawnSync(binary, [...configuredArgs, flag], {
+      env,
+      encoding: "utf8",
+      timeout: 15_000,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    });
+    if (result.error || result.status !== 0) {
+      throw new Error(
+        `Cannot inspect OMP executable "${binary}" (${flag}): ${result.error?.message ?? result.stderr?.trim() ?? "unknown error"}. Check the configured command or clear the disabled tools.`,
+      );
+    }
+    return `${result.stdout}\n${result.stderr}`;
+  };
+  const version = run("--version");
+  const help = run("--help");
+  resolveOmpBuiltinToolArgs(disabled, version, help, configuredArgs);
+}
+
+export async function resolveOmpBuiltinToolArgsForLaunch(
+  disabled: readonly string[],
+  command: readonly string[],
+  env: NodeJS.ProcessEnv,
+): Promise<string[]> {
+  assertOmpBuiltinToolNames(disabled);
+  if (disabled.length === 0) return [];
+  if (!command[0]) throw new Error("OMP built-in tool settings require an executable command");
+  const [binary, ...configuredArgs] = command;
+  if (configuredArgs.some((arg) => TOOL_FLAGS.test(arg))) {
+    throw new Error(
+      "OMP built-in tool settings conflict with a configured tool-selection argument",
+    );
+  }
+  try {
+    const [version, help] = await Promise.all(
+      ["--version", "--help"].map((flag) =>
+        execCommand(binary, [...configuredArgs, flag], {
+          envMode: "internal",
+          env,
+          timeout: 15_000,
+          maxBuffer: 1024 * 1024,
+        }),
+      ),
+    );
+    return resolveOmpBuiltinToolArgs(
+      disabled,
+      `${version.stdout}\n${version.stderr}`,
+      `${help.stdout}\n${help.stderr}`,
+      configuredArgs,
+    );
+  } catch (error) {
+    throw new Error(
+      `Cannot verify OMP built-in tool settings for "${binary}": ${error instanceof Error ? error.message : String(error)}. Check the configured command or clear the disabled tools.`,
+      { cause: error },
+    );
+  }
 }
 
 export function mergeOmpRuntimeSettings(

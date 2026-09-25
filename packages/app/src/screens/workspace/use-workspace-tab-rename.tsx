@@ -101,14 +101,8 @@ export function useWorkspaceTabRename(
         return;
       }
       await client.updateAgent(renamingTab.id, { name: trimmed });
-      void queryClient.invalidateQueries({
-        queryKey: ["sidebarAgentsList", normalizedServerId],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["allAgents", normalizedServerId],
-      });
     },
-    [client, normalizedServerId, queryClient, renamingTab, terminalsQueryKey, t],
+    [client, queryClient, renamingTab, terminalsQueryKey, t],
   );
 
   const handleRenameModalClose = useCallback(() => {

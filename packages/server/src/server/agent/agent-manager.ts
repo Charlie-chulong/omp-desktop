@@ -3277,11 +3277,6 @@ export class AgentManager {
       if (this.agents.has(resolvedAgentId)) {
         throw new Error(`Agent with id ${resolvedAgentId} already exists`);
       }
-      const initialPersistedTitle = await this.resolveInitialPersistedTitle(
-        resolvedAgentId,
-        config,
-        options?.initialTitle ?? null,
-      );
 
       const now = new Date();
       const { durableTimelineHasRows } = await this.initializeAgentTimelineForRegister({
@@ -3307,7 +3302,7 @@ export class AgentManager {
       await this.refreshRuntimeInfo(managed, { emit: false });
       this.assertAgentRegistrationActive(managed);
       await this.persistSnapshot(managed, {
-        title: initialPersistedTitle,
+        initialTitle: config.title?.trim() || options?.initialTitle || null,
       });
       this.assertAgentRegistrationActive(managed);
       if (!options?.publishWhenReady) {
@@ -3656,25 +3651,9 @@ export class AgentManager {
     );
   }
 
-  private async resolveInitialPersistedTitle(
-    agentId: string,
-    config: AgentSessionConfig,
-    fallbackTitle: string | null,
-  ): Promise<string | null> {
-    const existing = await this.registry?.get(agentId);
-    if (existing) {
-      return existing.title ?? null;
-    }
-    const explicitTitle =
-      typeof config.title === "string" && config.title.trim().length > 0
-        ? config.title.trim()
-        : null;
-    return explicitTitle ?? fallbackTitle;
-  }
-
   private async persistSnapshot(
     agent: ManagedAgent,
-    options?: { title?: string | null; internal?: boolean },
+    options?: { title?: string | null; initialTitle?: string | null; internal?: boolean },
   ): Promise<void> {
     if (!this.registry) {
       return;

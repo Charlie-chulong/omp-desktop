@@ -3953,6 +3953,8 @@ export const ServerInfoStatusPayloadSchema = z
         ompSubagentSettings: z.boolean().optional(),
         // COMPAT(ompMemoryManagement): added 2026-09-12, remove gate after 2027-03-12.
         ompMemoryManagement: z.boolean().optional(),
+        // COMPAT(ompBuiltinToolSettings): added 2026-09-24, remove gate after older daemons expire.
+        ompBuiltinToolSettings: z.boolean().optional(),
         // COMPAT(ompInstall): added in v0.5.1, remove gate after 2027-03-13.
         ompInstall: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.1.106, remove old
