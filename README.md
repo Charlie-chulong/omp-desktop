@@ -162,7 +162,10 @@ failure does not discard successfully retrieved usage. These endpoints are not a
 public API; authorization or service failures are shown without exposing credentials,
 refreshing tokens, or changing the saved account.
 
-Claude extra usage is not a Codex reset card. Claude accounts do not display Codex reset-card
+Claude's official [limit resets](https://support.claude.com/en/articles/17007452-what-is-a-limit-reset)
+are occasionally granted to eligible plans and can be used in Claude Web or Claude Desktop.
+They are distinct from paid extra usage and Codex reset cards. This integration does not
+list or consume Claude's reset offers. Claude accounts do not display Codex reset-card
 actions or subscription-expiry controls. Desktop does not infer a subscription end date
 from a token expiry, subscription creation date, or quota reset.
 
