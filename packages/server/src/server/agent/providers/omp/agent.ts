@@ -11,11 +11,13 @@ import { dirname, join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
+import { z } from "zod";
 import type {
   OmpCustomProviderInput,
   OmpInstallationStatus,
   OmpProviderAccountQuota,
   OmpCodexResetCreditConsumeResult,
+  OmpClaudeLimitResetConsumeResult,
   OmpSubagentSettings,
   OmpMemorySettings,
   OmpMemorySettingsPatch,
@@ -160,7 +162,13 @@ import {
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
 import { fetchCodexAccountQuota, type CodexAccountQuotaCredential } from "./codex-account-quota.js";
+import {
+  fetchClaudeAccountQuota,
+  type ClaudeAccountQuotaCredential,
+} from "./claude-account-quota.js";
 import { consumeCodexResetCredit } from "./codex-reset-credits.js";
+import { consumeClaudeLimitReset } from "./claude-limit-resets.js";
+import { OmpClaudeLimitResetConsumeRequestMessageSchema } from "@omp-desktop/protocol/messages";
 import { createProxyFetch } from "../../../../services/quota-fetcher/proxy-fetch.js";
 
 const OMP_PROVIDER = "omp";
@@ -242,7 +250,7 @@ export function readStoredOmpSessionCredentialId(
   }
 }
 interface StoredOmpOAuthAccountCredential
-  extends StoredOmpOAuthAccount, CodexAccountQuotaCredential {}
+  extends StoredOmpOAuthAccount, CodexAccountQuotaCredential, ClaudeAccountQuotaCredential {}
 
 function parseStoredOmpOAuthAccountCredential(
   row: Record<string, unknown>,
@@ -263,8 +271,9 @@ function parseStoredOmpOAuthAccountCredential(
   } catch {
     return null;
   }
-  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
-  const credential = data as Record<string, unknown>;
+  const parsedCredential = z.record(z.string(), z.unknown()).safeParse(data);
+  if (!parsedCredential.success) return null;
+  const credential = parsedCredential.data;
   const accessToken = typeof credential.access === "string" ? credential.access.trim() : "";
   if (!accessToken) return null;
   const identityKey =
@@ -281,6 +290,13 @@ function parseStoredOmpOAuthAccountCredential(
     ...(identityKey ? { identityKey } : {}),
     accessToken,
     ...(accountId ? { accountId } : {}),
+    ...(typeof credential.orgId === "string" ? { orgId: credential.orgId.trim() } : {}),
+    ...(typeof credential.subscriptionType === "string"
+      ? { subscriptionType: credential.subscriptionType }
+      : {}),
+    ...(typeof credential.rateLimitTier === "string"
+      ? { rateLimitTier: credential.rateLimitTier }
+      : {}),
   };
 }
 
@@ -4698,8 +4714,10 @@ export class OmpAgentClient implements AgentClient {
           accounts.push(account);
           storedAccountsByProvider.set(account.provider, accounts);
         }
-        for (const account of readStoredOmpOAuthAccountCredentials(agentDb)) {
-          storedAccountCredentialsById.set(account.credentialId, account);
+        for (const providerId of ["openai-codex", "anthropic"]) {
+          for (const account of readStoredOmpOAuthAccountCredentials(agentDb, providerId)) {
+            storedAccountCredentialsById.set(account.credentialId, account);
+          }
         }
       } catch (error) {
         this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
@@ -4719,16 +4737,16 @@ export class OmpAgentClient implements AgentClient {
       }
       const quotaByCredentialId = new Map<number, OmpProviderAccountQuota>();
       await Promise.all(
-        [...storedAccountCredentialsById.values()]
-          .filter((account) => account.provider === "openai-codex")
-          .map(async (account) => {
-            const quota = await fetchCodexAccountQuota({
-              credential: account,
-              fetch: this.quotaFetch,
-              now: this.quotaNow,
-            });
-            quotaByCredentialId.set(account.credentialId, quota);
-          }),
+        [...storedAccountCredentialsById.values()].map(async (account) => {
+          const fetchQuota =
+            account.provider === "anthropic" ? fetchClaudeAccountQuota : fetchCodexAccountQuota;
+          const quota = await fetchQuota({
+            credential: account,
+            fetch: this.quotaFetch,
+            now: this.quotaNow,
+          });
+          quotaByCredentialId.set(account.credentialId, quota);
+        }),
       );
       // eslint-disable-next-line oxc/no-map-spread
       loginProviders = providers.map((provider) => {
@@ -4741,8 +4759,7 @@ export class OmpAgentClient implements AgentClient {
           ...provider,
           // eslint-disable-next-line oxc/no-map-spread
           accounts: accounts.map(({ credentialId, accountNumber, identityKey }) => {
-            const quota =
-              provider.id === "openai-codex" ? quotaByCredentialId.get(credentialId) : undefined;
+            const quota = quotaByCredentialId.get(credentialId);
             return {
               credentialId,
               accountNumber,
@@ -4829,6 +4846,37 @@ export class OmpAgentClient implements AgentClient {
       codexResetConsumptions.delete(key);
       codexResetConsumptions.delete(cardKey);
     }
+  }
+
+  async consumeOmpClaudeLimitReset(
+    credentialId: number,
+    grantId: string,
+    redeemRequestId: string,
+  ): Promise<OmpClaudeLimitResetConsumeResult> {
+    const selection = OmpClaudeLimitResetConsumeRequestMessageSchema.safeParse({
+      type: "omp.claude.limit_reset.consume.request",
+      credentialId,
+      grantId,
+      redeemRequestId,
+      requestId: redeemRequestId,
+    });
+    if (!selection.success) {
+      throw new Error(
+        "A valid selected Claude credential, grant, and redemption request ID are required",
+      );
+    }
+    const { agentDb } = resolveOmpDiagnosticPaths({ ...process.env, ...this.runtimeSettings?.env });
+    const credential = readStoredOmpOAuthAccountCredentials(agentDb, "anthropic").find(
+      (account) => account.credentialId === credentialId,
+    );
+    if (!credential) throw new Error("The selected Claude OAuth account is unavailable");
+    return await consumeClaudeLimitReset({
+      credential,
+      grantId,
+      redeemRequestId,
+      fetch: this.quotaFetch,
+      now: this.quotaNow,
+    });
   }
 
   async getOmpSubagentSettings(): Promise<OmpSubagentSettings> {

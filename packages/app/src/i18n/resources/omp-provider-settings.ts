@@ -1,7 +1,9 @@
 import { codexQuotaStrings } from "./codex-quota";
+import { claudeLimitResetStrings } from "./claude-limit-resets";
 
 const en = {
   codexQuota: codexQuotaStrings.en,
+  claudeLimitResets: claudeLimitResetStrings.en,
   managementTitle: "OMP providers",
   loading: "Loading OMP providers…",
   updateHost: "Update this OMP Desktop host to manage OMP providers here.",
@@ -175,6 +177,7 @@ export const ompProviderSettings = {
   ar: {
     ...en,
     codexQuota: codexQuotaStrings.ar,
+    claudeLimitResets: claudeLimitResetStrings.ar,
     managementTitle: "موفرو OMP",
     loading: "جارٍ تحميل موفري OMP…",
     updateHost: "حدّث مضيف OMP Desktop لإدارة موفري OMP هنا.",
@@ -280,6 +283,7 @@ export const ompProviderSettings = {
   es: {
     ...en,
     codexQuota: codexQuotaStrings.es,
+    claudeLimitResets: claudeLimitResetStrings.es,
     managementTitle: "Proveedores de OMP",
     loading: "Cargando proveedores de OMP…",
     updateHost: "Actualiza este host de OMP Desktop para gestionar aquí los proveedores de OMP.",
@@ -388,6 +392,7 @@ export const ompProviderSettings = {
   fr: {
     ...en,
     codexQuota: codexQuotaStrings.fr,
+    claudeLimitResets: claudeLimitResetStrings.fr,
     managementTitle: "Fournisseurs OMP",
     loading: "Chargement des fournisseurs OMP…",
     updateHost: "Mettez à jour cet hôte OMP Desktop pour gérer les fournisseurs OMP ici.",
@@ -497,6 +502,7 @@ export const ompProviderSettings = {
   ja: {
     ...en,
     codexQuota: codexQuotaStrings.ja,
+    claudeLimitResets: claudeLimitResetStrings.ja,
     managementTitle: "OMPプロバイダー",
     loading: "OMPプロバイダーを読み込み中…",
     updateHost: "ここでOMPプロバイダーを管理するには、このOMP Desktopホストを更新してください。",
@@ -605,6 +611,7 @@ export const ompProviderSettings = {
   ko: {
     ...en,
     codexQuota: codexQuotaStrings.ko,
+    claudeLimitResets: claudeLimitResetStrings.ko,
     managementTitle: "OMP 제공자",
     loading: "OMP 제공자 불러오는 중…",
     updateHost: "여기서 OMP 제공자를 관리하려면 OMP Desktop 호스트를 업데이트하세요.",
@@ -713,6 +720,7 @@ export const ompProviderSettings = {
   "pt-BR": {
     ...en,
     codexQuota: codexQuotaStrings["pt-BR"],
+    claudeLimitResets: claudeLimitResetStrings["pt-BR"],
     managementTitle: "Provedores OMP",
     loading: "Carregando provedores OMP…",
     updateHost: "Atualize este host do OMP Desktop para gerenciar os provedores OMP aqui.",
@@ -821,6 +829,7 @@ export const ompProviderSettings = {
   ru: {
     ...en,
     codexQuota: codexQuotaStrings.ru,
+    claudeLimitResets: claudeLimitResetStrings.ru,
     managementTitle: "Провайдеры OMP",
     loading: "Загрузка провайдеров OMP…",
     updateHost: "Обновите этот хост OMP Desktop, чтобы управлять провайдерами OMP.",
@@ -929,6 +938,7 @@ export const ompProviderSettings = {
   "zh-CN": {
     ...en,
     codexQuota: codexQuotaStrings["zh-CN"],
+    claudeLimitResets: claudeLimitResetStrings["zh-CN"],
     managementTitle: "OMP 模型服务商",
     loading: "正在加载 OMP 模型服务商…",
     updateHost: "请更新此 OMP Desktop 主机后再管理 OMP 模型服务商。",
