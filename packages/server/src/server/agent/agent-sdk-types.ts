@@ -14,6 +14,7 @@ import type {
   OmpInstallationStatus,
   OmpProviderAccountQuota,
   OmpCodexResetCreditConsumeResult,
+  OmpClaudeLimitResetConsumeResult,
   OmpSubagentSettings,
   OmpMemorySettings,
   OmpMemorySettingsPatch,
@@ -851,6 +852,11 @@ export interface AgentClient {
     creditId: string,
     redeemRequestId: string,
   ): Promise<OmpCodexResetCreditConsumeResult>;
+  consumeOmpClaudeLimitReset?(
+    credentialId: number,
+    grantId: string,
+    redeemRequestId: string,
+  ): Promise<OmpClaudeLimitResetConsumeResult>;
   saveOmpProviderConfig?(configYaml: string): Promise<OmpProviderManagement>;
   getOmpSubagentSettings?(): Promise<OmpSubagentSettings>;
   updateOmpSubagentModel?(agentName: string, model: string | null): Promise<OmpSubagentSettings>;

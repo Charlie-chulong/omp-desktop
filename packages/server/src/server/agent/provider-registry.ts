@@ -391,6 +391,7 @@ function bindOmpClientMethods(inner: AgentClient): Partial<AgentClient> {
   return {
     getOmpProviderManagement: inner.getOmpProviderManagement?.bind(inner),
     consumeOmpCodexResetCredit: inner.consumeOmpCodexResetCredit?.bind(inner),
+    consumeOmpClaudeLimitReset: inner.consumeOmpClaudeLimitReset?.bind(inner),
     saveOmpProviderConfig: inner.saveOmpProviderConfig?.bind(inner),
     getOmpSubagentSettings: inner.getOmpSubagentSettings?.bind(inner),
     updateOmpSubagentModel: inner.updateOmpSubagentModel?.bind(inner),

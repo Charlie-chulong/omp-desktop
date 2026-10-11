@@ -11,11 +11,13 @@ import { dirname, join } from "node:path";
 import { setImmediate as waitForImmediate, setTimeout as delay } from "node:timers/promises";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
+import { z } from "zod";
 import type {
   OmpCustomProviderInput,
   OmpInstallationStatus,
   OmpProviderAccountQuota,
   OmpCodexResetCreditConsumeResult,
+  OmpClaudeLimitResetConsumeResult,
   OmpSubagentSettings,
   OmpMemorySettings,
   OmpMemorySettingsPatch,
@@ -165,6 +167,8 @@ import {
   type ClaudeAccountQuotaCredential,
 } from "./claude-account-quota.js";
 import { consumeCodexResetCredit } from "./codex-reset-credits.js";
+import { consumeClaudeLimitReset } from "./claude-limit-resets.js";
+import { OmpClaudeLimitResetConsumeRequestMessageSchema } from "@omp-desktop/protocol/messages";
 import { createProxyFetch } from "../../../../services/quota-fetcher/proxy-fetch.js";
 
 const OMP_PROVIDER = "omp";
@@ -267,8 +271,9 @@ function parseStoredOmpOAuthAccountCredential(
   } catch {
     return null;
   }
-  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
-  const credential = data as Record<string, unknown>;
+  const parsedCredential = z.record(z.string(), z.unknown()).safeParse(data);
+  if (!parsedCredential.success) return null;
+  const credential = parsedCredential.data;
   const accessToken = typeof credential.access === "string" ? credential.access.trim() : "";
   if (!accessToken) return null;
   const identityKey =
@@ -285,6 +290,7 @@ function parseStoredOmpOAuthAccountCredential(
     ...(identityKey ? { identityKey } : {}),
     accessToken,
     ...(accountId ? { accountId } : {}),
+    ...(typeof credential.orgId === "string" ? { orgId: credential.orgId.trim() } : {}),
     ...(typeof credential.subscriptionType === "string"
       ? { subscriptionType: credential.subscriptionType }
       : {}),
@@ -4840,6 +4846,37 @@ export class OmpAgentClient implements AgentClient {
       codexResetConsumptions.delete(key);
       codexResetConsumptions.delete(cardKey);
     }
+  }
+
+  async consumeOmpClaudeLimitReset(
+    credentialId: number,
+    grantId: string,
+    redeemRequestId: string,
+  ): Promise<OmpClaudeLimitResetConsumeResult> {
+    const selection = OmpClaudeLimitResetConsumeRequestMessageSchema.safeParse({
+      type: "omp.claude.limit_reset.consume.request",
+      credentialId,
+      grantId,
+      redeemRequestId,
+      requestId: redeemRequestId,
+    });
+    if (!selection.success) {
+      throw new Error(
+        "A valid selected Claude credential, grant, and redemption request ID are required",
+      );
+    }
+    const { agentDb } = resolveOmpDiagnosticPaths({ ...process.env, ...this.runtimeSettings?.env });
+    const credential = readStoredOmpOAuthAccountCredentials(agentDb, "anthropic").find(
+      (account) => account.credentialId === credentialId,
+    );
+    if (!credential) throw new Error("The selected Claude OAuth account is unavailable");
+    return await consumeClaudeLimitReset({
+      credential,
+      grantId,
+      redeemRequestId,
+      fetch: this.quotaFetch,
+      now: this.quotaNow,
+    });
   }
 
   async getOmpSubagentSettings(): Promise<OmpSubagentSettings> {
