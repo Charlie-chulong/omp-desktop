@@ -1755,6 +1755,14 @@ export const OmpCodexResetCreditConsumeRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const OmpClaudeLimitResetConsumeRequestMessageSchema = z.object({
+  type: z.literal("omp.claude.limit_reset.consume.request"),
+  credentialId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  grantId: z.string().regex(/^[a-z0-9_-]{1,40}$/),
+  redeemRequestId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  requestId: z.string(),
+});
+
 export const OmpProviderManagementSaveRequestMessageSchema = z.object({
   type: z.literal("omp.provider.management.save.request"),
   configYaml: z.string().max(1_000_000),
@@ -3557,6 +3565,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ProviderDiagnosticRequestMessageSchema,
   OmpProviderManagementGetRequestMessageSchema,
   OmpCodexResetCreditConsumeRequestMessageSchema,
+  OmpClaudeLimitResetConsumeRequestMessageSchema,
   OmpProviderManagementSaveRequestMessageSchema,
   OmpSubagentSettingsGetRequestMessageSchema,
   OmpSubagentSettingsUpdateRequestMessageSchema,
@@ -3793,6 +3802,7 @@ export const ServerInfoStatusPayloadSchema = z
         // COMPAT(ompProviderManagement): added in v0.1.0, remove gate after 2027-03-13.
         ompProviderManagement: z.boolean().optional(),
         ompCodexResetCredits: z.boolean().optional(),
+        ompClaudeLimitResets: z.boolean().optional(),
         // COMPAT(ompSubagentSettings): added in v0.2.8, remove gate after 2027-03-13.
         ompSubagentSettings: z.boolean().optional(),
         // COMPAT(ompMemoryManagement): added 2026-09-12, remove gate after 2027-03-12.
@@ -6408,6 +6418,43 @@ export const OmpCodexResetCreditConsumeResultSchema = z.object({
   code: z.enum(["reset", "nothing_to_reset", "no_credit", "already_redeemed"]),
   windowsReset: z.number().int().nonnegative(),
 });
+export const OmpClaudeLimitResetGrantSchema = z.object({
+  id: z.string().regex(/^[a-z0-9_-]{1,40}$/),
+  label: z.string().nullable(),
+  resetsTotal: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  resetsLeft: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  startsAt: z.string().nullable(),
+  endsAt: z.string(),
+  clears: z.array(z.string()),
+  paused: z.boolean(),
+  usableNow: z.boolean(),
+  useRequiresLimit: z.boolean(),
+  blocking: z.array(z.string()),
+  givesBackWeekly: z.boolean(),
+});
+export const OmpClaudeLimitResetsSchema = z.object({
+  status: z.enum(["available", "unavailable", "error"]),
+  eligible: z.boolean().nullable(),
+  availableCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+  grants: z.array(OmpClaudeLimitResetGrantSchema),
+  nextGrantId: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,40}$/)
+    .nullable(),
+  atLimit: z.boolean(),
+  exhausted: z.array(z.string()),
+  cooldownUntil: z.string().nullable(),
+  ineligibleReason: z.string().nullable(),
+  error: z.string().optional(),
+});
+export const OmpClaudeLimitResetConsumeResultSchema = z.object({
+  result: z.enum(["reset", "already_used", "not_limited", "cooldown", "ineligible", "unavailable"]),
+  reason: z.string().nullable(),
+  resetsLeft: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+  cleared: z.array(z.string()),
+  weeklyResetsAt: z.string().nullable(),
+  cooldownUntil: z.string().nullable(),
+});
 export const OmpProviderAccountQuotaSchema = z.object({
   status: z.enum(["available", "unavailable", "error"]),
   planLabel: z.string().nullable().optional(),
@@ -6416,9 +6463,27 @@ export const OmpProviderAccountQuotaSchema = z.object({
   fiveHourResetsAt: z.string().nullable().optional(),
   weeklyUsedPct: z.number().min(0).max(100).nullable().optional(),
   weeklyResetsAt: z.string().nullable().optional(),
+  modelWindows: z
+    .array(
+      z.object({
+        model: z.string(),
+        usedPct: z.number().min(0).max(100).nullable(),
+        resetsAt: z.string().nullable(),
+      }),
+    )
+    .optional(),
+  extraUsage: z
+    .object({
+      enabled: z.boolean(),
+      usedUsd: z.number().nonnegative().nullable(),
+      monthlyLimitUsd: z.number().nonnegative().nullable(),
+      usedPct: z.number().min(0).max(100).nullable(),
+    })
+    .optional(),
   fetchedAt: z.string().nullable().optional(),
   error: z.string().nullable().optional(),
   resetCredits: OmpCodexResetCreditsSchema.optional(),
+  limitResets: OmpClaudeLimitResetsSchema.optional(),
   subscription: OmpCodexSubscriptionSchema.optional(),
 });
 export const OmpProviderManagementSchema = z.object({
@@ -6573,6 +6638,11 @@ export const OmpProviderManagementGetResponseMessageSchema = z.object({
 export const OmpCodexResetCreditConsumeResponseMessageSchema = z.object({
   type: z.literal("omp.codex.reset_credit.consume.response"),
   payload: OmpCodexResetCreditConsumeResultSchema.extend({ requestId: z.string() }),
+});
+
+export const OmpClaudeLimitResetConsumeResponseMessageSchema = z.object({
+  type: z.literal("omp.claude.limit_reset.consume.response"),
+  payload: OmpClaudeLimitResetConsumeResultSchema.extend({ requestId: z.string() }),
 });
 
 export const OmpProviderManagementSaveResponseMessageSchema = z.object({
@@ -7409,6 +7479,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ProviderDiagnosticResponseMessageSchema,
   OmpProviderManagementGetResponseMessageSchema,
   OmpCodexResetCreditConsumeResponseMessageSchema,
+  OmpClaudeLimitResetConsumeResponseMessageSchema,
   OmpProviderManagementSaveResponseMessageSchema,
   OmpSubagentSettingsGetResponseMessageSchema,
   OmpSubagentSettingsUpdateResponseMessageSchema,
@@ -7618,6 +7689,17 @@ export type OmpProviderManagement = z.infer<typeof OmpProviderManagementSchema>;
 export type OmpProviderAccountQuota = z.infer<typeof OmpProviderAccountQuotaSchema>;
 export type OmpCodexResetCredits = z.infer<typeof OmpCodexResetCreditsSchema>;
 export type OmpCodexSubscription = z.infer<typeof OmpCodexSubscriptionSchema>;
+export type OmpClaudeLimitResetGrant = z.infer<typeof OmpClaudeLimitResetGrantSchema>;
+export type OmpClaudeLimitResets = z.infer<typeof OmpClaudeLimitResetsSchema>;
+export type OmpClaudeLimitResetConsumeResult = z.infer<
+  typeof OmpClaudeLimitResetConsumeResultSchema
+>;
+export type OmpClaudeLimitResetConsumeRequestMessage = z.infer<
+  typeof OmpClaudeLimitResetConsumeRequestMessageSchema
+>;
+export type OmpClaudeLimitResetConsumeResponseMessage = z.infer<
+  typeof OmpClaudeLimitResetConsumeResponseMessageSchema
+>;
 export type OmpCodexResetCreditConsumeResult = z.infer<
   typeof OmpCodexResetCreditConsumeResultSchema
 >;

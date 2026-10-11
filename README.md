@@ -134,6 +134,61 @@ This does not add support for the separate `api.z.ai` service or arbitrary
 OpenAI-compatible `/v1/usage` endpoints. Usage lookup failures do not change model
 availability or interrupt inference.
 
+## Claude official-account usage
+
+Claude accounts signed in through OMP's built-in `anthropic` provider now have individual
+usage entries in **Host Settings → Model providers → Signed-in providers**, the host's
+**Usage** page, the sidebar account selector, and the active model's context tooltip.
+Desktop preserves account names, notes, ordering, and selected-credential isolation.
+
+Five-hour and overall weekly percentages show **remaining quota**. Model-specific weekly
+windows appear only when Anthropic actually returns them; unknown window names retain
+their reported identifier rather than being guessed as Opus or Sonnet. Reset dates include
+a timezone, and compact countdowns refresh server usage at the deadline instead of
+locally assuming that quota has reset. Missing percentages and dates remain unknown.
+
+The account and Usage views also show read-only **extra usage** status, reported spending,
+and the monthly spending cap when available. The OAuth endpoint reports these amounts
+in USD cents; Desktop converts them to dollars and does not treat missing amounts as zero
+or missing caps as unlimited. An explicitly non-USD or unknown currency is not labeled as
+USD spending. Extra usage is [billed separately from the subscription](https://support.claude.com/en/articles/12429409-manage-usage-credits-for-paid-claude-plans)
+and is managed in [Claude Settings → Usage](https://claude.ai/settings/usage), not purchased
+or enabled through Desktop.
+
+Quota reads use Anthropic's undocumented OAuth `/api/oauth/usage?cedar_ember=1`
+endpoint, including the reported reset inventory, and optionally `/api/oauth/profile`
+for plan metadata. Requests reuse the configured OMP proxy, bound both the request and
+response-body read, and never follow redirects. A profile failure does not discard
+successfully retrieved usage. Authorization or service failures are shown without
+exposing credentials, refreshing tokens, or changing the saved account.
+
+Claude's official [limit resets](https://support.claude.com/en/articles/17007452-what-is-a-limit-reset)
+are occasionally granted to eligible plans. They are distinct from paid extra usage and
+Codex reset cards. **Host Settings → Model providers → Signed-in providers** shows each
+Claude account's reported grants, remaining uses, start and expiry dates, cleared windows,
+and eligibility. Held uses are separate from permission to redeem: expired, future,
+paused, exhausted, cooldown-blocked, or otherwise unusable grants cannot be consumed.
+Unknown inventory is not displayed as zero.
+
+Using one reset requires an explicit irreversible confirmation showing the selected
+account, grant, and affected quota windows. The daemon checks fresh inventory, binds the
+request to that enabled Claude OAuth account and organization, serializes concurrent
+redemptions for the same account, and issues one native
+`POST /api/organizations/{organizationUuid}/reset_rate_limits` request. This OAuth
+contract and its client-identification header were checked against the first-party
+Claude CLI 2.1.296; the endpoints are not a stable public API.
+
+After an attempted redemption, Desktop refreshes quota and inventory. An HTTP 200 alone
+does not establish success; non-reset outcomes and uncertain results remain distinct.
+There is no automatic mutation retry. A subsequent explicit retry of an uncertain request
+reuses its native-valid redemption ID rather than creating a new intent. Hosts without
+the `ompClaudeLimitResets` capability disable redemption and show update-host guidance.
+Reset grants never enable paid extra usage or refund previous spending.
+
+Claude accounts do not display Codex reset-card actions or subscription-expiry controls.
+Desktop does not infer a subscription end date from a token expiry, subscription creation
+date, grant expiry, or quota reset.
+
 ## Codex quota and reset cards
 
 Open **Host Settings → Model providers → Signed-in providers** to view each Codex account's

@@ -526,6 +526,21 @@ export class ProviderSnapshotManager {
     }
   }
 
+  async consumeOmpClaudeLimitReset(credentialId: number, grantId: string, redeemRequestId: string) {
+    try {
+      const definition = this.providerRegistry.omp;
+      if (!definition) throw new Error("OMP provider is not configured");
+      const client = this.ensureClient("omp", definition);
+      if (!client.consumeOmpClaudeLimitReset) {
+        throw new Error("Claude limit reset consumption is unavailable");
+      }
+      return await client.consumeOmpClaudeLimitReset(credentialId, grantId, redeemRequestId);
+    } finally {
+      // Even an unconfirmed mutation must detach every read begun before it completed.
+      this.ompProviderManagementRead = null;
+    }
+  }
+
   async saveOmpProviderConfig(configYaml: string): Promise<OmpProviderManagement> {
     const definition = this.providerRegistry.omp;
     if (!definition) {

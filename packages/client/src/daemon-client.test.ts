@@ -1027,6 +1027,60 @@ test("defaults session RPC waiters to sixty seconds", async () => {
   await expect(responsePromise).rejects.toThrow("Timeout waiting for message (60000ms)");
 });
 
+test("bounds an unanswered Claude reset RPC without resending its mutation intent", async () => {
+  useHeartbeatClock();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "claude_reset_rpc_deadline",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+  const pending = client.consumeOmpClaudeLimitReset(42, "selected_grant", "stable-redemption");
+  const outcome = pending.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(90_000);
+  expect(await outcome).toBeInstanceOf(Error);
+  const mutationRequests = mock.sent.filter(
+    (frame) =>
+      typeof frame === "string" && frame.includes("omp.claude.limit_reset.consume.request"),
+  );
+  expect(mutationRequests).toHaveLength(1);
+  expect(client.getConnectionState().status).toBe("connected");
+});
+
+test.each([
+  { credentialId: 0, grantId: "selected_grant", redeemRequestId: "stable" },
+  { credentialId: 42, grantId: "../grant", redeemRequestId: "stable" },
+  { credentialId: 42, grantId: "selected_grant", redeemRequestId: "invalid request" },
+])("rejects invalid Claude reset intent before sending: %j", async (selection) => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "claude_reset_rpc_invalid",
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+  await expect(
+    client.consumeOmpClaudeLimitReset(
+      selection.credentialId,
+      selection.grantId,
+      selection.redeemRequestId,
+    ),
+  ).rejects.toThrow();
+  expect(mock.sent).toHaveLength(0);
+});
+
 test("honors explicit fetchAgent timeout below the session RPC default", async () => {
   useHeartbeatClock();
   const logger = createMockLogger();

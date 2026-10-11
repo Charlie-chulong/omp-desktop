@@ -93,6 +93,7 @@ import type {
   ProviderDiagnosticResponseMessage,
   OmpProviderManagementGetResponseMessage,
   OmpCodexResetCreditConsumeResult,
+  OmpClaudeLimitResetConsumeResult,
   OmpProviderManagementSaveResponseMessage,
   OmpSubagentSettingsGetResponseMessage,
   OmpSubagentSettingsUpdateResponseMessage,
@@ -4890,6 +4891,24 @@ export class DaemonClient {
       },
       responseType: "omp.codex.reset_credit.consume.response",
       timeout: 45_000,
+    });
+  }
+
+  async consumeOmpClaudeLimitReset(
+    credentialId: number,
+    grantId: string,
+    redeemRequestId: string,
+  ): Promise<OmpClaudeLimitResetConsumeResult> {
+    return this.sendCorrelatedSessionRequest({
+      message: {
+        type: "omp.claude.limit_reset.consume.request",
+        credentialId,
+        grantId,
+        redeemRequestId,
+      },
+      responseType: "omp.claude.limit_reset.consume.response",
+      // Two 15s preflight reads plus the native 25s POST deadline and RPC overhead.
+      timeout: 75_000,
     });
   }
 
