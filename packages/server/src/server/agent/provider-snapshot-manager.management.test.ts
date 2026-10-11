@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import type { AgentClient, OmpProviderManagement } from "./agent-sdk-types.js";
+import type { OmpClaudeLimitResets } from "@omp-desktop/protocol/messages";
 import { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
 
 const TEST_CAPABILITIES = {
@@ -130,4 +131,107 @@ describe("ProviderSnapshotManager OMP management", () => {
       manager.destroy();
     }
   });
+  test.each(["confirmed", "unconfirmed"])(
+    "detaches pre-mutation Claude reads after a %s outcome without losing the new shared read",
+    async (outcome) => {
+      const stale = Promise.withResolvers<OmpProviderManagement>();
+      const fresh = Promise.withResolvers<OmpProviderManagement>();
+      const inventory: OmpClaudeLimitResets = {
+        status: "available",
+        eligible: true,
+        availableCount: 2,
+        grants: [],
+        nextGrantId: null,
+        atLimit: true,
+        exhausted: ["five_hour"],
+        cooldownUntil: null,
+        ineligibleReason: null,
+      };
+      const before: OmpProviderManagement = {
+        configPath: "/tmp/models.yml",
+        configYaml: "providers: {}\n",
+        providerModels: [],
+        loginProviders: [
+          {
+            id: "anthropic",
+            name: "Claude",
+            available: true,
+            authenticated: true,
+            accounts: [
+              {
+                credentialId: 1,
+                quota: {
+                  status: "available",
+                  fiveHourUsedPct: 100,
+                  limitResets: inventory,
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const after: OmpProviderManagement = {
+        ...before,
+        loginProviders: [
+          {
+            id: "anthropic",
+            name: "Claude",
+            available: true,
+            authenticated: true,
+            accounts: [
+              {
+                credentialId: 1,
+                quota: {
+                  status: "available",
+                  fiveHourUsedPct: 0,
+                  limitResets: {
+                    ...inventory,
+                    availableCount: 1,
+                    atLimit: false,
+                    exhausted: [],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const getManagement = vi
+        .fn()
+        .mockImplementationOnce(() => stale.promise)
+        .mockImplementation(() => fresh.promise);
+      const client = createOmpClient(getManagement);
+      client.consumeOmpClaudeLimitReset = async () => {
+        if (outcome === "unconfirmed") throw new Error("redemption is unconfirmed");
+        return {
+          result: "reset",
+          reason: null,
+          resetsLeft: 1,
+          cleared: ["five_hour"],
+          weeklyResetsAt: null,
+          cooldownUntil: null,
+        };
+      };
+      const manager = new ProviderSnapshotManager({
+        logger: createTestLogger(),
+        extraClients: { omp: client },
+      });
+      try {
+        const previousRead = manager.getOmpProviderManagement();
+        const mutation = manager.consumeOmpClaudeLimitReset(1, "grant", "stable-request");
+        if (outcome === "unconfirmed") await expect(mutation).rejects.toThrow("unconfirmed");
+        else await expect(mutation).resolves.toMatchObject({ result: "reset" });
+        const refresh = manager.getOmpProviderManagement();
+        expect(getManagement).toHaveBeenCalledTimes(2);
+        stale.resolve(before);
+        expect(await previousRead).toEqual(before);
+        const concurrentRefresh = manager.getOmpProviderManagement();
+        expect(getManagement).toHaveBeenCalledTimes(2);
+        fresh.resolve(after);
+        await expect(Promise.all([refresh, concurrentRefresh])).resolves.toEqual([after, after]);
+      } finally {
+        manager.destroy();
+      }
+    },
+  );
 });

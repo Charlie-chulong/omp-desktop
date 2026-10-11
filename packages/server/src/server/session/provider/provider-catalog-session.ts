@@ -592,6 +592,33 @@ export class ProviderCatalogSession {
     }
   }
 
+  async handleOmpClaudeLimitResetConsumeRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.claude.limit_reset.consume.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.providerSnapshotManager.consumeOmpClaudeLimitReset(
+        msg.credentialId,
+        msg.grantId,
+        msg.redeemRequestId,
+      );
+      this.host.emit({
+        type: "omp.claude.limit_reset.consume.response",
+        payload: { ...result, requestId: msg.requestId },
+      });
+    } catch (error) {
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error:
+            error instanceof Error ? error.message : "Claude limit reset redemption is unconfirmed",
+          code: "omp_claude_limit_reset_consume_failed",
+        },
+      });
+    }
+  }
+
   async handleOmpProviderManagementSaveRequest(
     msg: Extract<SessionInboundMessage, { type: "omp.provider.management.save.request" }>,
   ): Promise<void> {

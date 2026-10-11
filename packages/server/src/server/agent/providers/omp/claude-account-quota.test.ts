@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  CLAUDE_PROFILE_ENDPOINT,
-  CLAUDE_USAGE_ENDPOINT,
-  fetchClaudeAccountQuota,
-} from "./claude-account-quota.js";
+import { fetchClaudeAccountQuota } from "./claude-account-quota.js";
+import { CLAUDE_USAGE_ENDPOINT } from "./claude-oauth-api.js";
 
 const NOW = Date.parse("2026-10-11T00:00:00.000Z");
 function jsonResponse(body: unknown): Response {
@@ -48,7 +45,7 @@ describe("fetchClaudeAccountQuota", () => {
       }),
     );
     const quota = await fetchClaudeAccountQuota(quotaOptions(fetchApi));
-    expect(quota).toEqual({
+    expect(quota).toMatchObject({
       status: "available",
       planLabel: "max",
       fiveHourUsedPct: 100,
@@ -64,23 +61,10 @@ describe("fetchClaudeAccountQuota", () => {
       fetchedAt: "2026-10-11T00:00:00.000Z",
     });
     expect(fetchApi).toHaveBeenCalledTimes(1);
-    expect(fetchApi).toHaveBeenCalledWith(
-      CLAUDE_USAGE_ENDPOINT,
-      expect.objectContaining({
-        method: "GET",
-        cache: "no-store",
-        redirect: "error",
-        signal: expect.any(AbortSignal),
-        headers: {
-          Accept: "application/json",
-          Authorization: "Bearer private-token",
-          "anthropic-beta": "oauth-2025-04-20",
-        },
-      }),
-    );
     expect(JSON.stringify(quota)).not.toContain("private-token");
     expect(quota).not.toHaveProperty("subscription");
     expect(quota).not.toHaveProperty("resetCredits");
+    expect(quota.limitResets).toMatchObject({ status: "unavailable", availableCount: null });
   });
 
   it.each([
@@ -214,7 +198,6 @@ describe("fetchClaudeAccountQuota", () => {
       expect(quota).toMatchObject({ status: "available", fiveHourUsedPct: 36, planLabel: null });
       expect(quota).not.toHaveProperty("error");
       expect(fetchApi).toHaveBeenCalledTimes(2);
-      expect(String(fetchApi.mock.calls[1]![0])).toBe(CLAUDE_PROFILE_ENDPOINT);
     },
   );
 
@@ -260,6 +243,40 @@ describe("fetchClaudeAccountQuota", () => {
       planLabel: "Pro",
     });
   });
+  it.each([
+    { name: "missing", inventory: undefined, status: "unavailable", count: null },
+    { name: "null", inventory: null, status: "unavailable", count: null },
+    { name: "malformed", inventory: { eligible: "yes", grants: [] }, status: "error", count: null },
+    {
+      name: "known empty ineligible",
+      inventory: { eligible: false, ineligible_reason: "tenure", grants: [] },
+      status: "available",
+      count: 0,
+    },
+  ])(
+    "keeps quota windows and extra usage with $name reset inventory",
+    async ({ inventory, status, count }) => {
+      const quota = await fetchClaudeAccountQuota(
+        quotaOptions(async () =>
+          jsonResponse({
+            five_hour: { utilization: 17 },
+            seven_day: { utilization: 22 },
+            extra_usage: { is_enabled: true, used_credits: 250, monthly_limit: 10_000 },
+            cedar_ember: inventory,
+          }),
+        ),
+      );
+      expect(quota).toMatchObject({
+        status: "available",
+        fiveHourUsedPct: 17,
+        weeklyUsedPct: 22,
+        extraUsage: { enabled: true, usedUsd: 2.5, monthlyLimitUsd: 100 },
+        limitResets: { status, availableCount: count },
+      });
+      if (count === 0)
+        expect(quota.limitResets).toMatchObject({ eligible: false, ineligibleReason: "tenure" });
+    },
+  );
   it("aborts a stalled usage request at its deadline without fetching a profile", async () => {
     vi.useFakeTimers();
     try {

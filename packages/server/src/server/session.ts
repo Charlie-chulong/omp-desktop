@@ -2543,6 +2543,8 @@ export class Session {
         return this.providerCatalogSession.handleOmpProviderManagementGetRequest(msg);
       case "omp.codex.reset_credit.consume.request":
         return this.providerCatalogSession.handleOmpCodexResetCreditConsumeRequest(msg);
+      case "omp.claude.limit_reset.consume.request":
+        return this.providerCatalogSession.handleOmpClaudeLimitResetConsumeRequest(msg);
       case "omp.provider.management.save.request":
         return this.providerCatalogSession.handleOmpProviderManagementSaveRequest(msg);
       case "omp.provider.management.context_windows.update.request":

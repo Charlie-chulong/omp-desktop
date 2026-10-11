@@ -1497,6 +1497,7 @@ export class PaseoWebSocketServer {
         // COMPAT(ompProviderManagement): added in v0.1.0, remove gate after 2027-03-13.
         ompProviderManagement: true,
         ompCodexResetCredits: true,
+        ompClaudeLimitResets: true,
         // COMPAT(ompSubagentSettings): added in v0.2.8, remove gate after 2027-03-13.
         ompSubagentSettings: true,
         // COMPAT(ompMemoryManagement): added 2026-09-12, remove gate after 2027-03-12.

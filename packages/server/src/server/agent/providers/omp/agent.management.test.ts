@@ -18,7 +18,7 @@ import {
 import { FakeOmp } from "./test-utils/fake-omp.js";
 import { CODEX_USAGE_ENDPOINT } from "./codex-account-quota.js";
 import { CODEX_RESET_CREDITS_ENDPOINT } from "./codex-reset-credits.js";
-import { CLAUDE_USAGE_ENDPOINT } from "./claude-account-quota.js";
+import { CLAUDE_USAGE_ENDPOINT } from "./claude-oauth-api.js";
 
 const tempDirs: string[] = [];
 
@@ -37,7 +37,7 @@ const { DatabaseSync } = testRequire("node:sqlite") as {
   DatabaseSync: new (path: string) => TestSqliteDatabase;
 };
 
-async function createClient(options: { quotaFetch?: typeof fetch } = {}) {
+async function createClient(options: { quotaFetch?: typeof fetch; quotaNow?: () => number } = {}) {
   const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-management-"));
   tempDirs.push(agentDir);
   const runtime = new FakeOmp();
@@ -46,6 +46,7 @@ async function createClient(options: { quotaFetch?: typeof fetch } = {}) {
     runtime,
     runtimeSettings: { env: { PI_CODING_AGENT_DIR: agentDir } },
     quotaFetch: options.quotaFetch ?? (async () => new Response(null, { status: 401 })),
+    ...(options.quotaNow ? { quotaNow: options.quotaNow } : {}),
   });
   return { agentDir, client, runtime };
 }
@@ -1001,6 +1002,76 @@ providers:
       { account: "selected-account", method: "GET" },
       { account: "selected-account", method: "POST" },
     ]);
+  });
+  test("consumes only the selected enabled Claude OAuth credential without touching credentials or runtime auth", async () => {
+    const organization = "11111111-1111-4111-8111-111111111111";
+    const quotaFetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer selected-claude");
+      if (init?.method === "POST")
+        return new Response(JSON.stringify({ result: "reset", resets_left: 1 }));
+      return new Response(
+        JSON.stringify({
+          cedar_ember: {
+            eligible: true,
+            at_limit: true,
+            exhausted: ["five_hour"],
+            grants: [
+              {
+                id: "selected_grant",
+                resets_total: 2,
+                resets_left: 2,
+                ends_at: "2026-10-12T00:00:00Z",
+                clears: ["five_hour"],
+                usable_now: true,
+              },
+            ],
+          },
+        }),
+      );
+    });
+    const { agentDir, client, runtime } = await createClient({
+      quotaFetch,
+      quotaNow: () => Date.parse("2026-10-11T00:00:00Z"),
+    });
+    const startSession = vi.spyOn(runtime, "startSession");
+    const databasePath = path.join(agentDir, "agent.db");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY, provider TEXT NOT NULL, credential_type TEXT NOT NULL,
+        data TEXT NOT NULL, disabled_cause TEXT, identity_key TEXT
+      );
+      INSERT INTO auth_credentials VALUES
+        (1, 'anthropic', 'oauth', '{"access":"other-claude","accountId":"other-account","orgId":"${organization}"}', NULL, NULL),
+        (2, 'anthropic', 'oauth', '{"access":"selected-claude","refresh":"never-refresh","accountId":"selected-account","orgId":"${organization}"}', NULL, NULL),
+        (3, 'anthropic', 'oauth', '{"access":"disabled-claude"}', 'expired', NULL),
+        (4, 'openai-codex', 'oauth', '{"access":"wrong-provider"}', NULL, NULL),
+        (5, 'anthropic', 'api_key', '{"key":"wrong-type"}', NULL, NULL),
+        (6, 'anthropic', 'oauth', 'not-json', NULL, NULL),
+        (7, 'anthropic', 'oauth', '{"access":" "}', NULL, NULL);
+    `);
+    const before = database.prepare("SELECT * FROM auth_credentials ORDER BY id").all();
+    database.close();
+    for (const invalidId of [3, 4, 5, 6, 7, 999]) {
+      await expect(
+        client.consumeOmpClaudeLimitReset(invalidId, "selected_grant", "stable-request"),
+      ).rejects.toThrow("unavailable");
+    }
+    for (const invalidId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(
+        client.consumeOmpClaudeLimitReset(invalidId, "selected_grant", "stable-request"),
+      ).rejects.toThrow("valid selected Claude credential");
+    }
+    expect(quotaFetch).not.toHaveBeenCalled();
+    await expect(
+      client.consumeOmpClaudeLimitReset(2, "selected_grant", "stable-request"),
+    ).resolves.toMatchObject({ result: "reset", resetsLeft: 1 });
+    expect(quotaFetch).toHaveBeenCalledTimes(2);
+    expect(quotaFetch.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+    expect(startSession).not.toHaveBeenCalled();
+    const after = new DatabaseSync(databasePath);
+    expect(after.prepare("SELECT * FROM auth_credentials ORDER BY id").all()).toEqual(before);
+    after.close();
   });
   test("rolls back a models.yml rejected by OMP", async () => {
     const { agentDir, client, runtime } = await createClient();

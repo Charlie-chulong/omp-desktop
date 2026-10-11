@@ -22,6 +22,7 @@ import type {
   OmpInstallationStatus,
   OmpProviderManagementGetResponseMessage,
   OmpCodexResetCreditConsumeResult,
+  OmpClaudeLimitResetConsumeResult,
   OmpProviderManagementSaveResponseMessage,
   OmpSubagentSettingsGetResponseMessage,
   OmpSubagentSettingsUpdateResponseMessage,
@@ -383,6 +384,11 @@ export interface OmpProviderActions {
     creditId: string,
     redeemRequestId: string,
   ): Promise<OmpCodexResetCreditConsumeResult>;
+  consumeClaudeLimitReset(
+    credentialId: number,
+    grantId: string,
+    redeemRequestId: string,
+  ): Promise<OmpClaudeLimitResetConsumeResult>;
   saveProviderConfig(
     configYaml: string,
     options?: { requestId?: string },
@@ -570,6 +576,8 @@ export function createPaseoApi(daemonClient: DaemonClient): PaseoApi {
       getProviderManagement: (options) => daemonClient.getOmpProviderManagement(options),
       consumeCodexResetCredit: (credentialId, creditId, redeemRequestId) =>
         daemonClient.consumeOmpCodexResetCredit(credentialId, creditId, redeemRequestId),
+      consumeClaudeLimitReset: (credentialId, grantId, redeemRequestId) =>
+        daemonClient.consumeOmpClaudeLimitReset(credentialId, grantId, redeemRequestId),
       saveProviderConfig: (configYaml, options) =>
         daemonClient.saveOmpProviderConfig(configYaml, options),
       getSubagentSettings: (options) => daemonClient.getOmpSubagentSettings(options),

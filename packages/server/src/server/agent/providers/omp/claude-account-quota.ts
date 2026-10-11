@@ -1,12 +1,17 @@
+import { z } from "zod";
 import type { OmpProviderAccountQuota } from "@omp-desktop/protocol/messages";
-
-// These OAuth telemetry endpoints are undocumented and may change independently of the public API.
-export const CLAUDE_USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
-export const CLAUDE_PROFILE_ENDPOINT = "https://api.anthropic.com/api/oauth/profile";
-const DEFAULT_TIMEOUT_MS = 15_000;
+import {
+  CLAUDE_PROFILE_ENDPOINT,
+  CLAUDE_USAGE_ENDPOINT,
+  ClaudeOAuthRequestError,
+  requestClaudeOAuth,
+} from "./claude-oauth-api.js";
+import { parseClaudeLimitResets, unavailableClaudeLimitResets } from "./claude-limit-resets.js";
 
 export interface ClaudeAccountQuotaCredential {
   accessToken: string;
+  accountId?: string;
+  orgId?: string;
   subscriptionType?: string;
   rateLimitTier?: string;
 }
@@ -18,10 +23,11 @@ export interface ClaudeAccountQuotaFetchOptions {
   timeoutMs?: number;
 }
 
+const RecordSchema = z.record(z.string(), z.unknown());
+
 function record(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function text(value: unknown): string | null {
@@ -95,6 +101,7 @@ function failure(
     weeklyResetsAt: null,
     fetchedAt: new Date(now()).toISOString(),
     error,
+    limitResets: unavailableClaudeLimitResets(status, error),
   };
 }
 
@@ -131,53 +138,14 @@ export async function fetchClaudeAccountQuota(
   options: ClaudeAccountQuotaFetchOptions,
 ): Promise<OmpProviderAccountQuota> {
   const now = options.now ?? Date.now;
-  const accessToken = options.credential.accessToken.trim();
-  if (!accessToken) return failure("unavailable", "Claude account credential is unavailable", now);
-  const fetchApi = options.fetch ?? fetch;
-  const headers = {
-    Accept: "application/json",
-    Authorization: `Bearer ${accessToken}`,
-    "anthropic-beta": "oauth-2025-04-20",
-  };
-  async function request(endpoint: string): Promise<{ status: number; ok: boolean; body: string }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    try {
-      // Keep the deadline active until the body is consumed as well.
-      const response = await fetchApi(endpoint, {
-        method: "GET",
-        headers,
-        signal: controller.signal,
-        cache: "no-store",
-        redirect: "error",
-      });
-      const body = response.ok ? await response.text() : "";
-      return { status: response.status, ok: response.ok, body };
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
   let quota: OmpProviderAccountQuota;
   try {
-    const response = await request(CLAUDE_USAGE_ENDPOINT);
-    if (response.status === 401 || response.status === 403) {
-      return failure("unavailable", "Claude account authentication expired", now);
-    }
-    if (!response.ok) return failure("error", "Claude usage request failed", now);
-    let payload: unknown;
-    try {
-      payload = JSON.parse(response.body);
-    } catch {
-      return failure("error", "Claude usage response was not valid JSON", now);
-    }
-    quota = parseUsage(payload, now);
+    const payload = await requestClaudeOAuth(options, CLAUDE_USAGE_ENDPOINT, { resource: "usage" });
+    quota = { ...parseUsage(payload, now), limitResets: parseClaudeLimitResets(payload, now()) };
   } catch (error) {
     return failure(
-      "error",
-      error instanceof DOMException && error.name === "AbortError"
-        ? "Claude usage request timed out"
-        : "Claude usage request failed",
+      error instanceof ClaudeOAuthRequestError ? error.status : "error",
+      error instanceof ClaudeOAuthRequestError ? error.message : "Claude usage request failed",
       now,
     );
   }
@@ -185,10 +153,13 @@ export async function fetchClaudeAccountQuota(
   let label = planLabel(options.credential.subscriptionType, options.credential.rateLimitTier);
   if (!label) {
     try {
-      const response = await request(CLAUDE_PROFILE_ENDPOINT);
-      if (response.ok) {
-        const profile = record(JSON.parse(response.body));
-        const organization = record(profile?.organization);
+      const profile = record(
+        await requestClaudeOAuth(options, CLAUDE_PROFILE_ENDPOINT, {
+          resource: "profile",
+        }),
+      );
+      if (profile) {
+        const organization = record(profile.organization);
         label = planLabel(organization?.organization_type, organization?.rate_limit_tier);
       }
     } catch {

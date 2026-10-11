@@ -98,6 +98,7 @@ import {
   OmpQuotaServerContext,
   OmpQuotaCountdown,
 } from "./omp-codex-quota-details";
+import { OmpClaudeLimitResetDetails } from "./omp-claude-limit-reset-details";
 import {
   formatOmpQuotaResetTime,
   resolveOmpRemainingQuotaPct,
@@ -439,6 +440,7 @@ function OmpProviderAccountQuotaDetails({
           {account.quota?.error ? (
             <Text style={sheetStyles.mutedText}>{account.quota.error}</Text>
           ) : null}
+          <OmpClaudeLimitResetDetails account={account} accountLabel={accountLabel} />
         </>
       )}
     </>
@@ -3329,8 +3331,8 @@ const sheetStyles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
   },
   accountRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: theme.spacing[3],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[4],
