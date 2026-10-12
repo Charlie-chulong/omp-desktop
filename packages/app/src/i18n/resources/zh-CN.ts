@@ -1524,6 +1524,10 @@ export const zhCN: TranslationResources = {
       accessibilityLabel: "开启首页动态效果",
     },
     tiles: {
+      providers: {
+        title: "配置模型",
+        description: "配置模型服务商与 API 密钥",
+      },
       addProject: {
         title: "添加项目",
         description: "打开此机器上的文件夹",

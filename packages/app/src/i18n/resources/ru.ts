@@ -1547,6 +1547,10 @@ export const ru: TranslationResources = {
       accessibilityLabel: "Включить динамические эффекты на главном экране",
     },
     tiles: {
+      providers: {
+        title: "Настроить модели",
+        description: "Настройте провайдеров моделей и API-ключи",
+      },
       addProject: {
         title: "Добавить проект",
         description: "Откройте папку на своем компьютере",

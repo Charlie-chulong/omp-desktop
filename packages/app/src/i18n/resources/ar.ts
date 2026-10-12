@@ -1510,6 +1510,10 @@ export const ar: TranslationResources = {
   openProject: {
     motion: en.openProject.motion,
     tiles: {
+      providers: {
+        title: "إعداد النماذج",
+        description: "إعداد موفري النماذج ومفاتيح API",
+      },
       addProject: {
         title: "أضف مشروعًا",
         description: "افتح مجلدًا على جهازك",

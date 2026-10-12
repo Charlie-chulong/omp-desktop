@@ -16,6 +16,10 @@ Packaged macOS, Linux, and Windows applications include OMP and do not require a
 for Agent sessions. Update checks and installs target that same executable. Packaged applications
 label their bundled runtime separately from standalone, configured, and `PATH` installations.
 
+Select **Configure models** on the home screen to open **Host Settings → Model providers**
+directly. The shortcut targets the local host when available, otherwise the first configured
+host; if no host is configured, it opens the add-host flow.
+
 ## Choosing OMP subagent models
 
 In **Host Settings → OMP subagents**, enable **Override built-in subagent models** and

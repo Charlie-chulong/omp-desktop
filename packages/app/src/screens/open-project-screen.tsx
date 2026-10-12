@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Platform, Pressable, Text, View, type ViewStyle } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useRouter } from "expo-router";
-import { ArrowRight, FolderOpen, Inbox, Sparkles } from "lucide-react-native";
+import { ArrowRight, Boxes, FolderOpen, Inbox, Sparkles } from "lucide-react-native";
 import { OmpIcon } from "@/components/icons/omp-icon";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { Switch } from "@/components/ui/switch";
@@ -26,13 +26,18 @@ import {
 } from "@/constants/layout";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
-import { buildHostAgentDetailRoute } from "@/utils/host-routes";
+import {
+  buildHostAgentDetailRoute,
+  buildSettingsAddHostRoute,
+  buildSettingsHostSectionRoute,
+} from "@/utils/host-routes";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
-import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import { useOpenProject } from "@/hooks/use-open-project";
 import type { Href } from "expo-router";
 import { ompBrandColors } from "@/styles/theme";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
+import { resolveActiveHostServerId } from "@/types/host-connection";
 
 const OMP_MAGENTA = ompBrandColors.magenta;
 const OMP_CYAN = ompBrandColors.cyan;
@@ -291,6 +296,7 @@ export function OpenProjectScreen() {
   const openDesktopAgentList = usePanelStore((s) => s.openDesktopAgentList);
   const openProjectPicker = useOpenAddProject();
   const localServerId = useLocalDaemonServerId();
+  const hosts = useHosts();
   const [importServerId, setImportServerId] = useState<string | null>(null);
   const importClient = useHostRuntimeClient(importServerId ?? "");
   const openImportedProject = useOpenProject(importServerId);
@@ -313,6 +319,20 @@ export function OpenProjectScreen() {
   const handleOpenPicker = useCallback(() => {
     void openProjectPicker();
   }, [openProjectPicker]);
+
+  const handleOpenProviders = useCallback(() => {
+    const serverId = resolveActiveHostServerId({
+      selectedServerId: null,
+      localServerId,
+      hosts,
+      orderedHosts: hosts,
+    });
+    router.push(
+      serverId
+        ? buildSettingsHostSectionRoute(serverId, "providers")
+        : buildSettingsAddHostRoute(Date.now()),
+    );
+  }, [hosts, localServerId, router]);
 
   const handleOpenImportSession = useCallback(() => {
     if (!localServerId) return;
@@ -386,6 +406,16 @@ export function OpenProjectScreen() {
         <View style={styles.tiles}>
           <HomeTile
             index="01"
+            accent="cyan"
+            icon={Boxes}
+            title={t("openProject.tiles.providers.title")}
+            description={t("openProject.tiles.providers.description")}
+            onPress={handleOpenProviders}
+            testID="open-project-providers"
+            animationsEnabled={homeAnimationsEnabled}
+          />
+          <HomeTile
+            index="02"
             accent="magenta"
             icon={FolderOpen}
             title={t("openProject.tiles.addProject.title")}
@@ -395,7 +425,7 @@ export function OpenProjectScreen() {
             animationsEnabled={homeAnimationsEnabled}
           />
           <HomeTile
-            index="02"
+            index="03"
             accent="cyan"
             icon={Inbox}
             title={t("openProject.tiles.importSession.title")}

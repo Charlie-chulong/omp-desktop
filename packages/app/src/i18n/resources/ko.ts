@@ -1522,6 +1522,10 @@ export const ko: TranslationResources = {
   openProject: {
     motion: en.openProject.motion,
     tiles: {
+      providers: {
+        title: "모델 설정",
+        description: "모델 공급자와 API 키를 설정합니다",
+      },
       addProject: {
         title: "프로젝트 추가",
         description: "내 컴퓨터의 폴더를 엽니다",
