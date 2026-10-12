@@ -42,6 +42,7 @@ import {
   shift,
   size as floatingSize,
   useFloating,
+  type Placement,
 } from "@floating-ui/react-native";
 import { getNextActiveIndex } from "./combobox-keyboard";
 import {
@@ -397,7 +398,7 @@ function OptionsList({
 interface DesktopPositionInput {
   isDesktopAboveSearch: boolean;
   isMobile: boolean;
-  desktopPlacement: ComboboxDesktopPlacement;
+  desktopPlacement: Placement;
   referenceTop: number | null;
   referenceLeft: number | null;
   referenceAtOrigin: boolean;
@@ -854,7 +855,7 @@ function buildFloatingMiddleware(input: FloatingMiddlewareInput) {
   const { collisionPadding, isDesktopAboveSearch, setAvailableSize, setReferenceWidth } = input;
   return [
     floatingOffset(isWeb ? 5 : 4),
-    ...(isWeb ? [] : [flip({ padding: collisionPadding })]),
+    ...(!isWeb || !isDesktopAboveSearch ? [flip({ padding: collisionPadding })] : []),
     ...(isDesktopAboveSearch ? [] : [shift({ padding: collisionPadding })]),
     floatingSize({
       padding: collisionPadding,
@@ -1366,7 +1367,12 @@ export function Combobox({
     [collisionPadding, isDesktopAboveSearch],
   );
 
-  const { refs, floatingStyles, update } = useFloating({
+  const {
+    refs,
+    floatingStyles,
+    placement: resolvedPlacement,
+    update,
+  } = useFloating({
     placement: isWeb ? desktopPlacement : "bottom-start",
     middleware,
     sameScrollView: false,
@@ -1389,6 +1395,10 @@ export function Combobox({
     setReferenceAtOrigin,
   });
 
+  useEffect(() => {
+    if (isOpen && !isMobile) void update();
+  }, [isOpen, isMobile, windowWidth, windowHeight, update]);
+
   const floatingTop = toNumericStyleValue(floatingStyles.top);
   const floatingLeft = toNumericStyleValue(floatingStyles.left);
 
@@ -1401,7 +1411,7 @@ export function Combobox({
   } = computeDesktopPosition({
     isDesktopAboveSearch,
     isMobile,
-    desktopPlacement,
+    desktopPlacement: resolvedPlacement,
     referenceTop,
     referenceLeft,
     referenceAtOrigin,
