@@ -1550,6 +1550,10 @@ export const en = {
       accessibilityLabel: "Enable home screen dynamic effects",
     },
     tiles: {
+      providers: {
+        title: "Configure models",
+        description: "Configure model providers and API keys",
+      },
       addProject: {
         title: "Add a project",
         description: "Open a folder on your machine",

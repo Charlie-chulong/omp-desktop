@@ -1526,6 +1526,10 @@ export const ja: TranslationResources = {
   openProject: {
     motion: en.openProject.motion,
     tiles: {
+      providers: {
+        title: "モデル設定",
+        description: "モデルプロバイダーと API キーを設定",
+      },
       addProject: {
         title: "プロジェクトを追加",
         description: "マシン上のフォルダを開く",

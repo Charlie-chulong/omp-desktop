@@ -1556,6 +1556,10 @@ export const es: TranslationResources = {
   openProject: {
     motion: en.openProject.motion,
     tiles: {
+      providers: {
+        title: "Configurar modelos",
+        description: "Configura proveedores de modelos y claves API",
+      },
       addProject: {
         title: "Agregar un proyecto",
         description: "Abra una carpeta en su máquina",
