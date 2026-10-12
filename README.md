@@ -30,7 +30,8 @@ update Desktop's RPC adapter.
 
 ## Enhanced workflow
 
-Select **Enhanced**, identified by the Sparkles icon in the workflow menu, to keep
+Select **Enhanced**, identified by the same Sparkles icon in the workflow menu
+and the current-mode control (toolbar or compact settings sheet), to keep
 model-request failures running automatically. Both **Standard** and **Enhanced**
 continue responses that reach the model's output-length limit.
 

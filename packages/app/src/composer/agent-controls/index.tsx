@@ -25,8 +25,8 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useShallow } from "zustand/shallow";
-import { ListTodo, Settings2, SlidersHorizontal, Sparkles, Target, Zap } from "lucide-react-native";
-import { getAgentFeatureIcon } from "@/agent-controls/icons";
+import { Settings2, Zap } from "lucide-react-native";
+import { getAgentFeatureIcon, getAgentFeatureOptionIcon } from "@/agent-controls/icons";
 import {
   formatAgentFeatureLabel,
   formatAgentFeatureOptionLabel,
@@ -1302,13 +1302,7 @@ function FeatureSelectComboboxOption({
   featureIcon?: string;
   iconColor: string;
 }) {
-  let IconComponent = getAgentFeatureIcon(featureIcon);
-  if (featureId === "workflow_mode") {
-    if (option.id === "plan") IconComponent = ListTodo;
-    else if (option.id === "goal") IconComponent = Target;
-    else if (option.id === "enhanced") IconComponent = Sparkles;
-    else IconComponent = SlidersHorizontal;
-  }
+  const IconComponent = getAgentFeatureOptionIcon(featureId, option.id, featureIcon);
   const leadingSlot = useMemo(
     () => <IconComponent size={16} color={iconColor} />,
     [IconComponent, iconColor],
@@ -1432,7 +1426,7 @@ function DesktopFeatureItem({
   }
 
   if (feature.type === "select") {
-    const FeatureIcon = getAgentFeatureIcon(feature.icon);
+    const FeatureIcon = getAgentFeatureOptionIcon(feature.id, feature.value, feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const selectedOptionValueLabel = selectedOption
       ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)
@@ -1603,7 +1597,7 @@ function SheetFeatureItem({
   }
 
   if (feature.type === "select") {
-    const FeatureIcon = getAgentFeatureIcon(feature.icon);
+    const FeatureIcon = getAgentFeatureOptionIcon(feature.id, feature.value, feature.icon);
     const selectedOption = feature.options.find((o) => o.id === feature.value);
     const selectedOptionLabel = selectedOption
       ? formatFeatureOptionLabel(feature.id, selectedOption, oauthAccounts)

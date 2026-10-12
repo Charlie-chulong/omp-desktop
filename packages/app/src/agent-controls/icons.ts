@@ -11,6 +11,8 @@ import {
   ShieldOff,
   ShieldPlus,
   ShieldQuestionMark,
+  SlidersHorizontal,
+  Sparkles,
   Zap,
   Target,
 } from "lucide-react-native";
@@ -67,4 +69,24 @@ export function getAgentModeOptionIcon(
 
 export function getAgentFeatureIcon(icon?: string): AgentControlIcon {
   return (icon ? FEATURE_ICONS[icon] : undefined) ?? Settings2;
+}
+
+export function getAgentFeatureOptionIcon(
+  featureId: string,
+  optionId: string | null,
+  icon?: string,
+): AgentControlIcon {
+  if (featureId !== "workflow_mode") {
+    return getAgentFeatureIcon(icon);
+  }
+  switch (optionId) {
+    case "enhanced":
+      return Sparkles;
+    case "plan":
+      return ListTodo;
+    case "goal":
+      return Target;
+    default:
+      return SlidersHorizontal;
+  }
 }
