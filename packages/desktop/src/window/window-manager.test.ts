@@ -1,17 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  beginWindowDrag,
   applyMacWindowControlsUpdate,
+  applyWindowControlsOverlayUpdate,
+  beginWindowDrag,
   buildStandardContextMenuItems,
+  createWindowControlsOverlayState,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
   getMainWindowChromeOptions,
+  getTitleBarOverlayOptions,
   moveWindowDrag,
   readBadgeCount,
   readWindowControlsOverlayUpdate,
-  readWindowTheme,
   readWindowDragPoint,
+  readWindowTheme,
+  resolveRuntimeTitleBarOverlayOptions,
   resolveWindowBounds,
 } from "./window-manager";
 import { getDesktopContextMenuLabels } from "../features/context-menu-labels";
@@ -186,7 +190,7 @@ describe("window-manager", () => {
   });
 
   describe("getMainWindowChromeOptions", () => {
-    it("uses frameless hidden title bars without native overlay on windows", () => {
+    it("uses an opaque native title-bar overlay on windows", () => {
       expect(
         getMainWindowChromeOptions({
           platform: "win32",
@@ -195,11 +199,12 @@ describe("window-manager", () => {
       ).toEqual({
         titleBarStyle: "hidden",
         frame: false,
+        titleBarOverlay: { color: "#181B1A", symbolColor: "#e4e4e7", height: 29 },
         autoHideMenuBar: true,
       });
     });
 
-    it("uses frameless hidden title bars without native overlay on linux", () => {
+    it("uses the light native overlay palette on linux", () => {
       expect(
         getMainWindowChromeOptions({
           platform: "linux",
@@ -208,6 +213,7 @@ describe("window-manager", () => {
       ).toEqual({
         titleBarStyle: "hidden",
         frame: false,
+        titleBarOverlay: { color: "#ffffff", symbolColor: "#09090b", height: 29 },
         autoHideMenuBar: true,
       });
     });
@@ -222,6 +228,42 @@ describe("window-manager", () => {
         titleBarStyle: "hidden",
         titleBarOverlay: true,
         trafficLightPosition: { x: 16, y: 14 },
+      });
+    });
+  });
+
+  describe("native window controls overlay", () => {
+    it("applies runtime layout changes without making the title bar translucent", () => {
+      const setTitleBarOverlay = vi.fn();
+      const current = createWindowControlsOverlayState("dark");
+
+      const next = applyWindowControlsOverlayUpdate({
+        win: { setTitleBarOverlay },
+        current,
+        update: { height: 37, backgroundColor: "#252727" },
+      });
+
+      expect(next).toEqual({
+        height: 37,
+        backgroundColor: "#252727",
+        foregroundColor: "#e4e4e7",
+      });
+      expect(setTitleBarOverlay).toHaveBeenCalledWith({
+        color: "#252727",
+        symbolColor: "#e4e4e7",
+        height: 36,
+      });
+    });
+
+    it("preserves explicit opaque defaults for both color schemes", () => {
+      expect(getTitleBarOverlayOptions("dark").color).toBe("#181B1A");
+      expect(getTitleBarOverlayOptions("light").color).toBe("#ffffff");
+      expect(
+        resolveRuntimeTitleBarOverlayOptions(createWindowControlsOverlayState("light")),
+      ).toEqual({
+        color: "#ffffff",
+        symbolColor: "#09090b",
+        height: 28,
       });
     });
   });

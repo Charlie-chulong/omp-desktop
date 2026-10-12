@@ -43,7 +43,6 @@ import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
-import { WindowControls } from "@/components/window-controls";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
 import {
   getIsElectronRuntime,
@@ -85,6 +84,7 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { KeyboardShiftProvider } from "@/hooks/use-keyboard-shift-style";
 import { useCompactWebViewportZoomLock } from "@/hooks/use-compact-web-viewport-zoom-lock";
 import { WallpaperBackground } from "@/wallpaper/WallpaperBackground";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { useAppSettings } from "@/hooks/use-settings";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -414,7 +414,7 @@ interface AppContainerProps {
 }
 
 const WINDOW_SIDEBAR_TOGGLE_HORIZONTAL_PADDING = 12;
-const WINDOW_CONTROLS_OVERLAY_DATASET = { "window-controls-overlay": "true" } as const;
+const WINDOW_CHROME_INTERACTIVE_DATASET = { "window-chrome-interactive": "true" } as const;
 
 function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppContainerProps) {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
@@ -552,7 +552,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
           <WindowChromeSafeArea
             placement="inline"
             horizontalPadding={WINDOW_SIDEBAR_TOGGLE_HORIZONTAL_PADDING}
-            dataSet={WINDOW_CONTROLS_OVERLAY_DATASET}
+            dataSet={WINDOW_CHROME_INTERACTIVE_DATASET}
             pointerEvents="box-none"
             style={layoutStyles.windowSidebarToggle}
           >
@@ -634,12 +634,6 @@ function ProvidersWrapper({ children }: { children: ReactNode }) {
       <HostSessionManager />
       <FaviconStatusSync />
       <AppearanceStyleBoundary>{children}</AppearanceStyleBoundary>
-      {/* Chromium resolves -webkit-app-region by DOM order (drag rects add,
-          no-drag rects subtract), not by z-index. The tab strip's
-          [data-window-drag-region=native] sits inside {children} and would
-          otherwise swallow real OS clicks on these controls, so this overlay
-          must come after children to cut its drag rect out. */}
-      <WindowControls />
     </AppearanceProvider>
   );
 }
@@ -653,7 +647,7 @@ function DesktopWindowControlsSync() {
   useEffect(() => {
     if (isLoading || isNative) return;
     void updateDesktopWindowControls({
-      backgroundColor: surface0,
+      backgroundColor: setCssColorAlpha(surface0, 1),
       foregroundColor: foreground,
       trafficLightOffsetY: -5,
     }).catch((error) => {
@@ -900,10 +894,6 @@ function recordUserActivity(): void {
 }
 
 function RootAppTree() {
-  const { settings } = useAppSettings();
-  const wallpaperActive =
-    settings.wallpaperEnabled && settings.wallpaperSource !== "none" && !!settings.wallpaperPath;
-
   return (
     <GestureHandlerRootView
       style={flexStyle}
@@ -912,9 +902,7 @@ function RootAppTree() {
       onTouchCancel={recordUserActivity}
     >
       <WallpaperBackground />
-      <View
-        style={[layoutStyles.surfaceFill, wallpaperActive && layoutStyles.surfaceFillTransparent]}
-      >
+      <View style={[layoutStyles.surfaceFill, layoutStyles.wallpaperContent]}>
         <RootProviders>
           <RuntimeProviders>
             <AppShell />
@@ -955,8 +943,9 @@ const layoutStyles = StyleSheet.create((theme) => ({
     flex: 1,
     backgroundColor: theme.colors.surface0,
   },
-  surfaceFillTransparent: {
-    backgroundColor: "transparent",
+  wallpaperContent: {
+    position: "relative",
+    zIndex: 1,
   },
   windowSidebarToggle: {
     position: "absolute",

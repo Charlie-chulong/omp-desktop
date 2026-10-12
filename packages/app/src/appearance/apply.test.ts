@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { darkHighlightColors, resolveSyntaxColors } from "@omp-desktop/highlight";
-import { DEFAULT_UI_FONT_STACK, REGISTERED_THEMES } from "@/styles/theme";
+import { DEFAULT_UI_FONT_STACK, REGISTERED_THEMES, type Theme } from "@/styles/theme";
 import { applyAppearance, type AppearanceInput } from "./apply";
 
 // Override the global react-native-unistyles mock (vitest.setup.ts) so that
@@ -37,7 +37,7 @@ interface FakeTheme {
     "4xl": number;
   };
   lineHeight: { diff: number };
-  colors: { foreground: string; syntax: Record<string, string> };
+  colors: Theme["colors"];
 }
 
 function makeFakeTheme(): FakeTheme {
@@ -56,7 +56,7 @@ function makeFakeTheme(): FakeTheme {
       "4xl": 26,
     },
     lineHeight: { diff: 22 },
-    colors: { foreground: "#fff", syntax: {} },
+    colors: { ...REGISTERED_THEMES.dark.colors },
   };
 }
 
@@ -68,6 +68,8 @@ function makeInput(overrides: Partial<AppearanceInput> = {}): AppearanceInput {
     contentFontSize: 15,
     codeFontSize: 13,
     syntaxTheme: "one",
+    wallpaperActive: false,
+    wallpaperOpacity: 0.85,
     ...overrides,
   };
 }
@@ -193,5 +195,32 @@ describe("applyAppearance", () => {
     // makeFakeTheme().colorScheme === "dark" -> github resolves to the dark palette.
     expect(runCapturedUpdater().colors.syntax).toEqual(darkHighlightColors);
     expect(runCapturedUpdater().colors.syntax).toEqual(resolveSyntaxColors("github", "dark"));
+  });
+
+  it("makes base canvases transparent without compounding a second veil", () => {
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.6 }));
+
+    const { colors } = runCapturedUpdater();
+    expect(colors.surface0).toBe("rgba(24, 27, 26, 0)");
+    expect(colors.background).toBe("rgba(24, 27, 26, 0)");
+    expect(colors.surface2).toBe("rgba(39, 42, 41, 0.85)");
+  });
+
+  it("keeps remounted tab canvases transparent across repeated wallpaper applies", () => {
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.9 }));
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.4 }));
+
+    const reapplied = runCapturedUpdater(ALL_THEME_KEYS.length);
+    expect(reapplied.colors.surface0).toBe("rgba(24, 27, 26, 0)");
+    expect(reapplied.colors.surface1).toBe("rgba(30, 33, 32, 0.85)");
+  });
+
+  it("restores authored surfaces when wallpaper is disabled", () => {
+    applyAppearance(makeInput({ wallpaperActive: true }));
+    applyAppearance(makeInput({ wallpaperActive: false }));
+
+    const restored = runCapturedUpdater(ALL_THEME_KEYS.length);
+    expect(restored.colors.surface0).toBe(REGISTERED_THEMES.dark.colors.surface0);
+    expect(restored.colors.surface2).toBe(REGISTERED_THEMES.dark.colors.surface2);
   });
 });
