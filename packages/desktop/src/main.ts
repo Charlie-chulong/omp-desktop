@@ -8,8 +8,8 @@ import { inheritLoginShellEnv } from "./login-shell-env.js";
 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { existsSync, statSync } from "node:fs";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
+import { realpath, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { execFileSync } from "node:child_process";
 import {
@@ -40,6 +40,7 @@ import {
   setupDefaultContextMenu,
   setupDragDropPrevention,
 } from "./window/window-manager.js";
+import { wallpaperMediaRegistry } from "./wallpaper/media-registry.js";
 import { BackgroundModeController } from "./window/background-mode.js";
 import { CloseChoiceRequestBroker } from "./window/close-choice-request.js";
 import { setupDarwinCompositorWatchdog } from "./window/compositor-watchdog/index.js";
@@ -217,20 +218,6 @@ function getAppDistDir(): string {
   }
 
   return path.resolve(__dirname, "../../app/dist");
-}
-
-const WALLPAPER_MEDIA_MIME: Record<string, string> = {
-  ".mp4": "video/mp4",
-  ".m4v": "video/mp4",
-  ".webm": "video/webm",
-  ".mov": "video/quicktime",
-  ".ogv": "video/ogg",
-  ".mkv": "video/x-matroska",
-  ".avi": "video/x-msvideo",
-};
-
-function mediaTypeForPath(filePath: string): string {
-  return WALLPAPER_MEDIA_MIME[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
 
 /**
@@ -669,33 +656,39 @@ async function bootstrap(): Promise<void> {
   }
 
   const appDistDir = getAppDistDir();
-  protocol.handle(APP_SCHEME, (request) => {
+  protocol.handle(APP_SCHEME, async (request) => {
     const { pathname, search, hash } = new URL(request.url);
     const decodedPath = decodeURIComponent(pathname);
 
-    // Chromium blocks file:// media loaded from an http(s)/custom-scheme origin
-    // ("Media load rejected by URL safety check"), so local wallpaper videos are
-    // served through this same-origin scheme route instead of pathToFileUri.
-    // The media stack always probes with a Range request; a plain 200 from
-    // net.fetch(file://...) drops byte-range support and the demuxer fails with
-    // "Format error", so ranges are served explicitly here (206 + stream).
+    // Local wallpaper paths never cross into renderer-controlled URLs. The
+    // renderer receives an opaque capability after the main process validates
+    // that a selected path is a supported regular file inside its directory.
     if (decodedPath === "/wallpaper-media") {
-      const mediaPath = new URL(request.url).searchParams.get("path") ?? "";
-      if (!mediaPath) {
-        return new Response("Missing path", { status: 400 });
-      }
-      if (!existsSync(mediaPath)) {
+      const mediaId = new URL(request.url).searchParams.get("id") ?? "";
+      const media = wallpaperMediaRegistry.get(mediaId);
+      if (!media) {
         return new Response("Not found", { status: 404 });
       }
-      const { size } = statSync(mediaPath);
-      const mime = mediaTypeForPath(mediaPath);
+
+      let canonicalPath: string;
+      let size: number;
+      try {
+        canonicalPath = await realpath(media.path);
+        if (canonicalPath !== media.path) return new Response("Not found", { status: 404 });
+        const file = await stat(canonicalPath);
+        if (!file.isFile()) return new Response("Not found", { status: 404 });
+        size = file.size;
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
+
       const rangeHeader = request.headers.get("range");
       const baseHeaders = {
-        "content-type": mime,
+        "content-type": media.mime,
         "accept-ranges": "bytes",
-        "cache-control": "no-store",
+        "cache-control": "private, max-age=3600",
+        "x-content-type-options": "nosniff",
       };
-
       const parsed = rangeHeader ? parseByteRange(rangeHeader, size) : null;
       if (rangeHeader && !parsed) {
         return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
@@ -703,7 +696,7 @@ async function bootstrap(): Promise<void> {
       if (parsed) {
         const { start, end } = parsed;
         const stream = Readable.toWeb(
-          createReadStream(mediaPath, { start, end }),
+          createReadStream(canonicalPath, { start, end }),
         ) as ReadableStream;
         return new Response(stream, {
           status: 206,
@@ -714,7 +707,7 @@ async function bootstrap(): Promise<void> {
           },
         });
       }
-      const stream = Readable.toWeb(createReadStream(mediaPath)) as ReadableStream;
+      const stream = Readable.toWeb(createReadStream(canonicalPath)) as ReadableStream;
       return new Response(stream, {
         status: 200,
         headers: { ...baseHeaders, "content-length": String(size) },

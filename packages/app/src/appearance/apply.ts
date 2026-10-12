@@ -7,9 +7,11 @@ import {
   REGISTERED_THEMES,
   type Theme,
 } from "@/styles/theme";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { applyRootUiFont } from "./apply-root-font";
 
 const ALL_THEME_KEYS = Object.keys(REGISTERED_THEMES) as (keyof typeof REGISTERED_THEMES)[];
+const authoredColorsByTheme = new Map<string, Theme["colors"]>();
 
 export interface AppearanceInput {
   uiFontFamily: string; // "" -> default stack
@@ -18,6 +20,8 @@ export interface AppearanceInput {
   contentFontSize: number; // already clamped
   codeFontSize: number; // already clamped
   syntaxTheme: SyntaxThemeId;
+  wallpaperActive: boolean;
+  wallpaperOpacity: number;
 }
 
 /**
@@ -47,6 +51,39 @@ function scaleFontSize(
     code: codeSize, // absolute, NOT scaled
   };
 }
+function applyWallpaperSurfaces<TColors extends Theme["colors"]>(
+  colors: TColors,
+  active: boolean,
+  opacity: number,
+): TColors {
+  if (!active) return colors;
+  const surfaceAlpha = Math.max(0.85, 1 - Math.max(0, Math.min(1, opacity)));
+  return {
+    ...colors,
+    surface0: setCssColorAlpha(colors.surface0, 0),
+    surfaceWorkspace: setCssColorAlpha(colors.surfaceWorkspace, 0),
+    background: setCssColorAlpha(colors.background, 0),
+    surface1: setCssColorAlpha(colors.surface1, surfaceAlpha),
+    surface2: setCssColorAlpha(colors.surface2, surfaceAlpha),
+    surface3: setCssColorAlpha(colors.surface3, surfaceAlpha),
+    surface4: setCssColorAlpha(colors.surface4, surfaceAlpha),
+    surfaceSidebar: setCssColorAlpha(colors.surfaceSidebar, surfaceAlpha),
+    popover: setCssColorAlpha(colors.popover, surfaceAlpha),
+    secondary: setCssColorAlpha(colors.secondary, surfaceAlpha),
+    muted: setCssColorAlpha(colors.muted, surfaceAlpha),
+    input: setCssColorAlpha(colors.input, surfaceAlpha),
+  } as TColors;
+}
+
+function getAuthoredColors<TColors extends Theme["colors"]>(
+  key: string,
+  current: TColors,
+): TColors {
+  const stored = authoredColorsByTheme.get(key) as TColors | undefined;
+  if (stored) return stored;
+  authoredColorsByTheme.set(key, current);
+  return current;
+}
 
 /**
  * Patch every registered Unistyles theme with the user's appearance choices.
@@ -54,10 +91,10 @@ function scaleFontSize(
  * and adaptive mode can flip light/dark — patching all keys keeps the active key
  * always current and makes ordering vs `setTheme`/`setAdaptiveThemes` irrelevant.
  *
- * The updater preserves the active theme wholesale (surfaces, accents,
- * terminal) and only patches the font ramp and syntax palette.
- * `updateTheme` replaces the stored theme rather than merging, so we spread
- * `...t` first.
+ * The updater starts from each theme's authored colors so enabling/disabling
+ * wallpaper is idempotent. Wallpaper mode makes only base canvas tokens fully
+ * transparent; one explicit veil controls wallpaper visibility, avoiding the
+ * compounded opacity and remount flashes caused by DOM-wide style rewrites.
  */
 export function applyAppearance(input: AppearanceInput): void {
   const ui = input.uiFontFamily.trim() || DEFAULT_UI_FONT_STACK;
@@ -81,20 +118,36 @@ export function applyAppearance(input: AppearanceInput): void {
       );
       const lineHeight = { ...t.lineHeight, diff: diffLineHeight };
       if (t.colorScheme === "light") {
+        const colors = applyWallpaperSurfaces(
+          getAuthoredColors(key, t.colors),
+          input.wallpaperActive,
+          input.wallpaperOpacity,
+        );
         return {
           ...t,
           fontFamily,
           fontSize,
           lineHeight,
-          colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
+          colors: {
+            ...colors,
+            syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme),
+          },
         };
       }
+      const colors = applyWallpaperSurfaces(
+        getAuthoredColors(key, t.colors),
+        input.wallpaperActive,
+        input.wallpaperOpacity,
+      );
       return {
         ...t,
         fontFamily,
         fontSize,
         lineHeight,
-        colors: { ...t.colors, syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme) },
+        colors: {
+          ...colors,
+          syntax: resolveSyntaxColors(input.syntaxTheme, t.colorScheme),
+        },
       };
     });
   }

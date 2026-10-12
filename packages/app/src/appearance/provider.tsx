@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext, useEffect } from "react";
 import { UnistylesRuntime } from "react-native-unistyles";
 import { DEFAULT_THEME_PREFERENCE, useAppSettings } from "@/hooks/use-settings";
 import { PLUGIN_THEME_PREFERENCE, THEME_TO_UNISTYLES, type Theme } from "@/styles/theme";
+import { isWallpaperConfigured } from "@/wallpaper/source";
 import { applyAppearance } from "./apply";
 
 export interface ContributedThemeOption {
@@ -28,6 +29,7 @@ const ContributedThemesContext = createContext<ContributedThemes | null>(null);
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const { settings, isLoading } = useAppSettings();
+  const wallpaperActive = isWallpaperConfigured(settings);
 
   useEffect(() => {
     if (isLoading) return;
@@ -46,6 +48,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       contentFontSize: settings.contentFontSize,
       codeFontSize: settings.codeFontSize,
       syntaxTheme: settings.syntaxTheme,
+      wallpaperActive,
+      wallpaperOpacity: settings.wallpaperOpacity,
     });
   }, [
     isLoading,
@@ -56,6 +60,8 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     settings.contentFontSize,
     settings.codeFontSize,
     settings.syntaxTheme,
+    wallpaperActive,
+    settings.wallpaperOpacity,
   ]);
 
   return (
