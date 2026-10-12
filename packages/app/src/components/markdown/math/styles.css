@@ -15,3 +15,8 @@
 .omp-math-block > .katex-display {
   margin: 0.5em 0;
 }
+
+/* Follow the formula foreground, including explicit TeX color commands. */
+:is(.omp-math-inline, .omp-math-block) .katex .frac-line {
+  border-bottom-color: currentColor;
+}

@@ -399,6 +399,10 @@ Assistant Markdown renders inline formulas delimited by `$...$`, `\(...\)`, or s
 inside Markdown quotes and lists. Explicit `\vec{v}` notation renders with both a vector arrow and
 a bold symbol, while `\mathbf{v}` remains available for bold-vector notation.
 
+Math keeps its bundled KaTeX fonts when the interface font changes. `\binom61` renders
+6 above 1 inside full-height parentheses, without a fraction bar. Fraction bars follow
+the formula foreground in light and dark themes, including explicit TeX colors.
+
 ## Thinking and tool calls
 
 Collapsed activity groups show their item count in a compact, theme-aware pill with a layers icon. The count updates as activity arrives; expanding the group hides the pill and reveals the individual items.

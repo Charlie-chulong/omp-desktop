@@ -1,9 +1,12 @@
 import React, { useMemo, type CSSProperties } from "react";
 import "katex/dist/katex.min.css";
 import "./styles.css";
+import { installMathFonts } from "./fonts.web";
 import { MARKDOWN_COPY_MATH_SOURCE_ATTRIBUTE } from "@/assistant-selection-copy/markup";
 import { renderMathToHtml } from "./render";
 import type { MarkdownMathProps } from "./types";
+
+installMathFonts();
 
 function cssTextStyle({
   inheritedStyles,
