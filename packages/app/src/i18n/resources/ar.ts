@@ -1916,6 +1916,8 @@ export const ar: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "إنشاء صورة",
+    presentImage: "عرض صورة",
     error: "خطأ",
     empty: "لا توجد تفاصيل إضافية متاحة",
     subAgentActivity: "نشاط الوكيل الفرعي",

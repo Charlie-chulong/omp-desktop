@@ -1,5 +1,6 @@
 import type { ToolCallDetail } from "@omp-desktop/protocol/agent-types";
 import { describe, expect, it } from "vitest";
+import { i18n } from "@/i18n/i18next";
 
 import { buildToolCallPresentation, type ToolCallPresentationIcon } from "./presentation";
 
@@ -38,6 +39,7 @@ describe("tool-call presentation", () => {
         content: "console.log('hi');",
       },
       resolveIcon: fakeResolveIcon,
+      t: i18n.getFixedT("en"),
     });
 
     expect(presentation).toMatchObject({
@@ -63,6 +65,7 @@ describe("tool-call presentation", () => {
         output: null,
       },
       resolveIcon: fakeResolveIcon,
+      t: i18n.getFixedT("en"),
     });
 
     expect(presentation).toMatchObject({
@@ -86,6 +89,7 @@ describe("tool-call presentation", () => {
         text: "1. Do the thing",
       },
       resolveIcon: fakeResolveIcon,
+      t: i18n.getFixedT("en"),
     });
 
     expect(presentation.isPlan).toBe(true);

@@ -111,6 +111,7 @@ import { recordRenderProfileReasons } from "@/utils/render-profiler";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useStreamHistoryWindow } from "./use-stream-history-window";
 import { placePlanPermissions } from "./plan-permission-placement";
+import { collectDuplicateToolImagePreviewIds } from "./tool-image-previews";
 
 function renderLiveAuxiliaryNode(input: {
   pendingPermissions: ReactNode;
@@ -644,6 +645,10 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       () => [...effectiveStreamItems, ...(effectiveStreamHead ?? EMPTY_STREAM_HEAD)],
       [effectiveStreamHead, effectiveStreamItems],
     );
+    const duplicateToolImagePreviewIds = useMemo(
+      () => collectDuplicateToolImagePreviewIds(rawStreamItems),
+      [rawStreamItems],
+    );
     const streamLayout = useMemo(
       () =>
         layoutStream({
@@ -881,7 +886,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             data.status === "completed" && data.detail.type === "plain_text"
               ? data.detail.preview
               : undefined;
-          if (!preview) {
+          if (!preview || duplicateToolImagePreviewIds.has(item.id)) {
             return toolCall;
           }
           return (
@@ -922,6 +927,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         agentId,
         client,
         context.cwd,
+        duplicateToolImagePreviewIds,
         handleToolCallOpenFile,
         resolvedServerId,
         setInlineDetailsExpanded,

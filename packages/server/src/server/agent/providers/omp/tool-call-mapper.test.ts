@@ -308,6 +308,40 @@ describe("OMP tool call mapper", () => {
     );
   });
 
+  test("shares image identity between generation and publication, including replay after temp cleanup", () => {
+    const directory = mkdtempSync(join(tmpdir(), "omp-published-image-"));
+    try {
+      const generatedPath = join(directory, "generated.png");
+      const publishedPath = join(directory, "published.png");
+      const bytes = Buffer.from(png.data, "base64");
+      writeFileSync(generatedPath, bytes);
+      writeFileSync(publishedPath, bytes);
+      const context = { toolCallId: "image", imageOutputDir: join(directory, "blobs") };
+      const generated = mapOmpToolDetail(
+        parseToolArgs("generate_image", { subject: "a cat" }),
+        parseToolResult({ details: { imageCount: 1, imagePaths: [generatedPath] } }),
+        context,
+      );
+      const args = parseToolArgs("present_image", { path: publishedPath, alt: "A cat" });
+      const result = parseToolResult({
+        details: { status: "published", filePath: publishedPath, mimeType: "image/png" },
+      });
+      const published = mapOmpToolDetail(args, result, context);
+      if (generated?.type !== "plain_text" || !generated.preview) {
+        throw new Error("Expected generated image preview");
+      }
+      expect(published).toMatchObject({
+        preview: { source: generated.preview.source, mimeType: "image/png", alt: "A cat" },
+      });
+      expect(readFileSync(generated.preview.source)).toEqual(bytes);
+      rmSync(generatedPath);
+      rmSync(publishedPath);
+      expect(mapOmpToolDetail(args, result, context)).toEqual(published);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test("falls back to shared unknown detail for unmapped tools", () => {
     expect(mapOmpToolDetail(parseToolArgs("lsp", { op: "hover" }), null)).toEqual({
       type: "unknown",

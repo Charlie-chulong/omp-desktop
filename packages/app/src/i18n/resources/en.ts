@@ -1991,6 +1991,8 @@ export const en = {
     },
   },
   toolCallDetails: {
+    generateImage: "Generate image",
+    presentImage: "Present image",
     error: "Error",
     empty: "No additional details available",
     subAgentActivity: "Sub-agent activity",

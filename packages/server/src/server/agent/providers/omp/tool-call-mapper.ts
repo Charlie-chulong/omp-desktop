@@ -34,7 +34,7 @@ export function mapOmpToolDetail(
     return mapOmpImageGenerationDetail(toolCall.args, result, context);
   }
   if (toolCall.toolName === "present_image") {
-    return mapOmpPresentImageDetail(toolCall.args, result);
+    return mapOmpPresentImageDetail(toolCall.args, result, context);
   }
   if (toolCall.toolName === "edit") {
     return mapOmpEditDetail(toolCall, result);
@@ -151,13 +151,21 @@ function mapOmpImageGenerationDetail(
   };
 }
 
-function mapOmpPresentImageDetail(args: unknown, result: OmpToolResult): ToolCallDetail {
+function mapOmpPresentImageDetail(
+  args: unknown,
+  result: OmpToolResult,
+  context?: { imageOutputDir?: string },
+): ToolCallDetail {
   const argRecord = isRecord(args) ? args : {};
   const details = resultDetails(result);
   const filePath = firstString(details?.filePath);
-  const mimeType = firstString(details?.mimeType);
   const alt = firstString(details?.alt, argRecord.alt);
   const published = firstString(details?.status) === "published" && filePath !== undefined;
+  const image =
+    published && context?.imageOutputDir
+      ? persistOmpImageOutputs(undefined, [filePath], context.imageOutputDir)[0]
+      : undefined;
+  const mimeType = firstString(image?.mimeType, details?.mimeType);
   return {
     type: "plain_text",
     label: published ? "Presented image" : "Presenting image",
@@ -167,7 +175,7 @@ function mapOmpPresentImageDetail(args: unknown, result: OmpToolResult): ToolCal
       ? {
           preview: {
             type: "image",
-            source: filePath,
+            source: image?.filePath ?? filePath,
             ...(mimeType ? { mimeType } : {}),
             ...(alt ? { alt } : {}),
           },

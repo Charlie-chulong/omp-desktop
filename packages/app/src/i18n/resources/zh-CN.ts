@@ -1959,6 +1959,8 @@ export const zhCN: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "生成图片",
+    presentImage: "展示图片",
     error: "错误",
     empty: "没有可用的更多详情",
     subAgentActivity: "Sub-agent 活动",
