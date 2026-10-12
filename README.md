@@ -16,6 +16,14 @@ Packaged macOS, Linux, and Windows applications include OMP and do not require a
 for Agent sessions. Update checks and installs target that same executable. Packaged applications
 label their bundled runtime separately from standalone, configured, and `PATH` installations.
 
+## Choosing OMP subagent models
+
+In **Host Settings → OMP subagents**, enable **Override built-in subagent models** and
+choose a model for each built-in subagent. Desktop model pickers open above or below
+their selector according to the available window space, and constrain their height
+to keep search and the scrollable model list inside the window. Scroll the list or
+search to select any available model, including in a small window.
+
 ## Completing conversations
 
 After OMP finishes a model turn and reports that it is no longer streaming or compacting,
