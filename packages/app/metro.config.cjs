@@ -18,6 +18,7 @@ const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .toLowerCase();
 
 const config = getDefaultConfig(projectRoot);
+config.resolver.assetExts.push("woff2");
 if (customWebPlatform === "electron") {
   config.transformer.minifierConfig.output = {
     ...config.transformer.minifierConfig.output,
