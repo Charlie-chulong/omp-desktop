@@ -1,7 +1,9 @@
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
+import { persistOmpImageOutputs } from "./image-output.js";
 import {
   extractTextFromToolResult,
   mapToolDetail as mapOmpCoreToolDetail,
+  resolveXdevToolCall,
   type OmpToolResult,
   type OmpTrackedToolCall,
 } from "./tool-call-detail.js";
@@ -12,8 +14,15 @@ export function mapOmpToolDetail(
   context?: {
     toolCallId: string;
     mapSubagentDetail?: (baseDetail: ToolCallDetail) => ToolCallDetail;
+    imageOutputDir?: string;
+    toolCallStatus?: "running" | "completed" | "failed";
   },
 ): ToolCallDetail | null {
+  const dispatch = resolveXdevToolCall(toolCall, result);
+  if (dispatch) {
+    toolCall = dispatch.toolCall;
+    result = dispatch.result;
+  }
   if (toolCall.toolName === "todo") {
     return null;
   }
@@ -21,8 +30,8 @@ export function mapOmpToolDetail(
     const detail = mapOmpTaskDetail(toolCall.args, result);
     return context?.mapSubagentDetail?.(detail) ?? detail;
   }
-  if (toolCall.toolName === "image_gen") {
-    return mapOmpImageGenerationDetail(toolCall.args, result);
+  if (toolCall.toolName === "generate_image") {
+    return mapOmpImageGenerationDetail(toolCall.args, result, context);
   }
   if (toolCall.toolName === "present_image") {
     return mapOmpPresentImageDetail(toolCall.args, result);
@@ -36,69 +45,105 @@ export function mapOmpToolDetail(
   return mapOmpCoreToolDetail(toolCall, result);
 }
 
-interface ImageGenerationStatusTextInput {
-  filePath: string | undefined;
-  prompt: string | undefined;
-  elapsedText: string | null;
-  referenceText: string | null;
-}
-
-function formatImageGenerationElapsed(seconds: number | null): string | null {
-  if (seconds === null) {
-    return null;
-  }
-  if (seconds >= 60) {
-    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  }
-  return `${seconds}s`;
-}
-
-function imageGenerationStatusText(input: ImageGenerationStatusTextInput): string | undefined {
-  if (input.filePath) {
-    return input.referenceText
-      ? `Saved to ${input.filePath} · Used ${input.referenceText}`
-      : `Saved to ${input.filePath}`;
-  }
-  if (input.elapsedText) {
-    return `Waiting for the image provider · ${input.elapsedText} elapsed`;
-  }
-  if (input.referenceText) {
-    return `${input.prompt ?? "Generating image"} · Using ${input.referenceText}`;
-  }
-  return input.prompt;
-}
-
-function mapOmpImageGenerationDetail(args: unknown, result: OmpToolResult): ToolCallDetail {
+function mapOmpImageGenerationDetail(
+  args: unknown,
+  result: OmpToolResult,
+  context?: { imageOutputDir?: string; toolCallStatus?: "running" | "completed" | "failed" },
+): ToolCallDetail {
   const argRecord = isRecord(args) ? args : {};
   const details = resultDetails(result);
-  const prompt = firstString(details?.prompt, argRecord.prompt);
-  const filePath = firstString(details?.filePath);
-  const mimeType = firstString(details?.mimeType);
-  const referenceImageCount = Array.isArray(argRecord.referenceImagePaths)
-    ? argRecord.referenceImagePaths.length
-    : 0;
-  const referenceText =
-    referenceImageCount === 0
-      ? null
-      : `${referenceImageCount} reference image${referenceImageCount === 1 ? "" : "s"}`;
-  const elapsedSeconds =
-    typeof details?.elapsedSeconds === "number" &&
-    Number.isFinite(details.elapsedSeconds) &&
-    details.elapsedSeconds >= 0
-      ? Math.floor(details.elapsedSeconds)
-      : null;
-  const elapsedText = formatImageGenerationElapsed(elapsedSeconds);
+  // Match native prompt assembly, without exposing reference image data in the card.
+  const subject = [argRecord.subject, argRecord.action, argRecord.scene]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(", ");
+  const parts = [subject, argRecord.composition, argRecord.lighting, argRecord.style].filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  let prompt = parts.length
+    ? `${parts.map((part) => part.replace(/[.!,;:]+$/, "")).join(". ")}.`
+    : undefined;
+  if (firstString(argRecord.text)) {
+    prompt = `${prompt ?? ""}\n\nText: ${argRecord.text}`.trim();
+  }
+  const changes = Array.isArray(argRecord.changes)
+    ? argRecord.changes.filter((value): value is string => typeof value === "string")
+    : [];
+  if (changes.length) {
+    prompt =
+      `${prompt ?? ""}\n\nChanges:\n${changes.map((change) => `- ${change}`).join("\n")}`.trim();
+  }
+  const referenceCount = Array.isArray(argRecord.input) ? argRecord.input.length : 0;
+  const referenceText = referenceCount
+    ? `${referenceCount} reference image${referenceCount === 1 ? "" : "s"}`
+    : undefined;
+  const model = firstString(details?.model, argRecord.model);
+  const provider = firstString(details?.provider);
+  const metadata = [
+    model ? `Model: ${provider ? `${provider}/` : ""}${model}` : undefined,
+    referenceText ? `${result ? "Used" : "Using"} ${referenceText}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const failed =
+    context?.toolCallStatus === "failed" ||
+    (result !== null && typeof result !== "string" && result.isError === true);
+  const outputs = failed
+    ? []
+    : persistOmpImageOutputs(details?.images, details?.imagePaths, context?.imageOutputDir);
+  const primary = outputs[0];
+  const reportedCount =
+    typeof details?.imageCount === "number" && Number.isFinite(details.imageCount)
+      ? Math.max(0, Math.floor(details.imageCount))
+      : 0;
+  const expectedCount = Math.max(
+    reportedCount,
+    Array.isArray(details?.images) ? details.images.length : 0,
+    Array.isArray(details?.imagePaths) ? details.imagePaths.length : 0,
+  );
+  const pending =
+    !failed &&
+    !primary &&
+    (context?.toolCallStatus === "running" ||
+      (result === null && context?.toolCallStatus !== "completed"));
+  const resultText = extractTextFromToolResult(result);
+  let statusText: string | undefined;
+  if (primary) {
+    statusText =
+      outputs.length === 1 && expectedCount <= 1
+        ? `Saved to ${primary.filePath}`
+        : `Previewing image ${primary.index + 1} of ${expectedCount || outputs.length}\n${outputs.map((output) => `Image ${output.index + 1}: ${output.filePath}`).join("\n")}`;
+    if (expectedCount > outputs.length) {
+      statusText += `\n${expectedCount - outputs.length} image(s) unavailable`;
+    }
+  } else if (failed) {
+    statusText = resultText ?? "Image generation failed.";
+  } else if (pending) {
+    statusText = resultText ?? prompt;
+  } else {
+    statusText =
+      expectedCount > 0
+        ? "Generated image data is unavailable for preview."
+        : (resultText ?? "No image data returned.");
+  }
   return {
     type: "plain_text",
-    label: filePath ? "Generated image" : "Generating image",
-    text: imageGenerationStatusText({ filePath, prompt, elapsedText, referenceText }),
+    label: failed
+      ? "Image generation failed"
+      : primary
+        ? outputs.length > 1
+          ? "Generated images"
+          : "Generated image"
+        : pending
+          ? "Generating image"
+          : "No image available",
+    text: [statusText, metadata || undefined].filter(Boolean).join(" · ") || undefined,
     icon: "sparkles",
-    ...(filePath
+    ...(primary
       ? {
           preview: {
             type: "image",
-            source: filePath,
-            ...(mimeType ? { mimeType } : {}),
+            source: primary.filePath,
+            mimeType: primary.mimeType,
             ...(prompt ? { alt: prompt } : {}),
           },
         }

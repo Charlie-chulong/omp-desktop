@@ -76,7 +76,6 @@ interface ImageGenerationSettingsCardProps {
   enabled: boolean;
   status: string;
   isSourceConfigured: boolean;
-  toolsEnabled: boolean;
   persistedModel: string;
   persistedBaseUrl: string;
   apiKeyConfigured: boolean;
@@ -105,7 +104,6 @@ function ImageGenerationSettingsCard({
   enabled,
   status,
   isSourceConfigured,
-  toolsEnabled,
   persistedModel,
   persistedBaseUrl,
   apiKeyConfigured,
@@ -171,9 +169,6 @@ function ImageGenerationSettingsCard({
             />
             <Text style={styles.status}>{status}</Text>
           </View>
-          {!toolsEnabled ? (
-            <Text style={styles.warning}>{t("settings.imageGeneration.toolsDisabled")}</Text>
-          ) : null}
 
           {backend === "openai-api" ? (
             <View style={styles.form}>
@@ -235,7 +230,9 @@ function ImageGenerationSettingsCard({
               />
               <Field label={t("settings.imageGeneration.model")}>
                 <View style={styles.readOnlyValue}>
-                  <Text style={styles.fixedValue}>gpt-image-2</Text>
+                  <Text style={styles.fixedValue}>
+                    {t("settings.imageGeneration.subscriptionModel")}
+                  </Text>
                 </View>
               </Field>
             </View>
@@ -261,7 +258,7 @@ function ImageGenerationSettingsCard({
               disabled={
                 !hasChanges ||
                 isSaving ||
-                (backend === "openai-api" ? !normalizedModel : selectedCredentialId === null)
+                (backend === "openai-api" ? !normalizedModel : !isSourceConfigured)
               }
               testID="image-generation-save"
             >
@@ -301,7 +298,7 @@ export function ImageGenerationSettingsSection({ serverId }: { serverId: string 
   const { accounts, loading: accountsLoading } = useOmpAccountQuota(
     serverId,
     backend === "chatgpt-subscription" ? "openai-codex" : null,
-    backend === "chatgpt-subscription" ? "gpt-image-2" : null,
+    null,
   );
 
   useEffect(() => {
@@ -356,7 +353,6 @@ export function ImageGenerationSettingsSection({ serverId }: { serverId: string 
     selectedCredentialId,
     persisted: persistedSettings,
   });
-  const toolsEnabled = config?.mcp.injectIntoAgents !== false;
   const apiKeyIsEnvironmentControlled = persistedSettings.apiKeySource === "environment";
 
   const status = useMemo(() => {
@@ -434,7 +430,7 @@ export function ImageGenerationSettingsSection({ serverId }: { serverId: string 
 
   const handleSave = useCallback(() => {
     if (backend === "openai-api" && !normalizedModel) return;
-    if (backend === "chatgpt-subscription" && selectedCredentialId === null) return;
+    if (backend === "chatgpt-subscription" && !selectedAccountOption) return;
     const imageGeneration: NonNullable<MutableDaemonConfigPatch["imageGeneration"]> = {};
     if (backend !== persistedBackend) imageGeneration.backend = backend;
     if (backend === "openai-api") {
@@ -463,6 +459,7 @@ export function ImageGenerationSettingsSection({ serverId }: { serverId: string 
     persistedModel,
     persistedSubscriptionCredentialId,
     selectedCredentialId,
+    selectedAccountOption,
     showError,
   ]);
 
@@ -488,7 +485,6 @@ export function ImageGenerationSettingsSection({ serverId }: { serverId: string 
       enabled={persistedSettings.enabled}
       status={status}
       isSourceConfigured={isSourceConfigured}
-      toolsEnabled={toolsEnabled}
       persistedModel={persistedModel}
       persistedBaseUrl={persistedBaseUrl}
       apiKeyConfigured={persistedSettings.apiKeyConfigured}
@@ -555,11 +551,6 @@ const styles = StyleSheet.create((theme) => ({
   status: {
     color: theme.colors.foregroundMuted,
     flexShrink: 1,
-    fontSize: theme.fontSize.sm,
-    lineHeight: Math.round(theme.fontSize.sm * 1.4),
-  },
-  warning: {
-    color: theme.colors.statusWarning,
     fontSize: theme.fontSize.sm,
     lineHeight: Math.round(theme.fontSize.sm * 1.4),
   },

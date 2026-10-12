@@ -87,14 +87,6 @@ import {
   type CreatePaseoWorktreeCommandInput,
   createPaseoWorktreeCommand,
 } from "../../worktree/commands.js";
-import type { GeneratedImage, ImageGenerationService } from "../../image-generation/types.js";
-import {
-  IMAGE_GENERATION_BACKGROUNDS,
-  IMAGE_GENERATION_OUTPUT_FORMATS,
-  IMAGE_GENERATION_QUALITIES,
-  IMAGE_GENERATION_SIZES,
-  MAX_IMAGE_GENERATION_REFERENCE_IMAGES,
-} from "../../image-generation/types.js";
 import type {
   PaseoToolCatalog,
   PaseoToolConfig,
@@ -112,7 +104,6 @@ export interface PaseoToolHostDependencies {
   scheduleService?: ScheduleService | null;
   providerSnapshotManager: ProviderSnapshotManager;
   daemonConfigStore?: Pick<DaemonConfigStore, "get">;
-  imageGenerationService?: ImageGenerationService;
   github?: ForgeService;
   workspaceGitService?: Pick<
     WorkspaceGitService,
@@ -607,7 +598,6 @@ const TOOL_CAPABILITY_BY_NAME: Readonly<Record<string, OmpDesktopToolCapability>
   list_models: "providers",
   list_profiles: "providers",
   inspect_provider: "providers",
-  image_gen: "optional",
   present_image: "optional",
 };
 
@@ -1263,110 +1253,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   type LegacyTopLevelCreateAgentArgs = z.infer<typeof legacyTopLevelCreateAgentArgsSchema>;
 
   registerTool(
-    "image_gen",
-    {
-      title: "Generate or edit image",
-      description:
-        "Generate one raster image from a text prompt, optionally using one or more local reference images. Use referenceImagePaths for image editing, style transfer, composition, or identity-sensitive generation; list images in the same order used by the prompt. Use when the user asks to create or modify a photo, illustration, texture, mockup, or other bitmap image. Do not use for SVG, existing code-native graphics, or deterministic diagrams. Do not use this to show an existing local image in the chat; use present_image. Use medium quality for ordinary requests; use high only when the user explicitly requests maximum quality and accepts multi-minute latency. The desktop renders successful output automatically; never return image base64.",
-      inputSchema: {
-        prompt: z
-          .string()
-          .trim()
-          .min(1, "prompt is required")
-          .max(32_000, "prompt must be 32000 characters or fewer"),
-        referenceImagePaths: z
-          .array(z.string().trim().min(1, "reference image path must not be empty"))
-          .min(1)
-          .max(MAX_IMAGE_GENERATION_REFERENCE_IMAGES)
-          .optional()
-          .describe(
-            `Local PNG, JPEG, or WebP paths to use as references, in prompt order (maximum ${MAX_IMAGE_GENERATION_REFERENCE_IMAGES}). Relative paths resolve against the caller agent's workspace.`,
-          ),
-        size: z.enum(IMAGE_GENERATION_SIZES).optional().default("auto"),
-        quality: z
-          .enum(IMAGE_GENERATION_QUALITIES)
-          .optional()
-          .default("medium")
-          .describe(
-            "Use medium for ordinary requests. High can take several minutes and should only be used when the user explicitly asks for maximum quality.",
-          ),
-        background: z.enum(IMAGE_GENERATION_BACKGROUNDS).optional().default("auto"),
-        outputFormat: z.enum(IMAGE_GENERATION_OUTPUT_FORMATS).optional().default("png"),
-      },
-      outputSchema: {
-        prompt: z.string(),
-        model: z.string(),
-        filePath: z.string(),
-        mimeType: z.string(),
-        size: z.enum(IMAGE_GENERATION_SIZES),
-        quality: z.enum(IMAGE_GENERATION_QUALITIES),
-        background: z.enum(IMAGE_GENERATION_BACKGROUNDS),
-        outputFormat: z.enum(IMAGE_GENERATION_OUTPUT_FORMATS),
-        revisedPrompt: z.string().optional(),
-      },
-    },
-    async (args, context) => {
-      if (!callerAgentId) {
-        throw new Error("image_gen is only available to agent-scoped tool sessions");
-      }
-      if (!options.imageGenerationService) {
-        throw new Error("Image generation is unavailable on this host");
-      }
-      const startedAt = Date.now();
-      const progressTimer = setInterval(() => {
-        if (context.signal?.aborted) return;
-        const elapsedSeconds = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
-        context.sendUpdate?.({
-          content: [
-            {
-              type: "text",
-              text: `Waiting for the image provider (${elapsedSeconds}s elapsed).`,
-            },
-          ],
-          structuredContent: ensureValidJson({
-            type: "image_generation_progress",
-            prompt: args.prompt,
-            elapsedSeconds,
-          }),
-        });
-      }, 15_000);
-      const callerAgent = args.referenceImagePaths === undefined ? null : resolveCallerAgent();
-      const referenceImagePaths = args.referenceImagePaths?.map((imagePath: string) =>
-        resolvePresentImagePath({ path: imagePath, cwd: callerAgent?.cwd ?? null }),
-      );
-      let generated: GeneratedImage;
-      try {
-        generated = await options.imageGenerationService.generate(
-          {
-            ...args,
-            ...(referenceImagePaths ? { referenceImagePaths } : {}),
-          },
-          {
-            agentId: callerAgentId,
-            signal: context.signal,
-          },
-        );
-      } finally {
-        clearInterval(progressTimer);
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Generated image saved to ${generated.filePath}. The desktop renders it automatically.`,
-          },
-        ],
-        structuredContent: ensureValidJson(generated),
-      };
-    },
-  );
-
-  registerTool(
     "present_image",
     {
       title: "Present image",
       description:
-        "Publish an existing local raster image into this conversation so the user can see it. `read` only shows the image to you, not the user. Successful results have status published; only then may you say you attached the image. Never tell the user to scan or look at an image based on `read` alone. Do not use for SVG. To generate a new image, use image_gen.",
+        "Publish an existing local raster image into this conversation so the user can see it. `read` only shows the image to you, not the user. Successful results have status published; only then may you say you attached the image. Never tell the user to scan or look at an image based on `read` alone. Do not use for SVG. To generate a new image, use OMP's native generate_image tool.",
       inputSchema: {
         path: z
           .string()

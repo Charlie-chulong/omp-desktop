@@ -27,7 +27,7 @@ export interface OmpHistoryMapperHooks {
   mapToolDetail?: (
     toolCall: OmpTrackedToolCall,
     result: OmpToolResult,
-    context: { toolCallId: string },
+    context: { toolCallId: string; toolCallStatus?: "running" | "completed" | "failed" },
   ) => ToolCallDetail | null;
   mapToolResult?: (
     toolCall: OmpTrackedToolCall,
@@ -195,7 +195,7 @@ export class OmpHistoryMapper {
       if (content.type === "toolCall") {
         const tracked = parseToolArgs(content.name, content.arguments);
         this.pendingToolCalls.set(content.id, tracked);
-        const detail = this.mapToolDetail(content.id, tracked, null);
+        const detail = this.mapToolDetail(content.id, tracked, null, "running");
         if (!detail) {
           continue;
         }
@@ -205,7 +205,7 @@ export class OmpHistoryMapper {
           item: {
             type: "tool_call",
             callId: this.resolveToolCallId(content.id, tracked),
-            name: tracked.toolName,
+            name: resolveToolCallName(tracked),
             status: "running",
             detail,
             error: null,
@@ -222,7 +222,11 @@ export class OmpHistoryMapper {
     const tracked =
       this.pendingToolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
     this.pendingToolCalls.delete(message.toolCallId);
-    const result = parseToolResult({ content: message.content, details: message.details });
+    const result = parseToolResult({
+      content: message.content,
+      details: message.details,
+      isError: message.isError,
+    });
     const mappedResult = this.hooks.mapToolResult?.(tracked, result, {
       toolCallId: message.toolCallId,
     });
@@ -233,7 +237,12 @@ export class OmpHistoryMapper {
         item: mappedResult,
       };
     }
-    const detail = this.mapToolDetail(message.toolCallId, tracked, result);
+    const detail = this.mapToolDetail(
+      message.toolCallId,
+      tracked,
+      result,
+      message.isError ? "failed" : "completed",
+    );
     if (!detail) {
       return null;
     }
@@ -281,9 +290,12 @@ export class OmpHistoryMapper {
     toolCallId: string,
     toolCall: OmpTrackedToolCall,
     result: OmpToolResult,
+    toolCallStatus: "running" | "completed" | "failed",
   ): ToolCallDetail | null {
     const hook = this.hooks.mapToolDetail;
-    return hook ? hook(toolCall, result, { toolCallId }) : mapToolDetail(toolCall, result);
+    return hook
+      ? hook(toolCall, result, { toolCallId, toolCallStatus })
+      : mapToolDetail(toolCall, result);
   }
 }
 

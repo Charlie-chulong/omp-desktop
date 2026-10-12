@@ -47,7 +47,7 @@ const toolsByCapability = {
   ],
   scripts: ["list_workspace_scripts", "start_workspace_script", "stop_workspace_script"],
   providers: ["list_providers", "list_models", "list_profiles", "inspect_provider"],
-  optional: ["image_gen", "present_image"],
+  optional: ["present_image"],
 } satisfies Record<keyof OmpDesktopToolCapabilities, string[]>;
 
 const allEnabled: OmpDesktopToolCapabilities = {
@@ -120,7 +120,6 @@ describe("OMP Desktop tool capability switches", () => {
 
     expect(catalog.getTool("create_workspace")).toBeDefined();
     expect(catalog.getTool("create_agent")).toBeDefined();
-    expect(catalog.getTool("image_gen")).toBeDefined();
     expect(catalog.getTool("present_image")).toBeDefined();
   });
 });

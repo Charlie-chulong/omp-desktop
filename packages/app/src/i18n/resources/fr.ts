@@ -2720,7 +2720,7 @@ export const fr: TranslationResources = {
       title: "Génération d’images",
       enabled: "Activer la génération d’images",
       description:
-        "Autorise les agents à générer des images matricielles et à les afficher dans la conversation.",
+        "Permet aux agents de créer et modifier des images avec l’outil natif generate_image d’OMP et de les prévisualiser dans la conversation.",
       enabledAccessibilityLabel: "Activer la génération d’images",
       status: {
         notConfigured: "Clé API OpenAI non configurée",
@@ -2730,8 +2730,6 @@ export const fr: TranslationResources = {
         selectSubscriptionAccount: "Sélectionnez un compte avec abonnement OpenAI Codex",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled:
-        "L’injection des outils Paseo est désactivée. Activez-la dans les réglages d’orchestration de l’hôte.",
       source: {
         label: "Source d’images",
         hint: "La facturation API et les abonnements ChatGPT sont distincts. Aucun basculement automatique n’est effectué.",
@@ -2744,7 +2742,8 @@ export const fr: TranslationResources = {
       subscriptionAccountPlaceholder: "Sélectionnez un compte avec abonnement",
       subscriptionAccountEmpty: "Aucun compte OpenAI Codex n’est connecté",
       subscriptionHint:
-        "Utilise l’abonnement ChatGPT du compte sélectionné et le modèle fixe gpt-image-2.",
+        "Utilise l’abonnement ChatGPT du compte sélectionné. OpenAI choisit le modèle d’image utilisé.",
+      subscriptionModel: "Choisi par OpenAI",
       accountFallback: "Compte OpenAI Codex {{number}}",
       unknownPlan: "Abonnement",
       apiKey: "Clé API OpenAI",

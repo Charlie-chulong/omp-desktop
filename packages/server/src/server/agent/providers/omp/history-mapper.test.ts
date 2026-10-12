@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -519,6 +519,155 @@ describe("OMP history mapper", () => {
         },
       },
     });
+  });
+
+  test("re-materializes direct and xd native images from disk history after temporary cleanup", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omp-native-history-"));
+    const sessionFile = join(dir, "session.jsonl");
+    const blobDir = join(dir, "blobs");
+    const data =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aShoAAAAASUVORK5CYII=";
+    const bytes = Buffer.from(data, "base64");
+    const nativePath = join(dir, "native-temp.png");
+    const previewPath = join(
+      blobDir,
+      "generated-images",
+      `${createHash("sha256").update(bytes).digest("hex")}.png`,
+    );
+    const imageDetails = {
+      provider: "openai",
+      model: "native-image-model",
+      imageCount: 1,
+      imagePaths: [nativePath],
+      images: [{ data, mimeType: "image/png" }],
+    };
+    const messages: OmpAgentMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "direct-image",
+            name: "generate_image",
+            arguments: { subject: "fox" },
+          },
+          {
+            type: "toolCall",
+            id: "xd-image",
+            name: "write",
+            arguments: {
+              path: "xd://generate_image",
+              content: '{"subject":"fox"}',
+            },
+          },
+          {
+            type: "toolCall",
+            id: "failed-image",
+            name: "generate_image",
+            arguments: { subject: "fox" },
+          },
+          {
+            type: "toolCall",
+            id: "empty-image",
+            name: "generate_image",
+            arguments: { subject: "fox" },
+          },
+        ],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "direct-image",
+        toolName: "generate_image",
+        content: [],
+        details: imageDetails,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "xd-image",
+        toolName: "write",
+        content: [],
+        details: {
+          xdev: {
+            tool: "generate_image",
+            mode: "execute",
+            args: { subject: "fox" },
+            inner: imageDetails,
+          },
+        },
+      },
+      {
+        role: "toolResult",
+        toolCallId: "failed-image",
+        toolName: "generate_image",
+        isError: true,
+        content: [{ type: "text", text: "Provider failed" }],
+        details: imageDetails,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "empty-image",
+        toolName: "generate_image",
+        content: [],
+        details: { imageCount: 0, imagePaths: [], images: [] },
+      },
+    ];
+    try {
+      writeFileSync(nativePath, bytes);
+      writeFileSync(
+        sessionFile,
+        [
+          { type: "session", id: "root", parentId: null },
+          ...messages.map((message, index) => ({
+            type: "message",
+            id: `message-${index}`,
+            parentId: index === 0 ? "root" : `message-${index - 1}`,
+            message,
+          })),
+        ]
+          .map((entry) => JSON.stringify(entry))
+          .join("\n"),
+      );
+      const first: AgentStreamEvent[] = [];
+      for await (const event of streamOmpHistory({ sessionFile, provider: "omp", blobDir }))
+        first.push(event);
+      const toolItems = first.flatMap((event) =>
+        event.type === "timeline" && event.item.type === "tool_call" ? [event.item] : [],
+      );
+      expect(
+        toolItems.find((item) => item.callId === "xd-image" && item.status === "running"),
+      ).toMatchObject({
+        name: "generate_image",
+        detail: { type: "plain_text" },
+      });
+      for (const callId of ["direct-image", "xd-image"]) {
+        expect(
+          toolItems.find((item) => item.callId === callId && item.status === "completed"),
+        ).toMatchObject({
+          name: "generate_image",
+          detail: { preview: { type: "image", source: previewPath, mimeType: "image/png" } },
+        });
+      }
+      const failed = toolItems.find(
+        (item) => item.callId === "failed-image" && item.status === "failed",
+      );
+      expect(failed).toMatchObject({ status: "failed", detail: { type: "plain_text" } });
+      expect(failed?.detail).not.toHaveProperty("preview");
+      const empty = toolItems.find(
+        (item) => item.callId === "empty-image" && item.status === "completed",
+      );
+      expect(empty).toMatchObject({ status: "completed", detail: { type: "plain_text" } });
+      expect(empty?.detail).not.toHaveProperty("preview");
+      expect(readFileSync(previewPath)).toEqual(bytes);
+      rmSync(nativePath);
+      rmSync(previewPath);
+      const replay: AgentStreamEvent[] = [];
+      for await (const event of streamOmpHistory({ sessionFile, provider: "omp", blobDir }))
+        replay.push(event);
+      expect(replay).toEqual(first);
+      expect(readFileSync(previewPath)).toEqual(bytes);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("replays screenshot bytes and stable user IDs from disk without a runtime session", async () => {

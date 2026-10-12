@@ -1,7 +1,20 @@
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { parseToolArgs, parseToolResult } from "./tool-call-detail.js";
 import { mapOmpToolDetail } from "./tool-call-mapper.js";
+
+const png = {
+  data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aShoAAAAASUVORK5CYII=",
+  mimeType: "image/png",
+};
+const gif = {
+  data: "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  mimeType: "image/gif",
+};
 
 describe("OMP tool call mapper", () => {
   test("maps OMP bash, read, hashline edit, and write calls", () => {
@@ -110,69 +123,153 @@ describe("OMP tool call mapper", () => {
     });
   });
 
-  test("maps image generation output to a backward-compatible inline preview", () => {
-    expect(
-      mapOmpToolDetail(
-        parseToolArgs("image_gen", { prompt: "a red fox" }),
-        parseToolResult({
-          content: [{ type: "text", text: "Generated image" }],
-          details: {
-            prompt: "a red fox",
-            filePath: "/tmp/generated.png",
-            mimeType: "image/png",
-          },
-        }),
-      ),
-    ).toEqual({
-      type: "plain_text",
-      label: "Generated image",
-      text: "Saved to /tmp/generated.png",
-      icon: "sparkles",
-      preview: {
-        type: "image",
-        source: "/tmp/generated.png",
-        mimeType: "image/png",
-        alt: "a red fox",
-      },
-    });
-    expect(mapOmpToolDetail(parseToolArgs("image_gen", { prompt: "a red fox" }), null)).toEqual({
-      type: "plain_text",
-      label: "Generating image",
-      text: "a red fox",
-      icon: "sparkles",
-    });
-    expect(
-      mapOmpToolDetail(
-        parseToolArgs("image_gen", {
-          prompt: "combine the subject and style",
-          referenceImagePaths: ["/tmp/subject.png", "/tmp/style.png"],
-        }),
-        null,
-      ),
-    ).toEqual({
-      type: "plain_text",
-      label: "Generating image",
-      text: "combine the subject and style · Using 2 reference images",
-      icon: "sparkles",
-    });
-    expect(
-      mapOmpToolDetail(
-        parseToolArgs("image_gen", { prompt: "a red fox" }),
+  test("prefers returned bytes and persists a private content-addressed preview for replay", () => {
+    const directory = mkdtempSync(join(tmpdir(), "omp-native-image-"));
+    try {
+      const context = { toolCallId: "native", imageOutputDir: join(directory, "blobs") };
+      const args = parseToolArgs("generate_image", { subject: "a red fox" });
+      const result = parseToolResult({
+        details: {
+          provider: "openai",
+          model: "actual-native-model",
+          imageCount: 1,
+          imagePaths: [join(directory, "already-deleted.png")],
+          images: [png],
+        },
+      });
+      const detail = mapOmpToolDetail(args, result, context);
+      const bytes = Buffer.from(png.data, "base64");
+      const outputPath = join(
+        context.imageOutputDir,
+        "generated-images",
+        `${createHash("sha256").update(bytes).digest("hex")}.png`,
+      );
+      expect(detail).toMatchObject({
+        type: "plain_text",
+        preview: { type: "image", source: outputPath, mimeType: "image/png" },
+      });
+      expect(readFileSync(outputPath)).toEqual(bytes);
+      expect(statSync(outputPath).mode & 0o777).toBe(0o600);
+      expect(statSync(join(context.imageOutputDir, "generated-images")).mode & 0o777).toBe(0o700);
+      expect(mapOmpToolDetail(args, result, context)).toEqual(detail);
+      expect(JSON.stringify(detail)).not.toContain(png.data);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("restores a paths-only historical result after native temp files disappear", () => {
+    const directory = mkdtempSync(join(tmpdir(), "omp-native-path-"));
+    try {
+      const temporaryPath = join(directory, "native.png");
+      writeFileSync(temporaryPath, Buffer.from(png.data, "base64"));
+      const context = { toolCallId: "path-only", imageOutputDir: join(directory, "blobs") };
+      const args = parseToolArgs("generate_image", { subject: "a fox" });
+      const result = parseToolResult({ details: { imageCount: 1, imagePaths: [temporaryPath] } });
+      const detail = mapOmpToolDetail(args, result, context);
+      expect(detail).toMatchObject({ label: "Generated image", preview: { type: "image" } });
+      rmSync(temporaryPath);
+      expect(
+        mapOmpToolDetail(args, parseToolResult(JSON.parse(JSON.stringify(result))), context),
+      ).toEqual(detail);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("maps xd start, update, and end as the native image operation", () => {
+    const directory = mkdtempSync(join(tmpdir(), "omp-xd-image-"));
+    try {
+      const args = parseToolArgs("write", {
+        path: "xd://generate_image",
+        content: '{"subject":"draft fox"}',
+      });
+      const context = { toolCallId: "xd-image", imageOutputDir: directory };
+      const pending = mapOmpToolDetail(args, null, context);
+      expect(pending?.type === "plain_text" ? pending.preview : undefined).toBeUndefined();
+      const dispatch = {
+        tool: "generate_image",
+        mode: "execute",
+        args: { subject: "validated fox", model: "native" },
+      };
+      const update = mapOmpToolDetail(
+        args,
         parseToolResult({
           content: [{ type: "text", text: "Waiting for provider" }],
+          details: { xdev: { ...dispatch, inner: { model: "native" } } },
+        }),
+        { ...context, toolCallStatus: "running" },
+      );
+      expect(update?.type === "plain_text" ? update.preview : undefined).toBeUndefined();
+      expect(
+        mapOmpToolDetail(
+          args,
+          parseToolResult({
+            details: {
+              xdev: {
+                ...dispatch,
+                inner: { imageCount: 1, images: [png], imagePaths: ["/missing/native.png"] },
+              },
+            },
+          }),
+          { ...context, toolCallStatus: "completed" },
+        ),
+      ).toMatchObject({
+        preview: { type: "image", mimeType: "image/png" },
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves every output path and explicitly identifies the primary preview", () => {
+    const directory = mkdtempSync(join(tmpdir(), "omp-multiple-image-"));
+    try {
+      const detail = mapOmpToolDetail(
+        parseToolArgs("generate_image", { subject: "foxes" }),
+        parseToolResult({
           details: {
-            type: "image_generation_progress",
-            prompt: "a red fox",
-            elapsedSeconds: 195,
+            imageCount: 3,
+            images: [png, gif],
+            imagePaths: ["/missing/one.png", "/missing/two.gif", "/missing/three.png"],
           },
         }),
-      ),
-    ).toEqual({
-      type: "plain_text",
-      label: "Generating image",
-      text: "Waiting for the image provider · 3m 15s elapsed",
-      icon: "sparkles",
-    });
+        { toolCallId: "multiple", imageOutputDir: directory },
+      );
+      expect(detail).toMatchObject({ preview: { mimeType: "image/png" } });
+      if (detail?.type !== "plain_text") throw new Error("Expected image detail");
+      for (const [image, extension] of [
+        [png, "png"],
+        [gif, "gif"],
+      ] as const) {
+        const hash = createHash("sha256").update(Buffer.from(image.data, "base64")).digest("hex");
+        const imagePath = join(directory, "generated-images", `${hash}.${extension}`);
+        expect(detail.text).toContain(imagePath);
+        expect(readFileSync(imagePath)).toEqual(Buffer.from(image.data, "base64"));
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("does not expose a preview for failed, empty or malformed image results", () => {
+    const args = parseToolArgs("generate_image", { subject: "fox" });
+    const results = [
+      parseToolResult({ isError: true, details: { imageCount: 1, images: [png] } }),
+      parseToolResult({ details: { imageCount: 0, imagePaths: [], images: [] } }),
+      parseToolResult({
+        details: { imageCount: 1, images: [{ data: "not-base64", mimeType: "image/png" }] },
+      }),
+    ];
+    for (const result of results) {
+      const detail = mapOmpToolDetail(args, result);
+      expect(detail?.type).toBe("plain_text");
+      expect(detail?.type === "plain_text" ? detail.preview : undefined).toBeUndefined();
+    }
+    for (const status of ["failed", "completed"] as const) {
+      const detail = mapOmpToolDetail(args, null, { toolCallId: "empty", toolCallStatus: status });
+      expect(detail?.type === "plain_text" ? detail.preview : undefined).toBeUndefined();
+    }
   });
 
   test("maps present_image published output to an inline preview", () => {

@@ -8,6 +8,7 @@ import type { OmpRuntimeSession } from "./runtime.js";
 import { OMP_HISTORY_MAPPER_HOOKS } from "./history-hooks.js";
 import { resolveOmpDiagnosticPaths } from "./provider-config.js";
 import { buildOmpModelId, readOmpAssistantModel } from "./subagent-model.js";
+import { mapOmpToolDetail } from "./tool-call-mapper.js";
 
 interface OmpSessionEntry {
   type?: string;
@@ -71,7 +72,13 @@ export async function* streamOmpHistory(input: {
       userEntries.push({ id: entry.id, text: textOf(mapped.content) });
     }
   }
-  const mapper = new OmpHistoryMapper(input.provider, userEntries, OMP_HISTORY_MAPPER_HOOKS);
+  const imageOutputDir =
+    input.blobDir ?? join(dirname(resolveOmpDiagnosticPaths().agentDb), "blobs");
+  const mapper = new OmpHistoryMapper(input.provider, userEntries, {
+    ...OMP_HISTORY_MAPPER_HOOKS,
+    mapToolDetail: (toolCall, result, context) =>
+      mapOmpToolDetail(toolCall, result, { ...context, imageOutputDir }),
+  });
   for (const entry of entries) {
     const timestamp = normalizeProviderReplayTimestamp(entry.timestamp);
     if (entry.type === "compaction") {

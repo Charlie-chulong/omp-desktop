@@ -2657,7 +2657,8 @@ export const ar: TranslationResources = {
     imageGeneration: {
       title: "إنشاء الصور",
       enabled: "تفعيل إنشاء الصور",
-      description: "السماح للوكلاء بإنشاء صور نقطية وعرضها مباشرة في المحادثة.",
+      description:
+        "السماح للوكلاء بإنشاء الصور وتعديلها باستخدام أداة OMP الأصلية generate_image ومعاينتها في المحادثة.",
       enabledAccessibilityLabel: "تفعيل إنشاء الصور",
       status: {
         notConfigured: "مفتاح OpenAI API غير مهيأ",
@@ -2667,7 +2668,6 @@ export const ar: TranslationResources = {
         selectSubscriptionAccount: "اختر حساب اشتراك OpenAI Codex",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled: "حقن أدوات Paseo معطل. فعّله من إعدادات تنسيق المضيف.",
       source: {
         label: "مصدر الصور",
         hint: "فوترة API واشتراكات ChatGPT منفصلة، ولا يتم التبديل بينهما تلقائيًا.",
@@ -2679,7 +2679,8 @@ export const ar: TranslationResources = {
       subscriptionAccount: "حساب OpenAI Codex",
       subscriptionAccountPlaceholder: "اختر حساب اشتراك",
       subscriptionAccountEmpty: "لا توجد حسابات OpenAI Codex مسجلة الدخول",
-      subscriptionHint: "يستخدم اشتراك ChatGPT للحساب المحدد ونموذج gpt-image-2 الثابت.",
+      subscriptionHint: "يستخدم اشتراك ChatGPT للحساب المحدد. تختار OpenAI نموذج الصور الفعلي.",
+      subscriptionModel: "تختاره OpenAI",
       accountFallback: "حساب OpenAI Codex {{number}}",
       unknownPlan: "اشتراك",
       apiKey: "مفتاح OpenAI API",

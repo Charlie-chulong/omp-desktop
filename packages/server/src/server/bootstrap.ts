@@ -8,7 +8,6 @@ import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { resolveOmpProxyUrl } from "@omp-desktop/protocol/provider-config";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
 
 export type ListenTarget =
@@ -150,9 +149,6 @@ import {
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
-import { OpenAIImageGenerationService } from "./image-generation/openai-image-generator.js";
-import { DefaultOmpSubscriptionCredentialResolver } from "./image-generation/omp-subscription-credential.js";
-import { createProxyFetch } from "../services/quota-fetcher/proxy-fetch.js";
 import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import {
   DEFAULT_APP_BASE_URL,
@@ -688,15 +684,6 @@ export async function createPaseoDaemon(
   const elapsed = () => `${(performance.now() - bootstrapStart).toFixed(0)}ms`;
   const daemonVersion = config.daemonVersion ?? resolveDaemonVersion(import.meta.url);
   const daemonConfigStore = createDaemonConfigStore(config, logger);
-  const imageGenerationService = new OpenAIImageGenerationService({
-    paseoHome: config.paseoHome,
-    getConfig: () => daemonConfigStore.getImageGenerationRuntimeConfig(),
-    logger,
-    subscriptionCredentialResolver: new DefaultOmpSubscriptionCredentialResolver(),
-    fetch: createProxyFetch({
-      getProxyUrl: () => resolveOmpProxyUrl(daemonConfigStore.get().providers.omp),
-    }),
-  });
   const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
   void orchestrationSkills.autoUpdate().catch((error) => {
     logger.error({ err: error }, "Failed to maintain orchestration skills at startup");
@@ -1012,6 +999,7 @@ export async function createPaseoDaemon(
     providerDefinitions: initialAgentManagerState.providerDefinitions,
     registry: agentStorage,
     appendSystemPrompt: config.appendSystemPrompt,
+    getImageGenerationConfig: () => daemonConfigStore.getImageGenerationRuntimeConfig(),
     onWorkspaceStateMayHaveChanged: ({ cwd }) => {
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
     },
@@ -1346,7 +1334,6 @@ export async function createPaseoDaemon(
     getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
     scheduleService,
     providerSnapshotManager,
-    imageGenerationService,
     daemonConfigStore,
     github,
     workspaceGitService,

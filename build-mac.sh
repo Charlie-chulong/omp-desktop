@@ -21,7 +21,7 @@ if [[ "$has_notarization_credentials" != true ]]; then
 No macOS notarization credentials found; building an unsigned test package.
 Gatekeeper will reject this package unless quarantine is removed on the test Mac.
 EOF
-  CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --mac "$@"
+  CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --mac --publish never "$@"
   exit 0
 fi
 
@@ -32,7 +32,7 @@ if [[ -z "${CSC_LINK:-}" ]] &&
   exit 1
 fi
 
-npm run build:desktop -- --mac "$@"
+npm run build:desktop -- --mac --publish never "$@"
 
 shopt -s nullglob
 apps=(packages/desktop/release/mac-*/*.app)

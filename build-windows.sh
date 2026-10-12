@@ -78,7 +78,7 @@ mkdir -p "$metadata_dir"
 metadata_files=()
 
 for arch in "${arches[@]}"; do
-  npm run build:desktop -- --win "--$arch" "$@"
+  npm run build:desktop -- --win "--$arch" --publish never "$@"
   cp \
     "packages/desktop/release/$metadata_filename" \
     "$metadata_dir/$channel-$arch.yml"

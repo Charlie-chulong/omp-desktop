@@ -2716,7 +2716,7 @@ export const ru: TranslationResources = {
       title: "Генерация изображений",
       enabled: "Включить генерацию изображений",
       description:
-        "Позволяет агентам создавать растровые изображения и показывать их прямо в диалоге.",
+        "Позволяет агентам создавать и редактировать изображения встроенным инструментом OMP generate_image и просматривать их в диалоге.",
       enabledAccessibilityLabel: "Включить генерацию изображений",
       status: {
         notConfigured: "Ключ API OpenAI не настроен",
@@ -2726,8 +2726,6 @@ export const ru: TranslationResources = {
         selectSubscriptionAccount: "Выберите аккаунт с подпиской OpenAI Codex",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled:
-        "Внедрение инструментов Paseo отключено. Включите его в настройках оркестрации хоста.",
       source: {
         label: "Источник изображений",
         hint: "Оплата API и подписка ChatGPT независимы. Автоматического переключения между ними нет.",
@@ -2740,7 +2738,8 @@ export const ru: TranslationResources = {
       subscriptionAccountPlaceholder: "Выберите аккаунт с подпиской",
       subscriptionAccountEmpty: "Нет подключённых аккаунтов OpenAI Codex",
       subscriptionHint:
-        "Использует подписку ChatGPT выбранного аккаунта и фиксированную модель gpt-image-2.",
+        "Использует подписку ChatGPT выбранного аккаунта. Фактическую модель изображений выбирает OpenAI.",
+      subscriptionModel: "Выбирается OpenAI",
       accountFallback: "Аккаунт OpenAI Codex {{number}}",
       unknownPlan: "Подписка",
       apiKey: "Ключ API OpenAI",

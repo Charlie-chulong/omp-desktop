@@ -1093,6 +1093,7 @@ function buildResumeStartInput(input: {
     cwd: input.resumeConfig.cwd,
     protocolMode: "rpc-ui",
     env: input.launchContext?.env,
+    getImageGenerationConfig: input.launchContext?.getImageGenerationConfig,
     session: input.sessionFile,
     model: input.resumeConfig.model,
     thinkingOptionId: normalizeOmpThinkingOption(input.resumeConfig.thinkingOptionId) ?? undefined,
@@ -3960,7 +3961,12 @@ export class OmpAgentSession implements AgentSession {
     error: unknown,
   ): boolean {
     const turnId = this.currentTurnIdForEvent();
-    const detail = this.mapToolDetail(toolCallId, toolCall, result);
+    const detail = this.mapToolDetail(
+      toolCallId,
+      toolCall,
+      result,
+      status === "canceled" ? "failed" : status,
+    );
     if (!detail) {
       return false;
     }
@@ -3985,9 +3991,12 @@ export class OmpAgentSession implements AgentSession {
     toolCallId: string,
     toolCall: OmpTrackedToolCall,
     result: OmpToolResult,
+    toolCallStatus?: "running" | "completed" | "failed",
   ): ToolCallDetail | null {
     return mapOmpToolDetail(toolCall, result, {
       toolCallId,
+      imageOutputDir: this.blobDir,
+      toolCallStatus,
       mapSubagentDetail: (detail) =>
         this.subagentCardTracker.detailFor(toolCallId, detail) ?? detail,
     });
@@ -4340,6 +4349,7 @@ export class OmpAgentClient implements AgentClient {
         getOmpPlatformSystemPrompt(),
       ),
       env: launchContext?.env,
+      getImageGenerationConfig: launchContext?.getImageGenerationConfig,
     });
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);

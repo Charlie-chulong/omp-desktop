@@ -20,6 +20,7 @@ import type { Logger } from "pino";
 import type { ProviderOptions, ToolPolicy } from "@omp-desktop/protocol/agent-types";
 import { z } from "zod";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
+import type { ImageGenerationRuntimeConfig } from "../daemon-config-store.js";
 
 import {
   getAgentStreamEventTurnId,
@@ -303,6 +304,7 @@ export interface AgentManagerOptions {
   mcpAuthToken?: string;
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
+  getImageGenerationConfig?: () => ImageGenerationRuntimeConfig | null;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
@@ -719,6 +721,7 @@ export class AgentManager {
   private readonly mcpAuthToken: string | null;
   private paseoToolsEnabled = true;
   private paseoToolCatalogFactory: PaseoToolCatalogFactory | null = null;
+  private readonly getImageGenerationConfig?: AgentManagerOptions["getImageGenerationConfig"];
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -737,6 +740,7 @@ export class AgentManager {
     this.mcpBaseUrl = options?.mcpBaseUrl ?? null;
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
     this.configurePaseoTools(options);
+    this.getImageGenerationConfig = options.getImageGenerationConfig;
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({ module: "agent", component: "agent-manager" });
     this.rescueTimeouts = {
@@ -5233,6 +5237,9 @@ export class AgentManager {
         PASEO_AGENT_CWD: cwd,
       },
     };
+    if (client.provider === "omp" && this.getImageGenerationConfig) {
+      context.getImageGenerationConfig = this.getImageGenerationConfig;
+    }
     if (
       this.paseoToolsEnabled &&
       client.capabilities.supportsNativePaseoTools &&

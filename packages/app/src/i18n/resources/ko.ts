@@ -2674,7 +2674,8 @@ export const ko: TranslationResources = {
     imageGeneration: {
       title: "이미지 생성",
       enabled: "이미지 생성 사용",
-      description: "에이전트가 래스터 이미지를 생성하고 대화에 바로 표시하도록 합니다.",
+      description:
+        "에이전트가 OMP 네이티브 generate_image로 이미지를 생성·편집하고 대화에서 미리 보도록 합니다.",
       enabledAccessibilityLabel: "이미지 생성 사용",
       status: {
         notConfigured: "OpenAI API 키가 설정되지 않음",
@@ -2684,7 +2685,6 @@ export const ko: TranslationResources = {
         selectSubscriptionAccount: "OpenAI Codex 구독 계정을 선택하세요",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled: "Paseo 도구 주입이 꺼져 있습니다. 호스트 오케스트레이션 설정에서 켜세요.",
       source: {
         label: "이미지 소스",
         hint: "API 결제와 ChatGPT 구독은 별개이며 자동으로 전환되지 않습니다.",
@@ -2696,7 +2696,9 @@ export const ko: TranslationResources = {
       subscriptionAccount: "OpenAI Codex 계정",
       subscriptionAccountPlaceholder: "구독 계정 선택",
       subscriptionAccountEmpty: "로그인된 OpenAI Codex 계정이 없습니다",
-      subscriptionHint: "선택한 계정의 ChatGPT 구독과 고정된 gpt-image-2 모델을 사용합니다.",
+      subscriptionHint:
+        "선택한 계정의 ChatGPT 구독을 사용합니다. 실제 이미지 모델은 OpenAI가 선택합니다.",
+      subscriptionModel: "OpenAI가 선택",
       accountFallback: "OpenAI Codex 계정 {{number}}",
       unknownPlan: "구독",
       apiKey: "OpenAI API 키",

@@ -55,6 +55,7 @@ interface OmpToolResultObject {
   exitCode?: number;
   code?: number;
   details?: OmpToolResultDetails;
+  isError?: boolean;
 }
 
 interface OmpToolResultDetails {
@@ -175,6 +176,7 @@ const OmpToolResultObjectSchema = z
     content: z.array(OmpToolResultContentSchema).optional(),
     exitCode: z.number().optional(),
     code: z.number().optional(),
+    isError: z.boolean().optional(),
     details: OmpToolResultDetailsSchema.optional(),
   })
   .passthrough();
@@ -289,14 +291,57 @@ export function parseToolArgs(toolName: string, rawArgs: unknown): OmpTrackedToo
 }
 
 export function resolveToolCallName(toolCall: OmpTrackedToolCall, result?: OmpToolResult): string {
-  if (toolCall.kind === "write" && result && typeof result !== "string") {
-    const xdev = XdevExecuteDetailsSchema.safeParse(result.details?.xdev);
-    if (xdev.success) {
-      return xdev.data.tool;
-    }
-  }
+  return resolveXdevToolCall(toolCall, result)?.toolCall.toolName ?? toolCall.toolName;
+}
 
-  return toolCall.toolName;
+/** Resolve both streamed device args and validated result metadata through the same dispatch. */
+export function resolveXdevToolCall(
+  toolCall: OmpTrackedToolCall,
+  result?: OmpToolResult,
+): { toolCall: OmpTrackedToolCall; result: OmpToolResult } | null {
+  if (toolCall.toolName !== "write") {
+    return null;
+  }
+  const xdev = XdevExecuteDetailsSchema.safeParse(
+    result && typeof result !== "string" ? result.details?.xdev : undefined,
+  );
+  if (xdev.success) {
+    return {
+      toolCall: parseToolArgs(
+        xdev.data.tool,
+        xdev.data.args ?? parseDeviceInput(toolCall.args)?.args,
+      ),
+      result:
+        result && typeof result !== "string"
+          ? parseToolResult({ ...result, details: xdev.data.inner })
+          : (result ?? null),
+    };
+  }
+  // Help responses are not executions, even when the original path names a tool.
+  if (result && typeof result !== "string" && result.details?.xdev !== undefined) {
+    return null;
+  }
+  const device = parseDeviceInput(toolCall.args);
+  return device
+    ? { toolCall: parseToolArgs(device.tool, device.args), result: result ?? null }
+    : null;
+}
+
+function parseDeviceInput(rawArgs: unknown): { tool: string; args: unknown } | null {
+  if (!rawArgs || typeof rawArgs !== "object" || !("path" in rawArgs)) {
+    return null;
+  }
+  const { path, content } = rawArgs as WriteToolInput;
+  const tool = typeof path === "string" ? /^xd:\/\/([^/?#\s]+)\/?$/.exec(path)?.[1] : undefined;
+  if (!tool || typeof content !== "string" || /^\s*(\?|help)?\s*$/i.test(content)) {
+    return null;
+  }
+  try {
+    return { tool, args: JSON.parse(content) };
+  } catch {
+    // A streamed JSON payload can be incomplete; still identify its operation.
+    return { tool, args: null };
+  }
 }
 
 export function mapToolDetail(
