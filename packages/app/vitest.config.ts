@@ -84,9 +84,11 @@ export default defineConfig({
   // (`findHostInstance.web.js`). Vite's dependency optimizer does not apply `resolve.extensions`,
   // so it scans the native files and dies on imports react-native-web has no answer for.
   // Unbundled, the same imports go through the resolver below and land on the web files.
+  // Expo's clipboard entry also contains JSX and pulls native core modules into
+  // the scan. Leave both unbundled so browser tests can mock the clipboard boundary.
   optimizeDeps: {
     include: ["react/jsx-runtime"],
-    exclude: ["react-native-reanimated"],
+    exclude: ["react-native-reanimated", "expo-clipboard", "expo-modules-core"],
   },
   // The globals a React Native bundler defines, which esbuild is no longer there to supply for
   // the package excluded above.
