@@ -17,7 +17,7 @@ import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 const OMP_SESSION_DIR = "~/.omp/agent/sessions";
 const DEFAULT_OMP_MODE_ID = "ask";
 
-export const MIN_SUPPORTED_OMP_VERSION = "16.3.9";
+export const MIN_SUPPORTED_OMP_VERSION = "18.8.7";
 export { OMP_MODES };
 
 export const OmpAgentShellModeSchema = z.enum(["auto", "git-bash", "omp-default", "custom"]);

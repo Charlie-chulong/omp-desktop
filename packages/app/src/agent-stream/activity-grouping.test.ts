@@ -53,7 +53,7 @@ describe("agent activity grouping", () => {
     expect(history.groupsByHostId.get("thought-1")?.items).toEqual(items);
   });
 
-  it.each(["image_gen", "present_image"] as const)(
+  it.each(["generate_image", "present_image"] as const)(
     "keeps completed %s image previews visible outside collapsed activity",
     (name) => {
       const image: ToolCallItem = {

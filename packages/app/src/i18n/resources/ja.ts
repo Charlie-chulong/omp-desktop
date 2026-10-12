@@ -2684,7 +2684,8 @@ export const ja: TranslationResources = {
     imageGeneration: {
       title: "画像生成",
       enabled: "画像生成を有効にする",
-      description: "エージェントがラスター画像を生成し、会話内に直接表示できるようにします。",
+      description:
+        "エージェントが OMP ネイティブの generate_image で画像を生成・編集し、会話内でプレビューできるようにします。",
       enabledAccessibilityLabel: "画像生成を有効にする",
       status: {
         notConfigured: "OpenAI API キーが未設定です",
@@ -2694,8 +2695,6 @@ export const ja: TranslationResources = {
         selectSubscriptionAccount: "OpenAI Codex サブスクリプションアカウントを選択してください",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled:
-        "Paseo ツール注入が無効です。ホストのオーケストレーション設定で有効にしてください。",
       source: {
         label: "画像ソース",
         hint: "API 課金と ChatGPT サブスクリプションは別です。自動的に切り替わることはありません。",
@@ -2708,7 +2707,8 @@ export const ja: TranslationResources = {
       subscriptionAccountPlaceholder: "サブスクリプションアカウントを選択",
       subscriptionAccountEmpty: "ログイン済みの OpenAI Codex アカウントがありません",
       subscriptionHint:
-        "選択したアカウントの ChatGPT サブスクリプションと固定の gpt-image-2 モデルを使用します。",
+        "選択したアカウントの ChatGPT サブスクリプションを使用します。実際の画像モデルは OpenAI が選択します。",
+      subscriptionModel: "OpenAI が選択",
       accountFallback: "OpenAI Codex アカウント {{number}}",
       unknownPlan: "サブスクリプション",
       apiKey: "OpenAI API キー",

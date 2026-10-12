@@ -19,6 +19,7 @@ import type {
   OmpThinkingLevel,
 } from "./rpc-types.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
+import type { OmpImageSettingsGetter } from "./image-settings.js";
 
 export interface OmpRuntimeLaunch {
   cwd: string;
@@ -37,6 +38,7 @@ export interface OmpRuntimeLaunch {
 export interface OmpStartSessionInput {
   cwd: string;
   signal?: AbortSignal;
+  getImageGenerationConfig?: OmpImageSettingsGetter;
   env?: Record<string, string>;
   protocolMode?: "rpc" | "rpc-ui";
   model?: string;

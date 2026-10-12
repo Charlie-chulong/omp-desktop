@@ -2879,7 +2879,8 @@ export const en = {
     imageGeneration: {
       title: "Image generation",
       enabled: "Enable image generation",
-      description: "Let agents generate raster images and show them directly in the conversation.",
+      description:
+        "Let agents create and edit images with native OMP generate_image and preview them in the conversation.",
       enabledAccessibilityLabel: "Enable image generation",
       status: {
         notConfigured: "OpenAI API key not configured",
@@ -2889,7 +2890,6 @@ export const en = {
         selectSubscriptionAccount: "Select an OpenAI Codex subscription account",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled: "Paseo tool injection is disabled. Enable it in Host orchestration settings.",
       source: {
         label: "Image source",
         hint: "API billing and ChatGPT subscriptions are separate. Requests never fall back between them.",
@@ -2902,7 +2902,8 @@ export const en = {
       subscriptionAccountPlaceholder: "Select a subscription account",
       subscriptionAccountEmpty: "No OpenAI Codex accounts are signed in",
       subscriptionHint:
-        "Uses the selected account's ChatGPT subscription and the fixed gpt-image-2 model.",
+        "Uses the selected account's ChatGPT subscription. OpenAI selects the actual image model.",
+      subscriptionModel: "Selected by OpenAI",
       accountFallback: "OpenAI Codex account {{number}}",
       unknownPlan: "Subscription",
       apiKey: "OpenAI API key",

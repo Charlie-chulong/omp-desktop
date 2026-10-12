@@ -2703,7 +2703,7 @@ export const ptBR: TranslationResources = {
       title: "Geração de imagens",
       enabled: "Ativar geração de imagens",
       description:
-        "Permite que os agentes gerem imagens raster e as exibam diretamente na conversa.",
+        "Permite que os agentes criem e editem imagens com o generate_image nativo do OMP e as visualizem na conversa.",
       enabledAccessibilityLabel: "Ativar geração de imagens",
       status: {
         notConfigured: "Chave da API da OpenAI não configurada",
@@ -2713,8 +2713,6 @@ export const ptBR: TranslationResources = {
         selectSubscriptionAccount: "Selecione uma conta com assinatura do OpenAI Codex",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled:
-        "A injeção de ferramentas Paseo está desativada. Ative-a nas configurações de orquestração do host.",
       source: {
         label: "Fonte de imagens",
         hint: "A cobrança da API e as assinaturas do ChatGPT são separadas. Não há alternância automática entre elas.",
@@ -2727,7 +2725,8 @@ export const ptBR: TranslationResources = {
       subscriptionAccountPlaceholder: "Selecione uma conta com assinatura",
       subscriptionAccountEmpty: "Nenhuma conta do OpenAI Codex está conectada",
       subscriptionHint:
-        "Usa a assinatura do ChatGPT da conta selecionada e o modelo fixo gpt-image-2.",
+        "Usa a assinatura do ChatGPT da conta selecionada. A OpenAI escolhe o modelo de imagem utilizado.",
+      subscriptionModel: "Selecionado pela OpenAI",
       accountFallback: "Conta do OpenAI Codex {{number}}",
       unknownPlan: "Assinatura",
       apiKey: "Chave da API da OpenAI",

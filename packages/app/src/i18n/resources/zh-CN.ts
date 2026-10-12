@@ -2781,7 +2781,7 @@ export const zhCN: TranslationResources = {
     imageGeneration: {
       title: "图片生成",
       enabled: "启用图片生成",
-      description: "允许 Agent 生成位图，并直接显示在对话中。",
+      description: "允许 Agent 使用 OMP 原生 generate_image 创建和编辑图片，并在对话中预览。",
       enabledAccessibilityLabel: "启用图片生成",
       status: {
         notConfigured: "尚未配置 OpenAI API Key",
@@ -2791,7 +2791,6 @@ export const zhCN: TranslationResources = {
         selectSubscriptionAccount: "请选择 OpenAI Codex 订阅账户",
         subscriptionConfigured: "{{account}} · {{plan}}",
       },
-      toolsDisabled: "Paseo 工具注入已关闭，请先在 Host 编排设置中启用。",
       source: {
         label: "图片来源",
         hint: "API 计费与 ChatGPT 订阅相互独立，请求不会在两者之间自动降级。",
@@ -2803,7 +2802,8 @@ export const zhCN: TranslationResources = {
       subscriptionAccount: "OpenAI Codex 账户",
       subscriptionAccountPlaceholder: "选择订阅账户",
       subscriptionAccountEmpty: "没有已登录的 OpenAI Codex 账户",
-      subscriptionHint: "使用所选账户的 ChatGPT 订阅，模型固定为 gpt-image-2。",
+      subscriptionHint: "使用所选账户的 ChatGPT 订阅，实际图片模型由 OpenAI 选择。",
+      subscriptionModel: "由 OpenAI 选择",
       accountFallback: "OpenAI Codex 账户 {{number}}",
       unknownPlan: "订阅",
       apiKey: "OpenAI API Key",

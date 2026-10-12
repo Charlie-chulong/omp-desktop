@@ -20,6 +20,7 @@ import type {
   OmpMemorySettingsPatch,
 } from "@omp-desktop/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
+import type { ImageGenerationRuntimeConfig } from "../daemon-config-store.js";
 
 export type { AgentProviderNotice, AgentTaskItem };
 
@@ -651,6 +652,8 @@ export interface AgentSessionConfig {
 export interface AgentLaunchContext {
   agentId?: string;
   env?: Record<string, string>;
+  /** Private native image preferences; refreshed per turn and never persisted with the session. */
+  getImageGenerationConfig?: () => ImageGenerationRuntimeConfig | null;
   /**
    * Runtime-only internal Paseo tools. This must never be persisted into
    * AgentSessionConfig; providers may adapt it to their native tool surface.

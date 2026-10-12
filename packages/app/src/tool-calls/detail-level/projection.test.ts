@@ -77,7 +77,7 @@ describe("tool call detail-level projection", () => {
     expect(result.groupsByHostId.size).toBe(0);
   });
 
-  it.each(["image_gen", "present_image"] as const)(
+  it.each(["generate_image", "present_image"] as const)(
     "does not collapse %s inline image previews into overview groups",
     (name) => {
       const image = toolCall(

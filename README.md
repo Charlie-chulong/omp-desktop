@@ -7,7 +7,7 @@ Current source version: **0.4.1**.
 ## Requirements
 
 - Node.js from `.tool-versions` and npm workspaces for development and source builds
-- `omp >= 16.3.9` on `PATH` for development and standalone daemon runs
+- `omp >= 18.8.7` on `PATH` for development and standalone daemon runs
 - A configured OMP model provider
 
 Packaged macOS, Linux, and Windows applications include OMP and do not require a system OMP installation.
@@ -261,19 +261,34 @@ exact identity and preserve the existing user or project scope and enabled/disab
 
 ## Image generation with references
 
-When image generation is enabled in Host Settings, the `image_gen` tool can generate an image
-from text alone or use one to sixteen local PNG, JPEG, or WebP files as ordered reference images.
-Reference paths may be absolute or relative to the agent workspace. Prompts should identify each
-reference by its list position when the images have different roles, such as subject, composition,
-or style. Calls with references use the provider's image-edit endpoint; text-only calls continue to
-use image generation.
+Desktop uses OMP's native `generate_image` tool; there is no separate Desktop image-generation
+service or `image_gen` alias. Enable it in **Host Settings → Image generation**. This setting
+is independent of Desktop host-tool injection.
+
+Choose an OpenAI-compatible API with its image model, Base URL, and API key, or choose a
+ChatGPT subscription account already signed into OMP. Subscription image requests use the
+selected account without changing the chat account, and OpenAI chooses the hosted image model.
+The two sources never automatically fall back to one another.
+
+Native calls describe the subject, scene, style, and requested changes; the `input` parameter
+accepts ordered local reference paths. Paths may be absolute or relative to the agent workspace.
+Identify references by list position when they have different roles, such as subject,
+composition, or style. OpenAI-compatible API calls with references use the image-edit endpoint;
+subscription requests use OMP's hosted image-generation path. With OMP device tools enabled,
+the same native tool is available through `xd://generate_image`.
+
+Settings changes apply to the next agent input, including existing and resumed conversations.
+Missing or removed image credentials disable image access without blocking ordinary chat.
 
 ## Image previews
 
-Images in assistant messages, including `image_gen` and `present_image` previews, show a
+Images in assistant messages, including `generate_image` and `present_image` previews, show a
 **View full screen** button in the image's top-right corner once loaded. The preview fills the
 app window while preserving the image's aspect ratio. Use the close button or **Esc** to return
 to the conversation. Loading and failed images do not show the full-screen button.
+
+Native generation results are copied to private, content-addressed image files. History replay
+also understands OMP image-blob references, so previews do not depend on native temporary files.
 
 Workspace file tabs preview ICO (`.ico`, case-insensitive) icons as images, alongside PNG, JPEG,
 GIF, WebP, and SVG files, rather than showing the binary-file placeholder.
