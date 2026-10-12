@@ -1929,6 +1929,8 @@ export const ko: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "이미지 생성",
+    presentImage: "이미지 표시",
     error: "오류",
     empty: "추가 세부 정보가 없습니다",
     subAgentActivity: "서브에이전트 활동",

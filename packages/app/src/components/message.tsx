@@ -3117,6 +3117,7 @@ export const ToolCall = memo(function ToolCall({
   forceInline = false,
   maxDetailHeight = 400,
 }: ToolCallProps) {
+  const { t } = useTranslation();
   const { openToolCall } = useToolCallSheet();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? false);
 
@@ -3147,8 +3148,9 @@ export const ToolCall = memo(function ToolCall({
         metadata,
         cwd,
         resolveIcon: resolveToolCallIcon,
+        t,
       }),
-    [toolName, status, error, effectiveDetail, metadata, cwd],
+    [toolName, status, error, effectiveDetail, metadata, cwd, t],
   );
   const handleOpenFile = useMemo(() => {
     const openFilePath = presentation.openFilePath;

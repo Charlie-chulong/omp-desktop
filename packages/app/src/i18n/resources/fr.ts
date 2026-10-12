@@ -1965,6 +1965,8 @@ export const fr: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "Générer une image",
+    presentImage: "Afficher une image",
     error: "Erreur",
     empty: "Aucun détail supplémentaire disponible",
     subAgentActivity: "Activité du sous-agent",

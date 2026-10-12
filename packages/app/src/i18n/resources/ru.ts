@@ -1959,6 +1959,8 @@ export const ru: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "Создать изображение",
+    presentImage: "Показать изображение",
     error: "Ошибка",
     empty: "Дополнительные сведения отсутствуют",
     subAgentActivity: "Активность субагента",

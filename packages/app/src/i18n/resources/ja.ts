@@ -1936,6 +1936,8 @@ export const ja: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "画像を生成",
+    presentImage: "画像を表示",
     error: "エラー",
     empty: "追加の詳細はありません",
     subAgentActivity: "サブエージェントアクティビティ",

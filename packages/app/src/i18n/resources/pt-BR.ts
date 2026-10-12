@@ -1952,6 +1952,8 @@ export const ptBR: TranslationResources = {
     },
   },
   toolCallDetails: {
+    generateImage: "Gerar imagem",
+    presentImage: "Mostrar imagem",
     error: "Erro",
     empty: "Nenhum detalhe adicional disponível",
     subAgentActivity: "Atividade do subagente",

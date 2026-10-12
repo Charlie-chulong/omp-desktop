@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { TFunction } from "i18next";
 import type { ToolCallDetail } from "@omp-desktop/protocol/agent-types";
 import type { ToolCallDisplayInput } from "@/utils/tool-call-display";
 import { buildToolCallDisplayModel } from "@/utils/tool-call-display";
@@ -19,6 +20,7 @@ interface BuildToolCallPresentationInput {
   cwd?: string;
   metadata?: Record<string, unknown>;
   resolveIcon: ToolCallIconResolver;
+  t: TFunction;
 }
 
 export interface ToolCallPresentation {
@@ -64,10 +66,17 @@ export function buildToolCallPresentation(
     error: input.error,
   });
   const hasDetails = Boolean(input.error) || hasMeaningfulToolCallDetail(input.detail);
+  const isImageTool = input.toolName === "generate_image" || input.toolName === "present_image";
 
   return {
-    displayName: displayModel.displayName,
-    summary: displayModel.summary,
+    displayName: isImageTool
+      ? input.t(
+          input.toolName === "generate_image"
+            ? "toolCallDetails.generateImage"
+            : "toolCallDetails.presentImage",
+        )
+      : displayModel.displayName,
+    summary: isImageTool ? undefined : displayModel.summary,
     errorText: displayModel.errorText,
     icon: input.resolveIcon(input.toolName, input.detail),
     isLoadingDetails,

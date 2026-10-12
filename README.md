@@ -2,7 +2,7 @@
 
 An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). It runs a private daemon on your machine and talks to `omp --mode rpc-ui` through OMP's native JSONL RPC protocol. Web clients can control a remote daemon through a self-hosted, end-to-end encrypted relay.
 
-Current source version: **0.4.1**.
+Current source version: **0.4.2**.
 
 ## Requirements
 
@@ -287,8 +287,14 @@ Images in assistant messages, including `generate_image` and `present_image` pre
 app window while preserving the image's aspect ratio. Use the close button or **Esc** to return
 to the conversation. Loading and failed images do not show the full-screen button.
 
-Native generation results are copied to private, content-addressed image files. History replay
-also understands OMP image-blob references, so previews do not depend on native temporary files.
+Image tool badges follow the selected interface language and show one action label without a
+repeated status summary. When tools preview the same image in one turn, Desktop keeps the first
+preview and both tool records. Standalone image tools, different images, and images shown again
+in a new turn retain their previews.
+
+Native generation and publication previews are copied to private, content-addressed image files.
+History replay also understands OMP image-blob references, so previews do not depend on native
+temporary files.
 
 Workspace file tabs preview ICO (`.ico`, case-insensitive) icons as images, alongside PNG, JPEG,
 GIF, WebP, and SVG files, rather than showing the binary-file placeholder.
