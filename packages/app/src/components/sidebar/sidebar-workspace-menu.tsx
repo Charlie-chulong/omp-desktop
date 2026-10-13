@@ -1,6 +1,13 @@
-import { useMemo, type ComponentProps, type PropsWithChildren, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type ComponentProps,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
-import { type PressableStateCallbackType } from "react-native";
+import { type PressableStateCallbackType, type View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   Archive,
@@ -465,10 +472,32 @@ export function SidebarWorkspaceContextMenu({
     [conversationPages, labelPages],
   );
 
+  const renameTriggerRef = useRef<View | null>(null);
+  useEffect(() => {
+    const node = renameTriggerRef.current;
+    if (!isWeb || !(node instanceof HTMLElement) || !onRename || triggerProps.disabled) return;
+    const handleDoubleClick = (event: MouseEvent) => {
+      if (contextMenuOpen || !(event.target instanceof Element)) return;
+      if (
+        event.target.closest(
+          '[data-testid^="sidebar-workspace-quick-"],[data-testid^="sidebar-workspace-kebab-"],[data-testid^="sidebar-workspace-rename-"],a,input,[role="link"]',
+        )
+      )
+        return;
+      const control = event.target.closest('button,[role="button"]');
+      if (control && control !== node) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onRename();
+    };
+    node.addEventListener("dblclick", handleDoubleClick);
+    return () => node.removeEventListener("dblclick", handleDoubleClick);
+  }, [contextMenuOpen, onRename, triggerProps.disabled]);
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
       <ContextMenuTrigger
         {...triggerProps}
+        triggerRef={renameTriggerRef}
         enabledOnMobile={false}
         accessibilityLabel={accessibilityLabel ?? rowAccessibilityLabel}
         highlightStyle={highlightStyle}

@@ -8,7 +8,7 @@ import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-stor
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useDraftStore } from "@/stores/draft-store";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { buildProjectLayoutKey } from "@/workspace-tabs/model";
 import {
   archiveEmptyWorkspace,
@@ -203,6 +203,47 @@ describe("archiveEmptyWorkspace", () => {
     await archive;
     expect(storedWorkspace("workspace-1")).toBeUndefined();
     expect(isWorkspaceArchivePending(target())).toBe(true);
+  });
+
+  it("closes draft tabs owned by the archived workspace, keeping other drafts", async () => {
+    useWorkspaceLayoutStore.setState({ layoutByWorkspace: {} });
+    const workspaceKey = buildProjectLayoutKey({
+      serverId: SERVER_ID,
+      projectId: workspace().projectId,
+    })!;
+    useSessionStore
+      .getState()
+      .mergeWorkspaces(SERVER_ID, [
+        workspace(),
+        workspace({ id: "workspace-2", workspaceDirectory: "/repo/project/workspace-2" }),
+      ]);
+    const layouts = useWorkspaceLayoutStore.getState();
+    layouts.openTab({
+      workspaceKey,
+      target: { kind: "draft", draftId: "stale-draft", workspaceId: "workspace-1" },
+      intent: "new",
+    });
+    layouts.openTab({
+      workspaceKey,
+      target: { kind: "draft", draftId: "kept-draft", workspaceId: "workspace-2" },
+      intent: "new",
+    });
+    const client = createClient(async () => archivePayload({ workspaceId: "workspace-1" }));
+
+    await archiveEmptyWorkspace({
+      client,
+      workspace: target(),
+      hasPendingTerminalCreate: false,
+    });
+
+    const tabs = collectAllTabs(
+      useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey]!.root,
+    )
+      .filter((tab) => tab.target.kind !== "new_tab")
+      .map((tab) => tab.target);
+    expect(tabs).toEqual([{ kind: "draft", draftId: "kept-draft", workspaceId: "workspace-2" }]);
+    expect(storedWorkspace("workspace-1")).toBeUndefined();
+    expect(storedWorkspace("workspace-2")).toBeDefined();
   });
 
   it("preserves another draft's unsent text and attachments during unused-workspace cleanup", async () => {

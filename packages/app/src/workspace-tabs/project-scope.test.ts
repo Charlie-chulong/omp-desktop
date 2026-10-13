@@ -9,6 +9,7 @@ import type { WorkspaceTab } from "./model";
 import {
   migrateLegacyProjectLayouts,
   resolveProjectLayoutKeyFromWorkspaces,
+  pruneDraftTabsOwnedByMissingWorkspaces,
 } from "./project-scope";
 
 function layout(...tabs: WorkspaceTab[]): WorkspaceLayout {
@@ -566,5 +567,62 @@ describe("project layout migration", () => {
     expect(migrated.pending.map((entry) => entry.tab.tabId)).toEqual(["ambiguous"]);
     expect(migrated.layouts["host:first"].parentTabIdByTabId).toEqual({ ambiguous: "opener" });
     expect(collectAllTabs(migrated.layouts["host:project:three"].root)[0]?.tabId).toBe("opener");
+  });
+});
+
+describe("dead-owner draft pruning", () => {
+  it("drops drafts whose workspace is gone and keeps every other tab", () => {
+    const layouts = {
+      "host:project:one": layout(
+        tab("dead-draft", { kind: "draft", draftId: "dead", workspaceId: "removed" }),
+        tab("live-draft", { kind: "draft", draftId: "live", workspaceId: "second" }),
+        tab("agent", { kind: "agent", agentId: "a1", workspaceId: "removed" }),
+      ),
+      "other-server:project:one": layout(
+        tab("foreign-draft", { kind: "draft", draftId: "foreign", workspaceId: "removed" }),
+      ),
+    };
+
+    const pruned = pruneDraftTabsOwnedByMissingWorkspaces({
+      serverId: "host",
+      layouts,
+      workspaces,
+    });
+
+    expect(pruned["host:project:one"]).not.toBe(layouts["host:project:one"]);
+    expect(collectAllTabs(pruned["host:project:one"]!.root).map((entry) => entry.tabId)).toEqual([
+      "live-draft",
+      "agent",
+    ]);
+    expect(pruned["other-server:project:one"]).toBe(layouts["other-server:project:one"]);
+  });
+
+  it("keeps the layout identity when nothing is dead", () => {
+    const layouts = {
+      "host:project:one": layout(
+        tab("live-draft", { kind: "draft", draftId: "live", workspaceId: "first" }),
+      ),
+    };
+
+    expect(pruneDraftTabsOwnedByMissingWorkspaces({ serverId: "host", layouts, workspaces })).toBe(
+      layouts,
+    );
+  });
+
+  it("keeps drafts owned by workspaces hidden behind an in-flight local archive", () => {
+    const layouts = {
+      "host:project:one": layout(
+        tab("rollback-draft", { kind: "draft", draftId: "rollback", workspaceId: "hidden" }),
+      ),
+    };
+
+    expect(
+      pruneDraftTabsOwnedByMissingWorkspaces({
+        serverId: "host",
+        layouts,
+        workspaces,
+        preservedWorkspaceIds: new Set(["hidden"]),
+      }),
+    ).toBe(layouts);
   });
 });

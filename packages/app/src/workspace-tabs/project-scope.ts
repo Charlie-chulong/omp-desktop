@@ -1,3 +1,4 @@
+import { listWorkspaceArchivePendingIds } from "@/contexts/session-workspace-upserts";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   collectAllPanes,
@@ -7,6 +8,7 @@ import {
   normalizeLayout,
   type SplitNode,
   type WorkspaceLayout,
+  removeTabFromTree,
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
@@ -535,7 +537,15 @@ export function ensureProjectLayoutsMigrated(
     ...ownership,
     agentWorkspaceIds,
   });
-  if (result.layouts !== layoutStore.layoutByWorkspace) {
+  const prunedLayouts = pruneDraftTabsOwnedByMissingWorkspaces({
+    serverId,
+    layouts: result.layouts,
+    workspaces: session.workspaces,
+    // Optimistic archives hide the record before the request completes and may
+    // restore it on failure; their drafts must survive that window.
+    preservedWorkspaceIds: new Set(listWorkspaceArchivePendingIds(serverId)),
+  });
+  if (prunedLayouts !== layoutStore.layoutByWorkspace) {
     const splitSizesByWorkspace = { ...layoutStore.splitSizesByWorkspace };
     const sidePanelPaneIdByWorkspace = { ...result.sidePanelPaneIds };
     for (const rawKey of result.migratedLegacyKeys) {
@@ -555,10 +565,49 @@ export function ensureProjectLayoutsMigrated(
       delete sidePanelPaneIdByWorkspace[rawKey];
     }
     useWorkspaceLayoutStore.setState({
-      layoutByWorkspace: result.layouts,
+      layoutByWorkspace: prunedLayouts,
       splitSizesByWorkspace,
       sidePanelPaneIdByWorkspace,
     });
   }
   return result.pending;
+}
+
+/**
+ * Draft tabs whose owning workspace record is gone (archived or removed) are dead
+ * sidebar entries: nothing can submit them, yet they survive restarts because
+ * per-workspace reconciliation never prunes another workspace's tabs. Drop them
+ * once, when the project layout is finalized against the hydrated workspace list.
+ */
+export function pruneDraftTabsOwnedByMissingWorkspaces(input: {
+  serverId: string;
+  layouts: Record<string, WorkspaceLayout>;
+  workspaces: ReadonlyMap<string, Pick<WorkspaceDescriptor, "id" | "projectId">>;
+  preservedWorkspaceIds?: ReadonlySet<string>;
+}): Record<string, WorkspaceLayout> {
+  const ownsWorkspace = (workspaceId: string): boolean =>
+    input.workspaces.has(workspaceId) ||
+    [...input.workspaces.values()].some((workspace) => workspace.id === workspaceId) ||
+    (input.preservedWorkspaceIds?.has(workspaceId) ?? false);
+
+  let next = input.layouts;
+  for (const [key, layout] of Object.entries(input.layouts)) {
+    if (!key.startsWith(`${input.serverId}:project:`)) continue;
+    const deadTabIds = collectAllTabs(layout.root)
+      .filter(
+        (tab) =>
+          tab.target.kind === "draft" &&
+          tab.target.workspaceId !== undefined &&
+          !ownsWorkspace(tab.target.workspaceId),
+      )
+      .map((tab) => tab.tabId);
+    if (deadTabIds.length === 0) continue;
+    if (next === input.layouts) next = { ...input.layouts };
+    let root = layout.root;
+    for (const tabId of deadTabIds) {
+      root = removeTabFromTree(root, tabId) ?? root;
+    }
+    next[key] = normalizeLayout({ ...layout, root });
+  }
+  return next;
 }

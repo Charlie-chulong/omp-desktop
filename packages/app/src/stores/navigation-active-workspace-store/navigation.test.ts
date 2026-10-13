@@ -611,3 +611,57 @@ describe("workspace navigation", () => {
     expect(navigations).toEqual(["/h/server-1/workspace/workspace-a"]);
   });
 });
+
+describe("sidebar navigation to an empty workspace", () => {
+  it("seeds and focuses a draft tab when the project layout only has sibling content", async () => {
+    const workspaces = new Map<string, WorkspaceDescriptor>(
+      (
+        [
+          ["workspace-host", { id: "workspace-host", projectId: "project-a" }],
+          ["workspace-empty", { id: "workspace-empty", projectId: "project-a" }],
+        ] as const
+      ).map(([id, workspace]) => [id, workspace as WorkspaceDescriptor]),
+    );
+    const { deps, openedTabs, navigations } = createSidebarFakeDeps({
+      getSessionWorkspaces: () => workspaces,
+      listProjectTabs: () => [
+        { kind: "agent", agentId: "sibling-agent", workspaceId: "workspace-host" },
+      ],
+    });
+
+    const route = await navigateToSidebarWorkspace(
+      {
+        serverId: "server-1",
+        workspaceId: "workspace-empty",
+        tabHost: { serverId: "server-1", workspaceId: "workspace-host" },
+      },
+      deps,
+    );
+
+    const draftOpens = openedTabs.filter((tab) => tab.target.kind === "draft");
+    expect(draftOpens.length).toBeGreaterThan(0);
+    expect(new Set(draftOpens.map((tab) => JSON.stringify(tab.target))).size).toBe(1);
+    expect(draftOpens[0]!.target).toMatchObject({ kind: "draft", workspaceId: "workspace-empty" });
+    expect(draftOpens[0]!.workspaceKey).toBe("server-1:project:project-a");
+    expect(navigations).toEqual([route]);
+  });
+
+  it("keeps the existing tab when the workspace already owns one", async () => {
+    const { deps, openedTabs } = createSidebarFakeDeps({
+      listProjectTabs: () => [
+        { kind: "terminal", terminalId: "own-terminal", workspaceId: "workspace-empty" },
+      ],
+    });
+
+    await navigateToSidebarWorkspace(
+      {
+        serverId: "server-1",
+        workspaceId: "workspace-empty",
+        tabHost: { serverId: "server-1", workspaceId: "workspace-host" },
+      },
+      deps,
+    );
+
+    expect(openedTabs.filter((tab) => tab.target.kind === "draft")).toHaveLength(0);
+  });
+});

@@ -156,6 +156,12 @@ export async function navigateToSidebarWorkspace(
         archivedAt: agent.archivedAt,
       }));
     },
+    listProjectTabs: ({ serverId, workspaceId }) => {
+      const projectKey = resolveProjectLayoutKey({ serverId, workspaceId });
+      if (!projectKey) return null;
+      const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[projectKey];
+      return layout ? collectAllTabs(layout.root).map((tab) => tab.target) : null;
+    },
   };
   return navigateToSidebarWorkspacePure(input, deps);
 }
