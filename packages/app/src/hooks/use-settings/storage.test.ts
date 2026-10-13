@@ -510,6 +510,73 @@ describe("saveAppSettings", () => {
 
     expect((await loadAppSettingsFromStorage(deps)).sidebarRowItems).toEqual(sidebarRowItems);
   });
+
+  it("serializes concurrent saves so a later field update cannot erase an earlier one", async () => {
+    const entries = new Map<string, string>([
+      [APP_SETTINGS_KEY, JSON.stringify(DEFAULT_CLIENT_SETTINGS)],
+    ]);
+    let releaseFirstWrite!: () => void;
+    let markFirstWriteStarted!: () => void;
+    let setCalls = 0;
+    const firstWrite = new Promise<void>((resolve) => {
+      releaseFirstWrite = resolve;
+    });
+    const firstWriteStarted = new Promise<void>((resolve) => {
+      markFirstWriteStarted = resolve;
+    });
+    const deps = makeDeps({
+      storage: {
+        entries,
+        async getItem(key) {
+          return entries.get(key) ?? null;
+        },
+        async setItem(key, value) {
+          setCalls += 1;
+          if (setCalls === 1) {
+            markFirstWriteStarted();
+            await firstWrite;
+          }
+          entries.set(key, value);
+        },
+        async removeItem(key) {
+          entries.delete(key);
+        },
+      },
+    });
+    const queryClient = new QueryClient();
+
+    const first = saveAppSettings({ queryClient, updates: { theme: "light" }, deps });
+    const second = saveAppSettings({
+      queryClient,
+      updates: { syntaxTheme: "dracula" },
+      deps,
+    });
+    await firstWriteStarted;
+    expect(setCalls).toBe(1);
+
+    releaseFirstWrite();
+    await Promise.all([first, second]);
+
+    expect(JSON.parse(entries.get(APP_SETTINGS_KEY) ?? "null")).toMatchObject({
+      theme: "light",
+      syntaxTheme: "dracula",
+    });
+  });
+
+  it("rejects non-finite and out-of-range wallpaper opacity values", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          ...DEFAULT_CLIENT_SETTINGS,
+          wallpaperOpacity: 3,
+        }),
+      }),
+    });
+
+    expect((await loadAppSettingsFromStorage(deps)).wallpaperOpacity).toBe(
+      DEFAULT_CLIENT_SETTINGS.wallpaperOpacity,
+    );
+  });
 });
 
 describe("parseTerminalScrollbackLines", () => {
