@@ -119,6 +119,7 @@ export const fr: TranslationResources = {
       planModeGroupLabel: "Mode plan",
       planModeSearchKeywords: "plan planification mode plan",
       fastModeGroupLabel: "Rapide",
+      fastModeDescription: "Des réponses plus rapides à un coût plus élevé.",
       fastModeSearchKeywords: "rapide vitesse faible latence",
       settingOn: "Activé",
       settingOff: "Désactivé",
@@ -251,9 +252,13 @@ export const fr: TranslationResources = {
       workflow: {
         title: "Flux de travail",
         standard: "Standard",
+        standardDescription: "Exécutez les tâches directement avec le flux de travail par défaut.",
         enhanced: "Amélioré",
+        enhancedDescription: "Continuez automatiquement après des erreurs de requête au modèle.",
         plan: "Plan",
+        planDescription: "Planifiez la tâche avant d’apporter des modifications.",
         goal: "Objectif",
+        goalDescription: "Continuez à travailler vers un objectif défini.",
         goalPlaceholder: "Saisissez un objectif",
       },
       oauthAccount: {

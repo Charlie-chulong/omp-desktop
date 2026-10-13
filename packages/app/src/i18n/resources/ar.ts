@@ -118,6 +118,7 @@ export const ar: TranslationResources = {
       planModeGroupLabel: "وضع التخطيط",
       planModeSearchKeywords: "التخطيط خطة وضع التخطيط",
       fastModeGroupLabel: "سريع",
+      fastModeDescription: "استجابات أسرع بتكلفة أعلى.",
       fastModeSearchKeywords: "سريع سرعة زمن انتقال منخفض",
       settingOn: "تشغيل",
       settingOff: "إيقاف",
@@ -250,9 +251,13 @@ export const ar: TranslationResources = {
       workflow: {
         title: "سير العمل",
         standard: "قياسي",
+        standardDescription: "نفّذ المهام مباشرةً باستخدام سير العمل الافتراضي.",
         enhanced: "معزز",
+        enhancedDescription: "تابع تلقائيًا بعد حدوث أخطاء في الطلبات المرسلة إلى النموذج.",
         plan: "تخطيط",
+        planDescription: "خطّط للمهمة قبل إجراء التغييرات.",
         goal: "هدف",
+        goalDescription: "واصل العمل نحو هدف محدد.",
         goalPlaceholder: "أدخل هدفًا",
       },
       oauthAccount: {

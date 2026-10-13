@@ -1241,9 +1241,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     );
   }
 
-  // Desktop split view — mirrors AppContainer: sidebar owns the titlebar drag
-  // region + traffic-light padding; detail pane renders whatever header the
-  // selected section provides.
+  // Desktop split view — settings navigation beside the selected section.
   return (
     <View style={styles.container}>
       <View style={desktopStyles.row}>

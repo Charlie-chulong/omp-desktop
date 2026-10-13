@@ -118,6 +118,7 @@ export const ptBR: TranslationResources = {
       planModeGroupLabel: "Modo plano",
       planModeSearchKeywords: "plano planejamento modo plano",
       fastModeGroupLabel: "Rápido",
+      fastModeDescription: "Respostas mais rápidas com um custo maior.",
       fastModeSearchKeywords: "rápido velocidade baixa latência",
       settingOn: "Ligado",
       settingOff: "Desligado",
@@ -250,9 +251,13 @@ export const ptBR: TranslationResources = {
       workflow: {
         title: "Fluxo de trabalho",
         standard: "Padrão",
+        standardDescription: "Execute tarefas diretamente com o fluxo de trabalho padrão.",
         enhanced: "Aprimorado",
+        enhancedDescription: "Continue automaticamente após erros nas solicitações ao modelo.",
         plan: "Plano",
+        planDescription: "Planeje a tarefa antes de fazer alterações.",
         goal: "Objetivo",
+        goalDescription: "Continue trabalhando em direção a um objetivo definido.",
         goalPlaceholder: "Digite um objetivo",
       },
       oauthAccount: {

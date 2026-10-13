@@ -1285,6 +1285,31 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
   ) : null;
 }
 
+const WORKFLOW_OPTION_TRANSLATIONS = {
+  standard: {
+    label: "agentControls.features.workflow.standard",
+    description: "agentControls.features.workflow.standardDescription",
+  },
+  enhanced: {
+    label: "agentControls.features.workflow.enhanced",
+    description: "agentControls.features.workflow.enhancedDescription",
+  },
+  plan: {
+    label: "agentControls.features.workflow.plan",
+    description: "agentControls.features.workflow.planDescription",
+  },
+  goal: {
+    label: "agentControls.features.workflow.goal",
+    description: "agentControls.features.workflow.goalDescription",
+  },
+} as const;
+
+function getWorkflowOptionTranslations(optionId: string) {
+  return Object.hasOwn(WORKFLOW_OPTION_TRANSLATIONS, optionId)
+    ? WORKFLOW_OPTION_TRANSLATIONS[optionId as keyof typeof WORKFLOW_OPTION_TRANSLATIONS]
+    : undefined;
+}
+
 function FeatureSelectComboboxOption({
   option,
   selected,
@@ -1302,19 +1327,46 @@ function FeatureSelectComboboxOption({
   featureIcon?: string;
   iconColor: string;
 }) {
+  const { t } = useTranslation();
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const workflowTranslations =
+    featureId === WORKFLOW_MODE_FEATURE_ID ? getWorkflowOptionTranslations(option.id) : undefined;
+  const handlePress = useCallback(() => {
+    setTooltipOpen(false);
+    onPress();
+  }, [onPress]);
   const IconComponent = getAgentFeatureOptionIcon(featureId, option.id, featureIcon);
   const leadingSlot = useMemo(
     () => <IconComponent size={16} color={iconColor} />,
     [IconComponent, iconColor],
   );
-  return (
+  const item = (
     <ComboboxItem
-      label={option.label}
+      label={workflowTranslations ? t(workflowTranslations.label) : option.label}
       selected={selected}
       active={active}
-      onPress={onPress}
+      onPress={workflowTranslations ? handlePress : onPress}
       leadingSlot={leadingSlot}
     />
+  );
+  if (!workflowTranslations) return item;
+
+  return (
+    <Tooltip
+      open={tooltipOpen}
+      onOpenChange={setTooltipOpen}
+      delayDuration={0}
+      enabledOnDesktop
+      enabledOnMobile={false}
+    >
+      <TooltipTrigger asChild>
+        {/* ComboboxItem does not forward hover events or refs; anchor the unchanged row in a View. */}
+        <View collapsable={false}>{item}</View>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="center" offset={8}>
+        <Text style={styles.tooltipText}>{t(workflowTranslations.description)}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

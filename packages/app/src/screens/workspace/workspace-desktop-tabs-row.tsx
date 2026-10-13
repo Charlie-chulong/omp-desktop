@@ -83,7 +83,6 @@ import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import type { Theme } from "@/styles/theme";
 import { RenderProfile } from "@/utils/render-profiler";
-import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { buildWorkspaceKeyboardHandlerId } from "@/keyboard/handler-id";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
@@ -92,20 +91,17 @@ import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useWorkspace } from "@/stores/session-store-hooks";
 
 const DROPDOWN_WIDTH = 220;
-// Chip geometry. `layoutMetrics` measures tabs from these same numbers, so a chip that changes
-// shape without changing them mis-measures and drops the row into the overflow-scroll fallback at
-// the wrong width. Keep them together.
-// Tab chips use content-width sizing within the shared control-height geometry.
-const TAB_CHIP_HORIZONTAL_PADDING = 8;
-const TAB_CHIP_GAP = 4;
-const TAB_ROW_PADDING_HORIZONTAL = 4;
+// Keep the strip's rendered geometry and its overflow measurements in sync.
+const TAB_CHIP_HORIZONTAL_PADDING = 12;
+const TAB_CHIP_GAP = 0;
+const TAB_ROW_PADDING_HORIZONTAL = 0;
 const TAB_ICON_WIDTH = 14;
-const TAB_CONTENT_GAP = 4;
+const TAB_CONTENT_GAP = 8;
 const TAB_DROP_INDICATOR_WIDTH = 4;
 const TAB_MODIFIED_DOT_SIZE = 8;
-const TAB_MIN_WIDTH = 96;
-const TAB_MAX_WIDTH = 160;
-const TAB_CLOSE_BUTTON_RESERVED_WIDTH = 0;
+const TAB_MIN_WIDTH = 120;
+const TAB_MAX_WIDTH = 240;
+const TAB_CLOSE_BUTTON_RESERVED_WIDTH = 24;
 const TAB_LABEL_LAYOUT_ALLOWANCE = 4;
 const TAB_SCROLL_SHADE_WIDTH = 24;
 const TAB_SCROLL_EDGE_EPSILON = 1;
@@ -136,7 +132,7 @@ function WorkspaceTabScrollShadeSvg({ side, color }: { side: "left" | "right"; c
 }
 
 const ThemedWorkspaceTabScrollShadeSvg = withUnistyles(WorkspaceTabScrollShadeSvg);
-const tabScrollShadeColorMapping = (theme: Theme) => ({ color: theme.colors.surface0 });
+const tabScrollShadeColorMapping = (theme: Theme) => ({ color: theme.colors.surfaceSidebar });
 
 function WorkspaceTabScrollShades({
   visible,
@@ -569,16 +565,16 @@ function useMiddleClickClose(onClose: () => void) {
   return ref;
 }
 
-/** The chip fill the running-status ring has to knock out of. Mirrors `styles.tab*` exactly. */
+/** Match the tab fill so status rings knock out of the correct surface. */
 function resolveChipBackdrop({
-  isActiveFocused,
-  isFilled,
+  isActive,
+  isHovered,
 }: {
-  isActiveFocused: boolean;
-  isFilled: boolean;
+  isActive: boolean;
+  isHovered: boolean;
 }): SurfaceBackdrop {
-  if (isActiveFocused) return "surface2";
-  return isFilled ? "surface1" : "surface0";
+  if (isActive) return "surface0";
+  return isHovered ? "surface1" : "surfaceSidebar";
 }
 
 function TabHandleContent({
@@ -635,7 +631,6 @@ function TabChip({
   isActive,
   revealWorkspacePath,
   isDragging,
-  isFocused,
   resolvedTabWidth,
   showLabel,
   showCloseButton,
@@ -653,7 +648,6 @@ function TabChip({
   revealWorkspacePath: string | null;
   isActive: boolean;
   isDragging: boolean;
-  isFocused: boolean;
   resolvedTabWidth: number;
   showLabel: boolean;
   showCloseButton: boolean;
@@ -667,19 +661,17 @@ function TabChip({
   onCloseTab: (tabId: string) => Promise<void> | void;
   dragHandleProps: DraggableListDragHandleProps | undefined;
 }) {
+  const { t } = useTranslation();
   const { closeButtonTestId, contextMenuTestId, menuEntries } = resolvedTab;
   const middleClickRef = useMiddleClickClose(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
   );
   const [hovered, setHovered] = useState(false);
-  // Every pane's active tab uses the same label and icon emphasis. Pane focus remains visible
-  // through the stronger chip fill, without making the active tab in a sibling pane look disabled.
-  const isActiveFocused = isActive && isFocused;
   const isHovered = hovered || isCloseHovered;
   const isHighlighted = isActive || isHovered;
   const chipBackdrop: SurfaceBackdrop = resolveChipBackdrop({
-    isActiveFocused,
-    isFilled: isActive || isHovered,
+    isActive,
+    isHovered,
   });
   const closeButtonDragBlockers = isWeb
     ? ({
@@ -695,8 +687,7 @@ function TabChip({
   const tabChipStyle = useCallback(
     () => [
       styles.tab,
-      isActiveFocused && styles.tabActive,
-      isActive && !isFocused && styles.tabActiveUnfocused,
+      isActive && styles.tabActive,
       !isActive && isHovered && styles.tabHovered,
       isWeb && isDragging && ({ cursor: "grabbing" } as object),
       {
@@ -705,7 +696,7 @@ function TabChip({
         maxWidth: resolvedTabWidth,
       },
     ],
-    [isActive, isActiveFocused, isDragging, isFocused, isHovered, resolvedTabWidth],
+    [isActive, isDragging, isHovered, resolvedTabWidth],
   );
 
   const handleTabPointerEnter = useCallback(() => {
@@ -802,9 +793,8 @@ function TabChip({
           </TooltipContent>
         </Tooltip>
 
-        {showCloseButton ? (
+        {showCloseButton && (isActive || isHovered || isClosingTab) ? (
           <View pointerEvents="box-none" style={styles.tabTrailingOverlay}>
-            <TrailingActionScrim backdrop={chipBackdrop} />
             <Pressable
               {...(closeButtonDragBlockers as object | undefined)}
               testID={closeButtonTestId}
@@ -813,6 +803,8 @@ function TabChip({
               onHoverIn={handleCloseButtonHoverIn}
               onHoverOut={handleCloseButtonHoverOut}
               onPress={handleCloseButtonPress}
+              accessibilityRole="button"
+              accessibilityLabel={t("workspace.tabs.menu.close")}
               style={styles.tabCloseButton}
             >
               {({ hovered: closeHovered, pressed }) => {
@@ -1213,7 +1205,6 @@ function ResolvedWorkspaceDesktopTabsRow({
           serverId={normalizedServerId}
           fallbackWorkspaceId={normalizedWorkspaceId}
           isLocalDaemon={isLocalDaemon}
-          isFocused={isFocused}
           isDragging={isActive}
           index={index}
           tabCount={displayedTabs.length}
@@ -1244,7 +1235,6 @@ function ResolvedWorkspaceDesktopTabsRow({
       isLocalDaemon,
       normalizedServerId,
       normalizedWorkspaceId,
-      isFocused,
       layout.closeButtonPolicy,
       layout.items,
       onCloseOtherTabs,
@@ -1281,6 +1271,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       testID="workspace-tabs-row"
       onLayout={handleTabsContainerLayout}
     >
+      <View pointerEvents="none" style={styles.tabsBottomBorder} />
       <View
         style={styles.tabLabelMeasurements}
         pointerEvents="none"
@@ -1349,7 +1340,6 @@ function ResolvedDesktopTabChip({
   serverId,
   fallbackWorkspaceId,
   isLocalDaemon,
-  isFocused,
   isDragging,
   index,
   tabCount,
@@ -1377,7 +1367,6 @@ function ResolvedDesktopTabChip({
   serverId: string;
   fallbackWorkspaceId: string;
   isLocalDaemon: boolean;
-  isFocused: boolean;
   isDragging: boolean;
   index: number;
   tabCount: number;
@@ -1490,7 +1479,6 @@ function ResolvedDesktopTabChip({
         revealWorkspacePath={revealWorkspacePath}
         isActive={item.isActive}
         isDragging={isDragging}
-        isFocused={isFocused}
         resolvedTabWidth={resolvedTabWidth}
         showLabel={showLabel}
         showCloseButton={showCloseButton}
@@ -1515,12 +1503,18 @@ const styles = StyleSheet.create((theme) => ({
   tabsContainer: {
     minWidth: 0,
     height: WORKSPACE_SECONDARY_HEADER_HEIGHT,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surfaceSidebar,
     flexDirection: "row",
     alignItems: "center",
     overflow: "visible",
+  },
+  tabsBottomBorder: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: theme.colors.border,
   },
   tabsScroll: {
     minWidth: 0,
@@ -1538,6 +1532,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabsContent: {
     flexDirection: "row",
+    minHeight: WORKSPACE_SECONDARY_HEADER_HEIGHT,
     alignItems: "center",
     paddingHorizontal: TAB_ROW_PADDING_HORIZONTAL,
   },
@@ -1571,22 +1566,24 @@ const styles = StyleSheet.create((theme) => ({
     marginRight: theme.spacing[2],
   },
   tab: {
-    height: buttonControlHeight.xs,
+    height: WORKSPACE_SECONDARY_HEADER_HEIGHT,
     paddingHorizontal: TAB_CHIP_HORIZONTAL_PADDING,
-    borderRadius: theme.borderRadius.md,
+    borderRightWidth: 1,
+    borderRightColor: theme.colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSidebar,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
+    gap: TAB_CONTENT_GAP,
     userSelect: "none",
   },
   tabHovered: {
     backgroundColor: theme.colors.surface1,
   },
   tabActive: {
-    backgroundColor: theme.colors.surface2,
-  },
-  tabActiveUnfocused: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.surface0,
+    borderBottomColor: theme.colors.surface0,
   },
   tabHoverFrame: {
     position: "relative",
@@ -1594,14 +1591,14 @@ const styles = StyleSheet.create((theme) => ({
   tabSlot: {
     position: "relative",
     overflow: "visible",
-    marginHorizontal: TAB_CHIP_GAP / 2,
   },
   tabHandle: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
+    gap: TAB_CONTENT_GAP,
     flex: 1,
     minWidth: 0,
+    paddingRight: TAB_CLOSE_BUTTON_RESERVED_WIDTH,
     userSelect: "none",
   },
   tabIcon: {
@@ -1611,8 +1608,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  // The chip box stops at the slot's padding box, so the gap between two chips runs from
-  // -TAB_CHIP_GAP to 0. Centre a TAB_DROP_INDICATOR_WIDTH pill in it.
+  // Center the insertion marker on the shared border between adjacent tabs.
   tabDropIndicator: {
     position: "absolute",
     top: theme.spacing[0.5],
@@ -1632,7 +1628,7 @@ const styles = StyleSheet.create((theme) => ({
   tabLabel: {
     flexShrink: 1,
     minWidth: 0,
-    color: theme.colors.foregroundMuted,
+    color: theme.colors.foregroundExtraMuted,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
     lineHeight: 20,
@@ -1667,9 +1663,7 @@ const styles = StyleSheet.create((theme) => ({
     top: 0,
     right: 0,
     bottom: 0,
-    width: 48,
-    borderTopRightRadius: theme.borderRadius.md,
-    borderBottomRightRadius: theme.borderRadius.md,
+    width: TAB_CLOSE_BUTTON_RESERVED_WIDTH + TAB_CHIP_HORIZONTAL_PADDING,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
@@ -1677,7 +1671,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabCloseButton: {
     position: "absolute",
-    right: 4,
+    right: TAB_CHIP_HORIZONTAL_PADDING,
     width: 18,
     height: 18,
     borderRadius: theme.borderRadius.sm,

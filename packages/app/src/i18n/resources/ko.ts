@@ -118,6 +118,7 @@ export const ko: TranslationResources = {
       planModeGroupLabel: "계획 모드",
       planModeSearchKeywords: "계획 플랜 계획 모드",
       fastModeGroupLabel: "빠르게",
+      fastModeDescription: "더 높은 비용으로 더 빠른 응답을 제공합니다.",
       fastModeSearchKeywords: "빠르게 속도 낮은 지연 시간",
       settingOn: "켜짐",
       settingOff: "꺼짐",
@@ -250,9 +251,13 @@ export const ko: TranslationResources = {
       workflow: {
         title: "워크플로",
         standard: "표준",
+        standardDescription: "기본 워크플로로 작업을 바로 실행합니다.",
         enhanced: "향상",
+        enhancedDescription: "모델 요청 오류가 발생한 후 자동으로 계속 진행합니다.",
         plan: "계획",
+        planDescription: "변경하기 전에 작업 계획을 세웁니다.",
         goal: "목표",
+        goalDescription: "설정된 목표를 향해 계속 작업합니다.",
         goalPlaceholder: "목표를 입력하세요",
       },
       oauthAccount: {

@@ -20,6 +20,16 @@ Select **Configure models** on the home screen to open **Host Settings → Model
 directly. The shortcut targets the local host when available, otherwise the first configured
 host; if no host is configured, it opens the add-host flow.
 
+Desktop windows use a full-width title bar above the sidebar and workspace tabs.
+The desktop sidebar shares the title bar's background, and its toggle stays in
+the title bar when collapsed. Native window buttons retain their reserved space.
+Workspace tabs sit edge-to-edge with square corners and thin separators; the active
+tab shares the content background, with its close button visible on selection or hover.
+
+Hover **Fast** in model settings to see its cost explanation. The **Standard**,
+**Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
+These tips follow the interface language in all nine supported locales.
+
 ## Choosing OMP subagent models
 
 In **Host Settings → OMP subagents**, enable **Override built-in subagent models** and

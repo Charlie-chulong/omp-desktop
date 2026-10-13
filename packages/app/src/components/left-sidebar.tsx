@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronUp,
   CircleUserRound,
-  GitBranch,
   History,
   Home,
   Import as ImportIcon,
@@ -42,7 +41,6 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-nativ
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
 import { resolveDesktopSidebarWidth } from "@/components/desktop-sidebar-layout";
 import {
   SIDEBAR_RESIZE_ACTIVATION_OFFSET,
@@ -83,7 +81,7 @@ import {
   resolveModelBrowserProviderId,
   resolveModelBrowserProviderNamespaceId,
 } from "@/composer/agent-controls/model-sheet-flow";
-import { HEADER_INNER_HEIGHT, useIsCompactFormFactor } from "@/constants/layout";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { useOpenAddProject } from "@/hooks/use-open-add-project";
 import { useOpenProject } from "@/hooks/use-open-project";
 import type { OpenProjectResult } from "@/hooks/open-project";
@@ -107,7 +105,7 @@ import {
 } from "@/hooks/use-omp-account-quota";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { usePanelStore } from "@/stores/panel-store";
-import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
+import { WindowChromeSafeArea } from "@/utils/desktop-window";
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { useIsMobilePanelPresented } from "@/mobile-panels/provider";
@@ -136,7 +134,6 @@ type SidebarAccountFeature = Extract<
   { type: "select" }
 >;
 
-const DEV_BUILD_LABEL = process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() || null;
 const EXPANDED_ACCESSIBILITY_STATE = { expanded: true } as const;
 const COLLAPSED_ACCESSIBILITY_STATE = { expanded: false } as const;
 
@@ -1751,7 +1748,6 @@ function DesktopSidebar({
   handleViewMore,
   handleViewSchedules,
 }: DesktopSidebarProps) {
-  const ownsTopLeft = useOwnsWindowChromeCorner("top-left");
   const pathname = usePathname();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const isSessionsActive = pathname.includes("/sessions");
@@ -1830,10 +1826,6 @@ function DesktopSidebar({
     () => [styles.desktopSidebarBorder, { flex: 1, paddingTop: insetsTop }],
     [insetsTop],
   );
-  const sidebarHeaderGroupStyle = useMemo(
-    () => [styles.sidebarHeaderGroup, ownsTopLeft && styles.sidebarHeaderGroupBelowChrome],
-    [ownsTopLeft],
-  );
   return (
     <Animated.View
       accessibilityElementsHidden={!active}
@@ -1849,59 +1841,37 @@ function DesktopSidebar({
         openProject={openLocalProject}
         style={desktopSidebarBorderStyle}
       >
-        <View style={styles.sidebarDragArea}>
-          {ownsTopLeft || DEV_BUILD_LABEL ? (
-            <View style={styles.desktopChromeRow}>
-              <TitlebarDragRegion />
-              {DEV_BUILD_LABEL ? (
-                <View
-                  pointerEvents="none"
-                  style={styles.devBuildBadge}
-                  testID="dev-build-label"
-                  accessibilityLabel={`Development build: ${DEV_BUILD_LABEL}`}
-                >
-                  <GitBranch size={12} color={theme.colors.accentForeground} />
-                  <Text numberOfLines={1} ellipsizeMode="tail" style={styles.devBuildBadgeText}>
-                    {DEV_BUILD_LABEL}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : (
-            <TitlebarDragRegion />
-          )}
-          <View style={sidebarHeaderGroupStyle}>
-            <SidebarNewWorkspaceHeaderRow
-              label={labels.newWorkspace}
-              testID="sidebar-global-new-workspace"
-              variant="compact"
-              shortcutKeys={newWorkspaceKeys}
-              onPress={handleOpenProject}
-            />
-            <SidebarHeaderRow
-              icon={ImportIcon}
-              label={labels.importSession}
-              onPress={handleOpenImportSession}
-              testID="sidebar-import-session"
-              variant="compact"
-            />
-            <SidebarHeaderRow
-              icon={History}
-              label={labels.sessions}
-              onPress={handleViewMore}
-              isActive={isSessionsActive}
-              testID="sidebar-sessions"
-              variant="compact"
-            />
-            <SidebarHeaderRow
-              icon={CalendarClock}
-              label={labels.schedules}
-              onPress={handleViewSchedules}
-              isActive={isSchedulesActive}
-              testID="sidebar-schedules"
-              variant="compact"
-            />
-          </View>
+        <View style={styles.sidebarHeaderGroup}>
+          <SidebarNewWorkspaceHeaderRow
+            label={labels.newWorkspace}
+            testID="sidebar-global-new-workspace"
+            variant="compact"
+            shortcutKeys={newWorkspaceKeys}
+            onPress={handleOpenProject}
+          />
+          <SidebarHeaderRow
+            icon={ImportIcon}
+            label={labels.importSession}
+            onPress={handleOpenImportSession}
+            testID="sidebar-import-session"
+            variant="compact"
+          />
+          <SidebarHeaderRow
+            icon={History}
+            label={labels.sessions}
+            onPress={handleViewMore}
+            isActive={isSessionsActive}
+            testID="sidebar-sessions"
+            variant="compact"
+          />
+          <SidebarHeaderRow
+            icon={CalendarClock}
+            label={labels.schedules}
+            onPress={handleViewSchedules}
+            isActive={isSchedulesActive}
+            testID="sidebar-schedules"
+            variant="compact"
+          />
         </View>
 
         {isInitialLoad && !hasActiveHostFilter ? (
@@ -2025,9 +1995,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[2],
     userSelect: "none",
   },
-  sidebarHeaderGroupBelowChrome: {
-    paddingTop: 0,
-  },
   workspacesSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -2088,37 +2055,7 @@ const styles = StyleSheet.create((theme) => ({
   desktopSidebarBorder: {
     borderRightWidth: 1,
     borderRightColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceSidebar,
-  },
-  sidebarDragArea: {
-    position: "relative",
-  },
-  desktopChromeRow: {
-    position: "relative",
-    height: HEADER_INNER_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingHorizontal: theme.spacing[3],
-    borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: "transparent",
-  },
-  devBuildBadge: {
-    maxWidth: "60%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
-    paddingVertical: 2,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.accent,
-  },
-  devBuildBadgeText: {
-    minWidth: 0,
-    flexShrink: 1,
-    color: theme.colors.accentForeground,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
+    backgroundColor: theme.colors.surface0,
   },
   sidebarFooter: {
     paddingHorizontal: theme.spacing[2],

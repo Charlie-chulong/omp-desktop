@@ -19,6 +19,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { GitBranch } from "lucide-react-native";
 import { AppearanceProvider } from "@/appearance/provider";
 import { CommandCenter } from "@/command-center/command-center";
 import { CommandCenterRootActions } from "@/command-center/root-registration";
@@ -36,6 +37,7 @@ import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
 import { AppDiagnosticHost } from "@/components/app-diagnostic-host";
 import { LeftSidebar } from "@/components/left-sidebar";
 import { WindowSidebarMenuToggle } from "@/components/headers/menu-header";
+import { ScreenHeader } from "@/components/headers/screen-header";
 import { SidebarModelProvider } from "@/components/sidebar/sidebar-model";
 import { WorkspacePinShortcutHandler } from "@/components/workspace-pin-shortcut-handler";
 import { CompactExplorerSidebarHost } from "@/components/compact-explorer-sidebar-host";
@@ -51,7 +53,6 @@ import {
 } from "@/constants/layout";
 import {
   canDesktopAppSidebarShare,
-  resolveDesktopAppChromeLayout,
   resolveDesktopAppContentMinimum,
   resolveDesktopSidebarVisibility,
 } from "@/components/desktop-sidebar-layout";
@@ -117,12 +118,7 @@ import {
 } from "@/stores/navigation-active-workspace-store";
 import { installWebScrollbarStyles } from "@/styles/install-web-scrollbar-styles";
 import type { HostProfile } from "@/types/host-connection";
-import {
-  useHasWindowChromeObstruction,
-  WindowChromeProvider,
-  WindowChromeRegion,
-  WindowChromeSafeArea,
-} from "@/utils/desktop-window";
+import { WindowChromeProvider, WindowChromeRegion } from "@/utils/desktop-window";
 import {
   parseHostWorkspaceRouteFromPathname,
   parseServerIdFromPathname,
@@ -417,8 +413,7 @@ interface AppContainerProps {
   chromeEnabled?: boolean;
 }
 
-const WINDOW_SIDEBAR_TOGGLE_HORIZONTAL_PADDING = 12;
-const WINDOW_CHROME_INTERACTIVE_DATASET = { "window-chrome-interactive": "true" } as const;
+const DEV_BUILD_LABEL = process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() || null;
 
 function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppContainerProps) {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
@@ -526,12 +521,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
       viewportWidth,
     }),
   });
-  const hasTopLeftWindowControls = useHasWindowChromeObstruction("top-left");
-  const appChromeLayout = resolveDesktopAppChromeLayout({
-    desktopSidebarRendered: desktopSidebarVisible,
-    hasTopLeftWindowControls,
-    sidebarControlsEnabled: chromeEnabled && !isWorkspaceFocusModeEnabled,
-  });
+  const hasWindowTitlebar = !isCompactLayout && getIsElectronRuntime();
   const sidebarChrome = (
     <SidebarChrome
       mounted={isCompactLayout ? chromeEnabled : desktopSidebarMounted}
@@ -541,56 +531,28 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   );
   const workspaceChrome = (
     <View style={rowStyle}>
-      {!isCompactLayout ? (
-        <WindowChromeRegion corners={appChromeLayout.sidebarCorners}>
-          {sidebarChrome}
-        </WindowChromeRegion>
-      ) : null}
+      {!isCompactLayout ? sidebarChrome : null}
       {isCompactLayout ? (
         <CompactExplorerSidebarHost enabled={chromeEnabled}>
-          <WindowChromeRegion corners={chromeEnabled ? "both" : appChromeLayout.contentCorners}>
-            <View style={flexStyle}>{children}</View>
-          </WindowChromeRegion>
+          <View style={flexStyle}>{children}</View>
         </CompactExplorerSidebarHost>
       ) : (
-        <WindowChromeRegion corners={appChromeLayout.contentCorners}>
-          <View style={flexStyle}>{children}</View>
-        </WindowChromeRegion>
+        <View style={flexStyle}>{children}</View>
       )}
     </View>
   );
 
   const surface = (
     <View style={layoutStyles.surfaceFill}>
-      {workspaceChrome}
-      {!isCompactLayout && getIsElectronRuntime() && activeProjectName ? (
-        <View
-          pointerEvents="none"
-          style={layoutStyles.windowProjectTitle}
-          testID="window-active-project-title"
-        >
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            style={layoutStyles.windowProjectTitleText}
-          >
-            {activeProjectName}
-          </Text>
-        </View>
+      {hasWindowTitlebar ? (
+        <DesktopWindowTitlebar
+          projectName={activeProjectName}
+          sidebarControlsEnabled={chromeEnabled && !isWorkspaceFocusModeEnabled}
+        />
       ) : null}
-      {!isCompactLayout && appChromeLayout.sidebarToggleOwner === "window" ? (
-        <WindowChromeRegion corners="top-left">
-          <WindowChromeSafeArea
-            placement="inline"
-            horizontalPadding={WINDOW_SIDEBAR_TOGGLE_HORIZONTAL_PADDING}
-            dataSet={WINDOW_CHROME_INTERACTIVE_DATASET}
-            pointerEvents="box-none"
-            style={layoutStyles.windowSidebarToggle}
-          >
-            <WindowSidebarMenuToggle />
-          </WindowChromeSafeArea>
-        </WindowChromeRegion>
-      ) : null}
+      <WindowChromeRegion corners={hasWindowTitlebar ? "none" : "both"}>
+        {workspaceChrome}
+      </WindowChromeRegion>
       <FloatingPanelPortalHost />
       {isCompactLayout ? sidebarChrome : null}
       <DownloadToast />
@@ -616,6 +578,56 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   );
 
   return <CommandCenterProvider>{content}</CommandCenterProvider>;
+}
+
+function DesktopWindowTitlebar({
+  projectName,
+  sidebarControlsEnabled,
+}: {
+  projectName: string | null;
+  sidebarControlsEnabled: boolean;
+}) {
+  const { theme } = useUnistyles();
+  return (
+    <View style={layoutStyles.windowTitlebar} testID="desktop-window-titlebar">
+      <ScreenHeader
+        left={
+          sidebarControlsEnabled ? <WindowSidebarMenuToggle testID="window-sidebar-toggle" /> : null
+        }
+        right={
+          DEV_BUILD_LABEL ? (
+            <View
+              pointerEvents="none"
+              style={layoutStyles.devBuildBadge}
+              testID="dev-build-label"
+              accessibilityLabel={`Development build: ${DEV_BUILD_LABEL}`}
+            >
+              <GitBranch size={12} color={theme.colors.accentForeground} />
+              <Text numberOfLines={1} ellipsizeMode="tail" style={layoutStyles.devBuildBadgeText}>
+                {DEV_BUILD_LABEL}
+              </Text>
+            </View>
+          ) : null
+        }
+        rightStyle={layoutStyles.windowTitlebarRight}
+      />
+      {projectName ? (
+        <View
+          pointerEvents="none"
+          style={layoutStyles.windowProjectTitle}
+          testID="window-active-project-title"
+        >
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="middle"
+            style={layoutStyles.windowProjectTitleText}
+          >
+            {projectName}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function SidebarChrome({
@@ -978,6 +990,13 @@ const layoutStyles = StyleSheet.create((theme) => ({
     position: "relative",
     zIndex: 1,
   },
+  windowTitlebar: {
+    position: "relative",
+    flexShrink: 0,
+  },
+  windowTitlebarRight: {
+    maxWidth: "25%",
+  },
   windowProjectTitle: {
     position: "absolute",
     top: 0,
@@ -994,15 +1013,21 @@ const layoutStyles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: "600",
   },
-  windowSidebarToggle: {
-    position: "absolute",
-    top: 1,
-    left: 0,
-    zIndex: 20,
-    height: HEADER_INNER_HEIGHT,
+  devBuildBadge: {
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
-    borderBottomWidth: theme.borderWidth[1],
-    borderBottomColor: "transparent",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.accent,
+  },
+  devBuildBadgeText: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: theme.colors.accentForeground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
   },
 }));

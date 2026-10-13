@@ -2,16 +2,23 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { AgentSelectOption } from "@omp-desktop/protocol/agent-types";
 import { ThinkingIcon } from "@/agent-controls/icons";
 import { formatThinkingOptionLabel } from "@/agent-controls/labels";
-import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { formatTokenCount } from "@/components/context-window-meter.utils";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
 import { Combobox, ComboboxItem, type ComboboxOption } from "@/components/ui/combobox";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FastModeFeature } from "@/composer/agent-controls/utils";
+import type { Theme } from "@/styles/theme";
+
+const ThemedThinkingIcon = withUnistyles(ThinkingIcon);
+const ThemedZap = withUnistyles(Zap);
+const foregroundIconColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
+const mutedIconColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const fastIconColorMapping = (theme: Theme) => ({ color: theme.colors.palette.yellow[400] });
 
 interface ModelSettingsPanelProps {
   thinkingOptions: AgentSelectOption[];
@@ -34,12 +41,11 @@ export function ModelSettingsPanel({
   onSetFeature,
   contextWindowMaxTokens,
   contextControl,
-  disabled = false,
-  pending = false,
-  compact = false,
+  disabled,
+  pending,
+  compact,
 }: ModelSettingsPanelProps) {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
   const thinkingAnchorRef = useRef<View>(null);
   const [thinkingOpen, setThinkingOpen] = useState(false);
   const thinkingComboboxOptions = useMemo<ComboboxOption[]>(
@@ -51,11 +57,14 @@ export function ModelSettingsPanel({
       })),
     [thinkingOptions],
   );
-  const selectedThinking =
-    thinkingComboboxOptions.find((option) => option.id === selectedThinkingOptionId) ??
-    thinkingComboboxOptions[0] ??
-    null;
-  const controlsDisabled = disabled || pending;
+  const selectedThinking = useMemo(
+    () =>
+      thinkingComboboxOptions.find((option) => option.id === selectedThinkingOptionId) ??
+      thinkingComboboxOptions[0] ??
+      null,
+    [thinkingComboboxOptions, selectedThinkingOptionId],
+  );
+  const controlsDisabled = Boolean(disabled || pending);
   const hasThinking = thinkingComboboxOptions.length > 1 && Boolean(onSelectThinkingOption);
   const hasContext = contextControl != null || contextWindowMaxTokens !== undefined;
   const hasControls = hasThinking || fastMode !== null || hasContext;
@@ -76,6 +85,10 @@ export function ModelSettingsPanel({
     },
     [fastMode, onSetFeature],
   );
+  const thinkingLeadingSlot = useMemo(
+    () => <ThemedThinkingIcon size={16} uniProps={foregroundIconColorMapping} />,
+    [],
+  );
   const renderThinkingOption = useCallback(
     (args: { option: ComboboxOption; selected: boolean; active: boolean; onPress: () => void }) => (
       <ComboboxItem
@@ -84,10 +97,10 @@ export function ModelSettingsPanel({
         selected={args.selected}
         active={args.active}
         onPress={args.onPress}
-        leadingSlot={<ThinkingIcon size={16} color={theme.colors.foreground} />}
+        leadingSlot={thinkingLeadingSlot}
       />
     ),
-    [theme.colors.foreground],
+    [thinkingLeadingSlot],
   );
 
   if (!hasControls) return null;
@@ -130,31 +143,12 @@ export function ModelSettingsPanel({
           </>
         ) : null}
         {fastMode ? (
-          <View style={[styles.settingRow, controlsDisabled && styles.disabled]}>
-            <View style={styles.settingGlyph}>
-              <Zap
-                size={15}
-                color={
-                  fastMode.value ? theme.colors.palette.yellow[400] : theme.colors.foregroundMuted
-                }
-              />
-            </View>
-            <View style={styles.settingText}>
-              <Text style={styles.settingLabel}>{t("shell.commandCenter.fastModeGroupLabel")}</Text>
-              {fastMode.description ? (
-                <Text style={styles.settingDescription} numberOfLines={1}>
-                  {fastMode.description}
-                </Text>
-              ) : null}
-            </View>
-            <Switch
-              value={fastMode.value}
-              onValueChange={handleFastModeChange}
-              disabled={controlsDisabled || !onSetFeature}
-              accessibilityLabel={t("shell.commandCenter.fastModeGroupLabel")}
-              testID="model-settings-fast-mode"
-            />
-          </View>
+          <FastModeSetting
+            fastMode={fastMode}
+            disabled={controlsDisabled}
+            canSetFeature={Boolean(onSetFeature)}
+            onValueChange={handleFastModeChange}
+          />
         ) : null}
         {contextControl ??
           (contextWindowMaxTokens !== undefined ? (
@@ -168,6 +162,50 @@ export function ModelSettingsPanel({
           ) : null)}
       </View>
     </View>
+  );
+}
+
+function FastModeSetting({
+  fastMode,
+  disabled,
+  canSetFeature,
+  onValueChange,
+}: {
+  fastMode: FastModeFeature;
+  disabled: boolean;
+  canSetFeature: boolean;
+  onValueChange: (value: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const rowStyle = useMemo(() => [styles.settingRow, disabled && styles.disabled], [disabled]);
+  return (
+    <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
+      <TooltipTrigger style={rowStyle} testID="model-settings-fast-mode-row" accessible={false}>
+        <View style={styles.settingGlyph}>
+          <ThemedZap
+            size={15}
+            uniProps={fastMode.value ? fastIconColorMapping : mutedIconColorMapping}
+          />
+        </View>
+        <Text style={styles.settingLabel}>{t("shell.commandCenter.fastModeGroupLabel")}</Text>
+        <Switch
+          value={fastMode.value}
+          onValueChange={onValueChange}
+          disabled={disabled || !canSetFeature}
+          accessibilityLabel={t("shell.commandCenter.fastModeGroupLabel")}
+          testID="model-settings-fast-mode"
+        />
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="start"
+        offset={8}
+        maxWidth={320}
+        testID="model-settings-fast-mode-tooltip"
+      >
+        <Text style={styles.tooltipText}>{t("shell.commandCenter.fastModeDescription")}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -231,10 +269,6 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
-  settingText: {
-    flex: 1,
-    minWidth: 0,
-  },
   settingLabel: {
     flex: 1,
     minWidth: 0,
@@ -242,10 +276,10 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 13,
     fontWeight: theme.fontWeight.medium,
   },
-  settingDescription: {
-    color: theme.colors.foregroundMuted,
-    fontSize: 11,
-    lineHeight: 14,
+  tooltipText: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
   },
   settingValue: {
     color: theme.colors.foregroundMuted,

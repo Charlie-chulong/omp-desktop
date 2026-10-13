@@ -133,6 +133,7 @@ export const zhCN: TranslationResources = {
       planModeGroupLabel: "计划模式",
       planModeSearchKeywords: "计划 规划 计划模式",
       fastModeGroupLabel: "快速",
+      fastModeDescription: "以更高费用获得更快的响应。",
       fastModeSearchKeywords: "快速 速度 低延迟",
       settingOn: "开",
       settingOff: "关",
@@ -265,9 +266,13 @@ export const zhCN: TranslationResources = {
       workflow: {
         title: "工作流",
         standard: "标准",
+        standardDescription: "使用默认工作流直接执行任务。",
         enhanced: "增强",
+        enhancedDescription: "模型请求出错后自动继续。",
         plan: "计划",
+        planDescription: "在进行更改前先规划任务。",
         goal: "目标",
+        goalDescription: "持续朝设定的目标推进。",
         goalPlaceholder: "请输入目标",
       },
       oauthAccount: {
