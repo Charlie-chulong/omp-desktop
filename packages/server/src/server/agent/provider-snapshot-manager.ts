@@ -1,6 +1,4 @@
 import { EventEmitter } from "node:events";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
 
 import type { Logger } from "pino";
 import type {
@@ -8,7 +6,6 @@ import type {
   OmpProviderLoginCompletedMessage,
 } from "@omp-desktop/protocol/messages";
 
-import { expandTilde } from "../../utils/path.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
 import {
   filterSelectableAgentModels,
@@ -18,7 +15,6 @@ import {
   type AgentModelDefinition,
   type AgentProvider,
   type OmpProviderManagement,
-  type FetchCatalogOptions,
   type ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
 import {
@@ -114,17 +110,14 @@ export interface ProviderSnapshotManagerOptions {
 }
 
 interface ProviderSnapshotRefreshOptions {
-  cwd: string;
   providers?: AgentProvider[];
 }
 
 interface ProviderSnapshotWarmUpOptions {
-  cwd?: string | null;
   providers?: AgentProvider[];
 }
 
 interface ProviderSnapshotReadOptions {
-  cwd?: string | null;
   providers?: AgentProvider[];
   wait?: boolean;
 }
@@ -141,13 +134,11 @@ export interface StagedMutableProviderConfig {
 }
 
 interface ProviderSnapshotProviderOptions {
-  cwd?: string | null;
   provider: AgentProvider;
   wait?: boolean;
 }
 
 export interface ResolveProviderCreateConfigOptions {
-  cwd?: string | null;
   provider: AgentProvider;
   requestedMode: string | undefined;
   featureValues: Record<string, unknown> | undefined;
@@ -163,7 +154,6 @@ export interface ResolvedProviderCreateConfig {
 interface ResolveDefaultModelOptions {
   provider: AgentProvider;
   requestedModel?: string | null;
-  cwd?: string;
 }
 
 export interface ProviderDiagnosticResult {
@@ -204,7 +194,7 @@ interface MutableProviderState {
   providerLoads: Map<string, Map<AgentProvider, ProviderLoad>>;
 }
 
-type ProviderCatalogScope = { scope: "global" } | { scope: "workspace"; cwd: string };
+type ProviderCatalogScope = { scope: "global" };
 
 interface ProviderSnapshotTarget {
   snapshotCwd: string;
@@ -252,43 +242,25 @@ export class ProviderSnapshotManager {
     for (const client of Object.values(this.providerClients)) this.ownedClients.add(client);
   }
 
-  getSnapshot(cwd?: string): ProviderSnapshotEntry[] {
-    const target = resolveProviderSnapshotTarget(cwd);
+  getSnapshot(): ProviderSnapshotEntry[] {
+    const target = createGlobalSnapshotTarget();
     return this.getSnapshotForTarget(target);
   }
 
-  async refreshSnapshotForCwd(options: ProviderSnapshotRefreshOptions): Promise<void> {
-    const snapshotCwd = resolveSnapshotCwd(options.cwd);
-    const target = createWorkspaceSnapshotTarget(snapshotCwd);
-    const providers = this.resolveRefreshProviders(options.providers);
-    this.resetSnapshotToLoading(snapshotCwd, providers, { preserveExisting: false });
-    this.emitChange(snapshotCwd);
-    await this.refreshProviders(target, providers ?? this.getProviderIds());
-  }
-
-  async refreshSettingsSnapshot(
-    options: Omit<ProviderSnapshotRefreshOptions, "cwd"> = {},
-  ): Promise<void> {
+  async refreshSettingsSnapshot(options: ProviderSnapshotRefreshOptions = {}): Promise<void> {
     const target = createGlobalSnapshotTarget();
     const homeCwd = target.snapshotCwd;
     const providers = this.resolveRefreshProviders(options.providers);
     const providersToRefresh = providers ?? this.getProviderIds();
-    const targets = [target];
-    for (const cwd of this.snapshots.keys()) {
-      if (!isGlobalProviderSnapshotKey(cwd)) {
-        targets.push(createWorkspaceSnapshotTarget(cwd));
-      }
-    }
 
     this.clearCachedProviders(providers);
     this.resetSnapshotToLoading(homeCwd, providers, { preserveExisting: false });
     this.emitChange(homeCwd);
-    // Existing clients consume pushed snapshots and may never read these scopes again.
-    await Promise.all(targets.map((scope) => this.refreshProviders(scope, providersToRefresh)));
+    await this.refreshProviders(target, providersToRefresh);
   }
 
-  async warmUpSnapshotForCwd(options: ProviderSnapshotWarmUpOptions): Promise<void> {
-    const target = resolveProviderSnapshotTarget(options.cwd);
+  async warmUpSnapshot(options: ProviderSnapshotWarmUpOptions = {}): Promise<void> {
+    const target = createGlobalSnapshotTarget();
     const snapshotCwd = target.snapshotCwd;
     const providers = this.resolveRefreshProviders(options.providers);
     if (options.providers && providers?.length === 0) {
@@ -300,10 +272,6 @@ export class ProviderSnapshotManager {
       return;
     }
     await this.warmUp(target, providersToWarm);
-  }
-
-  async refresh(options: ProviderSnapshotRefreshOptions): Promise<void> {
-    await this.refreshSnapshotForCwd(options);
   }
 
   listRegisteredProviderIds(): AgentProvider[] {
@@ -353,9 +321,9 @@ export class ProviderSnapshotManager {
   }
 
   async listProviders(input: ProviderSnapshotReadOptions = {}): Promise<ProviderSnapshotEntry[]> {
-    const target = resolveProviderSnapshotTarget(input.cwd);
+    const target = createGlobalSnapshotTarget();
     if (input.wait) {
-      await this.warmUpSnapshotForCwd({ cwd: input.cwd, providers: input.providers });
+      await this.warmUpSnapshot({ providers: input.providers });
     }
     const providerFilter = input.providers ? new Set(input.providers) : null;
     const entries = this.getSnapshotForTarget(target);
@@ -429,7 +397,6 @@ export class ProviderSnapshotManager {
       }
       const models = await this.listModels({
         provider: input.provider,
-        cwd: input.cwd ? expandTilde(input.cwd) : undefined,
         wait: true,
       });
       const preferred = models.find((model) => model.isDefault) ?? models[0];
@@ -444,7 +411,6 @@ export class ProviderSnapshotManager {
     input: ResolveProviderCreateConfigOptions,
   ): Promise<ResolvedProviderCreateConfig> {
     const entry = await this.getReadyProvider({
-      cwd: input.cwd,
       provider: input.provider,
       wait: true,
     });
@@ -754,10 +720,7 @@ export class ProviderSnapshotManager {
         publish: () => {
           for (const cwd of snapshotCwds) {
             this.emitChange(cwd);
-            const target =
-              cwd === GLOBAL_PROVIDER_SNAPSHOT_KEY
-                ? createGlobalSnapshotTarget()
-                : createWorkspaceSnapshotTarget(cwd);
+            const target = createGlobalSnapshotTarget();
             const providers = this.resolveProvidersToWarm(cwd);
             if (providers.length > 0) void this.warmUp(target, providers);
           }
@@ -1189,8 +1152,11 @@ export class ProviderSnapshotManager {
             return null;
           }
 
-          const catalogOptions = createFetchCatalogOptions(catalogScope, force);
-          return await definition.fetchCatalog(catalogOptions, client, context);
+          return await definition.fetchCatalog(
+            { scope: catalogScope.scope, force },
+            client,
+            context,
+          );
         },
       });
       if (!catalog) {
@@ -1316,57 +1282,11 @@ export class ProviderSnapshotManager {
   }
 }
 
-export function resolveSnapshotCwd(cwd?: string | null): string {
-  const trimmed = cwd?.trim();
-  if (!trimmed) {
-    return homedir();
-  }
-  let expanded =
-    trimmed === "~" || trimmed.startsWith("~/") ? `${homedir()}${trimmed.slice(1)}` : trimmed;
-  if (process.platform === "win32" && /^[A-Za-z]:$/.test(expanded)) {
-    expanded = `${expanded}\\`;
-  }
-  let resolved = resolve(expanded);
-  if (process.platform === "win32" && /^[A-Za-z]:$/.test(resolved)) {
-    resolved = `${resolved}\\`;
-  }
-  return resolved;
-}
-
-function resolveProviderSnapshotTarget(cwd?: string | null): ProviderSnapshotTarget {
-  const trimmed = cwd?.trim();
-  if (!trimmed) {
-    return createGlobalSnapshotTarget();
-  }
-  return createWorkspaceSnapshotTarget(resolveSnapshotCwd(trimmed));
-}
-
 function createGlobalSnapshotTarget(): ProviderSnapshotTarget {
   return {
     snapshotCwd: GLOBAL_PROVIDER_SNAPSHOT_KEY,
     catalogScope: { scope: "global" },
   };
-}
-
-function createWorkspaceSnapshotTarget(cwd: string): ProviderSnapshotTarget {
-  const snapshotCwd = resolveSnapshotCwd(cwd);
-  return {
-    snapshotCwd,
-    catalogScope: { scope: "workspace", cwd: snapshotCwd },
-  };
-}
-
-function createFetchCatalogOptions(
-  scope: ProviderCatalogScope,
-  force: boolean,
-): FetchCatalogOptions {
-  return scope.scope === "global"
-    ? { scope: "global", force }
-    : { scope: "workspace", cwd: scope.cwd, force };
-}
-
-export function isGlobalProviderSnapshotKey(cwd: string): boolean {
-  return cwd === GLOBAL_PROVIDER_SNAPSHOT_KEY;
 }
 
 function entriesToArray(

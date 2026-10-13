@@ -83,8 +83,7 @@ async function createLogin() {
     },
   });
   session.start();
-  const workspaces = [join(directory, "one"), join(directory, "two")];
-  for (const cwd of workspaces) await manager.warmUpSnapshotForCwd({ cwd, providers: ["omp"] });
+  await manager.warmUpSnapshot({ providers: ["omp"] });
   await session.handleOmpProviderLoginStartRequest({
     type: "omp.provider.login.start.request",
     providerId: "openai-codex",
@@ -99,9 +98,9 @@ async function createLogin() {
     await client.shutdown();
     await rm(directory, { recursive: true, force: true });
   });
-  const modelIds = (cwd?: string) =>
+  const modelIds = () =>
     manager
-      .getSnapshot(cwd)
+      .getSnapshot()
       .find((entry) => entry.provider === "omp")
       ?.models?.map((model) => model.id);
   return {
@@ -109,7 +108,6 @@ async function createLogin() {
     manager,
     session,
     messages,
-    workspaces,
     modelIds,
     flowId: started.payload.flowId,
   };
@@ -118,15 +116,14 @@ async function createLogin() {
 const AUTHENTICATED_MODELS = ["custom/only", "openai-codex/subscription"];
 
 describe("OMP login catalog lifecycle", () => {
-  it("refreshes every cached workspace and pushes completion without a finish request", async () => {
+  it("refreshes the global catalog and pushes completion without a finish request", async () => {
     const state = await createLogin();
-    expect(state.modelIds(state.workspaces[0])).toEqual(["custom/only"]);
+    expect(state.modelIds()).toEqual(["custom/only"]);
 
     state.runtime.authorization.resolve();
 
     await vi.waitFor(() => {
       expect(state.modelIds()).toEqual(AUTHENTICATED_MODELS);
-      for (const cwd of state.workspaces) expect(state.modelIds(cwd)).toEqual(AUTHENTICATED_MODELS);
     });
     expect(
       state.messages.filter((message) => message.type === "omp.provider.login.completed"),
@@ -152,9 +149,7 @@ describe("OMP login catalog lifecycle", () => {
 
     state.runtime.authorization.resolve();
 
-    await vi.waitFor(() =>
-      expect(state.modelIds(state.workspaces[1])).toEqual(AUTHENTICATED_MODELS),
-    );
+    await vi.waitFor(() => expect(state.modelIds()).toEqual(AUTHENTICATED_MODELS));
     expect(state.messages).toHaveLength(messageCount);
   });
 
@@ -169,7 +164,7 @@ describe("OMP login catalog lifecycle", () => {
     await expect(state.manager.finishOmpProviderLogin(state.flowId)).rejects.toThrow(
       "Paste the OAuth code",
     );
-    expect(state.modelIds(state.workspaces[0])).toEqual(["custom/only"]);
+    expect(state.modelIds()).toEqual(["custom/only"]);
 
     const finish = state.manager.finishOmpProviderLogin(state.flowId, "  code  ");
     expect(state.runtime.loginSession!.extensionUiResponses).toEqual([
@@ -179,7 +174,7 @@ describe("OMP login catalog lifecycle", () => {
     const management = await finish;
 
     expect(management.loginProviders[0]?.authenticated).toBe(true);
-    for (const cwd of state.workspaces) expect(state.modelIds(cwd)).toEqual(AUTHENTICATED_MODELS);
+    expect(state.modelIds()).toEqual(AUTHENTICATED_MODELS);
   });
 
   it("accepts an automatic callback after a fallback code prompt was offered", async () => {
@@ -192,9 +187,7 @@ describe("OMP login catalog lifecycle", () => {
     });
 
     state.runtime.authorization.resolve();
-    await vi.waitFor(() =>
-      expect(state.modelIds(state.workspaces[0])).toEqual(AUTHENTICATED_MODELS),
-    );
+    await vi.waitFor(() => expect(state.modelIds()).toEqual(AUTHENTICATED_MODELS));
 
     const management = await state.manager.finishOmpProviderLogin(state.flowId);
     expect(management.loginProviders[0]?.authenticated).toBe(true);
@@ -207,7 +200,7 @@ describe("OMP login catalog lifecycle", () => {
     state.runtime.authorization.resolve();
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    for (const cwd of state.workspaces) expect(state.modelIds(cwd)).toEqual(["custom/only"]);
+    expect(state.modelIds()).toEqual(["custom/only"]);
     expect(
       state.messages.filter((message) => message.type === "omp.provider.login.completed"),
     ).toEqual([]);
@@ -223,7 +216,7 @@ describe("OMP login catalog lifecycle", () => {
     await expect(state.manager.finishOmpProviderLogin(state.flowId)).rejects.toThrow(
       "authorization denied",
     );
-    for (const cwd of state.workspaces) expect(state.modelIds(cwd)).toEqual(["custom/only"]);
+    expect(state.modelIds()).toEqual(["custom/only"]);
     expect(
       state.messages.filter((message) => message.type === "omp.provider.login.completed"),
     ).toEqual([]);

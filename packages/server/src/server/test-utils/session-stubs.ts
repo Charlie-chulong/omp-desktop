@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { vi, type Mock } from "vitest";
 
 import { getAgentProviderDefinition } from "@omp-desktop/protocol/provider-manifest";
 
@@ -148,10 +148,9 @@ export function findByType<T extends SessionOutboundMessage["type"]>(
 // ---------------------------------------------------------------------------
 
 export interface ProviderSnapshotManagerSpies {
-  getSnapshot: ReturnType<typeof vi.fn<[cwd?: string], ProviderSnapshotEntry[]>>;
-  refreshSnapshotForCwd: ReturnType<typeof vi.fn<[unknown], Promise<void>>>;
-  refreshSettingsSnapshot: ReturnType<typeof vi.fn<[unknown], Promise<void>>>;
-  warmUpSnapshotForCwd: ReturnType<typeof vi.fn<[unknown], Promise<void>>>;
+  getSnapshot: Mock<[], ProviderSnapshotEntry[]>;
+  refreshSettingsSnapshot: Mock<[unknown], Promise<void>>;
+  warmUpSnapshot: Mock<[unknown], Promise<void>>;
   listRegisteredProviderIds: ReturnType<typeof vi.fn<[], AgentProvider[]>>;
   hasProvider: ReturnType<typeof vi.fn<[AgentProvider], boolean>>;
   getProviderLabel: ReturnType<typeof vi.fn<[AgentProvider], string>>;
@@ -175,10 +174,9 @@ export interface ProviderSnapshotManagerSpies {
 export function createProviderSnapshotManagerStub(): {
   manager: ProviderSnapshotManager;
 } & ProviderSnapshotManagerSpies {
-  const getSnapshot = vi.fn<[cwd?: string], ProviderSnapshotEntry[]>(() => []);
-  const refreshSnapshotForCwd = vi.fn<[unknown], Promise<void>>(async () => {});
+  const getSnapshot = vi.fn<[], ProviderSnapshotEntry[]>(() => []);
   const refreshSettingsSnapshot = vi.fn<[unknown], Promise<void>>(async () => {});
-  const warmUpSnapshotForCwd = vi.fn<[unknown], Promise<void>>(async () => {});
+  const warmUpSnapshot = vi.fn<[unknown], Promise<void>>(async () => {});
   const listRegisteredProviderIds = vi.fn<[], AgentProvider[]>(() => []);
   const hasProvider = vi.fn<[AgentProvider], boolean>(() => false);
   const getProviderLabel = vi.fn<[AgentProvider], string>((provider) => {
@@ -218,9 +216,8 @@ export function createProviderSnapshotManagerStub(): {
   const destroy = vi.fn<[], void>();
   const stub = {
     getSnapshot,
-    refreshSnapshotForCwd,
     refreshSettingsSnapshot,
-    warmUpSnapshotForCwd,
+    warmUpSnapshot,
     listRegisteredProviderIds,
     hasProvider,
     getProviderLabel,
@@ -245,9 +242,8 @@ export function createProviderSnapshotManagerStub(): {
   return {
     manager,
     getSnapshot,
-    refreshSnapshotForCwd,
     refreshSettingsSnapshot,
-    warmUpSnapshotForCwd,
+    warmUpSnapshot,
     listRegisteredProviderIds,
     hasProvider,
     getProviderLabel,

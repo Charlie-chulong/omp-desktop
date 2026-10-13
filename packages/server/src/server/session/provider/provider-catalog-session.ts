@@ -7,11 +7,7 @@ import {
   type CompactProviderSnapshot,
 } from "@omp-desktop/protocol/provider-snapshot-codec";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
-import {
-  isGlobalProviderSnapshotKey,
-  resolveSnapshotCwd,
-  type ProviderSnapshotManager,
-} from "../../agent/provider-snapshot-manager.js";
+import type { ProviderSnapshotManager } from "../../agent/provider-snapshot-manager.js";
 import {
   filterSelectableAgentModels,
   type AgentFeature,
@@ -151,19 +147,17 @@ export class ProviderCatalogSession {
   }
 
   start(): void {
-    const handleProviderSnapshotChange = (entries: ProviderSnapshotEntry[], cwd: string) => {
+    const handleProviderSnapshotChange = (entries: ProviderSnapshotEntry[]) => {
       // COMPAT(providersSnapshot): keep provider visibility gating for older clients.
       const visibleEntries = entries.filter((entry) =>
         this.host.isProviderVisibleToClient(entry.provider),
       );
-      const snapshotCwd = isGlobalProviderSnapshotKey(cwd) ? undefined : cwd;
       const clientEntries = this.downgradeEntryModesForClient(visibleEntries);
       if (this.host.supportsCompactProviderSnapshots()) {
         const encoded = encodeProviderSnapshot(clientEntries);
         this.host.emit({
           type: "providers_snapshot_update",
           payload: {
-            ...(snapshotCwd ? { cwd: snapshotCwd } : {}),
             entries: [],
             ...encoded,
             generatedAt: new Date().toISOString(),
@@ -174,7 +168,6 @@ export class ProviderCatalogSession {
       this.host.emit({
         type: "providers_snapshot_update",
         payload: {
-          ...(snapshotCwd ? { cwd: snapshotCwd } : {}),
           entries: clientEntries,
           generatedAt: new Date().toISOString(),
         },
@@ -238,10 +231,9 @@ export class ProviderCatalogSession {
   async handleListProviderModelsRequest(
     msg: Extract<SessionInboundMessage, { type: "list_provider_models_request" }>,
   ): Promise<void> {
-    const cwd = resolveCatalogRequestCwd(msg.cwd);
     const fetchedAt = new Date().toISOString();
 
-    const entry = await this.getProviderSnapshotEntryForRead(cwd, msg.provider);
+    const entry = await this.getProviderSnapshotEntryForRead(msg.provider);
 
     if (!entry) {
       this.host.emit({
@@ -295,8 +287,7 @@ export class ProviderCatalogSession {
     msg: Extract<SessionInboundMessage, { type: "list_provider_modes_request" }>,
   ): Promise<void> {
     const fetchedAt = new Date().toISOString();
-    const cwd = resolveCatalogRequestCwd(msg.cwd);
-    const entry = await this.getProviderSnapshotEntryForRead(cwd, msg.provider);
+    const entry = await this.getProviderSnapshotEntryForRead(msg.provider);
 
     if (!entry) {
       this.host.emit({
@@ -347,21 +338,20 @@ export class ProviderCatalogSession {
   }
 
   private async getProviderSnapshotEntryForRead(
-    cwd: string | undefined,
     provider: AgentProvider,
   ): Promise<ProviderSnapshotEntry | undefined> {
     const manager = this.providerSnapshotManager;
     const findEntry = () =>
-      manager.getSnapshot(cwd).find((candidate) => candidate.provider === provider);
+      manager.getSnapshot().find((candidate) => candidate.provider === provider);
 
     let entry = findEntry();
     if (entry && !entry.enabled) {
       return entry;
     }
     if (!entry || entry.status === "loading") {
-      // Awaits the in-flight warmup (deduped per-cwd) so old clients still get
+      // Awaits the shared in-flight warmup so old clients still get
       // a resolved answer rather than a loading placeholder.
-      await manager.warmUpSnapshotForCwd({ cwd, providers: [provider] });
+      await manager.warmUpSnapshot({ providers: [provider] });
       entry = findEntry();
     }
     return entry;
@@ -454,9 +444,8 @@ export class ProviderCatalogSession {
     msg: Extract<SessionInboundMessage, { type: "get_providers_snapshot_request" }>,
   ): Promise<void> {
     // COMPAT(providersSnapshot): keep legacy provider-list RPCs alongside snapshot flow.
-    const snapshotCwd = msg.cwd?.trim() ? resolveSnapshotCwd(expandTilde(msg.cwd)) : undefined;
     const entries = this.providerSnapshotManager
-      .getSnapshot(snapshotCwd)
+      .getSnapshot()
       .filter((entry) => this.host.isProviderVisibleToClient(entry.provider));
     const clientEntries = this.downgradeEntryModesForClient(entries);
 
@@ -466,7 +455,6 @@ export class ProviderCatalogSession {
       this.host.emit({
         type: "get_providers_snapshot_response",
         payload: {
-          ...(snapshotCwd ? { cwd: snapshotCwd } : {}),
           entries: [],
           ...(!notModified ? { compactSnapshot: encoded.compactSnapshot } : {}),
           snapshotHash: encoded.snapshotHash,
@@ -481,7 +469,6 @@ export class ProviderCatalogSession {
     this.host.emit({
       type: "get_providers_snapshot_response",
       payload: {
-        ...(snapshotCwd ? { cwd: snapshotCwd } : {}),
         entries: clientEntries,
         generatedAt: new Date().toISOString(),
         requestId: msg.requestId,
@@ -492,16 +479,9 @@ export class ProviderCatalogSession {
   async handleRefreshProvidersSnapshotRequest(
     msg: Extract<SessionInboundMessage, { type: "refresh_providers_snapshot_request" }>,
   ): Promise<void> {
-    if (msg.cwd) {
-      await this.providerSnapshotManager.refreshSnapshotForCwd({
-        cwd: expandTilde(msg.cwd),
-        providers: msg.providers,
-      });
-    } else {
-      await this.providerSnapshotManager.refreshSettingsSnapshot({
-        providers: msg.providers,
-      });
-    }
+    await this.providerSnapshotManager.refreshSettingsSnapshot({
+      providers: msg.providers,
+    });
     this.host.emit({
       type: "refresh_providers_snapshot_response",
       payload: {
@@ -1188,9 +1168,4 @@ export class ProviderCatalogSession {
       });
     }
   }
-}
-
-function resolveCatalogRequestCwd(cwd?: string | null): string | undefined {
-  const trimmed = cwd?.trim();
-  return trimmed ? expandTilde(trimmed) : undefined;
 }

@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
   BackgroundProcessSchema,
@@ -67,6 +67,9 @@ const DEFAULT_OMP_COMMAND: [string, ...string[]] = [process.env.OMP_COMMAND ?? "
 const DEFAULT_COMMANDS_RPC_NAME = "get_available_commands";
 /** Allow cold OMP starts the same 30-second budget as other control-plane RPCs. */
 const OMP_READY_TIMEOUT_MS = JSONL_RPC_DEFAULT_TIMEOUT_MS;
+const OMP_CODEX_CATALOG_PRELOAD_URL_ENV = "OMP_DESKTOP_CODEX_CATALOG_PRELOAD_URL";
+const OMP_CODEX_CATALOG_PRELOAD_BRIDGE =
+  "data:text/javascript,await%20import(process%2Eenv%2EOMP_DESKTOP_CODEX_CATALOG_PRELOAD_URL)";
 const OmpToolInventorySchema = z.object({
   dumpTools: z.array(z.object({ name: z.string() })),
 });
@@ -101,11 +104,12 @@ export function resolveOmpCodexCatalogPreloadPath(
 
 function installCodexCatalogPreload(launch: OmpRuntimeLaunch): void {
   const bunOptions = (launch.env?.BUN_OPTIONS ?? globalThis.process.env.BUN_OPTIONS)?.trim();
-  // Use Bun's pre-entry hook, not --extension: both cache replay and fetch capture happen earlier.
-  // BUN_OPTIONS takes inline values verbatim, including spaces; shell quoting becomes literal.
+  // Bun tokenizes BUN_OPTIONS on whitespace and treats shell quotes and backslashes literally.
+  // Keep the option whitespace-free and carry the encoded absolute path in a separate env value.
   launch.env = {
     ...launch.env,
-    BUN_OPTIONS: `${bunOptions ? `${bunOptions} ` : ""}--preload=${resolveOmpCodexCatalogPreloadPath()}`,
+    BUN_OPTIONS: `${bunOptions ? `${bunOptions} ` : ""}--preload=${OMP_CODEX_CATALOG_PRELOAD_BRIDGE}`,
+    [OMP_CODEX_CATALOG_PRELOAD_URL_ENV]: pathToFileURL(resolveOmpCodexCatalogPreloadPath()).href,
   };
 }
 

@@ -13,7 +13,6 @@ import { providerSnapshotCache, type ProviderSnapshotCache } from "@/data/provid
 import {
   isProvidersSnapshotCacheable,
   mergeProvidersSnapshotHistory,
-  normalizeProvidersSnapshotCwd,
   providersSnapshotQueryKey,
   providersSnapshotQueryRoot,
 } from "@/data/providers-snapshot";
@@ -206,7 +205,7 @@ export function applyProvidersSnapshotUpdate(input: {
   if (input.message.type !== "providers_snapshot_update") {
     return;
   }
-  const queryKey = providersSnapshotQueryKey(input.serverId, input.message.payload.cwd);
+  const queryKey = providersSnapshotQueryKey(input.serverId);
   input.queryClient.setQueryData(
     queryKey,
     (previous: { entries?: ProviderSnapshotEntry[] } | undefined) => ({
@@ -223,7 +222,6 @@ export function applyProvidersSnapshotUpdate(input: {
   ) {
     void (input.cache ?? providerSnapshotCache).write({
       serverId: input.serverId,
-      cwd: normalizeProvidersSnapshotCwd(input.message.payload.cwd),
       hash: snapshotHash,
       generatedAt: input.message.payload.generatedAt,
       compactSnapshot,

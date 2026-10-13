@@ -2538,101 +2538,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("session provider refresh cwd routing", () => {
-  test("routes no-cwd provider snapshot refreshes through settings refresh", async () => {
-    const {
-      manager: providerSnapshotManager,
-      refreshSettingsSnapshot,
-      refreshSnapshotForCwd,
-    } = createProviderSnapshotManagerStub();
-    const session = createSessionForTest({ providerSnapshotManager });
-
-    await session.handleMessage({
-      type: "refresh_providers_snapshot_request",
-      providers: ["codex"],
-      requestId: "refresh-settings",
-    });
-
-    expect(refreshSettingsSnapshot).toHaveBeenCalledWith({
-      providers: ["codex"],
-    });
-    expect(refreshSnapshotForCwd).not.toHaveBeenCalled();
-  });
-
-  test("routes cwd provider snapshot refreshes through workspace refresh", async () => {
-    const {
-      manager: providerSnapshotManager,
-      refreshSnapshotForCwd,
-      refreshSettingsSnapshot,
-    } = createProviderSnapshotManagerStub();
-    const session = createSessionForTest({ providerSnapshotManager });
-
-    await session.handleMessage({
-      type: "refresh_providers_snapshot_request",
-      cwd: "/tmp/workspace-refresh",
-      providers: ["codex"],
-      requestId: "refresh-workspace",
-    });
-
-    expect(refreshSnapshotForCwd).toHaveBeenCalledWith({
-      cwd: "/tmp/workspace-refresh",
-      providers: ["codex"],
-    });
-    expect(refreshSettingsSnapshot).not.toHaveBeenCalled();
-  });
-
-  test("get_providers_snapshot_request forwards cwd to the provider authority", async () => {
-    const messages: unknown[] = [];
-    const workspaceCwd = resolvePath("/tmp/session-provider-snapshot");
-    const { manager: providerSnapshotManager, getSnapshot } = createProviderSnapshotManagerStub();
-    const session = createSessionForTest({ messages, providerSnapshotManager });
-
-    await session.handleMessage({
-      type: "get_providers_snapshot_request",
-      cwd: workspaceCwd,
-      requestId: "snapshot-workspace",
-    });
-
-    expect(getSnapshot).toHaveBeenCalledWith(workspaceCwd);
-  });
-
-  test("preserves legacy model and mode list requests without cwd as global", async () => {
-    const messages: unknown[] = [];
-    const {
-      manager: providerSnapshotManager,
-      getSnapshot,
-      warmUpSnapshotForCwd,
-    } = createProviderSnapshotManagerStub();
-    getSnapshot.mockReturnValue([
-      {
-        provider: "codex",
-        status: "loading",
-        enabled: true,
-      },
-    ]);
-    const session = createSessionForTest({ messages, providerSnapshotManager });
-
-    await session.handleMessage({
-      type: "list_provider_models_request",
-      provider: "codex",
-      requestId: "models-home",
-    });
-    await session.handleMessage({
-      type: "list_provider_modes_request",
-      provider: "codex",
-      requestId: "modes-home",
-    });
-
-    expect(getSnapshot).toHaveBeenCalledWith(undefined);
-    expect(warmUpSnapshotForCwd).toHaveBeenCalledWith({
-      cwd: undefined,
-      providers: ["codex"],
-    });
-  });
-
+describe("session provider catalog reads", () => {
   test("legacy model list request treats disabled snapshot entries as unavailable without warming", async () => {
     const messages: unknown[] = [];
-    const { manager: providerSnapshotManager, warmUpSnapshotForCwd } =
+    const { manager: providerSnapshotManager, warmUpSnapshot } =
       createProviderSnapshotManagerStub();
     providerSnapshotManager.getSnapshot = vi.fn(() => [
       {
@@ -2649,7 +2558,7 @@ describe("session provider refresh cwd routing", () => {
       requestId: "models-disabled",
     });
 
-    expect(warmUpSnapshotForCwd).not.toHaveBeenCalled();
+    expect(warmUpSnapshot).not.toHaveBeenCalled();
     expect(messages).toContainEqual({
       type: "list_provider_models_response",
       payload: {
@@ -2663,7 +2572,7 @@ describe("session provider refresh cwd routing", () => {
 
   test("legacy mode list request treats disabled snapshot entries as unavailable without warming", async () => {
     const messages: unknown[] = [];
-    const { manager: providerSnapshotManager, warmUpSnapshotForCwd } =
+    const { manager: providerSnapshotManager, warmUpSnapshot } =
       createProviderSnapshotManagerStub();
     providerSnapshotManager.getSnapshot = vi.fn(() => [
       {
@@ -2680,7 +2589,7 @@ describe("session provider refresh cwd routing", () => {
       requestId: "modes-disabled",
     });
 
-    expect(warmUpSnapshotForCwd).not.toHaveBeenCalled();
+    expect(warmUpSnapshot).not.toHaveBeenCalled();
     expect(messages).toContainEqual({
       type: "list_provider_modes_response",
       payload: {
@@ -2698,7 +2607,7 @@ describe("session provider refresh cwd routing", () => {
     const {
       manager: providerSnapshotManager,
       getSnapshot,
-      warmUpSnapshotForCwd,
+      warmUpSnapshot,
     } = createProviderSnapshotManagerStub();
     getSnapshot.mockReturnValueOnce([
       {
@@ -2717,7 +2626,7 @@ describe("session provider refresh cwd routing", () => {
         fetchedAt: "2026-05-28T00:00:00.000Z",
       },
     ]);
-    warmUpSnapshotForCwd.mockReturnValue(warmupDeferred.promise);
+    warmUpSnapshot.mockReturnValue(warmupDeferred.promise);
     const session = createSessionForTest({ messages, providerSnapshotManager });
 
     const responsePromise = session.handleMessage({
@@ -2726,10 +2635,6 @@ describe("session provider refresh cwd routing", () => {
       requestId: "models-loading-home",
     });
 
-    expect(warmUpSnapshotForCwd).toHaveBeenCalledWith({
-      cwd: undefined,
-      providers: ["codex"],
-    });
     warmupDeferred.resolve();
     await responsePromise;
 

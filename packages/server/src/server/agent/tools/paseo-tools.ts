@@ -3115,11 +3115,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       });
       const providerId = resolvedProviderModel.provider;
       const resolvedCwd = resolveScopedCwd(cwd, { required: true });
-      const entry = await providerSnapshotManager.getProvider({
-        cwd: resolvedCwd,
-        provider: providerId,
-        wait: true,
-      });
+      const entry = await providerSnapshotManager.getProvider({ provider: providerId, wait: true });
       const summary = toProviderSummary(entry);
       if (!entry.enabled) {
         throw new Error(`Provider '${providerId}' is disabled`);

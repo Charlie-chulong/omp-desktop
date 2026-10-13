@@ -1347,26 +1347,23 @@ function usePrefetchWorkspaceProviders(input: {
   isRouteFocused: boolean;
   serverId: string;
   supportsProvidersSnapshot: boolean;
-  workspaceDirectory: string | null;
 }) {
   useEffect(() => {
     if (
       !input.isRouteFocused ||
       !input.isConnected ||
       !input.client ||
-      !input.workspaceDirectory ||
       !input.supportsProvidersSnapshot
     ) {
       return;
     }
-    prefetchProvidersSnapshot(input.serverId, input.client, { cwd: input.workspaceDirectory });
+    prefetchProvidersSnapshot(input.serverId, input.client);
   }, [
     input.client,
     input.isConnected,
     input.isRouteFocused,
     input.serverId,
     input.supportsProvidersSnapshot,
-    input.workspaceDirectory,
   ]);
 }
 
@@ -1471,7 +1468,6 @@ function WorkspaceScreenContent({
     isRouteFocused,
     serverId: normalizedServerId,
     supportsProvidersSnapshot,
-    workspaceDirectory: toolWorkspaceDirectory,
   });
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
   const replaceTab = useWorkspaceLayoutStore((state) => state.replaceTab);

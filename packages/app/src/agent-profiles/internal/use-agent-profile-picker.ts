@@ -68,10 +68,8 @@ export function useAgentProfilePicker(
   const { serverId, availableProviders, target } = input;
   const { t } = useTranslation();
   const { profiles, isSupported } = useAgentProfiles(serverId);
-  // Profiles are host config, so their labels read from the host-wide catalog
-  // rather than a workspace's. That is also the key the settings section uses,
-  // so every composer on a host shares one query instead of adding its own.
-  const { entries } = useProvidersSnapshot(serverId, { cwd: null });
+  // Profile labels use the same host-wide catalog as every composer and settings.
+  const { entries } = useProvidersSnapshot(serverId);
   const { updatePreferences } = useFormPreferences();
   const client = useSessionStore((state) => state.sessions[serverId ?? ""]?.client ?? null);
   const toast = useToast();

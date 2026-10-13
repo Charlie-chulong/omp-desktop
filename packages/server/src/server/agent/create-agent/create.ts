@@ -247,7 +247,6 @@ async function resolveSessionCreateAgent(
   // this is a pre-existing gap for directory-only workspace creates, not
   // introduced by this validation).
   const resolvedCreateConfig = await dependencies.providerSnapshotManager.resolveCreateConfig({
-    cwd: builtSessionConfig.cwd,
     provider: builtSessionConfig.provider,
     requestedMode: builtSessionConfig.modeId,
     featureValues: builtSessionConfig.featureValues,
@@ -384,7 +383,6 @@ async function resolveMcpProviderCreateConfig(params: {
 }): Promise<{ modeId?: string; featureValues?: Record<string, unknown> }> {
   const passthroughConfig = params.input.config;
   return params.dependencies.providerSnapshotManager.resolveCreateConfig({
-    cwd: params.resolvedCwd,
     provider: params.provider,
     requestedMode: params.input.mode ?? passthroughConfig?.modeId,
     featureValues: params.input.features ?? passthroughConfig?.featureValues,
