@@ -819,7 +819,7 @@ describe("editQueuedComposerMessage", () => {
       text: "queued draft",
       attachments: [{ kind: "image", metadata: image }],
     });
-    expect(queue.state.get("agent")).toEqual([]);
+    expect(queue.state.get("agent")).toBeUndefined();
   });
 });
 
@@ -854,7 +854,7 @@ describe("sendQueuedComposerMessageNow", () => {
       },
     });
     expect(result).toEqual({ status: "submitted" });
-    expect(queue.state.get("agent")).toEqual([]);
+    expect(queue.state.get("agent")).toBeUndefined();
     expect(submitted).toEqual([{ text: "send me", attachments: [review] }]);
   });
 

@@ -1340,7 +1340,10 @@ export class HostRuntimeStore {
   private lastConnectionStatusByServer = new Map<string, HostRuntimeConnectionStatus>();
   private connectionStatusStartedAtByServer = new Map<string, number>();
   private directoryBootstrapInFlight = new Map<string, Promise<void>>();
-  private queuedAgentDrainInFlight = new Set<string>();
+  private queuedAgentActiveByServer = new Map<
+    string,
+    { agentId: string; messageId: string; dispatchAccepted: boolean }
+  >();
   private directorySyncByServer = new Map<string, DirectorySync>();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
   private bootPromise: Promise<void> | null = null;
@@ -1601,6 +1604,7 @@ export class HostRuntimeStore {
     rekeyMap(this.lastConnectionStatusByServer, oldServerId, newServerId);
     rekeyMap(this.connectionStatusStartedAtByServer, oldServerId, newServerId);
     rekeyMap(this.directoryBootstrapInFlight, oldServerId, newServerId);
+    rekeyMap(this.queuedAgentActiveByServer, oldServerId, newServerId);
     this.replicaCache.reconcileServerId(oldServerId, newServerId);
     projectIconCache.reconcileServerId(oldServerId, newServerId);
     this.directorySyncByServer.get(oldServerId)?.dispose();
@@ -1977,6 +1981,7 @@ export class HostRuntimeStore {
       this.lastConnectionStatusByServer.delete(serverId);
       this.connectionStatusStartedAtByServer.delete(serverId);
       this.directoryBootstrapInFlight.delete(serverId);
+      this.queuedAgentActiveByServer.delete(serverId);
       this.directorySyncByServer.get(serverId)?.dispose();
       this.directorySyncByServer.delete(serverId);
       this.clearHostReplica(serverId);
@@ -2147,17 +2152,37 @@ export class HostRuntimeStore {
   }
 
   drainQueuedAgentMessage(serverId: string, agentId: string): void {
-    const drainKey = `${serverId}:${agentId}`;
-    if (this.queuedAgentDrainInFlight.has(drainKey)) return;
+    const active = this.queuedAgentActiveByServer.get(serverId);
+    if (active?.agentId === agentId && active.dispatchAccepted) {
+      this.queuedAgentActiveByServer.delete(serverId);
+    }
+    this.reevaluateQueuedAgentMessages(serverId);
+  }
+
+  reevaluateQueuedAgentMessages(serverId: string): void {
+    if (this.queuedAgentActiveByServer.has(serverId)) return;
     const store = useSessionStore.getState();
     const session = store.sessions[serverId];
-    const queue = session?.queuedMessages.get(agentId);
     const client = session?.client;
-    if (!client || !queue?.length || session.initializingAgents.get(agentId) === true) {
+    if (!session || !client) return;
+    const agentId = session.queuedAgentOrder.find(
+      (queuedAgentId) => (session.queuedMessages.get(queuedAgentId)?.length ?? 0) > 0,
+    );
+    if (!agentId) return;
+    const queue = session.queuedMessages.get(agentId);
+    const next = queue?.[0];
+    const agent = session.agents.get(agentId) ?? session.agentDetails.get(agentId);
+    if (
+      !next ||
+      session.initializingAgents.get(agentId) === true ||
+      agent?.status === "initializing" ||
+      agent?.status === "running"
+    ) {
       return;
     }
-    this.queuedAgentDrainInFlight.add(drainKey);
-    const next = queue[0];
+
+    const active = { agentId, messageId: next.id, dispatchAccepted: false };
+    this.queuedAgentActiveByServer.set(serverId, active);
     void sendQueuedComposerMessageNow({
       agentId,
       messageId: next.id,
@@ -2181,20 +2206,27 @@ export class HostRuntimeStore {
           submission: createMessageSubmissionWriter(serverId),
         });
       },
-    })
-      .then((result) => {
+    }).then((result) => {
+      if (result.status === "submitted") {
+        if (this.queuedAgentActiveByServer.get(serverId) === active) {
+          active.dispatchAccepted = true;
+        }
+      } else {
+        if (this.queuedAgentActiveByServer.get(serverId) === active) {
+          this.queuedAgentActiveByServer.delete(serverId);
+        }
         if (result.status === "failed") {
           console.error("[HostRuntime] failed to drain queued agent message", {
             serverId,
             agentId,
             error: result.errorMessage,
           });
+        } else {
+          this.reevaluateQueuedAgentMessages(serverId);
         }
-        return result;
-      })
-      .finally(() => {
-        this.queuedAgentDrainInFlight.delete(drainKey);
-      });
+      }
+      return undefined;
+    });
   }
 
   getSnapshot(serverId: string): HostRuntimeSnapshot | null {

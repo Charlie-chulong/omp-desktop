@@ -283,10 +283,12 @@ export function editQueuedComposerMessage(
   if (!item) return null;
   input.queue.write((prev) => {
     const next = new Map(prev);
-    next.set(
-      input.agentId,
-      (prev.get(input.agentId) ?? []).filter((q) => q.id !== input.messageId),
-    );
+    const remaining = (prev.get(input.agentId) ?? []).filter((q) => q.id !== input.messageId);
+    if (remaining.length > 0) {
+      next.set(input.agentId, remaining);
+    } else {
+      next.delete(input.agentId);
+    }
     return next;
   });
   return {
@@ -323,6 +325,12 @@ export async function sendQueuedComposerMessageNow(
   });
   try {
     await input.submitMessage({ text: item.text, attachments: item.attachments });
+    input.queue.write((prev) => {
+      if ((prev.get(input.agentId)?.length ?? 0) > 0) return prev;
+      const next = new Map(prev);
+      next.delete(input.agentId);
+      return next;
+    });
     return { status: "submitted" };
   } catch (error) {
     input.queue.write((prev) => {
