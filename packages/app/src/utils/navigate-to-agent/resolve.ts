@@ -23,7 +23,7 @@ export interface AgentNavTarget {
 
 export interface NavigateToAgentDeps extends Pick<
   NavigateToSidebarWorkspaceDeps,
-  "getSessionWorkspaces" | "getWorkspaceTabs"
+  "getSessionWorkspaces"
 > {
   readAgentNavTarget: (input: { serverId: string; agentId: string }) => AgentNavTarget;
   navigateToHostAgent: (route: string) => void;
@@ -34,12 +34,11 @@ export function resolveNavigateToAgent(
   input: NavigateToAgentInput,
   deps: NavigateToAgentDeps,
 ): string {
-  const tabHost = resolveWorkspaceTabHost(input, deps);
   const agentWorkspaceId =
-    tabHost?.workspaceId ??
-    input.workspaceId ??
-    deps.readAgentNavTarget({ serverId: input.serverId, agentId: input.agentId }).agentWorkspaceId;
+    deps.readAgentNavTarget({ serverId: input.serverId, agentId: input.agentId })
+      .agentWorkspaceId ?? input.workspaceId;
   const workspaceId = normalizeWorkspaceOpaqueId(agentWorkspaceId);
+  const tabHost = workspaceId ? resolveWorkspaceTabHost({ ...input, workspaceId }, deps) : null;
 
   if (!workspaceId) {
     const route = buildHostAgentDetailRoute(input.serverId, input.agentId);
@@ -49,8 +48,8 @@ export function resolveNavigateToAgent(
 
   return deps.navigateToWorkspace({
     serverId: input.serverId,
-    workspaceId,
-    target: { kind: "agent", agentId: input.agentId },
+    workspaceId: tabHost?.workspaceId ?? workspaceId,
+    target: { kind: "agent", agentId: input.agentId, workspaceId },
     pin: input.pin,
   });
 }

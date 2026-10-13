@@ -13,17 +13,15 @@ import {
 } from "@/stores/workspace-layout-store";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({
-  default: {
-    getItem: async () => null,
-    setItem: async () => {},
-    removeItem: async () => {},
-  },
+  default: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
 }));
 
 const SERVER_ID = "server-1";
 const HOST_ID = "workspace-host";
 const OWNER_ID = "workspace-owner";
-const HOST_KEY = `${SERVER_ID}:${HOST_ID}`;
+const OTHER_ID = "workspace-other";
+const HOST_KEY = `${SERVER_ID}:project:project-a`;
+const OTHER_KEY = `${SERVER_ID}:project:project-b`;
 const AGENT_ID = "agent-y";
 
 function createNavigation(agentWorkspaceId: string | null = OWNER_ID) {
@@ -35,8 +33,21 @@ function createNavigation(agentWorkspaceId: string | null = OWNER_ID) {
   let route = `/h/${SERVER_ID}/workspace/${HOST_ID}`;
   let remembered: ActiveWorkspaceSelection | null = null;
   const workspaceDeps: NavigateToWorkspaceDeps = {
-    getSessionWorkspaces: () =>
-      new Map([HOST_ID, OWNER_ID].map((id) => [id, { id } as WorkspaceDescriptor])),
+    getSessionWorkspaces: (serverId) =>
+      serverId === SERVER_ID
+        ? new Map(
+            [HOST_ID, OWNER_ID, OTHER_ID].map(
+              (id) =>
+                [
+                  id,
+                  {
+                    id,
+                    projectId: id === OTHER_ID ? "project-b" : "project-a",
+                  } as WorkspaceDescriptor,
+                ] as const,
+            ),
+          )
+        : null,
     getSessionAgents: () => [],
     openTab: (input) => store.getState().openTab(input),
     pinAgent: (key, id) => store.getState().pinAgent(key, id),
@@ -49,17 +60,16 @@ function createNavigation(agentWorkspaceId: string | null = OWNER_ID) {
   };
   const deps: NavigateToAgentDeps = {
     ...workspaceDeps,
-    getWorkspaceTabs: (key) => store.getState().getWorkspaceTabs(key),
     readAgentNavTarget: () => ({ agentWorkspaceId }),
     navigateToHostAgent: (nextRoute) => {
       route = nextRoute;
     },
     navigateToWorkspace: (input) => navigateToWorkspace(input, workspaceDeps),
   };
-  const openAgent = (agentId: string) =>
+  const openAgent = (agentId: string, workspaceId = HOST_ID) =>
     store.getState().openTab({
       workspaceKey: HOST_KEY,
-      target: { kind: "agent", agentId },
+      target: { kind: "agent", agentId, workspaceId },
       intent: "reveal",
     })!;
   const agentIds = (key = HOST_KEY) =>
@@ -82,11 +92,11 @@ function notification(workspaceId = OWNER_ID) {
 
 describe("resolveNavigateToAgent", () => {
   it.each([HOST_ID, OWNER_ID])(
-    "reveals an existing notification target without changing panes (%s)",
+    "reveals a notification in its existing pane without changing ownership (%s)",
     (ownerId) => {
       const nav = createNavigation(ownerId);
       nav.openAgent("agent-x");
-      const targetTabId = nav.openAgent(AGENT_ID);
+      const targetTabId = nav.openAgent(AGENT_ID, ownerId);
       nav.openAgent("agent-z");
       const targetPaneId = nav.store.getState().splitPane(HOST_KEY, {
         tabId: targetTabId,
@@ -114,70 +124,66 @@ describe("resolveNavigateToAgent", () => {
     },
   );
 
-  it("adds a not-yet-open notification target and preserves the other tabs", () => {
+  it("adds a same-project notification without removing any existing tabs", () => {
     const nav = createNavigation();
     nav.openAgent("agent-x");
     nav.openAgent("agent-z");
-
     resolveNavigateToAgent(notification(), nav.deps);
     resolveNavigateToAgent(notification(), nav.deps);
-
-    expect(nav.route()).toBe(`/h/${SERVER_ID}/workspace/${HOST_ID}`);
     expect(nav.agentIds()).toEqual(["agent-x", "agent-z", AGENT_ID]);
-    expect(nav.store.getState().layoutByWorkspace[`${SERVER_ID}:${OWNER_ID}`]).toBeUndefined();
+    expect(nav.store.getState().layoutByWorkspace).toHaveProperty(HOST_KEY);
+    const opened = nav.store
+      .getState()
+      .getWorkspaceTabs(HOST_KEY)
+      .find((tab) => tab.target.kind === "agent" && tab.target.agentId === AGENT_ID);
+    expect(opened?.target.workspaceId).toBe(OWNER_ID);
   });
 
-  it("does not host a notification from another server", () => {
-    const nav = createNavigation();
+  it("switches project for a notification without polluting the active project's panes", () => {
+    const nav = createNavigation(OTHER_ID);
     nav.openAgent("agent-x");
     const before = nav.store.getState().layoutByWorkspace[HOST_KEY];
-
-    resolveNavigateToAgent({ ...notification(), serverId: "server-2" }, nav.deps);
-
-    expect(nav.route()).toBe(`/h/server-2/workspace/${OWNER_ID}`);
-    expect(nav.agentIds(`server-2:${OWNER_ID}`)).toEqual([AGENT_ID]);
+    resolveNavigateToAgent(notification(OTHER_ID), nav.deps);
+    expect(nav.route()).toBe(`/h/${SERVER_ID}/workspace/${OTHER_ID}`);
+    expect(nav.agentIds(OTHER_KEY)).toEqual([AGENT_ID]);
     expect(nav.store.getState().layoutByWorkspace[HOST_KEY]).toEqual(before);
   });
 
-  it("leaves a draft-only host so its normal cleanup can run", () => {
+  it("preserves draft-only hosts when a same-project notification arrives", () => {
     const nav = createNavigation();
     nav.store.getState().openTab({
       workspaceKey: HOST_KEY,
-      target: { kind: "draft", draftId: "draft-1" },
+      target: { kind: "draft", draftId: "draft-1", workspaceId: HOST_ID },
       intent: "reveal",
     });
-    const before = nav.store.getState().layoutByWorkspace[HOST_KEY];
-
     resolveNavigateToAgent(notification(), nav.deps);
-
-    expect(nav.route()).toBe(`/h/${SERVER_ID}/workspace/${OWNER_ID}`);
-    expect(nav.agentIds(`${SERVER_ID}:${OWNER_ID}`)).toEqual([AGENT_ID]);
-    expect(nav.store.getState().layoutByWorkspace[HOST_KEY]).toEqual(before);
+    expect(nav.route()).toBe(`/h/${SERVER_ID}/workspace/${HOST_ID}`);
+    const tabs = nav.store.getState().getWorkspaceTabs(HOST_KEY);
+    expect(tabs.find((tab) => tab.target.kind === "draft")?.target).toMatchObject({
+      draftId: "draft-1",
+      workspaceId: HOST_ID,
+    });
+    expect(nav.agentIds()).toEqual([AGENT_ID]);
   });
 
-  it("uses the notification owner on a cold start without a tab host", () => {
-    const nav = createNavigation(null);
-
-    resolveNavigateToAgent({ ...notification(), tabHost: null }, nav.deps);
-
-    expect(nav.route()).toBe(`/h/${SERVER_ID}/workspace/${OWNER_ID}`);
-    expect(nav.agentIds(`${SERVER_ID}:${OWNER_ID}`)).toEqual([AGENT_ID]);
-  });
-
-  it("keeps ordinary agent navigation targeted at the owning workspace", () => {
+  it("does not host another server's notification", () => {
     const nav = createNavigation();
+    nav.openAgent("agent-x");
+    resolveNavigateToAgent({ ...notification(), serverId: "server-2" }, nav.deps);
+    expect(nav.route()).toBe(`/h/server-2/workspace/${OWNER_ID}?open=agent%3A${AGENT_ID}`);
+    expect(nav.agentIds()).toEqual(["agent-x"]);
+  });
 
-    resolveNavigateToAgent({ serverId: SERVER_ID, agentId: AGENT_ID }, nav.deps);
-
+  it("opens a notification on its owner when there is no tab host", () => {
+    const nav = createNavigation();
+    resolveNavigateToAgent({ ...notification(), tabHost: null }, nav.deps);
     expect(nav.route()).toBe(`/h/${SERVER_ID}/workspace/${OWNER_ID}`);
-    expect(nav.agentIds(`${SERVER_ID}:${OWNER_ID}`)).toEqual([AGENT_ID]);
+    expect(nav.agentIds()).toEqual([AGENT_ID]);
   });
 
   it("falls back to agent recovery when neither host nor owner is known", () => {
     const nav = createNavigation(null);
-
     resolveNavigateToAgent({ serverId: SERVER_ID, agentId: AGENT_ID }, nav.deps);
-
     expect(nav.route()).toBe(`/h/${SERVER_ID}/agent/${AGENT_ID}`);
     expect(nav.store.getState().layoutByWorkspace).toEqual({});
   });

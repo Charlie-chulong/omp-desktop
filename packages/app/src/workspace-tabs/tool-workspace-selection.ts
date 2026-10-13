@@ -11,10 +11,8 @@ function selectionsEqual(left: ActiveWorkspaceSelection, right: ActiveWorkspaceS
 }
 
 /**
- * Workspace tabs can host conversations from another workspace without changing the
- * route. Tools follow the focused conversation or draft and keep that scope while a
- * tool has pane focus. Legacy drafts and new tabs belong to the route workspace, as
- * does the initial scope after a route change.
+ * Layouts belong to a project; tool data still belongs to a checkout. Bound tabs
+ * keep their checkout when another conversation or pane becomes focused.
  */
 export function resolveWorkspaceToolSelection(input: {
   current: WorkspaceToolSelection | null;
@@ -27,9 +25,8 @@ export function resolveWorkspaceToolSelection(input: {
     return null;
   }
 
-  const focusedDraftWorkspaceId =
-    input.focusedTarget?.kind === "draft" ? input.focusedTarget.workspaceId?.trim() || null : null;
-  const focusedWorkspaceId = input.focusedAgentWorkspaceId?.trim() || focusedDraftWorkspaceId;
+  const focusedWorkspaceId =
+    input.focusedTarget?.workspaceId?.trim() || input.focusedAgentWorkspaceId?.trim() || null;
   let activeSelection = routeSelection;
   if (focusedWorkspaceId) {
     activeSelection = { serverId: routeSelection.serverId, workspaceId: focusedWorkspaceId };
@@ -72,6 +69,10 @@ export function resolveWorkspaceTabWorkspaceId(input: {
   routeWorkspaceId: string;
   toolWorkspaceId: string;
 }): string {
+  const workspaceId = input.target.workspaceId?.trim();
+  if (workspaceId) {
+    return workspaceId;
+  }
   if (input.target.kind === "draft") {
     return input.target.workspaceId?.trim() || input.routeWorkspaceId;
   }

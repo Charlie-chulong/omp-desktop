@@ -1142,10 +1142,19 @@ function SplitPaneView({
   );
   const paneTabs = useMemo(() => paneState.tabs.map((tab) => tab.descriptor), [paneState.tabs]);
   const paneTabIds = useMemo(() => paneTabs.map((tab) => tab.tabId), [paneTabs]);
+  const workspaceIdByTabId = useMemo(() => {
+    const paneIds = new Set(paneTabIds);
+    return new Map(
+      uiTabs
+        .filter((tab) => paneIds.has(tab.tabId))
+        .map((tab) => [tab.tabId, tab.target.workspaceId ?? normalizedWorkspaceId]),
+    );
+  }, [uiTabs, paneTabIds, normalizedWorkspaceId]);
   const modifiedPaneTabIds = useModifiedPanelTabIds({
     serverId: normalizedServerId,
     workspaceId: normalizedWorkspaceId,
     tabIds: paneTabIds,
+    workspaceIdByTabId,
   });
   const tabDescriptorMap = useStableTabDescriptorMap(paneTabs);
   const activeTabDescriptor = paneState.activeTab?.descriptor ?? null;

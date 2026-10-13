@@ -521,6 +521,10 @@ export const ru: TranslationResources = {
     },
   },
   workspace: {
+    projectEmpty: {
+      description: "Пока нет диалогов",
+      newConversation: "Новый диалог",
+    },
     route: {
       loading: "Загрузка рабочего пространства",
       connecting: "Подключение",
@@ -697,6 +701,8 @@ export const ru: TranslationResources = {
         copyAgentId: "Скопировать идентификатор агента",
         copyTerminalId: "Скопировать идентификатор терминала",
         copyFilePath: "Скопировать путь к файлу",
+        revealInFiles: "Показать в дереве файлов",
+        revealOutsideWorkspace: "Файл находится вне этого рабочего пространства",
         rename: "Переименовать",
         closeAbove: "Закрыть вкладки выше",
         closeBelow: "Закрыть вкладки ниже",
@@ -1348,6 +1354,7 @@ export const ru: TranslationResources = {
   },
   newWorkspace: {
     title: "Новое рабочее пространство",
+    deleteDraft: "Удалить новое рабочее пространство",
     create: "Создать",
     fields: {
       project: "Проект",

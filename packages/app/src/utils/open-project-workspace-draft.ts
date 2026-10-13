@@ -25,6 +25,10 @@ export async function openProjectWorkspaceDraft(input: {
     input.tabHost?.serverId === serverId
       ? session.workspaces.get(input.tabHost.workspaceId)
       : undefined;
+  const validTabHost =
+    tabHostWorkspace?.projectId === projectId && !tabHostWorkspace.archivingAt
+      ? tabHostWorkspace
+      : null;
   const payload = await session.client.createWorkspace({
     source: { kind: "directory", path: projectRootPath, projectId },
   });
@@ -43,8 +47,13 @@ export async function openProjectWorkspaceDraft(input: {
         }),
       }
     : undefined;
+  const currentTabHost = validTabHost
+    ? useSessionStore.getState().sessions[serverId]?.workspaces.get(validTabHost.id)
+    : null;
   const tabHostWorkspaceId =
-    tabHostWorkspace && !tabHostWorkspace.archivingAt ? tabHostWorkspace.id : workspace.id;
+    currentTabHost?.projectId === projectId && !currentTabHost.archivingAt
+      ? currentTabHost.id
+      : workspace.id;
   navigateToWorkspace({
     serverId,
     workspaceId: tabHostWorkspaceId,

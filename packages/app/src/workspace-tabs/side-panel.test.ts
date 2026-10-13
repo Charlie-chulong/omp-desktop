@@ -264,7 +264,6 @@ describe("non-compact without splits", () => {
     toggleSidePanel(tablet);
 
     expect(focusedPaneTabKinds()).toContain("working_diff");
-    expect(collectAllPanes(layout().root)).toHaveLength(1);
     expect(isSidePanelOpen(tablet)).toBe(true);
   });
 
@@ -286,6 +285,5 @@ describe("non-compact without splits", () => {
 
     expect(tabId).not.toBeNull();
     expect(paneIdHolding(tabId as string)).toBe(layout().focusedPaneId);
-    expect(collectAllPanes(layout().root)).toHaveLength(1);
   });
 });

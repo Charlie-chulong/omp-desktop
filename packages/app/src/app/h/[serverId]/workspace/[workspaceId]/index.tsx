@@ -36,6 +36,9 @@ import {
 import { prepareWorkspaceTab } from "@/utils/workspace-navigation";
 import { isNative, isWeb } from "@/constants/platform";
 import { RenderProfile } from "@/utils/render-profiler";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
+import { useModifiedPanelIdentities } from "@/panels/panel-instance-attributes";
+import { useSessionStore } from "@/stores/session-store";
 
 function getParamValue(value: string | string[] | undefined): string {
   if (typeof value === "string") {
@@ -205,6 +208,37 @@ function WorkspaceDeck({
   const [retainedSelections, setRetainedSelections] = useState<RetainedWorkspaceSelection[]>(() =>
     activeSelection ? [{ selection: activeSelection, inactiveSince: null }] : [],
   );
+  const modifiedPanels = useModifiedPanelIdentities();
+  const activeWorkspaces = useSessionStore((state) =>
+    activeSelection ? state.sessions[activeSelection.serverId]?.workspaces : undefined,
+  );
+  const projectRetainedSelections = useMemo(() => {
+    const activeKey = activeSelection ? resolveProjectLayoutKey(activeSelection) : null;
+    const seen = new Set<string>();
+    return retainedSelections.filter((entry) => {
+      const key =
+        resolveProjectLayoutKey(entry.selection) ?? getWorkspaceSelectionKey(entry.selection);
+      if (key === activeKey && !areWorkspaceSelectionsEqual(entry.selection, activeSelection))
+        return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [activeSelection, activeWorkspaces, retainedSelections]);
+  const protectedSelectionKeys = useMemo(() => {
+    const dirtyProjectKeys = new Set(
+      modifiedPanels.flatMap((identity) => {
+        const key = resolveProjectLayoutKey(identity);
+        return key ? [key] : [];
+      }),
+    );
+    return new Set(
+      projectRetainedSelections.flatMap((entry) => {
+        const key = resolveProjectLayoutKey(entry.selection);
+        return key && dirtyProjectKeys.has(key) ? [getWorkspaceSelectionKey(entry.selection)] : [];
+      }),
+    );
+  }, [activeWorkspaces, modifiedPanels, projectRetainedSelections]);
   const unmountWorkspaceSelection = useCallback((selection: ActiveWorkspaceSelection) => {
     setRetainedSelections((current) =>
       current.filter((entry) => !areWorkspaceSelectionsEqual(entry.selection, selection)),
@@ -215,12 +249,13 @@ function WorkspaceDeck({
   const nextRetainedSelections = useMemo(
     () =>
       reconcileRetainedWorkspaceSelections({
-        currentEntries: retainedSelections,
+        currentEntries: projectRetainedSelections,
         activeSelection,
         now: reconciliationNow,
         maxMountedWorkspaces: resolveWorkspaceDeckRetentionLimit({ isNative }),
+        protectedSelectionKeys,
       }),
-    [activeSelection, reconciliationNow, retainedSelections],
+    [activeSelection, reconciliationNow, projectRetainedSelections, protectedSelectionKeys],
   );
   const renderedSelections = useMemo(
     () =>
@@ -245,6 +280,7 @@ function WorkspaceDeck({
       entries: nextRetainedSelections,
       activeSelection,
       now: reconciliationNow,
+      protectedSelectionKeys,
     });
     if (expirationDelay === null) {
       return;
@@ -256,11 +292,12 @@ function WorkspaceDeck({
           activeSelection,
           now: Date.now(),
           maxMountedWorkspaces: resolveWorkspaceDeckRetentionLimit({ isNative }),
+          protectedSelectionKeys,
         }),
       );
     }, expirationDelay + 1);
     return () => clearTimeout(timeout);
-  }, [activeSelection, nextRetainedSelections, reconciliationNow]);
+  }, [activeSelection, nextRetainedSelections, reconciliationNow, protectedSelectionKeys]);
 
   return (
     <RenderProfile id="WorkspaceDeck">
@@ -268,7 +305,7 @@ function WorkspaceDeck({
         {renderedEntries.map(({ selection, active }) => {
           return (
             <WorkspaceDeckEntry
-              key={getWorkspaceSelectionKey(selection)}
+              key={resolveProjectLayoutKey(selection) ?? getWorkspaceSelectionKey(selection)}
               selection={selection}
               active={active}
               recoveryRequested={recoveryRequested}

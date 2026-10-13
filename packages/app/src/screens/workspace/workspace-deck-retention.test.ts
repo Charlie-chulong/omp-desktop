@@ -124,6 +124,37 @@ describe("reconcileRetainedWorkspaceSelections", () => {
 
     expect(retainedWorkspaceIds(retainedEntries)).toEqual(["A", "B"]);
   });
+
+  it("preserves dirty editors past both the capacity and expiry limits, then releases them when saved", () => {
+    const now = WORKSPACE_DECK_INACTIVE_TTL_MS;
+    const protectedSelectionKeys = new Set(["server:dirty"]);
+    const entries = reconcileRetainedWorkspaceSelections({
+      currentEntries: [retained("dirty", 0), retained("clean", 0)],
+      activeSelection: workspace("active"),
+      maxMountedWorkspaces: 1,
+      now,
+      protectedSelectionKeys,
+    });
+    expect(retainedWorkspaceIds(entries)).toEqual(["active", "dirty"]);
+    expect(
+      getNextWorkspaceDeckExpirationDelay({
+        entries,
+        activeSelection: workspace("active"),
+        now,
+        protectedSelectionKeys,
+      }),
+    ).toBeNull();
+    expect(
+      retainedWorkspaceIds(
+        reconcileRetainedWorkspaceSelections({
+          currentEntries: entries,
+          activeSelection: workspace("active"),
+          maxMountedWorkspaces: 1,
+          now,
+        }),
+      ),
+    ).toEqual(["active"]);
+  });
 });
 
 describe("getNextWorkspaceDeckExpirationDelay", () => {

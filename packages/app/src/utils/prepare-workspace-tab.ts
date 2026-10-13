@@ -1,5 +1,6 @@
 import { generateDraftId } from "@/stores/draft-keys";
-import { buildWorkspaceTabPersistenceKey, type WorkspaceTabTarget } from "@/workspace-tabs/model";
+import { type WorkspaceTabTarget } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 
 export interface PrepareWorkspaceTabInput {
   serverId: string;
@@ -15,6 +16,7 @@ export interface PrepareWorkspaceTabDeps {
     intent: "reveal";
   }) => string | null;
   pinAgent: (workspaceKey: string, agentId: string) => void;
+  getProjectLayoutKey?: (serverId: string, workspaceId: string) => string | null;
 }
 
 function getPreparedTarget(target: WorkspaceTabTarget): WorkspaceTabTarget {
@@ -29,14 +31,18 @@ export function prepareWorkspaceTab(
   deps: PrepareWorkspaceTabDeps,
 ): void {
   const target = getPreparedTarget(input.target);
-  const key =
-    buildWorkspaceTabPersistenceKey({
-      serverId: input.serverId,
-      workspaceId: input.workspaceId,
-    }) ?? "";
+  const ownerWorkspaceId = target.workspaceId?.trim() || input.workspaceId;
+  const key = (
+    deps.getProjectLayoutKey ??
+    ((serverId, workspaceId) => resolveProjectLayoutKey({ serverId, workspaceId }))
+  )(input.serverId, ownerWorkspaceId);
+  if (!key) return;
 
-  deps.openTab({ workspaceKey: key, target, intent: "reveal" });
-
+  deps.openTab({
+    workspaceKey: key,
+    target: { ...target, workspaceId: ownerWorkspaceId },
+    intent: "reveal",
+  });
   if (input.pin && target.kind === "agent") {
     deps.pinAgent(key, target.agentId);
   }

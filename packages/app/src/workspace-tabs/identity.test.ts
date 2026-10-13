@@ -49,6 +49,42 @@ describe("draft tab identity", () => {
   });
 });
 
+describe("checkout-bound resource identity", () => {
+  it("preserves ownership through normalization and differentiates equal paths", () => {
+    const first = normalizeWorkspaceTabTarget({
+      kind: "file",
+      path: "src/index.ts",
+      workspaceId: " checkout-a ",
+    });
+    const second = normalizeWorkspaceTabTarget({
+      kind: "file",
+      path: "src/index.ts",
+      workspaceId: "checkout-b",
+    });
+    expect(first?.workspaceId).toBe("checkout-a");
+    expect(first && second && workspaceTabTargetsEqual(first, second)).toBe(false);
+    expect(first && second && buildDeterministicWorkspaceTabId(first)).not.toBe(
+      second && buildDeterministicWorkspaceTabId(second),
+    );
+  });
+
+  it("keeps terminal and agent ownership immutable in target comparisons", () => {
+    expect(
+      workspaceTabTargetsEqual(
+        { kind: "terminal", terminalId: "t", workspaceId: "a" },
+        { kind: "terminal", terminalId: "t", workspaceId: "b" },
+      ),
+    ).toBe(false);
+    expect(
+      normalizeWorkspaceTabTarget({
+        kind: "agent",
+        agentId: "a",
+        workspaceId: " checkout ",
+      }),
+    ).toEqual({ kind: "agent", agentId: "a", workspaceId: "checkout" });
+  });
+});
+
 describe("provider subagent tab identity", () => {
   test("normalizes and compares the parent and provider child as one tab identity", () => {
     const target = normalizeWorkspaceTabTarget({

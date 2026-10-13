@@ -309,6 +309,23 @@ export function parseHostWorkspaceRouteFromPathname(
   return { serverId, workspaceId };
 }
 
+export function parseHostProjectRouteFromPathname(
+  pathname: string,
+): { serverId: string; projectId: string } | null {
+  const match = stripSearchAndHash(pathname).match(/^\/h\/([^/]+)\/project\/([^/]+)\/?$/);
+  if (!match) return null;
+  const serverId = trimNonEmpty(decodeSegment(match[1]));
+  const projectId = trimNonEmpty(decodeSegment(match[2]));
+  return serverId && projectId ? { serverId, projectId } : null;
+}
+
+export function buildHostProjectRoute(serverId: string, projectId: string) {
+  const host = trimNonEmpty(serverId);
+  const project = trimNonEmpty(projectId);
+  if (!host || !project) return "/" as const;
+  return `/h/${encodeSegment(host)}/project/${encodeSegment(project)}` as const;
+}
+
 export function stripHostWorkspaceRouteEchoSearch(route: string): string {
   const pathname = stripSearchAndHash(route);
   const selection = parseHostWorkspaceRouteFromPathname(pathname);

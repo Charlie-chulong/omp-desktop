@@ -75,7 +75,7 @@ import {
 import { FOCUSED_PANE_PLACEMENT, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import type { WorkspaceTabPlacement } from "@/stores/workspace-layout-actions";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { isWeb } from "@/constants/platform";
 import { usePublishWorkingDiffAttachment, useWorkingDiff } from "@/git/use-working-diff";
 import type { CheckoutStatusPayload } from "@/git/use-status-query";
@@ -1545,17 +1545,19 @@ function useDiffTabNavigation({
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
   const openWorkspaceTabInFocusedPane = useCallback(
     (workspaceKey: string, target: WorkspaceTabTarget, placement?: WorkspaceTabPlacement) =>
-      openTab({ workspaceKey, target, intent: "reveal", placement }),
-    [openTab],
+      openTab({
+        workspaceKey,
+        target: { ...target, ...(workspaceId ? { workspaceId } : {}) },
+        intent: "reveal",
+        placement,
+      }),
+    [openTab, workspaceId],
   );
   const persistenceKey = useMemo(
     () =>
       layoutWorkspaceKey ??
-      buildWorkspaceTabPersistenceKey({
-        serverId,
-        workspaceId: workspaceId ?? cwd,
-      }),
-    [cwd, layoutWorkspaceKey, serverId, workspaceId],
+      (workspaceId ? resolveProjectLayoutKey({ serverId, workspaceId }) : null),
+    [layoutWorkspaceKey, serverId, workspaceId],
   );
   const changesTabOpen = false;
   const openChanges = useCallback(

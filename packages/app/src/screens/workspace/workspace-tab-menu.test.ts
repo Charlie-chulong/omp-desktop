@@ -274,6 +274,48 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(onCopyFilePath).toHaveBeenCalledWith("/some/path.ts");
   });
 
+  it("offers Files tree reveal only for desktop file tabs inside the workspace", () => {
+    const onRevealFileInExplorer = vi.fn();
+    const tab: WorkspaceTabDescriptor = {
+      key: "file_nested",
+      tabId: "file_nested",
+      kind: "file",
+      target: { kind: "file", path: "src/deep/example.ts" },
+    };
+    const input = {
+      tab,
+      index: 0,
+      tabCount: 1,
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFilePath: vi.fn(),
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsToLeft: vi.fn(),
+      onCloseTabsToRight: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+      onRevealFileInExplorer,
+      canRevealFileInExplorer: vi.fn(() => true),
+    };
+    const actions = buildWorkspaceDesktopTabActions(input);
+    const entry = actions.menuEntries.find(
+      (candidate) => candidate.kind === "item" && candidate.key === "reveal-in-files",
+    );
+    expect(entry).toEqual(expect.objectContaining({ disabled: false }));
+    if (entry?.kind !== "item") throw new Error("Reveal entry missing");
+    entry.onSelect();
+    expect(onRevealFileInExplorer).toHaveBeenCalledWith("src/deep/example.ts");
+    const outside = buildWorkspaceDesktopTabActions({
+      ...input,
+      canRevealFileInExplorer: () => false,
+    }).menuEntries.find(
+      (candidate) => candidate.kind === "item" && candidate.key === "reveal-in-files",
+    );
+    expect(outside).toEqual(expect.objectContaining({ disabled: true }));
+  });
+
   it("uses a Changes close id for the working diff tab", () => {
     const actions = buildWorkspaceDesktopTabActions({
       tab: {
@@ -293,6 +335,8 @@ describe("buildWorkspaceTabMenuEntries", () => {
       onCopyTerminalId: vi.fn(),
       onCopyFilePath: vi.fn(),
       onReloadAgent: vi.fn(),
+      onRevealFileInExplorer: vi.fn(),
+      canRevealFileInExplorer: vi.fn(() => false),
       onRenameTab: vi.fn(),
       onCloseTab: vi.fn(),
       onCloseTabsToLeft: vi.fn(),

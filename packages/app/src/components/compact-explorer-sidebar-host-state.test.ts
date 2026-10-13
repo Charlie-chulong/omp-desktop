@@ -4,6 +4,11 @@ import {
   type CompactExplorerSidebarHostModel,
 } from "@/components/compact-explorer-sidebar-host-state";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
+const workspaces = new Map([
+  ["workspace-a", { id: "workspace-a", projectId: "project-1" }],
+  ["workspace-b", { id: "workspace-b", projectId: "project-2" }],
+  ["workspace-project", { id: "workspace-project", projectId: "project-1" }],
+]);
 
 function createWorkspace(
   input: Partial<WorkspaceDescriptor> & Pick<WorkspaceDescriptor, "id">,
@@ -31,7 +36,7 @@ function createModel(
   return {
     serverId: overrides.serverId ?? "server-1",
     workspaceId: overrides.workspaceId ?? "workspace-a",
-    persistenceKey: overrides.persistenceKey ?? "server-1:workspace-a",
+    persistenceKey: overrides.persistenceKey ?? "server-1:project:project-1",
     workspaceRoot: overrides.workspaceRoot ?? "/repo/a",
     isGit: overrides.isGit ?? true,
   };
@@ -46,13 +51,14 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
       routeSelection: { serverId: "server-1", workspaceId: "workspace-a" },
       selection: { serverId: "server-1", workspaceId: "workspace-a" },
       workspace: null,
+      workspaces,
       isGit: false,
     });
 
     expect(result).toEqual({
       serverId: "server-1",
       workspaceId: "workspace-a",
-      persistenceKey: "server-1:workspace-a",
+      persistenceKey: "server-1:project:project-1",
       workspaceRoot: "/repo/a",
       isGit: true,
     });
@@ -67,12 +73,13 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
       selection: { serverId: "server-1", workspaceId: "workspace-b" },
       workspace: null,
       isGit: false,
+      workspaces,
     });
 
     expect(result).toEqual({
       serverId: "server-1",
       workspaceId: "workspace-b",
-      persistenceKey: "server-1:workspace-b",
+      persistenceKey: "server-1:project:project-2",
       workspaceRoot: "",
       isGit: false,
     });
@@ -96,16 +103,30 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
       routeSelection: { serverId: "server-1", workspaceId: "workspace-a" },
       selection: { serverId: "server-1", workspaceId: "workspace-a" },
       workspace: createWorkspace({ id: "workspace-a", workspaceDirectory: "/repo/current" }),
+      workspaces,
       isGit: true,
     });
 
     expect(result).toEqual({
       serverId: "server-1",
       workspaceId: "workspace-a",
-      persistenceKey: "server-1:workspace-a",
+      persistenceKey: "server-1:project:project-1",
       workspaceRoot: "/repo/current",
       isGit: true,
     });
+  });
+
+  it("waits for route workspace metadata rather than inventing a layout owner", () => {
+    expect(
+      resolveCompactExplorerSidebarHostModel({
+        previous: createModel(),
+        routeSelection: { serverId: "server-1", workspaceId: "unknown" },
+        selection: { serverId: "server-1", workspaceId: "workspace-a" },
+        workspace: createWorkspace({ id: "workspace-a" }),
+        workspaces,
+        isGit: true,
+      }),
+    ).toBeNull();
   });
 
   it("opens tool tabs in the visible route while browsing the focused conversation's workspace", () => {
@@ -117,10 +138,11 @@ describe("resolveCompactExplorerSidebarHostModel", () => {
         id: "workspace-conversation",
         workspaceDirectory: "/repo/worktrees/conversation",
       }),
+      workspaces,
       isGit: true,
     });
 
-    expect(result?.persistenceKey).toBe("server-1:workspace-project");
+    expect(result?.persistenceKey).toBe("server-1:project:project-1");
     expect(result?.workspaceId).toBe("workspace-conversation");
     expect(result?.workspaceRoot).toBe("/repo/worktrees/conversation");
   });

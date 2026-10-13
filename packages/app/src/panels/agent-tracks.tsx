@@ -26,7 +26,7 @@ import {
 import { SubagentsTrack } from "@/subagents/track";
 import { toErrorMessage } from "@/utils/error-messages";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { openSidePanelView } from "@/workspace-tabs/side-panel";
 
 /**
@@ -60,7 +60,7 @@ export const AgentTracks = memo(function AgentTracks({
   const hasWorkspaceBranch = useWorkspaceHasBranch(serverId, workspaceId);
   const isCompact = useIsCompactFormFactor();
   const canSplit = supportsDesktopPaneSplits() && !isCompact;
-  const paneWorkspaceKey = buildWorkspaceTabPersistenceKey({
+  const paneWorkspaceKey = resolveProjectLayoutKey({
     serverId,
     workspaceId: paneWorkspaceId,
   });
@@ -75,23 +75,40 @@ export const AgentTracks = memo(function AgentTracks({
     (subagentId: string) => {
       const session = useSessionStore.getState().sessions[serverId];
       const agent = session?.agents.get(subagentId) ?? session?.agentDetails.get(subagentId);
-      if (agent?.workspaceId && agent.workspaceId !== workspaceId) {
+      if (!agent?.workspaceId) {
+        navigateToAgent({ serverId, agentId: subagentId });
+        return;
+      }
+      if (agent.workspaceId !== workspaceId) {
+        navigateToAgent({ serverId, agentId: subagentId });
+        return;
+      }
+      if (
+        resolveProjectLayoutKey({ serverId, workspaceId: agent.workspaceId }) !== paneWorkspaceKey
+      ) {
         navigateToAgent({ serverId, agentId: subagentId });
         return;
       }
       if (canSplit) {
-        openTab({ kind: "agent", agentId: subagentId });
+        openTab({ kind: "agent", agentId: subagentId, workspaceId: agent.workspaceId });
         return;
       }
       navigateToAgent({ serverId, agentId: subagentId });
     },
-    [canSplit, openTab, serverId, workspaceId],
+    [canSplit, openTab, paneWorkspaceKey, serverId, workspaceId],
   );
   const handleOpenProviderSubagent = useCallback(
     (parentAgentId: string, subagentId: string) => {
-      openTab({ kind: "provider_subagent", parentAgentId, subagentId });
+      if (
+        !paneWorkspaceKey ||
+        resolveProjectLayoutKey({ serverId, workspaceId }) !== paneWorkspaceKey
+      ) {
+        navigateToAgent({ serverId, agentId: parentAgentId });
+        return;
+      }
+      openTab({ kind: "provider_subagent", parentAgentId, subagentId, workspaceId });
     },
-    [openTab],
+    [openTab, paneWorkspaceKey, serverId, workspaceId],
   );
   const handleStopSubagent = useCallback(
     async (subagentId: string) => {
@@ -119,12 +136,20 @@ export const AgentTracks = memo(function AgentTracks({
   );
   const handleOpenProcess = useCallback(
     (process: BackgroundProcess) => {
+      if (resolveProjectLayoutKey({ serverId, workspaceId }) !== paneWorkspaceKey) {
+        navigateToAgent({ serverId, agentId });
+        return;
+      }
       if (process.source === "terminal" && process.terminalId) {
         if (!paneWorkspaceKey) return;
         const store = useWorkspaceLayoutStore.getState();
         const processTabId = store.openTab({
           workspaceKey: paneWorkspaceKey,
-          target: { kind: "terminal", terminalId: process.terminalId },
+          target: {
+            kind: "terminal",
+            terminalId: process.terminalId,
+            workspaceId: paneWorkspaceId,
+          },
           intent: "reveal",
           parentTabId: tabId,
         });
@@ -141,19 +166,19 @@ export const AgentTracks = memo(function AgentTracks({
           });
         }
       } else {
-        openTab({ kind: "background_process", agentId, processId: process.id });
+        openTab({ kind: "background_process", agentId, processId: process.id, workspaceId });
       }
     },
-    [agentId, openTab, paneWorkspaceKey, tabId],
+    [agentId, openTab, paneWorkspaceId, paneWorkspaceKey, serverId, tabId, workspaceId],
   );
   const handleOpenChanges = useCallback(() => {
     openSidePanelView({
       isCompact,
       workspaceKey: paneWorkspaceKey,
-      checkout: { serverId, cwd, isGit: true },
+      checkout: { serverId, workspaceId: paneWorkspaceId, cwd, isGit: true },
       view: "changes",
     });
-  }, [cwd, isCompact, paneWorkspaceKey, serverId]);
+  }, [cwd, isCompact, paneWorkspaceId, paneWorkspaceKey, serverId]);
 
   if (
     !hasWorkspaceDiffStat &&

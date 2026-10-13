@@ -29,6 +29,8 @@ import { router, usePathname, type Href } from "expo-router";
 import {
   navigateToSidebarWorkspace,
   navigateToWorkspace,
+  navigateToProject,
+  useActiveProjectSelection,
   useActiveWorkspaceSelection,
   useSidebarActiveWorkspaceSelection,
   type ActiveWorkspaceSelection,
@@ -62,6 +64,7 @@ import { useHostFeatureMap } from "@/runtime/host-features";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIcons } from "@/projects/icons";
 import {
+  buildHostProjectRoute,
   buildProjectSettingsRoute,
   parseHostWorkspaceRouteFromPathname,
 } from "@/utils/host-routes";
@@ -152,10 +155,22 @@ import { OpenInFileManagerMenuItem } from "@/workspace/open-in-file-manager/menu
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { useHostBadges } from "@/hosts/use-host-badges";
+import { useSessionStore } from "@/stores/session-store";
 import { useSidebarRowItems } from "@/components/sidebar/display-preferences/model";
 import { openProjectWorkspaceDraft } from "@/utils/open-project-workspace-draft";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { groupSidebarAgentDrafts, type SidebarAgentDraft } from "@/components/sidebar-agent-drafts";
+import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
+import { useDraftStore } from "@/stores/draft-store";
+import { buildDraftStoreKey } from "@/stores/draft-keys";
+import {
+  buildDraftWorkspaceAttachmentScopeKey,
+  useWorkspaceAttachmentsStore,
+} from "@/attachments/workspace-attachments-store";
+import { archiveEmptyWorkspace } from "@/workspace/workspace-archive";
+import { getShortcutOs } from "@/utils/shortcut-platform";
+import { shouldFocusProjectOnPress } from "@/utils/project-row-interaction";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
@@ -214,16 +229,16 @@ function isWorkspaceSelected(input: {
 }
 
 function isProjectSelectedByRoute(input: {
-  selection: ActiveWorkspaceSelection | null;
+  selection: { serverId: string; projectId: string } | null;
   project: SidebarProjectEntry;
   enabled: boolean;
 }): boolean {
   return (
     input.enabled &&
-    input.project.workspaces.some(
-      (workspace) =>
-        workspace.serverId === input.selection?.serverId &&
-        workspace.workspaceId === input.selection.workspaceId,
+    input.project.hosts.some(
+      (host) =>
+        host.serverId === input.selection?.serverId &&
+        host.projectId === input.selection.projectId,
     )
   );
 }
@@ -263,7 +278,7 @@ interface ProjectHeaderRowProps {
   statusBucket: SidebarStateBucket | null;
   selected?: boolean;
   chevron: "expand" | "collapse" | null;
-  onPress: () => void;
+  onPress: (event: GestureResponderEvent) => void;
   workspaceTarget: SidebarProjectHostTarget | null;
   onBeginWorkspaceSetup: () => void;
   isProjectActive?: boolean;
@@ -821,17 +836,16 @@ function SidebarAgentDraftRow({
   workspaceId,
   tabHostWorkspaceId,
   draftId,
+  tabId,
   selected,
+  routeActive,
   onWorkspacePress,
-}: {
-  serverId: string;
-  workspaceId: string;
-  tabHostWorkspaceId: string;
-  draftId: string;
-  selected: boolean;
-  onWorkspacePress?: () => void;
-}) {
+}: SidebarAgentDraft & { routeActive: boolean; onWorkspacePress?: () => void }) {
   const { t } = useTranslation();
+  const toast = useToast();
+  const isCompact = useIsCompactFormFactor();
+  const [isHovered, setIsHovered] = useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const handlePress = useCallback(() => {
     onWorkspacePress?.();
     navigateToWorkspace({
@@ -840,6 +854,85 @@ function SidebarAgentDraftRow({
       target: { kind: "draft", draftId, workspaceId },
     });
   }, [draftId, onWorkspacePress, serverId, tabHostWorkspaceId, workspaceId]);
+  const handleDelete = useCallback(() => {
+    const layoutStore = useWorkspaceLayoutStore.getState();
+    const hostKey = resolveProjectLayoutKey({ serverId, workspaceId });
+    if (!hostKey) return;
+    const tab = layoutStore.getWorkspaceTabs(hostKey).find((entry) => entry.tabId === tabId);
+    if (
+      tab?.target.kind !== "draft" ||
+      tab.target.draftId !== draftId ||
+      (tab.target.workspaceId?.trim() || tabHostWorkspaceId) !== workspaceId
+    ) {
+      return;
+    }
+
+    const result = layoutStore.closeTab(hostKey, tabId);
+    if (!result) return;
+    useDraftStore.getState().clearDraftInput({
+      draftKey: buildDraftStoreKey({ serverId, agentId: tabId, draftId }),
+      lifecycle: "abandoned",
+    });
+    useWorkspaceAttachmentsStore.getState().clearWorkspaceAttachments({
+      scopeKey: buildDraftWorkspaceAttachmentScopeKey(draftId),
+    });
+    useWorkspaceDraftSubmissionStore.getState().consumePending({
+      serverId,
+      workspaceId,
+      draftId,
+    });
+
+    const remainingLayouts = useWorkspaceLayoutStore.getState().layoutByWorkspace;
+    // Keep in-flight create attempts: the server request can complete after the tab is closed,
+    // and archiveEmptyWorkspace uses them to protect workspaces from premature archival.
+    const archiveIfUnused = (candidateId: string) => {
+      const candidateLayoutKey = resolveProjectLayoutKey({ serverId, workspaceId: candidateId });
+      const hasOtherDraft = Object.entries(remainingLayouts).some(
+        ([key, layout]) =>
+          key.startsWith(`${serverId}:project:`) &&
+          collectAllTabs(layout.root).some(
+            (entry) =>
+              entry.target.kind === "draft" &&
+              (entry.target.workspaceId?.trim() === candidateId ||
+                (!entry.target.workspaceId && key === candidateLayoutKey)),
+          ),
+      );
+      if (hasOtherDraft) return;
+      void archiveEmptyWorkspace({
+        client: getHostRuntimeStore().getClient(serverId),
+        workspace: { serverId, workspaceId: candidateId },
+        closedDraftId: draftId,
+        hasPendingTerminalCreate: false,
+        preserveDrafts: true,
+      }).catch((error: unknown) => {
+        toast.error(
+          t("sidebar.workspace.toasts.emptyArchiveFailed", {
+            reason:
+              error instanceof Error ? error.message : t("sidebar.workspace.toasts.archiveFailed"),
+          }),
+        );
+      });
+    };
+
+    if (workspaceId !== tabHostWorkspaceId || !routeActive) {
+      archiveIfUnused(workspaceId);
+    }
+    if (result === "workspace-empty" && routeActive) {
+      const projectId = useSessionStore.getState().sessions[serverId]?.workspaces.get(workspaceId)?.projectId;
+      if (projectId) router.replace(buildHostProjectRoute(serverId, projectId));
+    }
+  }, [draftId, routeActive, serverId, t, tabHostWorkspaceId, tabId, toast, workspaceId]);
+  const handleDeletePress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      handleDelete();
+    },
+    [handleDelete],
+  );
+  const handleContextMenuOpenChange = useCallback((open: boolean) => {
+    setContextMenuOpen(open);
+    if (open) setIsHovered(false);
+  }, []);
   const rowStyle = useCallback(
     ({ hovered = false, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.agentDraftRow,
@@ -849,23 +942,62 @@ function SidebarAgentDraftRow({
     ],
     [selected],
   );
+  const deleteLabel = t("newWorkspace.deleteDraft");
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={t("newWorkspace.title")}
-      accessibilityState={{ selected }}
-      onPress={handlePress}
-      style={rowStyle}
-      testID={`sidebar-agent-draft-${draftId}`}
-    >
-      <View style={styles.agentDraftStatusSlot}>
-        <View style={styles.agentDraftStatusDot} />
+    <ContextMenu open={contextMenuOpen} onOpenChange={handleContextMenuOpenChange}>
+      <View onPointerEnter={() => setIsHovered(true)} onPointerLeave={() => setIsHovered(false)}>
+        <ContextMenuTrigger
+          enabledOnMobile={false}
+          accessibilityRole="button"
+          accessibilityLabel={t("newWorkspace.title")}
+          accessibilityState={{ selected }}
+          onPress={handlePress}
+          style={rowStyle}
+          testID={`sidebar-agent-draft-${draftId}`}
+        >
+          <View style={styles.agentDraftStatusSlot}>
+            <View style={styles.agentDraftStatusDot} />
+          </View>
+          <Text style={styles.agentDraftText} numberOfLines={1}>
+            {t("newWorkspace.title")}
+          </Text>
+          <View
+            style={styles.agentDraftDeleteSlot}
+            pointerEvents={isCompact || isHovered || contextMenuOpen ? "auto" : "none"}
+          >
+            <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
+              <TooltipTrigger asChild>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={deleteLabel}
+                  onPress={handleDeletePress}
+                  style={[
+                    styles.agentDraftDeleteButton,
+                    !isCompact && !isHovered && !contextMenuOpen && styles.agentDraftDeleteHidden,
+                  ]}
+                  testID={`sidebar-agent-draft-delete-${draftId}`}
+                >
+                  <ThemedTrash2 size={15} uniProps={foregroundMutedColorMapping} />
+                </Pressable>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="center" offset={8}>
+                <Text style={styles.projectActionTooltipText}>{deleteLabel}</Text>
+              </TooltipContent>
+            </Tooltip>
+          </View>
+        </ContextMenuTrigger>
       </View>
-      <Text style={styles.agentDraftText} numberOfLines={1}>
-        {t("newWorkspace.title")}
-      </Text>
-    </Pressable>
+      <ContextMenuContent align="start" width={220}>
+        <ContextMenuItem
+          leading={trash2LeadingIcon}
+          onSelect={handleDelete}
+          testID={`sidebar-agent-draft-menu-delete-${draftId}`}
+        >
+          {deleteLabel}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -909,12 +1041,12 @@ function ProjectHeaderRow({
     ...dragAttributes
   } = dragHandleProps?.attributes ?? {};
 
-  const handlePress = useCallback(() => {
+  const handlePress = useCallback((event: GestureResponderEvent) => {
     if (interaction.didLongPressRef.current) {
       interaction.didLongPressRef.current = false;
       return;
     }
-    onPress();
+    onPress(event);
   }, [interaction.didLongPressRef, onPress]);
 
   const handlePointerEnter = useCallback(() => {
@@ -1653,6 +1785,7 @@ function ProjectBlock({
   useNestable,
   dragGestureHostPresented,
   activeWorkspaceSelection,
+  activeProjectSelection,
   hostBadgeByServerId,
   supportsPinningByServerId,
   onToggleWorkspacePin,
@@ -1679,6 +1812,7 @@ function ProjectBlock({
   useNestable: boolean;
   dragGestureHostPresented?: boolean;
   activeWorkspaceSelection: ActiveWorkspaceSelection | null;
+  activeProjectSelection: { serverId: string; projectId: string } | null;
   hostBadgeByServerId: ReadonlyMap<string, HostBadgeModel>;
   supportsPinningByServerId: ReadonlyMap<string, boolean>;
   onToggleWorkspacePin: ToggleSidebarWorkspacePin;
@@ -1725,7 +1859,7 @@ function ProjectBlock({
   });
 
   const active = isProjectSelectedByRoute({
-    selection: activeWorkspaceSelection,
+    selection: activeProjectSelection,
     project,
     enabled: selectionEnabled,
   });
@@ -1876,9 +2010,26 @@ function ProjectBlock({
     })();
   }, [isRemovingProject, displayName, t, toast, project.hosts]);
 
-  const handleToggleCollapsed = useCallback(() => {
+  const handleProjectPress = useCallback((event: GestureResponderEvent) => {
+    const nativeEvent: unknown = event.nativeEvent;
+    const metaKey = !!nativeEvent && typeof nativeEvent === "object" &&
+      "metaKey" in nativeEvent && nativeEvent.metaKey === true;
+    if (shouldFocusProjectOnPress({
+      metaKey,
+      isMacDesktop: platformIsWeb && getShortcutOs() === "mac" &&
+        (typeof navigator === "undefined" || navigator.maxTouchPoints < 2),
+    })) {
+      const host = project.hosts.find(
+        (candidate) => candidate.serverId === activeProjectSelection?.serverId,
+      ) ?? project.hosts[0];
+      if (host) {
+        onWorkspacePress?.();
+        navigateToProject({ serverId: host.serverId, projectId: host.projectId });
+      }
+      return;
+    }
     onToggleCollapsed(project.viewKey);
-  }, [onToggleCollapsed, project.viewKey]);
+  }, [activeProjectSelection?.serverId, onToggleCollapsed, onWorkspacePress, project.hosts, project.viewKey]);
 
   let projectChildren = null;
   if (!collapsed && project.workspaces.length > 0) {
@@ -1888,6 +2039,10 @@ function ProjectBlock({
           <SidebarAgentDraftRow
             key={draft.draftId}
             {...draft}
+            routeActive={
+              activeWorkspaceSelection?.serverId === draft.serverId &&
+              activeWorkspaceSelection.workspaceId === draft.tabHostWorkspaceId
+            }
             onWorkspacePress={onWorkspacePress}
           />
         ))}
@@ -1947,9 +2102,9 @@ function ProjectBlock({
         displayName={displayName}
         iconDataUri={iconDataUri}
         statusBucket={aggregateStatusBucket}
-        selected={false}
+        selected={active}
         chevron={rowModel.chevron}
-        onPress={handleToggleCollapsed}
+        onPress={handleProjectPress}
         workspaceTarget={
           rowModel.trailingAction.kind === "new_agent" ? rowModel.trailingAction.target : null
         }
@@ -2007,12 +2162,12 @@ function areProjectBlockSelectionsEqual(
   next: ProjectBlockProps,
 ): boolean {
   const previousActive = isProjectSelectedByRoute({
-    selection: previous.activeWorkspaceSelection,
+    selection: previous.activeProjectSelection,
     project: previous.project,
     enabled: previous.selectionEnabled,
   });
   const nextActive = isProjectSelectedByRoute({
-    selection: next.activeWorkspaceSelection,
+    selection: next.activeProjectSelection,
     project: next.project,
     enabled: next.selectionEnabled,
   });
@@ -2024,7 +2179,9 @@ function areProjectBlockSelectionsEqual(
   }
   return (
     activeWorkspaceSelectionKey(previous.activeWorkspaceSelection) ===
-    activeWorkspaceSelectionKey(next.activeWorkspaceSelection)
+      activeWorkspaceSelectionKey(next.activeWorkspaceSelection) &&
+    previous.activeProjectSelection?.serverId === next.activeProjectSelection?.serverId &&
+    previous.activeProjectSelection?.projectId === next.activeProjectSelection?.projectId
   );
 }
 
@@ -2230,7 +2387,8 @@ function ProjectModeList({
     () => Boolean(pathname && parseHostWorkspaceRouteFromPathname(pathname)),
     [pathname],
   );
-  const selectionEnabled = isWorkspaceRoute;
+  const activeProjectSelection = useActiveProjectSelection();
+  const selectionEnabled = isWorkspaceRoute || activeProjectSelection !== null;
   const activeWorkspaceSelection = useSidebarActiveWorkspaceSelection();
   const nativeScrollGestureProps = useMemo(
     () =>
@@ -2363,6 +2521,7 @@ function ProjectModeList({
           useNestable={platformIsNative}
           dragGestureHostPresented={dragGestureHostPresented}
           activeWorkspaceSelection={activeWorkspaceSelection}
+          activeProjectSelection={activeProjectSelection}
           hostBadgeByServerId={hostBadgeByServerId}
           supportsPinningByServerId={supportsPinningByServerId}
           onToggleWorkspacePin={onToggleWorkspacePin}
@@ -2371,6 +2530,8 @@ function ProjectModeList({
     },
     [
       collapsedProjectKeys,
+      activeProjectSelection?.serverId,
+      activeProjectSelection?.projectId,
       activeWorkspaceSelection,
       agentDraftsByProjectViewKey,
       onWorkspacePress,
@@ -2407,7 +2568,7 @@ function ProjectModeList({
         keyExtractor={projectViewKeyExtractor}
         renderItem={renderProject}
         onDragEnd={handleProjectDragEnd}
-        extraData={activeWorkspaceSelectionKey(activeWorkspaceSelection)}
+        extraData={`${activeWorkspaceSelectionKey(activeWorkspaceSelection)}:${activeProjectSelection?.serverId ?? ""}:${activeProjectSelection?.projectId ?? ""}`}
         scrollEnabled={false}
         useDragHandle
         nestable={platformIsNative}
@@ -2506,6 +2667,22 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     lineHeight: 20,
     flexShrink: 1,
+  },
+  agentDraftDeleteSlot: {
+    width: 20,
+    height: 20,
+    marginLeft: "auto",
+    flexShrink: 0,
+  },
+  agentDraftDeleteButton: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.md,
+  },
+  agentDraftDeleteHidden: {
+    opacity: 0,
   },
   projectRow: {
     position: "relative",

@@ -64,6 +64,7 @@ import { replicaCacheStorage } from "@/runtime/replica-cache/storage";
 import { projectIconCache } from "@/projects/icon-cache";
 import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
+import { mountProjectLayoutMigrationRuntime } from "@/workspace-tabs/project-layout-migration-runtime";
 import { createAppWebSocketFactory } from "./websocket-factory";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
@@ -1345,6 +1346,10 @@ export class HostRuntimeStore {
     { agentId: string; messageId: string; dispatchAccepted: boolean }
   >();
   private directorySyncByServer = new Map<string, DirectorySync>();
+  private projectLayoutMigrationByServer = new Map<
+    string,
+    { client: DaemonClient; generation: number; dispose: () => void }
+  >();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
   private bootPromise: Promise<void> | null = null;
   private storage: HostRuntimeStorage;
@@ -1607,6 +1612,8 @@ export class HostRuntimeStore {
     rekeyMap(this.queuedAgentActiveByServer, oldServerId, newServerId);
     this.replicaCache.reconcileServerId(oldServerId, newServerId);
     projectIconCache.reconcileServerId(oldServerId, newServerId);
+    this.projectLayoutMigrationByServer.get(oldServerId)?.dispose();
+    this.projectLayoutMigrationByServer.delete(oldServerId);
     this.directorySyncByServer.get(oldServerId)?.dispose();
     this.directorySyncByServer.delete(oldServerId);
     const directory = new DirectorySync(
@@ -1624,6 +1631,7 @@ export class HostRuntimeStore {
     const snapshot = controller.getSnapshot();
     this.clearHostReplica(oldServerId);
     this.syncSessionReplica(newServerId, snapshot);
+    this.syncProjectLayoutMigration(newServerId, snapshot);
     directory.connectionChanged({
       client: snapshot.client,
       status: snapshot.connectionStatus === "online" ? "online" : "offline",
@@ -1982,6 +1990,8 @@ export class HostRuntimeStore {
       this.connectionStatusStartedAtByServer.delete(serverId);
       this.directoryBootstrapInFlight.delete(serverId);
       this.queuedAgentActiveByServer.delete(serverId);
+      this.projectLayoutMigrationByServer.get(serverId)?.dispose();
+      this.projectLayoutMigrationByServer.delete(serverId);
       this.directorySyncByServer.get(serverId)?.dispose();
       this.directorySyncByServer.delete(serverId);
       this.clearHostReplica(serverId);
@@ -2027,6 +2037,7 @@ export class HostRuntimeStore {
       controller.subscribe(() => {
         const snapshot = controller.getSnapshot();
         this.syncSessionReplica(snapshot.serverId, snapshot);
+        this.syncProjectLayoutMigration(snapshot.serverId, snapshot);
         this.maybeAutoBootstrapDirectories(snapshot.serverId);
         this.emit(snapshot.serverId);
       });
@@ -2053,6 +2064,32 @@ export class HostRuntimeStore {
     const sessionStore = useSessionStore.getState();
     sessionStore.initializeSession(serverId, snapshot.client, snapshot.clientGeneration);
     sessionStore.updateSessionClient(serverId, snapshot.client, snapshot.clientGeneration);
+  }
+
+  private syncProjectLayoutMigration(serverId: string, snapshot: HostRuntimeSnapshot): void {
+    const existing = this.projectLayoutMigrationByServer.get(serverId);
+    if (
+      existing &&
+      (snapshot.connectionStatus !== "online" ||
+        existing.client !== snapshot.client ||
+        existing.generation !== snapshot.clientGeneration)
+    ) {
+      existing.dispose();
+      this.projectLayoutMigrationByServer.delete(serverId);
+    }
+    if (
+      snapshot.connectionStatus !== "online" ||
+      !snapshot.client ||
+      this.projectLayoutMigrationByServer.has(serverId)
+    ) {
+      return;
+    }
+    const dispose = mountProjectLayoutMigrationRuntime({ serverId, client: snapshot.client });
+    this.projectLayoutMigrationByServer.set(serverId, {
+      client: snapshot.client,
+      generation: snapshot.clientGeneration,
+      dispose,
+    });
   }
 
   private clearHostReplica(serverId: string): void {

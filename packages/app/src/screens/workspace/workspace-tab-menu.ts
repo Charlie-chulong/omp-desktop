@@ -1,6 +1,6 @@
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { i18n } from "@/i18n/i18next";
-import { encodeFilePathForPathSegment, encodeWorkspaceIdForPathSegment } from "@/utils/host-routes";
+import { encodeFilePathForPathSegment } from "@/utils/host-routes";
 import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
 
 export type WorkspaceTabMenuSurface = "desktop" | "mobile";
@@ -10,6 +10,8 @@ export interface WorkspaceTabMenuLabels {
   copyAgentId: string;
   copyTerminalId: string;
   copyFilePath: string;
+  revealInFiles: string;
+  revealOutsideWorkspace: string;
   rename: string;
   closeAbove: string;
   closeBelow: string;
@@ -26,6 +28,8 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   copyAgentId: i18n.t("workspace.tabs.menu.copyAgentId"),
   copyTerminalId: i18n.t("workspace.tabs.menu.copyTerminalId"),
   copyFilePath: i18n.t("workspace.tabs.menu.copyFilePath"),
+  revealInFiles: i18n.t("workspace.tabs.menu.revealInFiles"),
+  revealOutsideWorkspace: i18n.t("workspace.tabs.menu.revealOutsideWorkspace"),
   rename: i18n.t("workspace.tabs.menu.rename"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
@@ -49,7 +53,8 @@ export type WorkspaceTabMenuEntry =
         | "arrow-right-to-line"
         | "copy-x"
         | "pencil"
-        | "x";
+        | "x"
+        | "folder-tree";
       hint?: string;
       tooltip?: string;
       disabled?: boolean;
@@ -72,6 +77,8 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
+  onRevealFileInExplorer?: (path: string) => void;
+  canRevealFileInExplorer?: (path: string) => boolean;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -90,6 +97,8 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  onRevealFileInExplorer: (path: string) => void;
+  canRevealFileInExplorer: (path: string) => boolean;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -140,7 +149,7 @@ function getCloseButtonTestId(tab: WorkspaceTabDescriptor): string {
     return `workspace-draft-close-${tab.target.draftId}`;
   }
   if (tab.target.kind === "setup") {
-    return `workspace-setup-close-${encodeWorkspaceIdForPathSegment(tab.target.workspaceId)}`;
+    return `workspace-setup-close-${encodeFilePathForPathSegment(buildDeterministicWorkspaceTabId(tab.target))}`;
   }
   if (tab.target.kind === "provider_subagent") {
     return `workspace-provider-subagent-close-${tab.target.subagentId}`;
@@ -179,6 +188,8 @@ export function buildWorkspaceTabMenuEntries(
     onCopyAgentId,
     onCopyTerminalId,
     onCopyFilePath,
+    onRevealFileInExplorer,
+    canRevealFileInExplorer,
     onReloadAgent,
     onRenameTab,
     onCloseTab,
@@ -244,6 +255,19 @@ export function buildWorkspaceTabMenuEntries(
         void onCopyFilePath(filePath);
       },
     });
+    if (surface === "desktop" && onRevealFileInExplorer) {
+      const canReveal = canRevealFileInExplorer?.(filePath) ?? false;
+      entries.push({
+        kind: "item",
+        key: "reveal-in-files",
+        label: labels.revealInFiles,
+        icon: "folder-tree",
+        disabled: !canReveal,
+        tooltip: canReveal ? undefined : labels.revealOutsideWorkspace,
+        testID: `${menuTestIDBase}-reveal-in-files`,
+        onSelect: () => onRevealFileInExplorer(filePath),
+      });
+    }
   }
 
   if (tab.target.kind === "agent" || tab.target.kind === "terminal") {
@@ -340,6 +364,8 @@ export function buildWorkspaceDesktopTabActions(
       onCopyAgentId: input.onCopyAgentId,
       onCopyTerminalId: input.onCopyTerminalId,
       onCopyFilePath: input.onCopyFilePath,
+      onRevealFileInExplorer: input.onRevealFileInExplorer,
+      canRevealFileInExplorer: input.canRevealFileInExplorer,
       onReloadAgent: input.onReloadAgent,
       onRenameTab: input.onRenameTab,
       onCloseTab: input.onCloseTab,

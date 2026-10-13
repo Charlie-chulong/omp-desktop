@@ -1,4 +1,4 @@
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKeyFromWorkspaces } from "@/workspace-tabs/project-scope";
 import type { ActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 
@@ -15,6 +15,7 @@ interface ResolveCompactExplorerSidebarHostModelInput {
   routeSelection: ActiveWorkspaceSelection | null;
   selection: ActiveWorkspaceSelection | null;
   workspace: WorkspaceDescriptor | null;
+  workspaces?: ReadonlyMap<string, Pick<WorkspaceDescriptor, "id" | "projectId">>;
   isGit: boolean;
 }
 
@@ -37,7 +38,10 @@ export function resolveCompactExplorerSidebarHostModel(
 
   // Tool data follows the conversation, but tabs belong to the visible route.
   const persistenceKey = input.routeSelection
-    ? buildWorkspaceTabPersistenceKey(input.routeSelection)
+    ? resolveProjectLayoutKeyFromWorkspaces({
+        ...input.routeSelection,
+        workspaces: input.workspaces,
+      })
     : null;
   if (!persistenceKey) {
     return null;

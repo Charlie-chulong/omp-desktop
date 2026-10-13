@@ -2,6 +2,7 @@ import type { Agent, WorkspaceDescriptor } from "@/stores/session-store";
 import { pickAttentionAgent } from "@/utils/agent-attention";
 import { listActiveWorkspaceRootAgentIds, pickWorkspacePrimaryAgentId } from "@/subagents/policies";
 import {
+  buildHostProjectRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
   decodeWorkspaceIdFromPathSegment,
@@ -12,8 +13,10 @@ import {
   resolveWorkspaceMapKeyByIdentity,
 } from "@/utils/workspace-identity";
 import type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection";
-import type { WorkspaceTab, WorkspaceTabTarget } from "@/workspace-tabs/model";
+import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { prepareWorkspaceTab, type PrepareWorkspaceTabDeps } from "@/utils/prepare-workspace-tab";
+import { resolveProjectLayoutKeyFromWorkspaces } from "@/workspace-tabs/project-scope";
+import type { ActiveProjectSelection } from "./project-selection";
 
 export interface RouteSelectionInput {
   pathname: string;
@@ -31,6 +34,8 @@ export interface NavigateToWorkspaceInput {
   // Defer agent-tab preparation until the destination route is active. This avoids
   // inactive retained-workspace effects restoring the previously focused tab.
   deferAgentTargetUntilNavigation?: boolean;
+  /** Switching a project preserves its focused pane/tab rather than revealing attention. */
+  restoreProjectSelection?: boolean;
 }
 
 export interface NavigateToSidebarWorkspaceInput extends NavigateToWorkspaceInput {
@@ -54,7 +59,6 @@ export interface WorkspaceHistoryAgent {
 
 export interface NavigateToSidebarWorkspaceDeps extends NavigateToWorkspaceDeps {
   getSessionAgentsHydrated: (serverId: string) => boolean;
-  getWorkspaceTabs: (workspaceKey: string) => readonly WorkspaceTab[];
   fetchWorkspaceAgentHistory: (
     serverId: string,
     workspaceId: string,
@@ -109,76 +113,95 @@ export function navigateToWorkspace(
   deps: NavigateToWorkspaceDeps,
 ): string {
   const workspaces = deps.getSessionWorkspaces(input.serverId);
-  const resolvedWorkspaceId = resolveWorkspaceMapKeyByIdentity({
+  const resolvedHostWorkspaceId = resolveWorkspaceMapKeyByIdentity({
     workspaces,
     workspaceId: input.workspaceId,
   });
+  const ownerWorkspaceId = input.target?.workspaceId?.trim()
+    ? resolveWorkspaceMapKeyByIdentity({
+        workspaces,
+        workspaceId: input.target.workspaceId,
+      })
+    : resolvedHostWorkspaceId;
+  const ownerProjectId = ownerWorkspaceId && workspaces?.get(ownerWorkspaceId)?.projectId;
+  const hostProjectId =
+    resolvedHostWorkspaceId && workspaces?.get(resolvedHostWorkspaceId)?.projectId;
+  const routeWorkspaceId =
+    input.target?.workspaceId && (!ownerProjectId || ownerProjectId !== hostProjectId)
+      ? input.target.workspaceId
+      : input.workspaceId;
+  const resolvedWorkspaceId =
+    routeWorkspaceId === input.workspaceId ? resolvedHostWorkspaceId : ownerWorkspaceId;
+  const projectKey =
+    ownerWorkspaceId && ownerProjectId && workspaces
+      ? resolveProjectLayoutKeyFromWorkspaces({
+          serverId: input.serverId,
+          workspaceId: ownerWorkspaceId,
+          workspaces,
+        })
+      : null;
   if (input.target) {
-    if (
-      !input.deferAgentTargetUntilNavigation &&
-      (resolvedWorkspaceId || input.target.kind !== "agent")
-    ) {
-      prepareWorkspaceTab({ ...input, target: input.target }, deps);
+    if (projectKey && !input.deferAgentTargetUntilNavigation) {
+      prepareWorkspaceTab(
+        { ...input, workspaceId: ownerWorkspaceId ?? routeWorkspaceId, target: input.target },
+        { ...deps, getProjectLayoutKey: () => projectKey },
+      );
     }
-  } else {
+  } else if (!input.restoreProjectSelection) {
     const workspaceAgents = resolvedWorkspaceId
       ? Array.from(deps.getSessionAgents(input.serverId)).filter(
           (agent) => normalizeWorkspaceOpaqueId(agent.workspaceId) === resolvedWorkspaceId,
         )
       : [];
     const attentionAgentId = pickAttentionAgent(workspaceAgents);
-    if (attentionAgentId && resolvedWorkspaceId) {
+    if (attentionAgentId && resolvedWorkspaceId && projectKey) {
       deps.openTab({
-        workspaceKey: `${input.serverId}:${resolvedWorkspaceId}`,
-        target: { kind: "agent", agentId: attentionAgentId },
+        workspaceKey: projectKey,
+        target: { kind: "agent", agentId: attentionAgentId, workspaceId: resolvedWorkspaceId },
         intent: "reveal",
       });
     }
   }
 
   const route =
-    input.target?.kind === "agent" &&
-    (!resolvedWorkspaceId || input.deferAgentTargetUntilNavigation)
+    input.target?.kind === "agent" && (!projectKey || input.deferAgentTargetUntilNavigation)
       ? buildHostWorkspaceOpenRoute(
           input.serverId,
-          input.workspaceId,
+          routeWorkspaceId,
           `agent:${input.target.agentId}`,
         )
-      : buildHostWorkspaceRoute(input.serverId, input.workspaceId);
-  deps.rememberLastWorkspace({ serverId: input.serverId, workspaceId: input.workspaceId });
+      : buildHostWorkspaceRoute(input.serverId, routeWorkspaceId);
+  deps.rememberLastWorkspace({ serverId: input.serverId, workspaceId: routeWorkspaceId });
   deps.navigateToRoute(route);
   return route;
 }
 
 export function resolveWorkspaceTabHost(
-  input: Pick<NavigateToSidebarWorkspaceInput, "serverId" | "tabHost">,
-  deps: Pick<NavigateToSidebarWorkspaceDeps, "getSessionWorkspaces" | "getWorkspaceTabs">,
+  input: Pick<NavigateToSidebarWorkspaceInput, "serverId" | "workspaceId" | "tabHost">,
+  deps: Pick<NavigateToSidebarWorkspaceDeps, "getSessionWorkspaces">,
 ): ActiveWorkspaceSelection | null {
   const tabHost = input.tabHost;
-  if (!tabHost || tabHost.serverId !== input.serverId) {
-    return null;
-  }
-  const workspaceId =
-    resolveWorkspaceMapKeyByIdentity({
-      workspaces: deps.getSessionWorkspaces(tabHost.serverId),
-      workspaceId: tabHost.workspaceId,
-    }) ?? normalizeWorkspaceOpaqueId(tabHost.workspaceId);
-  if (workspaceId) {
-    const tabs = deps.getWorkspaceTabs(`${tabHost.serverId}:${workspaceId}`);
-    if (
-      tabs.some((tab) => tab.target.kind === "draft") &&
-      !tabs.some((tab) => tab.target.kind === "agent")
-    ) {
-      // Navigate away so the draft workspace's leave cleanup can release it.
-      // Hosting the destination here would keep the route focused indefinitely.
-      return null;
-    }
-  }
-  return workspaceId ? { serverId: tabHost.serverId, workspaceId } : null;
+  if (!tabHost || tabHost.serverId !== input.serverId) return null;
+  const workspaces = deps.getSessionWorkspaces(input.serverId);
+  const ownerWorkspaceId = resolveWorkspaceMapKeyByIdentity({
+    workspaces,
+    workspaceId: input.workspaceId,
+  });
+  const hostWorkspaceId = resolveWorkspaceMapKeyByIdentity({
+    workspaces,
+    workspaceId: tabHost.workspaceId,
+  });
+  if (!ownerWorkspaceId || !hostWorkspaceId) return null;
+  const ownerProject = workspaces?.get(ownerWorkspaceId)?.projectId;
+  const hostProject = workspaces?.get(hostWorkspaceId)?.projectId;
+  return ownerProject && ownerProject === hostProject
+    ? { serverId: input.serverId, workspaceId: hostWorkspaceId }
+    : null;
 }
 
 function revealSidebarAgentInTabHost(
   tabHost: ActiveWorkspaceSelection,
+  ownerWorkspaceId: string,
   agentId: string,
   deps: NavigateToSidebarWorkspaceDeps,
 ): string {
@@ -186,10 +209,22 @@ function revealSidebarAgentInTabHost(
     {
       serverId: tabHost.serverId,
       workspaceId: tabHost.workspaceId,
-      target: { kind: "agent", agentId },
+      target: { kind: "agent", agentId, workspaceId: ownerWorkspaceId },
       pin: true,
     },
-    deps,
+    {
+      ...deps,
+      getProjectLayoutKey: () => {
+        const workspaces = deps.getSessionWorkspaces(tabHost.serverId);
+        return workspaces
+          ? resolveProjectLayoutKeyFromWorkspaces({
+              serverId: tabHost.serverId,
+              workspaceId: ownerWorkspaceId,
+              workspaces,
+            })
+          : null;
+      },
+    },
   );
   return buildHostWorkspaceRoute(tabHost.serverId, tabHost.workspaceId);
 }
@@ -238,14 +273,22 @@ export async function navigateToSidebarWorkspace(
     ];
     if (tabHost) {
       for (const agentId of revealOrder) {
-        revealSidebarAgentInTabHost(tabHost, agentId, deps);
+        revealSidebarAgentInTabHost(tabHost, workspaceId, agentId, deps);
       }
       return buildHostWorkspaceRoute(tabHost.serverId, tabHost.workspaceId);
     }
 
-    const workspaceKey = `${input.serverId}:${workspaceId}`;
-    for (const agentId of rootAgentIds) {
-      deps.pinAgent(workspaceKey, agentId);
+    const workspaceKey = workspaces
+      ? resolveProjectLayoutKeyFromWorkspaces({
+          serverId: input.serverId,
+          workspaceId,
+          workspaces,
+        })
+      : null;
+    if (workspaceKey) {
+      for (const agentId of rootAgentIds) {
+        deps.pinAgent(workspaceKey, agentId);
+      }
     }
     return navigateToWorkspace(
       {
@@ -260,7 +303,7 @@ export async function navigateToSidebarWorkspace(
   if (activeWorkspaceAgents.length > 0) {
     const agentId = pickWorkspacePrimaryAgentId(activeAgents, workspaceId);
     if (agentId && tabHost) {
-      return revealSidebarAgentInTabHost(tabHost, agentId, deps);
+      return revealSidebarAgentInTabHost(tabHost, workspaceId, agentId, deps);
     }
     if (agentId) {
       return navigateToWorkspace(
@@ -281,7 +324,7 @@ export async function navigateToSidebarWorkspace(
     const agentId = pickWorkspacePrimaryAgentId(history, workspaceId);
     if (agentId) {
       if (tabHost) {
-        return revealSidebarAgentInTabHost(tabHost, agentId, deps);
+        return revealSidebarAgentInTabHost(tabHost, workspaceId, agentId, deps);
       }
       return navigateToWorkspace(
         {
@@ -298,6 +341,40 @@ export async function navigateToSidebarWorkspace(
   }
 
   return navigateToWorkspace(input, deps);
+}
+
+export function navigateToProject(
+  project: ActiveProjectSelection,
+  deps: NavigateToWorkspaceDeps & {
+    getProjectLastWorkspace: (project: ActiveProjectSelection) => ActiveWorkspaceSelection | null;
+  },
+): string {
+  const previous = deps.getProjectLastWorkspace(project);
+  const workspaces = deps.getSessionWorkspaces(project.serverId);
+  const previousKey = previous
+    ? resolveWorkspaceMapKeyByIdentity({ workspaces, workspaceId: previous.workspaceId })
+    : null;
+  const workspace = previousKey ? workspaces?.get(previousKey) : null;
+  if (previous && workspace?.projectId === project.projectId && !workspace.archivingAt) {
+    return navigateToWorkspace({ ...previous, restoreProjectSelection: true }, deps);
+  }
+  if (workspaces) {
+    for (const available of workspaces.values()) {
+      if (available.projectId === project.projectId && !available.archivingAt) {
+        return navigateToWorkspace(
+          {
+            serverId: project.serverId,
+            workspaceId: available.id,
+            restoreProjectSelection: true,
+          },
+          deps,
+        );
+      }
+    }
+  }
+  const route = buildHostProjectRoute(project.serverId, project.projectId);
+  deps.navigateToRoute(route);
+  return route;
 }
 
 export function navigateToLastWorkspace(deps: NavigateToLastWorkspaceDeps): boolean {

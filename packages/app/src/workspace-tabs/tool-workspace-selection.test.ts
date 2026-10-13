@@ -157,4 +157,33 @@ describe("workspace tool selection", () => {
       }),
     ).toBe("workspace-host");
   });
+
+  it("keeps a file and terminal bound to their checkout while another conversation is focused", () => {
+    const conversation = resolveWorkspaceToolSelection({
+      current: null,
+      routeSelection: ROUTE,
+      focusedTarget: { kind: "agent", agentId: "agent-b", workspaceId: "checkout-b" },
+      focusedAgentWorkspaceId: "checkout-b",
+    });
+    for (const target of [
+      { kind: "file", path: "src/index.ts", workspaceId: "checkout-a" },
+      { kind: "terminal", terminalId: "terminal-a", workspaceId: "checkout-a" },
+    ] satisfies WorkspaceTabTarget[]) {
+      expect(
+        resolveWorkspaceTabWorkspaceId({
+          target,
+          routeWorkspaceId: ROUTE.workspaceId,
+          toolWorkspaceId: conversation!.activeSelection.workspaceId,
+        }),
+      ).toBe("checkout-a");
+      expect(
+        resolveWorkspaceToolSelection({
+          current: conversation,
+          routeSelection: ROUTE,
+          focusedTarget: target,
+          focusedAgentWorkspaceId: null,
+        })?.activeSelection,
+      ).toEqual({ serverId: "server-1", workspaceId: "checkout-a" });
+    }
+  });
 });

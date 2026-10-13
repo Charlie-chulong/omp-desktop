@@ -14,6 +14,7 @@ import {
   buildWorkspaceAttachmentScopeKey,
   useWorkspaceAttachmentsStore,
 } from "@/attachments/workspace-attachments-store";
+import { ensureProjectLayoutsMigrated, resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 
 export interface WorkspaceArchiveTarget {
   serverId: string;
@@ -130,10 +131,11 @@ export async function archiveEmptyWorkspace(input: {
     if (attachments[workspaceScope]?.length) {
       return;
     }
-    for (const tab of useWorkspaceLayoutStore
-      .getState()
-      .getWorkspaceTabs(`${serverId}:${workspaceId}`)) {
-      // A host can contain conversations belonging to other workspaces.
+    ensureProjectLayoutsMigrated(serverId);
+    const projectKey = resolveProjectLayoutKey({ serverId, workspaceId });
+    if (!projectKey) return;
+    for (const tab of useWorkspaceLayoutStore.getState().getWorkspaceTabs(projectKey)) {
+      if (tab.target.workspaceId !== workspaceId) continue;
       if (tab.target.kind === "agent") {
         return;
       }
