@@ -155,6 +155,8 @@ export const ru: TranslationResources = {
       addDirectory: "Добавить папку",
       addIssueOrPr: "Добавить проблему или PR",
       addIssueOrPr_mr: "Добавить проблему или MR",
+      browserUse: "Управление браузером",
+      computerUse: "Управление компьютером",
       dropImagesHere: "Скиньте изображения сюда",
       dropFilesHere: "Переместите файлы сюда",
       editQueuedMessage: "Изменить сообщение из очереди",

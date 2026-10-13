@@ -170,6 +170,8 @@ export const zhCN: TranslationResources = {
       addDirectory: "添加文件夹",
       addIssueOrPr: "添加 issue 或 PR",
       addIssueOrPr_mr: "添加 issue 或 MR",
+      browserUse: "浏览器操作",
+      computerUse: "电脑操作",
       dropImagesHere: "将图片拖放到这里",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "编辑排队消息",

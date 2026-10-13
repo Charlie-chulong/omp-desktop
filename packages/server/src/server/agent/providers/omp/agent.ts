@@ -1006,6 +1006,20 @@ function convertPromptInput(
   return payload;
 }
 
+function readPlainTextPromptInput(prompt: AgentPromptInput): string | null {
+  if (typeof prompt === "string") {
+    return prompt;
+  }
+  const textParts: string[] = [];
+  for (const block of prompt) {
+    if (block.type !== "text") {
+      return null;
+    }
+    textParts.push(block.text);
+  }
+  return textParts.join("\n\n");
+}
+
 function parseModelReference(modelId: string | null): OmpModelReference | null {
   if (!modelId) {
     return null;
@@ -2712,10 +2726,11 @@ export class OmpAgentSession implements AgentSession {
   tryHandleOutOfBand(prompt: AgentPromptInput): {
     run(ctx: { emit: (event: AgentStreamEvent) => void }): Promise<void>;
   } | null {
-    if (typeof prompt !== "string") {
+    const promptText = readPlainTextPromptInput(prompt);
+    if (promptText === null) {
       return null;
     }
-    const parsed = this.parseSlashCommandInput(prompt);
+    const parsed = this.parseSlashCommandInput(promptText);
     if (!parsed) {
       return null;
     }
@@ -2754,6 +2769,45 @@ export class OmpAgentSession implements AgentSession {
       return {
         run: async ({ emit }) => {
           await this.executeHandoffCommand(parsed.args, emit);
+        },
+      };
+    }
+    const normalizedArgs = parsed.args?.toLowerCase();
+    let toolUseCommand: {
+      name: "browser" | "computer";
+      prompt: "/browser visible" | "/computer on";
+      confirmation: string;
+    } | null = null;
+    if (commandName === "browser" && normalizedArgs === "visible") {
+      toolUseCommand = {
+        name: "browser",
+        prompt: "/browser visible",
+        confirmation: "Browser mode: visible",
+      };
+    } else if (commandName === "computer" && normalizedArgs === "on") {
+      toolUseCommand = {
+        name: "computer",
+        prompt: "/computer on",
+        confirmation: "Computer use enabled for this session.",
+      };
+    }
+    if (toolUseCommand) {
+      return {
+        run: async ({ emit }) => {
+          const commands = await this.listCommands();
+          if (!commands.some((command) => command.name.toLowerCase() === toolUseCommand.name)) {
+            throw new Error(`OMP command /${toolUseCommand.name} is unavailable`);
+          }
+          const acknowledgement = await this.runtimeSession.prompt(toolUseCommand.prompt);
+          if (acknowledgement.agentInvoked === true) {
+            await this.runtimeSession.abort();
+            throw new Error(`OMP command /${toolUseCommand.name} unexpectedly started an agent`);
+          }
+          emit({
+            type: "timeline",
+            provider: this.provider,
+            item: { type: "assistant_message", text: toolUseCommand.confirmation },
+          });
         },
       };
     }

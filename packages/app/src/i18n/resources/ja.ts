@@ -155,6 +155,8 @@ export const ja: TranslationResources = {
       addDirectory: "フォルダを追加",
       addIssueOrPr: "イシューまたはPRを追加",
       addIssueOrPr_mr: "イシューまたはMRを追加",
+      browserUse: "ブラウザ操作",
+      computerUse: "コンピューター操作",
       dropImagesHere: "ここに画像をドロップ",
       dropFilesHere: "ここにファイルをドロップ",
       editQueuedMessage: "キューに入れたメッセージを編集",

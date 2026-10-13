@@ -123,6 +123,13 @@ If the active provider cannot accept steering, Desktop reports the send failure 
 current turn running. Agent-to-agent prompts and completion notifications use the same
 non-destructive rule rather than falling back to replacement.
 
+## Browser and computer use
+
+For an idle OMP conversation, open the composer's attachment menu and choose **Browser use** to
+switch OMP's browser tool to visible mode, or **Computer use** to enable native desktop capture
+and input for that session. These actions run `/browser visible` and `/computer on` without
+discarding the current draft. They are unavailable while the conversation is running.
+
 ## Ordering queued conversations
 
 When several conversations on the same host have queued follow-up messages, each affected

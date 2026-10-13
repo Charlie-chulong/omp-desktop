@@ -169,6 +169,8 @@ export const en = {
       addDirectory: "Add folder",
       addIssueOrPr: "Add issue or PR",
       addIssueOrPr_mr: "Add issue or MR",
+      browserUse: "Browser use",
+      computerUse: "Computer use",
       dropImagesHere: "Drop images here",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Edit queued message",
