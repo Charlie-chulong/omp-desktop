@@ -118,6 +118,7 @@ export const ru: TranslationResources = {
       planModeGroupLabel: "Режим планирования",
       planModeSearchKeywords: "план планирование режим плана",
       fastModeGroupLabel: "Быстрый",
+      fastModeDescription: "Более быстрые ответы при более высокой стоимости.",
       fastModeSearchKeywords: "быстрый скорость низкая задержка",
       settingOn: "Вкл",
       settingOff: "Выкл",
@@ -250,9 +251,13 @@ export const ru: TranslationResources = {
       workflow: {
         title: "Рабочий процесс",
         standard: "Стандартный",
+        standardDescription: "Выполняйте задачи напрямую, используя рабочий процесс по умолчанию.",
         enhanced: "Расширенный",
+        enhancedDescription: "Автоматически продолжайте работу после ошибок запросов к модели.",
         plan: "План",
+        planDescription: "Планируйте задачу перед внесением изменений.",
         goal: "Цель",
+        goalDescription: "Продолжайте работать над достижением заданной цели.",
         goalPlaceholder: "Введите цель",
       },
       oauthAccount: {

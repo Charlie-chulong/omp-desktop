@@ -132,6 +132,7 @@ export const en = {
       planModeGroupLabel: "Plan mode",
       planModeSearchKeywords: "plan planning plan mode",
       fastModeGroupLabel: "Fast",
+      fastModeDescription: "Faster responses at higher cost.",
       fastModeSearchKeywords: "fast speed low latency",
       settingOn: "On",
       settingOff: "Off",
@@ -264,9 +265,13 @@ export const en = {
       workflow: {
         title: "Workflow",
         standard: "Standard",
+        standardDescription: "Run tasks directly using the default workflow.",
         enhanced: "Enhanced",
+        enhancedDescription: "Automatically continue after model-request errors.",
         plan: "Plan",
+        planDescription: "Plan the task before making changes.",
         goal: "Goal",
+        goalDescription: "Keep working toward a defined goal.",
         goalPlaceholder: "Enter a goal",
       },
       oauthAccount: {

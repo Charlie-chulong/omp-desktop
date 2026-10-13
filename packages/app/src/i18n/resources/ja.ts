@@ -118,6 +118,7 @@ export const ja: TranslationResources = {
       planModeGroupLabel: "プランモード",
       planModeSearchKeywords: "プラン 計画 プランモード",
       fastModeGroupLabel: "高速",
+      fastModeDescription: "コストは高くなりますが、より速く応答します。",
       fastModeSearchKeywords: "高速 速度 低遅延",
       settingOn: "オン",
       settingOff: "オフ",
@@ -250,9 +251,13 @@ export const ja: TranslationResources = {
       workflow: {
         title: "ワークフロー",
         standard: "標準",
+        standardDescription: "デフォルトのワークフローでタスクを直接実行します。",
         enhanced: "強化",
+        enhancedDescription: "モデルへのリクエストでエラーが発生した後、自動的に続行します。",
         plan: "計画",
+        planDescription: "変更を加える前にタスクの計画を立てます。",
         goal: "目標",
+        goalDescription: "設定された目標に向けて作業を続けます。",
         goalPlaceholder: "目標を入力",
       },
       oauthAccount: {
