@@ -11,12 +11,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useMutation } from "@tanstack/react-query";
-import { AdaptiveRenameModal } from "@/components/rename-modal";
+import type { SidebarWorkspaceRename } from "@/components/sidebar/sidebar-workspace-inline-rename";
 import {
   memo,
   Fragment,
   useCallback,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type MutableRefObject,
@@ -108,6 +109,8 @@ import {
   SidebarWorkspaceContextMenu,
   SidebarWorkspaceMenu,
 } from "@/components/sidebar/sidebar-workspace-menu";
+import { SidebarWorkspaceQuickActions } from "@/components/sidebar/sidebar-workspace-quick-actions";
+import { useSidebarWorkspaceFork } from "@/components/sidebar/use-sidebar-workspace-fork";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import { SidebarGroupToggleRow } from "@/components/sidebar/sidebar-group-toggle-row";
 import { useLimitedSidebarGroup } from "@/components/sidebar/use-limited-sidebar-group";
@@ -237,8 +240,7 @@ function isProjectSelectedByRoute(input: {
     input.enabled &&
     input.project.hosts.some(
       (host) =>
-        host.serverId === input.selection?.serverId &&
-        host.projectId === input.selection.projectId,
+        host.serverId === input.selection?.serverId && host.projectId === input.selection.projectId,
     )
   );
 }
@@ -312,12 +314,15 @@ interface WorkspaceRowInnerProps {
   archiveStatus?: "idle" | "pending" | "success";
   archivePendingLabel?: string;
   onArchive?: () => void;
+  onFork?: () => void;
+  forkPending?: boolean;
   onDelete?: () => void;
   deleteStatus?: "idle" | "pending" | "success";
   deletePendingLabel?: string;
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
   onRename?: () => void;
+  rename?: SidebarWorkspaceRename;
   onMarkAsRead?: () => void;
   archiveShortcutKeys?: ShortcutKey[][] | null;
   isPinned?: boolean;
@@ -654,6 +659,8 @@ function WorkspaceRowRightGroup({
   archivePendingLabel,
   archiveShortcutKeys,
   onArchive,
+  onFork,
+  forkPending,
   onMarkAsRead,
   onDelete,
   deleteStatus,
@@ -676,6 +683,8 @@ function WorkspaceRowRightGroup({
   archivePendingLabel?: string;
   archiveShortcutKeys?: ShortcutKey[][] | null;
   onArchive?: () => void;
+  onFork?: () => void;
+  forkPending?: boolean;
   onMarkAsRead?: () => void;
   onDelete?: () => void;
   deleteStatus?: "idle" | "pending" | "success";
@@ -721,6 +730,22 @@ function WorkspaceRowRightGroup({
             visible={kebab.showKebab}
             scrimBackdrop={showScrim ? backdrop : undefined}
           >
+            <SidebarWorkspaceQuickActions
+              workspaceKey={workspace.workspaceKey}
+              onDelete={onDelete}
+              onArchive={onArchive}
+              onFork={onFork}
+              deleteStatus={deleteStatus}
+              archiveStatus={archiveStatus}
+              forkPending={forkPending}
+              disabled={
+                isCreating ||
+                deleteStatus === "pending" ||
+                archiveStatus === "pending" ||
+                forkPending
+              }
+              visible={isHovered && !isTouchPlatform}
+            />
             {onArchive ? (
               <SidebarWorkspaceMenu
                 {...kebab.menuProps}
@@ -883,6 +908,13 @@ function SidebarAgentDraftRow({
     });
 
     const remainingLayouts = useWorkspaceLayoutStore.getState().layoutByWorkspace;
+    const hasRemainingTabsForWorkspace = Object.entries(remainingLayouts).some(
+      ([key, layout]) =>
+        key.startsWith(`${serverId}:project:`) &&
+        collectAllTabs(layout.root).some(
+          (entry) => entry.target.workspaceId?.trim() === workspaceId,
+        ),
+    );
     // Keep in-flight create attempts: the server request can complete after the tab is closed,
     // and archiveEmptyWorkspace uses them to protect workspaces from premature archival.
     const archiveIfUnused = (candidateId: string) => {
@@ -914,11 +946,17 @@ function SidebarAgentDraftRow({
       });
     };
 
-    if (workspaceId !== tabHostWorkspaceId || !routeActive) {
+    // Each sidebar draft owns a distinct workspace record; sibling drafts in the
+    // same project layout do not keep this one alive. Archiving it here prevents
+    // the closed record from resurfacing as a plain row under its checkout/branch
+    // name (e.g. "main"). archiveEmptyWorkspace re-verifies emptiness server-side.
+    if (!hasRemainingTabsForWorkspace) {
       archiveIfUnused(workspaceId);
     }
     if (result === "workspace-empty" && routeActive) {
-      const projectId = useSessionStore.getState().sessions[serverId]?.workspaces.get(workspaceId)?.projectId;
+      const projectId = useSessionStore
+        .getState()
+        .sessions[serverId]?.workspaces.get(workspaceId)?.projectId;
       if (projectId) router.replace(buildHostProjectRoute(serverId, projectId));
     }
   }, [draftId, routeActive, serverId, t, tabHostWorkspaceId, tabId, toast, workspaceId]);
@@ -1041,13 +1079,16 @@ function ProjectHeaderRow({
     ...dragAttributes
   } = dragHandleProps?.attributes ?? {};
 
-  const handlePress = useCallback((event: GestureResponderEvent) => {
-    if (interaction.didLongPressRef.current) {
-      interaction.didLongPressRef.current = false;
-      return;
-    }
-    onPress(event);
-  }, [interaction.didLongPressRef, onPress]);
+  const handlePress = useCallback(
+    (event: GestureResponderEvent) => {
+      if (interaction.didLongPressRef.current) {
+        interaction.didLongPressRef.current = false;
+        return;
+      }
+      onPress(event);
+    },
+    [interaction.didLongPressRef, onPress],
+  );
 
   const handlePointerEnter = useCallback(() => {
     if (!contextMenuOpen) setIsHovered(true);
@@ -1206,12 +1247,15 @@ function WorkspaceRowInner({
   archiveStatus = "idle",
   archivePendingLabel,
   onArchive,
+  onFork,
+  forkPending,
   onDelete,
   deleteStatus,
   deletePendingLabel,
   onCopyBranchName,
   onCopyPath,
   onRename,
+  rename,
   archiveShortcutKeys,
   isPinned,
   onTogglePin,
@@ -1220,8 +1264,11 @@ function WorkspaceRowInner({
   const isCompact = useIsCompactFormFactor();
   const [isPressed, setIsPressed] = useState(false);
   const isTouchPlatform = platformIsNative || isCompact;
+  const handleDrag = useCallback(() => {
+    if (!rename) drag();
+  }, [drag, rename]);
   const interaction = useLongPressDragInteraction({
-    drag,
+    drag: handleDrag,
     menuController,
   });
   const {
@@ -1236,14 +1283,15 @@ function WorkspaceRowInner({
       interaction.didLongPressRef.current = false;
       return;
     }
-    onPress();
-  }, [interaction.didLongPressRef, onPress]);
+    if (!rename) onPress();
+  }, [interaction.didLongPressRef, onPress, rename]);
   const handleWorkspacePressIn = useCallback(
     (event: GestureResponderEvent) => {
+      if (rename) return;
       setIsPressed(true);
       interaction.handlePressIn(event);
     },
-    [interaction],
+    [interaction, rename],
   );
   const handleWorkspacePressOut = useCallback(() => {
     setIsPressed(false);
@@ -1267,7 +1315,7 @@ function WorkspaceRowInner({
         return (
           <View
             {...dragAttributes}
-            {...dragHandleProps?.listeners}
+            {...(!rename ? dragHandleProps?.listeners : undefined)}
             ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
             style={styles.workspaceRowContainer}
             {...hoverHandlers}
@@ -1319,6 +1367,7 @@ function WorkspaceRowInner({
                 shortcutNumber={shortcutNumber}
                 showShortcutBadge={showShortcutBadge}
                 reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+                rename={rename}
               >
                 <WorkspaceRowRightGroup
                   workspace={workspace}
@@ -1334,6 +1383,8 @@ function WorkspaceRowInner({
                   archiveShortcutKeys={archiveShortcutKeys}
                   onArchive={onArchive}
                   onDelete={onDelete}
+                  onFork={onFork}
+                  forkPending={forkPending}
                   deleteStatus={deleteStatus}
                   deletePendingLabel={deletePendingLabel}
                   onCopyBranchName={onCopyBranchName}
@@ -1390,7 +1441,9 @@ function WorkspaceRowWithMenu({
   const toast = useToast();
   const activeRouteWorkspaceSelection = useActiveWorkspaceSelection();
   const [isHidingWorkspace, setIsHidingWorkspace] = useState(false);
-  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const deleteConfirmationOpenRef = useRef(false);
+  const { canFork, isForking, fork } = useSidebarWorkspaceFork(workspace);
   const isArchiving = workspace.archivingAt !== null || isHidingWorkspace;
   const redirectAfterArchive = useCallback(() => {
     redirectIfArchivingActiveWorkspace({
@@ -1430,29 +1483,50 @@ function WorkspaceRowWithMenu({
   });
 
   const handleArchive = useCallback(() => {
-    if (isArchiving) {
+    if (isCreating || isArchiving || isDeleting || isForking) {
       return;
     }
     archiveController.archive();
-  }, [archiveController, isArchiving]);
+  }, [archiveController, isCreating, isArchiving, isDeleting, isForking]);
 
   const handleDelete = useCallback(async () => {
-    if (isArchiving || isDeleting) {
+    if (isCreating || isArchiving || isDeleting || isForking || deleteConfirmationOpenRef.current) {
       return;
     }
-    const confirmed = await confirmDialog({
-      title: t("sidebar.workspace.confirmations.deleteTitle", {
-        name: workspace.title ?? workspace.name,
-      }),
-      message: t("sidebar.workspace.confirmations.deleteMessage"),
-      confirmLabel: t("sidebar.workspace.actions.delete"),
-      cancelLabel: t("workspace.tabs.confirmations.cancel"),
-      destructive: true,
-    });
-    if (confirmed) {
-      deleteMutation.mutate();
+    deleteConfirmationOpenRef.current = true;
+    try {
+      const confirmed = await confirmDialog({
+        title: t("sidebar.workspace.confirmations.deleteTitle", {
+          name: workspace.title ?? workspace.name,
+        }),
+        message: t("sidebar.workspace.confirmations.deleteMessage"),
+        confirmLabel: t("sidebar.workspace.actions.delete"),
+        cancelLabel: t("workspace.tabs.confirmations.cancel"),
+        destructive: true,
+      });
+      if (confirmed) {
+        deleteMutation.mutate();
+      }
+    } finally {
+      deleteConfirmationOpenRef.current = false;
     }
-  }, [deleteMutation, isArchiving, isDeleting, t, workspace.name, workspace.title]);
+  }, [
+    deleteMutation,
+    isCreating,
+    isArchiving,
+    isDeleting,
+    isForking,
+    t,
+    workspace.name,
+    workspace.title,
+  ]);
+
+  const handleFork = useCallback(() => {
+    if (isCreating || isArchiving || isDeleting || isForking || !canFork) {
+      return;
+    }
+    void fork();
+  }, [canFork, fork, isCreating, isArchiving, isDeleting, isForking]);
 
   const handleCopyPath = useCallback(() => {
     let copyTargetDirectory: string;
@@ -1492,11 +1566,11 @@ function WorkspaceRowWithMenu({
   });
 
   const handleOpenRename = useCallback(() => {
-    setIsRenameOpen(true);
+    setIsRenaming(true);
   }, []);
 
   const handleCloseRename = useCallback(() => {
-    setIsRenameOpen(false);
+    setIsRenaming(false);
   }, []);
 
   const handleSubmitRename = useCallback(
@@ -1505,6 +1579,14 @@ function WorkspaceRowWithMenu({
     },
     [renameMutation],
   );
+  const rename: SidebarWorkspaceRename | undefined = isRenaming
+    ? {
+        initialValue: workspace.title ?? workspace.name,
+        placeholder: workspace.name,
+        onSubmit: handleSubmitRename,
+        onCancel: handleCloseRename,
+      }
+    : undefined;
 
   const isPinned = workspace.pinnedAt != null;
   const handleTogglePin = useCallback(() => {
@@ -1535,49 +1617,40 @@ function WorkspaceRowWithMenu({
   });
 
   return (
-    <>
-      <WorkspaceRowInner
-        workspace={workspace}
-        hostBadge={hostBadge}
-        leadingProjectName={leadingProjectName}
-        leadingProjectIconDataUri={leadingProjectIconDataUri}
-        selected={selected}
-        shortcutNumber={shortcutNumber}
-        showShortcutBadge={showShortcutBadge}
-        onPress={onPress}
-        drag={drag}
-        isDragging={isDragging}
-        isArchiving={isArchiving}
-        isCreating={isCreating}
-        dragHandleProps={dragHandleProps}
-        menuController={null}
-        archiveLabel={t("sidebar.workspace.actions.archive")}
-        archiveStatus={isArchiving ? "pending" : "idle"}
-        archivePendingLabel={t("sidebar.workspace.actions.archiving")}
-        onArchive={handleArchive}
-        onDelete={handleDelete}
-        deleteStatus={isDeleting ? "pending" : "idle"}
-        deletePendingLabel={t("sidebar.workspace.actions.deleting")}
-        onCopyBranchName={canCopyBranchName ? handleCopyBranchName : undefined}
-        onCopyPath={handleCopyPath}
-        onRename={handleOpenRename}
-        onMarkAsRead={hasClearableAttention ? handleMarkAsRead : undefined}
-        archiveShortcutKeys={selected ? archiveShortcutKeys : null}
-        isPinned={isPinned}
-        onTogglePin={onTogglePin}
-        reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
-      />
-      <AdaptiveRenameModal
-        visible={isRenameOpen}
-        title={t("sidebar.workspace.rename.title")}
-        initialValue={workspace.title ?? workspace.name}
-        placeholder={workspace.name}
-        submitLabel={t("sidebar.workspace.rename.submit")}
-        onClose={handleCloseRename}
-        onSubmit={handleSubmitRename}
-        testID={`sidebar-workspace-rename-modal-${workspace.workspaceKey}`}
-      />
-    </>
+    <WorkspaceRowInner
+      workspace={workspace}
+      hostBadge={hostBadge}
+      leadingProjectName={leadingProjectName}
+      leadingProjectIconDataUri={leadingProjectIconDataUri}
+      selected={selected}
+      shortcutNumber={shortcutNumber}
+      showShortcutBadge={showShortcutBadge}
+      onPress={onPress}
+      drag={drag}
+      isDragging={isDragging}
+      isArchiving={isArchiving}
+      isCreating={isCreating}
+      dragHandleProps={dragHandleProps}
+      menuController={null}
+      archiveLabel={t("sidebar.workspace.actions.archive")}
+      archiveStatus={isArchiving ? "pending" : "idle"}
+      archivePendingLabel={t("sidebar.workspace.actions.archiving")}
+      onArchive={handleArchive}
+      onFork={canFork ? handleFork : undefined}
+      forkPending={isForking}
+      onDelete={handleDelete}
+      deleteStatus={isDeleting ? "pending" : "idle"}
+      deletePendingLabel={t("sidebar.workspace.actions.deleting")}
+      onCopyBranchName={canCopyBranchName ? handleCopyBranchName : undefined}
+      onCopyPath={handleCopyPath}
+      onRename={handleOpenRename}
+      rename={rename}
+      onMarkAsRead={hasClearableAttention ? handleMarkAsRead : undefined}
+      archiveShortcutKeys={selected ? archiveShortcutKeys : null}
+      isPinned={isPinned}
+      onTogglePin={onTogglePin}
+      reserveIdleStatusIndicatorSpace={reserveIdleStatusIndicatorSpace}
+    />
   );
 }
 
@@ -2010,26 +2083,43 @@ function ProjectBlock({
     })();
   }, [isRemovingProject, displayName, t, toast, project.hosts]);
 
-  const handleProjectPress = useCallback((event: GestureResponderEvent) => {
-    const nativeEvent: unknown = event.nativeEvent;
-    const metaKey = !!nativeEvent && typeof nativeEvent === "object" &&
-      "metaKey" in nativeEvent && nativeEvent.metaKey === true;
-    if (shouldFocusProjectOnPress({
-      metaKey,
-      isMacDesktop: platformIsWeb && getShortcutOs() === "mac" &&
-        (typeof navigator === "undefined" || navigator.maxTouchPoints < 2),
-    })) {
-      const host = project.hosts.find(
-        (candidate) => candidate.serverId === activeProjectSelection?.serverId,
-      ) ?? project.hosts[0];
-      if (host) {
-        onWorkspacePress?.();
-        navigateToProject({ serverId: host.serverId, projectId: host.projectId });
+  const handleProjectPress = useCallback(
+    (event: GestureResponderEvent) => {
+      const nativeEvent: unknown = event.nativeEvent;
+      const metaKey =
+        !!nativeEvent &&
+        typeof nativeEvent === "object" &&
+        "metaKey" in nativeEvent &&
+        nativeEvent.metaKey === true;
+      if (
+        shouldFocusProjectOnPress({
+          metaKey,
+          isMacDesktop:
+            platformIsWeb &&
+            getShortcutOs() === "mac" &&
+            (typeof navigator === "undefined" || navigator.maxTouchPoints < 2),
+        })
+      ) {
+        const host =
+          project.hosts.find(
+            (candidate) => candidate.serverId === activeProjectSelection?.serverId,
+          ) ?? project.hosts[0];
+        if (host) {
+          onWorkspacePress?.();
+          navigateToProject({ serverId: host.serverId, projectId: host.projectId });
+        }
+        return;
       }
-      return;
-    }
-    onToggleCollapsed(project.viewKey);
-  }, [activeProjectSelection?.serverId, onToggleCollapsed, onWorkspacePress, project.hosts, project.viewKey]);
+      onToggleCollapsed(project.viewKey);
+    },
+    [
+      activeProjectSelection?.serverId,
+      onToggleCollapsed,
+      onWorkspacePress,
+      project.hosts,
+      project.viewKey,
+    ],
+  );
 
   let projectChildren = null;
   if (!collapsed && project.workspaces.length > 0) {

@@ -8,13 +8,16 @@ import { i18n } from "@/i18n/i18next";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useDraftStore } from "@/stores/draft-store";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
-import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import {
   buildDraftWorkspaceAttachmentScopeKey,
   buildWorkspaceAttachmentScopeKey,
   useWorkspaceAttachmentsStore,
 } from "@/attachments/workspace-attachments-store";
-import { ensureProjectLayoutsMigrated, resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
+import {
+  ensureProjectLayoutsMigrated,
+  resolveProjectLayoutKey,
+} from "@/workspace-tabs/project-scope";
 
 export interface WorkspaceArchiveTarget {
   serverId: string;
@@ -190,7 +193,28 @@ export async function archiveEmptyWorkspace(input: {
     throw new Error(i18n.t("sidebar.workspace.toasts.archiveFailed"));
   }
   markWorkspaceArchivePending(input.workspace);
+  removeWorkspaceAndDraftTabs({ serverId, workspaceId });
+}
+
+/**
+ * The retained workspace screen can seed a fresh draft tab for a workspace whose
+ * archive is still in flight; without this sweep those tabs survive the removal
+ * as dead sidebar entries owned by an archived workspace.
+ */
+function removeWorkspaceAndDraftTabs(input: { serverId: string; workspaceId: string }): void {
+  const { serverId, workspaceId } = input;
   useSessionStore.getState().removeWorkspace(serverId, workspaceId);
+  const prefix = `${serverId}:project:`;
+  for (const [workspaceKey, layout] of Object.entries(
+    useWorkspaceLayoutStore.getState().layoutByWorkspace,
+  )) {
+    if (!workspaceKey.startsWith(prefix)) continue;
+    for (const tab of collectAllTabs(layout.root)) {
+      if (tab.target.kind === "draft" && tab.target.workspaceId === workspaceId) {
+        useWorkspaceLayoutStore.getState().closeTab(workspaceKey, tab.tabId);
+      }
+    }
+  }
 }
 
 export async function archiveWorkspacesOptimistically(input: {

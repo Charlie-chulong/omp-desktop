@@ -398,7 +398,7 @@ localized units.
 
 ## Conversation names
 
-Rename a conversation from its tab's context menu. Renaming the workspace's primary conversation changes the workspace name; additional conversations keep their own titles. Accepted renames update the local tab title immediately, without waiting for a directory event. Saved names remain visible when switching tabs, including when a conversation is not loaded or its provider history is unavailable.
+Double-click a sidebar conversation row to edit its title in place, without a dialog. **Enter** confirms; **Esc** cancels and restores the original title. The row's Rename menu action uses the same inline editor; tab context menus also support renaming. Renaming the workspace's primary conversation changes the workspace name; additional conversations keep their own titles. Accepted renames update the local tab title immediately, without waiting for a directory event. Saved names remain visible when switching tabs, including when a conversation is not loaded or its provider history is unavailable.
 
 Each tab reads its title and chooses its rename target from the conversation's own workspace,
 including when conversations from multiple workspaces within one project share the tab container.
@@ -414,6 +414,11 @@ width. If an expanded task rail would leave less than a complete compact convers
 composer, the rail and its toggle hide until that pane is wide enough again; its expanded state
 is restored when space returns. Resizing or maximizing the window therefore keeps message text
 and composer controls within each pane.
+
+Hover a sidebar conversation to reveal **Delete**, **Archive**, and **Fork** shortcuts before
+the existing three-dot menu. Project and status groupings share these interactions. Delete
+still requires confirmation; Fork opens a new draft with the source conversation's history,
+without changing the original conversation. Shortcut clicks do not open, drag, or rename the row.
 
 ## Pinned conversation ordering
 
@@ -450,7 +455,6 @@ When multiple old layouts merge into one project, tab state is retained; the fir
 is kept and incoming tabs join its matching panes. Entity tabs follow the current identity
 and deduplication rules. Migrated layouts are persisted and restored after restarting the client.
 
-
 ## Closing unused conversations
 
 Closing the last empty conversation tab returns to the project page. On supported hosts, the daemon also archives the unused workspace record so it does not remain in the sidebar under its branch name. This does not delete project files or the project itself.
@@ -461,9 +465,25 @@ Delete an unsent **New workspace** draft from its sidebar hover button or right-
 Only that draft tab, its input, and attachments are removed; other conversations and project
 files are preserved. Removing the last content tab returns to the project page.
 
+Deleting a draft from the sidebar also retires its workspace record once no other tab
+hosts it. Each sidebar draft owns a distinct workspace, so sibling drafts never keep a
+deleted one alive, and no leftover entry reappears under the checkout name (for example
+`main`). Draft tabs whose workspace record no longer exists are pruned when the project
+layout loads. The daemon re-verifies the workspace is empty before archiving.
+
 Opening a new conversation from the sidebar preserves existing tabs within the same project.
 The draft retains its own workspace for execution. Opening a conversation in another project
 switches to that project's layout instead of adding it to the current project's tabs.
+
+Opening an empty conversation from the sidebar always focuses its own tab: when the
+project's shared layout is showing a sibling conversation, the click seeds a fresh
+draft for that workspace instead of leaving the sibling visible.
+
+Archiving a conversation does not create another draft or relabel surviving sidebar entries.
+If a different conversation is focused in the same project, it stays focused and navigation
+uses its owning workspace. Only the archived conversation's tabs are closed. Workspace open
+intents are scoped to the current page, so a parent route's consumed intent cannot reopen an
+archived conversation in another workspace.
 
 Conversation notifications follow the same rule: reveal or add the conversation in its owning
 project, preserving that project's other tabs, order, and split panes. Notification navigation

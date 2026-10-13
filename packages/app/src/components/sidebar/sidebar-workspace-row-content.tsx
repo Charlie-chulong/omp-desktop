@@ -1,5 +1,5 @@
 import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
-import { Text, View, type ViewStyle } from "react-native";
+import { Text, View, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { CircleAlert, Folder, FolderGit2, Monitor, Pin } from "lucide-react-native";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
@@ -29,6 +29,10 @@ import { StatusRing } from "@/components/status-ring";
 import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
+import {
+  SidebarWorkspaceInlineRename,
+  type SidebarWorkspaceRename,
+} from "@/components/sidebar/sidebar-workspace-inline-rename";
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const needsInputColorMapping = (theme: Theme) => ({
@@ -102,6 +106,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   shortcutNumber = null,
   showShortcutBadge = false,
   reserveIdleStatusIndicatorSpace = true,
+  rename,
   children,
 }: {
   workspace: SidebarWorkspaceEntry;
@@ -120,6 +125,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   showShortcutBadge?: boolean;
   /** Keep the empty leading slot when the workspace has no active status. */
   reserveIdleStatusIndicatorSpace?: boolean;
+  rename?: SidebarWorkspaceRename;
   children?: ReactNode;
 }) {
   const {
@@ -168,10 +174,14 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
                 accessibilityLabel="Pinned"
               />
             ) : null}
-            <Text style={workspaceTitleTextStyle} numberOfLines={1}>
-              {workspaceLabel}
-            </Text>
-            <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View>
+            {rename ? (
+              <SidebarWorkspaceInlineRename workspaceKey={workspace.workspaceKey} rename={rename} />
+            ) : (
+              <Text style={workspaceTitleTextStyle} numberOfLines={1}>
+                {workspaceLabel}
+              </Text>
+            )}
+            {!rename ? <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View> : null}
           </View>
           <WorkspaceMetaRow
             currentBranch={null}
@@ -183,7 +193,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
           />
         </View>
       </View>
-      {showShortcutBadge && shortcutNumber !== null ? (
+      {!rename && showShortcutBadge && shortcutNumber !== null ? (
         <View style={styles.shortcutBadgeOverlay} pointerEvents="none">
           <SidebarWorkspaceShortcutBadge number={shortcutNumber} />
         </View>
@@ -341,6 +351,9 @@ export const sidebarWorkspaceRowStyles = StyleSheet.create((theme) => ({
   trailingActionOverlay: {
     position: "absolute",
     top: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
     right: 0,
   },
 }));
@@ -385,7 +398,8 @@ export function resolveTrailingActionVisibility({
   reserveSlotWidth: boolean;
 } {
   const hasTrailing = hasSidebarWorkspaceTrailing({ workspace, trailing });
-  const showKebab = Boolean(hasArchiveAction && (isHovered || isTouchPlatform)) && !showShortcut;
+  const showKebab =
+    Boolean(hasArchiveAction && (isHovered || isTouchPlatform)) && (!showShortcut || isHovered);
   const showTrailing = hasTrailing && !showShortcut && (isHovered || !showKebab);
   return {
     showTrailing,
@@ -444,14 +458,22 @@ export function SidebarWorkspaceTrailingActionOverlay({
   scrimBackdrop?: SidebarSurfaceBackdrop;
   children: ReactNode;
 }) {
+  const [actionWidth, setActionWidth] = useState(0);
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    setActionWidth(event.nativeEvent.layout.width);
+  }, []);
   if (!visible || !children) return null;
   return (
-    <>
+    <View style={sidebarWorkspaceRowStyles.trailingActionOverlay} onLayout={handleLayout}>
       {scrimBackdrop ? (
-        <TrailingActionScrim backdrop={scrimBackdrop} testID="sidebar-workspace-trailing-scrim" />
+        <TrailingActionScrim
+          backdrop={scrimBackdrop}
+          width={actionWidth + 32}
+          testID="sidebar-workspace-trailing-scrim"
+        />
       ) : null}
-      <View style={sidebarWorkspaceRowStyles.trailingActionOverlay}>{children}</View>
-    </>
+      {children}
+    </View>
   );
 }
 

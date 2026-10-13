@@ -55,10 +55,10 @@ describe("redirectIfArchivingActiveWorkspace", () => {
   };
 
   it("leaves an inactive workspace's route untouched", () => {
-    const navigateToDraft = vi.fn();
+    const navigateToWorkspace = vi.fn();
     const navigateToOpenProject = vi.fn();
     const deps: RedirectIfArchivingActiveWorkspaceDeps = {
-      navigateToDraft,
+      navigateToWorkspace,
       navigateToOpenProject,
       readWorkspaces: () => [workspace({ id: "feature" })],
     };
@@ -71,32 +71,14 @@ describe("redirectIfArchivingActiveWorkspace", () => {
         deps,
       ),
     ).toBe(false);
-    expect(navigateToDraft).not.toHaveBeenCalled();
+    expect(navigateToWorkspace).not.toHaveBeenCalled();
     expect(navigateToOpenProject).not.toHaveBeenCalled();
-  });
-
-  it("opens a new draft in the surviving workspace", () => {
-    const navigateToDraft = vi.fn();
-    const deps: RedirectIfArchivingActiveWorkspaceDeps = {
-      navigateToDraft,
-      navigateToOpenProject: vi.fn(),
-      readWorkspaces: () => [
-        workspace({ id: "feature", workspaceDirectory: "/repo/worktrees/feature" }),
-        workspace({ id: "main", workspaceKind: "checkout" }),
-      ],
-    };
-    expect(redirectIfArchivingActiveWorkspace(input, deps)).toBe(true);
-    expect(navigateToDraft).toHaveBeenCalledWith({
-      serverId: "server-1",
-      workspaceId: "main",
-      draftId: expect.any(String),
-    });
   });
 
   it("opens project selection rather than racing archive with workspace creation", () => {
     const navigateToOpenProject = vi.fn();
     const deps: RedirectIfArchivingActiveWorkspaceDeps = {
-      navigateToDraft: vi.fn(),
+      navigateToWorkspace: vi.fn(),
       navigateToOpenProject,
       readWorkspaces: () => [workspace({ id: "feature" })],
     };

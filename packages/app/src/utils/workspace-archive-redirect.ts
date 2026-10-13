@@ -1,6 +1,5 @@
 import type { ActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
-import { generateDraftId } from "@/stores/draft-keys";
 import { resolveWorkspaceArchiveDestination } from "@/utils/workspace-archive-navigation";
 
 export interface RedirectIfArchivingActiveWorkspaceInput {
@@ -10,7 +9,7 @@ export interface RedirectIfArchivingActiveWorkspaceInput {
 }
 
 export interface RedirectIfArchivingActiveWorkspaceDeps {
-  navigateToDraft: (input: { serverId: string; workspaceId: string; draftId: string }) => void;
+  navigateToWorkspace: (input: { serverId: string; workspaceId: string }) => void;
   navigateToOpenProject: () => void;
   readWorkspaces: (serverId: string) => Iterable<WorkspaceDescriptor>;
 }
@@ -31,10 +30,9 @@ export function redirectIfArchivingActiveWorkspace(
     workspaces: deps.readWorkspaces(input.serverId),
   });
   if (destination.kind === "workspace") {
-    deps.navigateToDraft({
+    deps.navigateToWorkspace({
       serverId: input.serverId,
       workspaceId: destination.workspaceId,
-      draftId: generateDraftId(),
     });
   } else {
     deps.navigateToOpenProject();

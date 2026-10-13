@@ -16,6 +16,7 @@ import type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { prepareWorkspaceTab, type PrepareWorkspaceTabDeps } from "@/utils/prepare-workspace-tab";
 import { resolveProjectLayoutKeyFromWorkspaces } from "@/workspace-tabs/project-scope";
+import { generateDraftId } from "@/stores/draft-keys";
 import type { ActiveProjectSelection } from "./project-selection";
 
 export interface RouteSelectionInput {
@@ -63,6 +64,12 @@ export interface NavigateToSidebarWorkspaceDeps extends NavigateToWorkspaceDeps 
     serverId: string,
     workspaceId: string,
   ) => Promise<readonly WorkspaceHistoryAgent[]>;
+  // Sidebar-only: reads the project layout's tab targets so an empty workspace
+  // can be given its own tab when the shared layout only has sibling content.
+  listProjectTabs?: (input: {
+    serverId: string;
+    workspaceId: string;
+  }) => readonly WorkspaceTabTarget[] | null;
 }
 
 export interface NavigateToLastWorkspaceDeps extends NavigateToWorkspaceDeps {
@@ -338,6 +345,24 @@ export async function navigateToSidebarWorkspace(
     }
   } catch {
     // History is a best-effort fallback. The workspace itself must remain navigable.
+  }
+
+  // An empty conversation still needs its own focused tab when opened from the
+  // sidebar. The project layout is shared, so without this the previously
+  // focused sibling tab keeps rendering and the click looks like a no-op.
+  const projectKey = workspaces
+    ? resolveProjectLayoutKeyFromWorkspaces({ serverId: input.serverId, workspaceId, workspaces })
+    : null;
+  if (projectKey && deps.listProjectTabs) {
+    const projectTabs = deps.listProjectTabs({ serverId: input.serverId, workspaceId }) ?? [];
+    const ownsFocusedCandidate = projectTabs.some(
+      (target) => target.workspaceId?.trim() === workspaceId,
+    );
+    if (!ownsFocusedCandidate) {
+      const target: WorkspaceTabTarget = { kind: "draft", draftId: generateDraftId(), workspaceId };
+      deps.openTab({ workspaceKey: projectKey, target, intent: "reveal" });
+      return navigateToWorkspace({ ...input, target }, deps);
+    }
   }
 
   return navigateToWorkspace(input, deps);

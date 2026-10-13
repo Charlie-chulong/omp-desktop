@@ -66,6 +66,16 @@ export function isWorkspaceArchivePending(input: {
   return Boolean(workspaceId && archives.has(pendingArchiveKey({ serverId, workspaceId })));
 }
 
+/**
+ * Workspace ids whose records are temporarily hidden by an in-flight local
+ * archive. Owners here may be restored on failure, so consumers must not treat
+ * them as permanently gone (e.g. dead-owner draft pruning).
+ */
+export function listWorkspaceArchivePendingIds(serverId: string): string[] {
+  const archives = pendingWorkspaceArchivesByServer.get(serverId.trim());
+  return archives ? [...archives.values()].map((entry) => entry.workspaceId) : [];
+}
+
 export function shouldSuppressWorkspaceForLocalArchive(input: {
   serverId: string;
   workspace: WorkspaceDescriptor;

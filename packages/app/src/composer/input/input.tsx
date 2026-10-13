@@ -285,7 +285,6 @@ function AttachmentDropdown({
   );
 }
 
-
 type ShortcutChord = NonNullable<React.ComponentProps<typeof Shortcut>["chord"]>;
 
 function SendTooltipBody({
@@ -450,12 +449,23 @@ function useAutoFocusOnWebEffect(
 ): void {
   useEffect(() => {
     if (!isWeb || !autoFocus) return;
+    const anotherEditorHasFocus = () => {
+      const element = getTextInputNativeElement(textInputRef.current);
+      const active = document.activeElement;
+      return (
+        active instanceof HTMLElement &&
+        active !== element &&
+        (active.matches("input, textarea") || active.isContentEditable)
+      );
+    };
     return focusWithRetries({
-      focus: () => textInputRef.current?.focus(),
+      focus: () => {
+        if (!anotherEditorHasFocus()) textInputRef.current?.focus();
+      },
       isFocused: () => {
         const element = getTextInputNativeElement(textInputRef.current);
         const active = typeof document !== "undefined" ? document.activeElement : null;
-        return Boolean(element) && active === element;
+        return (Boolean(element) && active === element) || anotherEditorHasFocus();
       },
       deferInitialAttempt: true,
     });
@@ -476,7 +486,6 @@ function MessageInputAutoFocus({
   useAutoFocusOnWebEffect(textInputRef, enabled && isActiveComposer, autoFocusKey);
   return null;
 }
-
 
 function FocusHint({
   visible,
@@ -563,7 +572,6 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
     </View>
   );
 }
-
 
 function SendButtonTooltip({
   shouldShow,
@@ -705,7 +713,6 @@ function queueMessageImpl(ctx: QueueMessageContext): void {
   ctx.replaceText("");
   ctx.onMinimizeHeight();
 }
-
 
 function resolveMaxInputHeight(windowHeight: number): number {
   if (!Number.isFinite(windowHeight) || windowHeight <= 0) return DEFAULT_MAX_INPUT_HEIGHT;
@@ -998,7 +1005,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       };
     }, [onFocusChange]);
 
-
     const minimizeInputHeight = useCallback(() => {
       resetComposerHeight?.();
     }, [resetComposerHeight]);
@@ -1151,7 +1157,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       t,
     });
 
-
     const sendTooltipLabel = resolveSendTooltipLabel({
       submitButtonAccessibilityLabel,
       defaultActionQueues,
@@ -1197,7 +1202,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       [isConnected, disabled],
     );
 
-
     const inputWrapperCombinedStyle = useMemo(
       () => [styles.inputWrapper, readOnly && styles.inputWrapperReadOnly, inputWrapperStyle],
       [inputWrapperStyle, readOnly],
@@ -1236,7 +1240,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       ),
       [onAttachButtonRef, buttonIconSize],
     );
-
 
     return (
       <View

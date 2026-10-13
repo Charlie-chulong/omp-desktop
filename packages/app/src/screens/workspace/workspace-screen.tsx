@@ -1954,6 +1954,11 @@ function WorkspaceScreenContent({
     if (!normalizedServerId || !normalizedWorkspaceId || !persistenceKey) {
       return;
     }
+    // A removed workspace must not seed a replacement draft: its record is gone
+    // and the tab would reference an archived workspace.
+    if (!workspaceDescriptor) {
+      return;
+    }
     if (!hasHydratedWorkspaceLayoutStore) {
       return;
     }
@@ -2001,6 +2006,7 @@ function WorkspaceScreenContent({
     terminalsQuery.isSuccess,
     uiTabs,
     workspaceAgentVisibility,
+    workspaceDescriptor,
   ]);
 
   const activeTabId = focusedPaneTabState.activeTabId;
