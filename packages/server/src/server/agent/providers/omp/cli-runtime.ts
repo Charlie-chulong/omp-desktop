@@ -90,6 +90,25 @@ export function resolveOmpImageSettingsExtensionPath(
   return (pathExists(compiled) ? compiled : source).replace(/\.asar(?=[/\\]|$)/, ".asar.unpacked");
 }
 
+export function resolveOmpCodexCatalogPreloadPath(
+  moduleUrl: string | URL = import.meta.url,
+  pathExists: (path: string) => boolean = existsSync,
+): string {
+  const compiled = fileURLToPath(new URL("./codex-catalog-preload.js", moduleUrl));
+  const source = fileURLToPath(new URL("./codex-catalog-preload.ts", moduleUrl));
+  return (pathExists(compiled) ? compiled : source).replace(/\.asar(?=[/\\]|$)/, ".asar.unpacked");
+}
+
+function installCodexCatalogPreload(launch: OmpRuntimeLaunch): void {
+  const bunOptions = (launch.env?.BUN_OPTIONS ?? globalThis.process.env.BUN_OPTIONS)?.trim();
+  // Use Bun's pre-entry hook, not --extension: both cache replay and fetch capture happen earlier.
+  // BUN_OPTIONS takes inline values verbatim, including spaces; shell quoting becomes literal.
+  launch.env = {
+    ...launch.env,
+    BUN_OPTIONS: `${bunOptions ? `${bunOptions} ` : ""}--preload=${resolveOmpCodexCatalogPreloadPath()}`,
+  };
+}
+
 export class OmpReadyTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(
@@ -125,6 +144,7 @@ export class OmpCliRuntime implements OmpRuntime {
       runtimeSettings: this.options.runtimeSettings,
       session: input,
     });
+    installCodexCatalogPreload(launch);
     const configuredCommand = this.options.runtimeSettings?.command;
     const effectiveCommand =
       configuredCommand?.mode === "replace"
