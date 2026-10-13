@@ -1192,9 +1192,29 @@ function latestOmpPlan(
   };
 }
 
+const URL_CREDENTIALS_PATTERN = /\b([a-z][a-z\d+.-]*:\/\/)[^\s/@]+(?::[^\s/@]*)?@/giu;
+const PROXY_AUTHORIZATION_PATTERN =
+  /\b(Proxy-Authorization\s*[:=]\s*)(?:Basic|Bearer)\s+[^\s,;)]+/giu;
+
 function formatOmpErrorMessage(message: Extract<OmpAgentMessage, { role: "assistant" }>): string {
-  const headline = message.errorMessage?.trim() || "OMP turn failed";
+  const rawError = message.errorMessage?.trim() ?? "";
+  const reportedStatus = message.errorStatus;
+  const status =
+    typeof reportedStatus === "number" &&
+    Number.isInteger(reportedStatus) &&
+    reportedStatus >= 400 &&
+    reportedStatus < 600
+      ? reportedStatus
+      : null;
+  if (status === 407 && /\bproxy\b/iu.test(rawError)) {
+    const code = /\bcode\s*[:=]\s*([a-z\d][a-z\d._-]{0,63})\b/iu.exec(rawError)?.[1];
+    const details = [`HTTP ${status}`, code].filter(Boolean);
+    return `Provider request failed: proxy tunnel rejected (${details.join(", ")})`;
+  }
+
+  const headline = rawError || "Provider request failed";
   const details = [
+    status ? `HTTP ${status}` : null,
     message.stopReason ? `stopReason=${message.stopReason}` : null,
     message.provider && message.model ? `model=${message.provider}/${message.model}` : null,
     message.responseModel ? `responseModel=${message.responseModel}` : null,
@@ -1204,12 +1224,24 @@ function formatOmpErrorMessage(message: Extract<OmpAgentMessage, { role: "assist
   if (partialText) {
     details.push(`partial=${JSON.stringify(partialText.slice(0, 500))}`);
   }
-  return details.length > 0 ? `${headline} (${details.join(", ")})` : headline;
+  const formatted = details.length > 0 ? `${headline} (${details.join(", ")})` : headline;
+  return formatted
+    .replace(URL_CREDENTIALS_PATTERN, "$1[redacted]@")
+    .replace(PROXY_AUTHORIZATION_PATTERN, "$1[redacted]");
 }
 
 function latestOmpErrorMessage(messages: OmpAgentMessage[]): string | null {
   const latestAssistant = messages.findLast((message) => message.role === "assistant");
-  if (!latestAssistant || !latestAssistant.errorMessage?.trim()) {
+  if (!latestAssistant) {
+    return null;
+  }
+  const reportedStatus = latestAssistant.errorStatus;
+  const hasHttpErrorStatus =
+    typeof reportedStatus === "number" &&
+    Number.isInteger(reportedStatus) &&
+    reportedStatus >= 400 &&
+    reportedStatus < 600;
+  if (!latestAssistant.errorMessage?.trim() && !hasHttpErrorStatus) {
     return null;
   }
   return formatOmpErrorMessage(latestAssistant);

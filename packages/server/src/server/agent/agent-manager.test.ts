@@ -8466,6 +8466,88 @@ test("turn_failed emits a system error assistant timeline message and keeps erro
   expect(systemErrors[0]?.text).toContain("invalid model id");
 });
 
+test("waiting for a retry start ignores the previous turn error lifecycle", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-retry-start-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const allowRetryStart = deferred<void>();
+  let startCount = 0;
+  let capturedSession: TestAgentSession | null = null;
+
+  class RetryAfterFailureSession extends TestAgentSession {
+    override async startTurn(): Promise<{ turnId: string }> {
+      startCount += 1;
+      const turnId = `turn-${startCount}`;
+      if (startCount === 1) {
+        queueMicrotask(() => {
+          this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+          this.pushEvent({
+            type: "turn_failed",
+            provider: this.provider,
+            turnId,
+            error: "Proxy refused to open a tunnel: 407 Auth Failed (code: ip_forbidden)",
+          });
+        });
+        return { turnId };
+      }
+
+      await allowRetryStart.promise;
+      return { turnId };
+    }
+  }
+
+  class RetryAfterFailureClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      capturedSession = new RetryAfterFailureSession(config);
+      return capturedSession;
+    }
+  }
+
+  const manager = new AgentManager({
+    clients: { codex: new RetryAfterFailureClient() },
+    registry: storage,
+    logger,
+  });
+  const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+
+  await expect(manager.runAgent(agent.id, "first turn")).rejects.toThrow("ip_forbidden");
+  expect(manager.getAgent(agent.id)?.lifecycle).toBe("error");
+
+  const retryStream = manager.streamAgent(agent.id, "retry");
+  const retryDrain = (async () => {
+    for await (const _event of retryStream) {
+      // Drain the retry until its terminal event.
+    }
+  })();
+  await vi.waitFor(() => expect(startCount).toBe(2));
+
+  const startWait = manager.waitForAgentRunStart(agent.id);
+  let startWaitOutcome: "pending" | "resolved" | "rejected" = "pending";
+  void startWait.then(
+    () => {
+      startWaitOutcome = "resolved";
+      return undefined;
+    },
+    () => {
+      startWaitOutcome = "rejected";
+      return undefined;
+    },
+  );
+  await Promise.resolve();
+  expect(startWaitOutcome).toBe("pending");
+
+  allowRetryStart.resolve();
+  await expect(startWait).resolves.toBeUndefined();
+  capturedSession!.pushEvent({
+    type: "turn_completed",
+    provider: "codex",
+    turnId: "turn-2",
+  });
+  await retryDrain;
+  expect(manager.getAgent(agent.id)?.lifecycle).toBe("idle");
+});
+
 test("turn_failed surfaces provider code and diagnostic in system error message", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-turn-failed-detail-"));
   const storagePath = join(workdir, "agents");
