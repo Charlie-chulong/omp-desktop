@@ -546,7 +546,7 @@ the formula foreground in light and dark themes, including explicit TeX colors.
 
 ## Thinking and tool calls
 
-Collapsed activity groups show their item count in a compact, theme-aware pill with a layers icon. The count updates as activity arrives; expanding the group hides the pill and reveals the individual items.
+Collapsed activity groups show their item count in a compact, theme-aware pill with a layers icon. The count updates as activity arrives; expanding the group hides the pill and reveals the individual items. Read tool file buttons remove line-range selectors before opening the workspace file; for comma-separated ranges, the preview selects the first range.
 
 ## Background processes
 

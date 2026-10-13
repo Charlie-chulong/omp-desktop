@@ -17,7 +17,8 @@ export interface InlinePathTarget {
 
 const FILE_PROTOCOL = "file:";
 const INLINE_LINE_FRAGMENT = /^L([0-9]+)(?:C[0-9]+)?(?:-L?([0-9]+)(?:C[0-9]+)?)?$/i;
-const INLINE_COLON_LINE_SUFFIX = /^(.+?):([0-9]+)(?::[0-9]+)?(?:-([0-9]+)(?::[0-9]+)?)?$/;
+const INLINE_COLON_LINE_SUFFIX =
+  /^(.+?):([0-9]+)(?::[0-9]+)?(?:-([0-9]+)(?::[0-9]+)?)?(?:,[0-9]+(?::[0-9]+)?(?:-[0-9]+(?::[0-9]+)?)?)*$/;
 const INLINE_PAREN_LINE_SUFFIX = /^(.+?)\(([0-9]+)(?:,[0-9]+)?(?:-([0-9]+)(?:,[0-9]+)?)?\)$/;
 const INLINE_WORD_LINE_SUFFIX = /^(.+?)\s+lines?\s+([0-9]+)(?:-([0-9]+))?$/i;
 const ASSISTANT_FILE_EXTENSIONS: Record<string, true> = {
@@ -173,7 +174,7 @@ function parseLineFragment(value: string): Pick<InlinePathTarget, "lineStart" | 
  * Supported:
  * - `filename:linenumber`
  * - `filename:linenumber:columnnumber` as a line target
- * - `filename:lineStart-lineEnd`
+ * - `filename:lineStart-lineEnd` (optionally followed by comma-separated ranges)
  *
  * Not supported (by design):
  * - plain `filename` (no line)
