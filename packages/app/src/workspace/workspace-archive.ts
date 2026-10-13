@@ -18,6 +18,7 @@ import {
   ensureProjectLayoutsMigrated,
   resolveProjectLayoutKey,
 } from "@/workspace-tabs/project-scope";
+import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-target";
 
 export interface WorkspaceArchiveTarget {
   serverId: string;
@@ -193,15 +194,12 @@ export async function archiveEmptyWorkspace(input: {
     throw new Error(i18n.t("sidebar.workspace.toasts.archiveFailed"));
   }
   markWorkspaceArchivePending(input.workspace);
-  removeWorkspaceAndDraftTabs({ serverId, workspaceId });
+  removeUnusedWorkspaceTabs({ serverId, workspaceId });
 }
 
-/**
- * The retained workspace screen can seed a fresh draft tab for a workspace whose
- * archive is still in flight; without this sweep those tabs survive the removal
- * as dead sidebar entries owned by an archived workspace.
- */
-function removeWorkspaceAndDraftTabs(input: { serverId: string; workspaceId: string }): void {
+// Sweep drafts seeded while the archive was in flight and companion tools that
+// would otherwise retain references to the retired workspace.
+function removeUnusedWorkspaceTabs(input: { serverId: string; workspaceId: string }): void {
   const { serverId, workspaceId } = input;
   useSessionStore.getState().removeWorkspace(serverId, workspaceId);
   const prefix = `${serverId}:project:`;
@@ -210,7 +208,10 @@ function removeWorkspaceAndDraftTabs(input: { serverId: string; workspaceId: str
   )) {
     if (!workspaceKey.startsWith(prefix)) continue;
     for (const tab of collectAllTabs(layout.root)) {
-      if (tab.target.kind === "draft" && tab.target.workspaceId === workspaceId) {
+      if (
+        tab.target.workspaceId === workspaceId &&
+        (tab.target.kind === "draft" || isWorkspaceSidePanelToolTarget(tab.target))
+      ) {
         useWorkspaceLayoutStore.getState().closeTab(workspaceKey, tab.tabId);
       }
     }

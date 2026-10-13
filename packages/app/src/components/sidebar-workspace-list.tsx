@@ -174,6 +174,7 @@ import { archiveEmptyWorkspace } from "@/workspace/workspace-archive";
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import { shouldFocusProjectOnPress } from "@/utils/project-row-interaction";
 import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
+import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-target";
 
 const workspaceKeyExtractor = (workspace: SidebarWorkspacePlacement) => workspace.workspaceKey;
 
@@ -862,11 +863,14 @@ function SidebarAgentDraftRow({
   draftId,
   tabId,
   selected,
-  routeActive,
   onWorkspacePress,
-}: SidebarAgentDraft & { routeActive: boolean; onWorkspacePress?: () => void }) {
+}: SidebarAgentDraft & { onWorkspacePress?: () => void }) {
   const { t } = useTranslation();
   const toast = useToast();
+  const activeRouteWorkspaceSelection = useActiveWorkspaceSelection();
+  const routeActive =
+    activeRouteWorkspaceSelection?.serverId === serverId &&
+    activeRouteWorkspaceSelection.workspaceId === tabHostWorkspaceId;
   const isCompact = useIsCompactFormFactor();
   const [isHovered, setIsHovered] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
@@ -911,7 +915,9 @@ function SidebarAgentDraftRow({
       ([key, layout]) =>
         key.startsWith(`${serverId}:project:`) &&
         collectAllTabs(layout.root).some(
-          (entry) => entry.target.workspaceId?.trim() === workspaceId,
+          (entry) =>
+            entry.target.workspaceId?.trim() === workspaceId &&
+            !isWorkspaceSidePanelToolTarget(entry.target),
         ),
     );
     // Keep in-flight create attempts: the server request can complete after the tab is closed,
@@ -929,6 +935,15 @@ function SidebarAgentDraftRow({
           ),
       );
       if (hasOtherDraft) return;
+      if (result !== "workspace-empty") {
+        redirectIfArchivingActiveWorkspace({
+          serverId,
+          workspaceId: candidateId,
+          activeWorkspaceSelection: routeActive
+            ? { serverId, workspaceId: tabHostWorkspaceId }
+            : null,
+        });
+      }
       void archiveEmptyWorkspace({
         client: getHostRuntimeStore().getClient(serverId),
         workspace: { serverId, workspaceId: candidateId },
@@ -945,10 +960,8 @@ function SidebarAgentDraftRow({
       });
     };
 
-    // Each sidebar draft owns a distinct workspace record; sibling drafts in the
-    // same project layout do not keep this one alive. Archiving it here prevents
-    // the closed record from resurfacing as a plain row under its checkout/branch
-    // name (e.g. "main"). archiveEmptyWorkspace re-verifies emptiness server-side.
+    // Companion tools do not keep a deleted draft alive; content tabs still do.
+    // The server re-verifies emptiness before retiring the workspace record.
     if (!hasRemainingTabsForWorkspace) {
       archiveIfUnused(workspaceId);
     }
@@ -2126,10 +2139,6 @@ function ProjectBlock({
           <SidebarAgentDraftRow
             key={draft.draftId}
             {...draft}
-            routeActive={
-              activeWorkspaceSelection?.serverId === draft.serverId &&
-              activeWorkspaceSelection.workspaceId === draft.tabHostWorkspaceId
-            }
             onWorkspacePress={onWorkspacePress}
           />
         ))}
