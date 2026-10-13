@@ -278,7 +278,6 @@ interface ProjectHeaderRowProps {
   displayName: string;
   iconDataUri: string | null;
   statusBucket: SidebarStateBucket | null;
-  selected?: boolean;
   chevron: "expand" | "collapse" | null;
   onPress: (event: GestureResponderEvent) => void;
   workspaceTarget: SidebarProjectHostTarget | null;
@@ -1044,7 +1043,6 @@ function ProjectHeaderRow({
   displayName,
   iconDataUri,
   statusBucket,
-  selected = false,
   chevron,
   onPress,
   workspaceTarget,
@@ -1114,11 +1112,10 @@ function ProjectHeaderRow({
     ({ pressed }: PressableStateCallbackType) => [
       styles.projectRow,
       isDragging && styles.projectRowDragging,
-      selected && styles.sidebarRowSelected,
       isHovered && styles.projectRowHovered,
       pressed && styles.projectRowPressed,
     ],
-    [isDragging, selected, isHovered],
+    [isDragging, isHovered],
   );
 
   const rowChildren = (
@@ -1129,7 +1126,7 @@ function ProjectHeaderRow({
           iconDataUri={iconDataUri}
           statusBucket={statusBucket}
           projectViewKey={project.viewKey}
-          backdrop={getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered })}
+          backdrop={getSidebarRowBackdrop({ isDragging, isPressed, isHovered })}
           chevron={chevron}
           showChevron={isHovered && chevron !== null}
           isArchiving={isArchiving}
@@ -2192,7 +2189,6 @@ function ProjectBlock({
         displayName={displayName}
         iconDataUri={iconDataUri}
         statusBucket={aggregateStatusBucket}
-        selected={active}
         chevron={rowModel.chevron}
         onPress={handleProjectPress}
         workspaceTarget={

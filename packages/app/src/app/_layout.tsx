@@ -13,7 +13,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AppState, useWindowDimensions, View } from "react-native";
+import { AppState, Text, useWindowDimensions, View } from "react-native";
 import { GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -111,7 +111,10 @@ import { selectIsAgentListOpen, usePanelStore } from "@/stores/panel-store";
 import { flushDraftPersistStorage } from "@/stores/draft-store";
 import { getNextThemePreference } from "@/styles/theme";
 import { useSessionStore } from "@/stores/session-store";
-import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import {
+  useActiveProjectSelection,
+  useActiveWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
 import { installWebScrollbarStyles } from "@/styles/install-web-scrollbar-styles";
 import type { HostProfile } from "@/types/host-connection";
 import {
@@ -124,6 +127,7 @@ import {
   parseHostWorkspaceRouteFromPathname,
   parseServerIdFromPathname,
 } from "@/utils/host-routes";
+import { projectDisplayNameFromProjectId } from "@/utils/project-display-name";
 import { buildNotificationRoute, resolveNotificationTarget } from "@/utils/notification-routing";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import {
@@ -428,6 +432,18 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const isDesktopAgentListOpen = usePanelStore((state) => state.desktop.agentListOpen);
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
+  const activeProjectSelection = useActiveProjectSelection();
+  const activeProjectName = useSessionStore((state) => {
+    if (!activeProjectSelection) return null;
+    const project = state.sessions[activeProjectSelection.serverId]?.projects.get(
+      activeProjectSelection.projectId,
+    );
+    return (
+      project?.projectCustomName ??
+      project?.projectDisplayName ??
+      projectDisplayNameFromProjectId(activeProjectSelection.projectId)
+    );
+  });
 
   useEffect(() => {
     const setContextMenuLabels = getDesktopHost()?.menu?.setContextMenuLabels;
@@ -547,6 +563,21 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   const surface = (
     <View style={layoutStyles.surfaceFill}>
       {workspaceChrome}
+      {!isCompactLayout && getIsElectronRuntime() && activeProjectName ? (
+        <View
+          pointerEvents="none"
+          style={layoutStyles.windowProjectTitle}
+          testID="window-active-project-title"
+        >
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="middle"
+            style={layoutStyles.windowProjectTitleText}
+          >
+            {activeProjectName}
+          </Text>
+        </View>
+      ) : null}
       {!isCompactLayout && appChromeLayout.sidebarToggleOwner === "window" ? (
         <WindowChromeRegion corners="top-left">
           <WindowChromeSafeArea
@@ -946,6 +977,22 @@ const layoutStyles = StyleSheet.create((theme) => ({
   wallpaperContent: {
     position: "relative",
     zIndex: 1,
+  },
+  windowProjectTitle: {
+    position: "absolute",
+    top: 0,
+    left: "25%",
+    right: "25%",
+    zIndex: 10,
+    height: HEADER_INNER_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  windowProjectTitleText: {
+    maxWidth: "100%",
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: "600",
   },
   windowSidebarToggle: {
     position: "absolute",
