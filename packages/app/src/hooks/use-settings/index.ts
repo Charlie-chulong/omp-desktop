@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { queryClient as appQueryClient } from "@/data/query-client";
@@ -111,6 +111,7 @@ export interface UseAppSettingsReturn {
   isLoading: boolean;
   error: unknown;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
+  previewSettings: (updates: Partial<AppSettings>) => void;
   resetSettings: () => Promise<void>;
 }
 
@@ -132,45 +133,42 @@ export function useAppSettings(): UseAppSettingsReturn {
     staleTime: Infinity,
     gcTime: Infinity,
   });
-  const [localOverride, setLocalOverride] = useState<AppSettings | null>(null);
 
   const updateSettings = useCallback(
     async (updates: Partial<AppSettings>) => {
       try {
-        const current = localOverride ?? data ?? DEFAULT_CLIENT_SETTINGS;
-        const next = { ...current, ...updates };
-        setLocalOverride(next);
         await saveAppSettings({ queryClient, updates });
       } catch (err) {
         console.error("[AppSettings] Failed to save settings:", err);
         throw err;
       }
     },
-    [queryClient, data, localOverride],
+    [queryClient],
+  );
+  const previewSettings = useCallback(
+    (updates: Partial<AppSettings>) => {
+      queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, (current) =>
+        normalizeAppSettings({ ...(current ?? DEFAULT_CLIENT_SETTINGS), ...updates }),
+      );
+    },
+    [queryClient],
   );
 
   const resetSettings = useCallback(async () => {
     try {
-      const next = { ...DEFAULT_CLIENT_SETTINGS };
-      setLocalOverride(next);
-      queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
-      await AsyncStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
+      await saveAppSettings({ queryClient, updates: DEFAULT_CLIENT_SETTINGS });
     } catch (err) {
       console.error("[AppSettings] Failed to reset settings:", err);
       throw err;
     }
   }, [queryClient]);
-  const settings = useMemo(
-    () =>
-      (localOverride ??
-        (data ? normalizeAppSettings(data) : DEFAULT_CLIENT_SETTINGS)) as AppSettings,
-    [localOverride, data],
-  );
+  const settings = data ? normalizeAppSettings(data) : DEFAULT_CLIENT_SETTINGS;
 
   return {
     settings,
     isLoading: isPending,
     error: error ?? null,
+    previewSettings,
     updateSettings,
     resetSettings,
   };

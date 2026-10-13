@@ -79,6 +79,20 @@ attachments stored in the Web client's IndexedDB use self-contained data URLs in
 blob URLs, preserving the original bytes for browsers whose image-saving menus cannot
 resolve blob URLs. Non-image attachments retain revocable blob previews.
 
+## Desktop wallpaper
+
+In **Settings → Appearance**, enable **Wallpaper** and choose either a local folder or an
+HTTP(S) image/video URL. Local previews are limited to the first 48 supported regular files
+(`jpg`, `jpeg`, `png`, `gif`, `webp`, `bmp`, `avif`, `mp4`, `m4v`, `webm`, `mov`, or `ogv`);
+expand the preview grid to see all returned entries. URL media type detection uses the URL
+pathname, so signed video URLs with query strings are supported.
+
+The opacity slider covers 0–100% and previews changes without writing every intermediate
+value. Base workspaces remain transparent while wallpaper is enabled, including newly
+selected tabs; cards retain an opaque-enough surface for text. Local media is streamed
+through app-scoped opaque identifiers rather than embedding full files in renderer IPC.
+Windows and Linux keep their native, opaque title-bar controls over wallpaper content.
+
 ## Stopping conversations and subagents
 
 The conversation's **Stop** button interrupts its current run and all running managed descendants,

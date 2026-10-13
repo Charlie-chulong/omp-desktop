@@ -69,7 +69,7 @@ describe("window drag region CSS", () => {
         <div data-window-drag-scope="true"></div>
         <section><button id="static-control">Static control</button></section>
       </div>
-      <div id="window-controls-overlay" data-window-controls-overlay="true">
+      <div id="window-chrome-interactive" data-window-chrome-interactive="true">
         <button id="window-control">Window control</button>
       </div>
       <div id="overlay-root"><button id="overlay-control">Overlay control</button></div>
@@ -78,14 +78,14 @@ describe("window drag region CSS", () => {
     const nativeRegion = frameDocument.getElementById("native-region");
     const nativeControl = frameDocument.getElementById("native-control");
     const staticControl = frameDocument.getElementById("static-control");
-    const windowControlsOverlay = frameDocument.getElementById("window-controls-overlay");
+    const windowChromeInteractive = frameDocument.getElementById("window-chrome-interactive");
     const windowControl = frameDocument.getElementById("window-control");
     const overlayControl = frameDocument.getElementById("overlay-control");
     if (
       !nativeRegion ||
       !nativeControl ||
       !staticControl ||
-      !windowControlsOverlay ||
+      !windowChromeInteractive ||
       !windowControl ||
       !overlayControl
     ) {
@@ -95,7 +95,7 @@ describe("window drag region CSS", () => {
     expect(readAppRegion(nativeRegion)).toBe("drag");
     expect(readAppRegion(nativeControl)).toBe("no-drag");
     expect(readAppRegion(staticControl)).toBe("no-drag");
-    expect(readAppRegion(windowControlsOverlay)).toBe("no-drag");
+    expect(readAppRegion(windowChromeInteractive)).toBe("no-drag");
     expect(readAppRegion(windowControl)).toBe("no-drag");
     expect(readAppRegion(overlayControl)).toBe("no-drag");
   });

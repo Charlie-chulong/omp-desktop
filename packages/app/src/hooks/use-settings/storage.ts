@@ -235,19 +235,50 @@ export interface SettingsDeps {
   storage: KeyValueStorage;
   desktop: DesktopSettingsBridge;
 }
+const appSettingsSaveTails = new WeakMap<KeyValueStorage, Promise<void>>();
 
-export async function saveAppSettings(input: {
+interface SaveAppSettingsInput {
   queryClient: QueryClient;
   updates: Partial<AppSettings>;
   deps: SettingsDeps;
-}): Promise<void> {
+}
+
+async function runQueuedAppSettingsSave(
+  input: SaveAppSettingsInput,
+  previous: Promise<void>,
+): Promise<void> {
+  try {
+    await previous;
+  } catch {
+    // A failed write must not prevent the next user change from being persisted.
+  }
   const storedCurrent =
     input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
     (await loadAppSettingsFromStorage(input.deps));
   const current = normalizeAppSettings(storedCurrent);
-  const next = { ...current, ...input.updates };
-  await input.deps.storage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
+  const next = normalizeAppSettings({ ...current, ...input.updates });
   input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+  try {
+    await input.deps.storage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
+  } catch (error) {
+    if (input.queryClient.getQueryData(APP_SETTINGS_QUERY_KEY) === next) {
+      input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, current);
+    }
+    throw error;
+  }
+}
+
+export async function saveAppSettings(input: SaveAppSettingsInput): Promise<void> {
+  const previous = appSettingsSaveTails.get(input.deps.storage) ?? Promise.resolve();
+  const save = runQueuedAppSettingsSave(input, previous);
+  appSettingsSaveTails.set(input.deps.storage, save);
+  try {
+    await save;
+  } finally {
+    if (appSettingsSaveTails.get(input.deps.storage) === save) {
+      appSettingsSaveTails.delete(input.deps.storage);
+    }
+  }
 }
 
 export async function loadAppSettingsFromStorage(deps: SettingsDeps): Promise<AppSettings> {
@@ -426,13 +457,17 @@ function pickEnumAppSettings(stored: StoredAppSettings): Partial<AppSettings> {
  */
 function pickWallpaperMediaAppSettings(stored: StoredAppSettings): Partial<AppSettings> {
   const result: Partial<AppSettings> = {};
-  if (typeof stored.wallpaperOpacity === "number") {
-    result.wallpaperOpacity = stored.wallpaperOpacity;
-  } else if (typeof stored.wallpaperOpacity === "string") {
-    const parsed = parseFloat(stored.wallpaperOpacity);
-    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
-      result.wallpaperOpacity = parsed;
-    }
+  const wallpaperOpacity =
+    typeof stored.wallpaperOpacity === "string"
+      ? Number.parseFloat(stored.wallpaperOpacity)
+      : stored.wallpaperOpacity;
+  if (
+    typeof wallpaperOpacity === "number" &&
+    Number.isFinite(wallpaperOpacity) &&
+    wallpaperOpacity >= 0 &&
+    wallpaperOpacity <= 1
+  ) {
+    result.wallpaperOpacity = wallpaperOpacity;
   }
   if (typeof stored.wallpaperPath === "string") {
     result.wallpaperPath = stored.wallpaperPath;
