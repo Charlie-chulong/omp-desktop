@@ -22,9 +22,13 @@ host; if no host is configured, it opens the add-host flow.
 
 Desktop windows use a full-width title bar above the sidebar and workspace tabs.
 The desktop sidebar shares the title bar's background, and its toggle stays in
-the title bar when collapsed. Native window buttons retain their reserved space.
-Workspace tabs sit edge-to-edge with square corners and thin separators; the active
-tab shares the content background, with its close button visible on selection or hover.
+the title bar when collapsed. Workspace panel toggles, script controls, and the
+new-tab launcher occupy the title bar's right side; only the focused workspace
+contributes these controls when navigation keeps other workspaces mounted.
+Workspace tabs sit directly below the title bar without a second workspace header.
+Native window buttons retain their reserved space. Tabs sit edge-to-edge with
+square corners and thin separators; the active tab shares the content background,
+with its close button visible on selection or hover.
 
 Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.

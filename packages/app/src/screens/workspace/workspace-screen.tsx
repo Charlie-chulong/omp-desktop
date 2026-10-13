@@ -37,6 +37,7 @@ import { SidebarMenuToggle } from "@/components/headers/menu-header";
 import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { ScreenHeader } from "@/components/headers/screen-header";
 import { WorkspaceHeaderActions } from "./workspace-header-actions";
+import { DesktopWindowTitlebarActions } from "@/components/desktop-window-titlebar-actions";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
@@ -180,7 +181,11 @@ import {
   useModifiedPanelTabIds,
 } from "@/panels/panel-instance-attributes";
 import { findAdjacentPane } from "@/utils/split-navigation";
-import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/layout";
+import {
+  getIsElectronRuntime,
+  supportsDesktopPaneSplits,
+  useIsCompactFormFactor,
+} from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
@@ -3574,38 +3579,69 @@ function WorkspaceScreenContent({
   });
 
   const focusedPaneIdOrUndefined = useMemo(() => focusedPaneId ?? undefined, [focusedPaneId]);
+  const hasDesktopWindowTitlebar = !isMobile && getIsElectronRuntime();
+  const workspaceHeaderActions = useMemo(
+    () => (
+      <WorkspaceHeaderActions
+        showPanels={Boolean(toolWorkspaceDirectory)}
+        showNewTab={Boolean(persistenceKey)}
+        bottomPaneOpen={isHeaderBottomPaneOpen}
+        onToggleBottomPane={handleToggleTerminalBelowFocusedPane}
+        bottomPaneKeys={splitPaneDownKeys?.[0] ?? []}
+        onToggleSidePanel={handleToggleSidePanel}
+        sidePanelLabel={sidePanelToggleLabel}
+        sidePanelOpen={sidePanelToggleAccessibilityState.expanded}
+        sidePanelKeys={EXPLORER_TOGGLE_KEYS}
+      >
+        <WorkspaceNewTabMenuContent
+          serverId={normalizedServerId}
+          purpose="primary"
+          paneId={focusedPaneIdOrUndefined}
+          align="end"
+        />
+      </WorkspaceHeaderActions>
+    ),
+    [
+      focusedPaneIdOrUndefined,
+      handleToggleSidePanel,
+      handleToggleTerminalBelowFocusedPane,
+      isHeaderBottomPaneOpen,
+      normalizedServerId,
+      persistenceKey,
+      sidePanelToggleAccessibilityState.expanded,
+      sidePanelToggleLabel,
+      splitPaneDownKeys,
+      toolWorkspaceDirectory,
+    ],
+  );
+  const desktopWorkspaceScriptsButton = useMemo(
+    () =>
+      toolWorkspaceDescriptor && toolWorkspaceScripts.length > 0 ? (
+        <WorkspaceScriptsButton
+          serverId={normalizedServerId}
+          workspaceId={toolWorkspaceId}
+          scripts={toolWorkspaceScripts}
+          liveTerminalIds={liveTerminalIds}
+          onScriptTerminalStarted={handleScriptTerminalStarted}
+          onViewTerminal={handleViewScriptTerminal}
+          hideLabels
+        />
+      ) : null,
+    [
+      handleScriptTerminalStarted,
+      handleViewScriptTerminal,
+      liveTerminalIds,
+      normalizedServerId,
+      toolWorkspaceDescriptor,
+      toolWorkspaceId,
+      toolWorkspaceScripts,
+    ],
+  );
   const headerRight = useMemo(
     () => (
       <View style={styles.headerRight}>
-        {!isMobile && toolWorkspaceDescriptor && toolWorkspaceScripts.length > 0 ? (
-          <WorkspaceScriptsButton
-            serverId={normalizedServerId}
-            workspaceId={toolWorkspaceId}
-            scripts={toolWorkspaceScripts}
-            liveTerminalIds={liveTerminalIds}
-            onScriptTerminalStarted={handleScriptTerminalStarted}
-            onViewTerminal={handleViewScriptTerminal}
-            hideLabels
-          />
-        ) : null}
-        <WorkspaceHeaderActions
-          showPanels={!isMobile && Boolean(toolWorkspaceDirectory)}
-          showNewTab={!isMobile && Boolean(persistenceKey)}
-          bottomPaneOpen={isHeaderBottomPaneOpen}
-          onToggleBottomPane={handleToggleTerminalBelowFocusedPane}
-          bottomPaneKeys={splitPaneDownKeys?.[0] ?? []}
-          onToggleSidePanel={handleToggleSidePanel}
-          sidePanelLabel={sidePanelToggleLabel}
-          sidePanelOpen={sidePanelToggleAccessibilityState.expanded}
-          sidePanelKeys={EXPLORER_TOGGLE_KEYS}
-        >
-          <WorkspaceNewTabMenuContent
-            serverId={normalizedServerId}
-            purpose="primary"
-            paneId={focusedPaneIdOrUndefined}
-            align="end"
-          />
-        </WorkspaceHeaderActions>
+        {!isMobile ? desktopWorkspaceScriptsButton : null}
+        {!isMobile && !hasDesktopWindowTitlebar ? workspaceHeaderActions : null}
         {isMobile ? (
           <HeaderToggleButton
             testID="workspace-explorer-toggle"
@@ -3629,24 +3665,14 @@ function WorkspaceScreenContent({
       </View>
     ),
     [
-      focusedPaneIdOrUndefined,
-      isMobile,
-      persistenceKey,
-      toolWorkspaceDescriptor,
-      normalizedServerId,
-      toolWorkspaceDirectory,
-      toolWorkspaceId,
-      toolWorkspaceScripts,
-      liveTerminalIds,
-      handleScriptTerminalStarted,
-      handleViewScriptTerminal,
-      handleToggleTerminalBelowFocusedPane,
-      isHeaderBottomPaneOpen,
-      splitPaneDownKeys,
+      desktopWorkspaceScriptsButton,
       handleToggleSidePanel,
-      sidePanelToggleLabel,
+      isMobile,
       sidePanelToggleAccessibilityState,
+      sidePanelToggleLabel,
       t,
+      hasDesktopWindowTitlebar,
+      workspaceHeaderActions,
     ],
   );
 
@@ -3760,27 +3786,35 @@ function WorkspaceScreenContent({
 
   const workspaceCenterColumn = (
     <NewTabLauncherProvider value={newTabLauncher}>
+      {hasDesktopWindowTitlebar ? (
+        <DesktopWindowTitlebarActions active={isRouteFocused}>
+          {desktopWorkspaceScriptsButton}
+          {workspaceHeaderActions}
+        </DesktopWindowTitlebarActions>
+      ) : null}
       <View style={styles.centerColumn}>
-        <ScreenHeader
-          left={
-            <>
-              <SidebarMenuToggle />
-              {isMobile && toolWorkspaceScripts.length > 0 ? (
-                <WorkspaceScriptsButton
-                  serverId={normalizedServerId}
-                  workspaceId={toolWorkspaceId}
-                  scripts={toolWorkspaceScripts}
-                  liveTerminalIds={liveTerminalIds}
-                  onScriptTerminalStarted={handleScriptTerminalStarted}
-                  onViewTerminal={handleViewScriptTerminal}
-                  hideLabels
-                  presentation="ghost"
-                />
-              ) : null}
-            </>
-          }
-          right={headerRight}
-        />
+        {!hasDesktopWindowTitlebar ? (
+          <ScreenHeader
+            left={
+              <>
+                <SidebarMenuToggle />
+                {isMobile && toolWorkspaceScripts.length > 0 ? (
+                  <WorkspaceScriptsButton
+                    serverId={normalizedServerId}
+                    workspaceId={toolWorkspaceId}
+                    scripts={toolWorkspaceScripts}
+                    liveTerminalIds={liveTerminalIds}
+                    onScriptTerminalStarted={handleScriptTerminalStarted}
+                    onViewTerminal={handleViewScriptTerminal}
+                    hideLabels
+                    presentation="ghost"
+                  />
+                ) : null}
+              </>
+            }
+            right={headerRight}
+          />
+        ) : null}
 
         {isMobile ? (
           <MobileWorkspaceTabSwitcher

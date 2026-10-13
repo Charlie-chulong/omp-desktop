@@ -45,6 +45,10 @@ import { RootErrorBoundary } from "@/components/root-error-boundary";
 import { WorkspaceSetupDialog } from "@/components/workspace-setup-dialog";
 import { WorkspaceShortcutTargetsSubscriber } from "@/components/workspace-shortcut-targets-subscriber";
 import { FloatingPanelPortalHost } from "@/components/ui/floating-panel-portal";
+import {
+  DesktopWindowTitlebarActionsHost,
+  DesktopWindowTitlebarActionsProvider,
+} from "@/components/desktop-window-titlebar-actions";
 import { HostChooserModal, useHostChooser } from "@/hosts/host-chooser";
 import {
   getIsElectronRuntime,
@@ -577,7 +581,11 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
     surface
   );
 
-  return <CommandCenterProvider>{content}</CommandCenterProvider>;
+  return (
+    <DesktopWindowTitlebarActionsProvider>
+      <CommandCenterProvider>{content}</CommandCenterProvider>
+    </DesktopWindowTitlebarActionsProvider>
+  );
 }
 
 function DesktopWindowTitlebar({
@@ -595,19 +603,22 @@ function DesktopWindowTitlebar({
           sidebarControlsEnabled ? <WindowSidebarMenuToggle testID="window-sidebar-toggle" /> : null
         }
         right={
-          DEV_BUILD_LABEL ? (
-            <View
-              pointerEvents="none"
-              style={layoutStyles.devBuildBadge}
-              testID="dev-build-label"
-              accessibilityLabel={`Development build: ${DEV_BUILD_LABEL}`}
-            >
-              <GitBranch size={12} color={theme.colors.accentForeground} />
-              <Text numberOfLines={1} ellipsizeMode="tail" style={layoutStyles.devBuildBadgeText}>
-                {DEV_BUILD_LABEL}
-              </Text>
-            </View>
-          ) : null
+          <>
+            <DesktopWindowTitlebarActionsHost />
+            {DEV_BUILD_LABEL ? (
+              <View
+                pointerEvents="none"
+                style={layoutStyles.devBuildBadge}
+                testID="dev-build-label"
+                accessibilityLabel={`Development build: ${DEV_BUILD_LABEL}`}
+              >
+                <GitBranch size={12} color={theme.colors.accentForeground} />
+                <Text numberOfLines={1} ellipsizeMode="tail" style={layoutStyles.devBuildBadgeText}>
+                  {DEV_BUILD_LABEL}
+                </Text>
+              </View>
+            ) : null}
+          </>
         }
         rightStyle={layoutStyles.windowTitlebarRight}
       />
