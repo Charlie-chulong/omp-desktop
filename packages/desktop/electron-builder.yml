@@ -51,6 +51,7 @@ asarUnpack:
   - node_modules/@omp-desktop/server/dist/server/terminal/shell-integration/**/*
   - node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/background-jobs-extension.js
   - node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/image-settings-extension.js
+  - node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/codex-catalog-preload.js
   - node_modules/@napi-rs/keyring-win32-*/**/*
 extraResources:
   - from: ../app/dist

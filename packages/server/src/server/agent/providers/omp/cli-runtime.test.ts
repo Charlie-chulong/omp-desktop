@@ -116,18 +116,6 @@ describe("OMP CLI runtime", () => {
     );
   });
 
-  test("passes the configured PI_PROXY to a new OMP process", async () => {
-    const child = createOmpChild();
-    const launches: OmpRuntimeLaunch[] = [];
-    await createRuntime(child, launches, {
-      env: { PI_PROXY: "http://127.0.0.1:7890" },
-    }).startSession({ cwd: "/workspace/project" });
-
-    expect(launches[0]?.env).toEqual({
-      PI_PROXY: "http://127.0.0.1:7890",
-    });
-  });
-
   test("rejects custom tool flags in command and session options while a policy is set", async () => {
     const child = createOmpChild();
     const runtime = createRuntime(

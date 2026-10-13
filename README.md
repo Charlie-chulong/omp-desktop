@@ -335,6 +335,14 @@ provider's signed-in state updates. Providers that request an OAuth code or redi
 still support entering it and completing sign-in manually. Catalog refresh does not switch
 an existing conversation's selected model.
 
+For official Codex OAuth, Desktop accepts dynamic models only from the dedicated Codex
+catalog and requires Codex capability metadata for every entry. It never sends the OAuth
+credential to the generic ChatGPT model catalog as a discovery fallback. A temporary
+failure, invalid JSON, or non-Codex response keeps the last validated catalog or OMP's
+built-in models, including their reasoning options. The first fixed launch removes legacy
+Codex cache rows whose original endpoint and protocol cannot be proven; provider credentials,
+other provider caches, and conversation settings are unchanged.
+
 ## Claude fast mode
 
 The model settings **Fast** switch also supports direct Anthropic Claude Opus 4.8, Opus 5,
