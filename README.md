@@ -123,6 +123,15 @@ If the active provider cannot accept steering, Desktop reports the send failure 
 current turn running. Agent-to-agent prompts and completion notifications use the same
 non-destructive rule rather than falling back to replacement.
 
+## Ordering queued conversations
+
+When several conversations on the same host have queued follow-up messages, each affected
+composer shows that conversation's queue position and controls to move it earlier or later.
+Automatic delivery starts one queued conversation at a time in the displayed order; moving a
+conversation changes the next actual start, not only the UI. Existing active turns continue
+without interruption, and every conversation retains the FIFO order of its own queued messages.
+**Send queued message now** remains an explicit override of the shared order.
+
 ## Answering grouped questions
 
 When OMP asks several questions together, use the labeled question tabs to move between them in

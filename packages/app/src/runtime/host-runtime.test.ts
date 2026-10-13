@@ -2003,6 +2003,22 @@ describe("HostRuntimeStore", () => {
     });
     pageTwo.resolve(makeFetchAgentsPayload({ entries: [] }));
     await waitForDirectoryReady(store, host.serverId);
+    await fakeClient.waitForSentMessages(1);
+    await vi.waitFor(() => {
+      expect(
+        useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("legacy-snapshot"),
+      ).toBe(false);
+    });
+    fakeClient.agentUpdate({
+      kind: "upsert",
+      agent: { ...snapshotAgent.agent, status: "running" },
+      project: snapshotAgent.project,
+    });
+    fakeClient.agentUpdate({
+      kind: "upsert",
+      agent: { ...snapshotAgent.agent, status: "idle" },
+      project: snapshotAgent.project,
+    });
     await fakeClient.waitForSentMessages(2);
 
     expect(fakeClient.sentAgentMessages.map(([agentId, text]) => [agentId, text])).toEqual([
@@ -2526,17 +2542,105 @@ describe("HostRuntimeStore", () => {
     });
     pageTwo.resolve(makeFetchAgentsPayload({ entries: [] }));
     await waitForDirectoryReady(store, host.serverId);
+    await fakeClient.waitForSentMessages(1);
+    await vi.waitFor(() => {
+      expect(
+        useSessionStore
+          .getState()
+          .sessions[host.serverId]?.queuedMessages.has("snapshot-transition"),
+      ).toBe(false);
+    });
+    fakeClient.agentUpdate({
+      kind: "upsert",
+      agent: { ...snapshotAgent.agent, status: "running" },
+      project: snapshotAgent.project,
+    });
+    fakeClient.agentUpdate({
+      kind: "upsert",
+      agent: { ...snapshotAgent.agent, status: "idle" },
+      project: snapshotAgent.project,
+    });
     await fakeClient.waitForSentMessages(2);
 
     expect(fakeClient.sentAgentMessages.map(([agentId, text]) => [agentId, text])).toEqual([
       ["snapshot-transition", "snapshot queued"],
       ["buffered-transition", "buffered queued"],
     ]);
-    expect(
-      Array.from(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.values() ?? []),
-    ).toEqual([[], []]);
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.size).toBe(0);
+    });
 
     store.syncHosts([]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("starts ready queued conversations in the user-selected order", async () => {
+    const host = makeHost({ serverId: "srv_reordered_queue" });
+    const fakeClient = new FakeDaemonClient();
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => fakeClient as unknown as DaemonClient,
+        connectToDaemon: async () => ({
+          client: fakeClient as unknown as DaemonClient,
+          serverId: host.serverId,
+          hostname: null,
+        }),
+        getClientId: async () => "cid_reordered_queue",
+      },
+    });
+    const first = makeFetchAgentsEntry({
+      id: "first",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    const second = makeFetchAgentsEntry({
+      id: "second",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    sessionStore.setAgents(
+      host.serverId,
+      new Map([
+        ["first", { ...replicaAgent(first.agent, host.serverId), status: "idle" }],
+        ["second", { ...replicaAgent(second.agent, host.serverId), status: "running" }],
+      ]),
+    );
+    sessionStore.setQueuedMessages(
+      host.serverId,
+      new Map([
+        ["first", [{ id: "message-first", text: "run first", attachments: [] }]],
+        ["second", [{ id: "message-second", text: "run second", attachments: [] }]],
+      ]),
+    );
+    sessionStore.moveQueuedAgent(host.serverId, "second", -1);
+
+    store.drainQueuedAgentMessage(host.serverId, "first");
+    expect(fakeClient.sentAgentMessages).toEqual([]);
+
+    sessionStore.setAgents(
+      host.serverId,
+      new Map([
+        ["first", { ...replicaAgent(first.agent, host.serverId), status: "idle" }],
+        ["second", { ...replicaAgent(second.agent, host.serverId), status: "idle" }],
+      ]),
+    );
+    store.drainQueuedAgentMessage(host.serverId, "second");
+    await fakeClient.waitForSentMessages(1);
+
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["second"]);
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("second")).toBe(
+        false,
+      );
+    });
+
+    store.drainQueuedAgentMessage(host.serverId, "second");
+    await fakeClient.waitForSentMessages(2);
+
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["second", "first"]);
+
     useSessionStore.getState().clearSession(host.serverId);
   });
 
@@ -2683,7 +2787,7 @@ describe("HostRuntimeStore", () => {
     await vi.waitFor(() => {
       expect(
         useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("agent"),
-      ).toEqual([]);
+      ).toBeUndefined();
     });
     useSessionStore.getState().clearSession(host.serverId);
   });

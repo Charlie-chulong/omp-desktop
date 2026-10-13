@@ -381,6 +381,26 @@ function updateAgentTasks(
   return next;
 }
 
+interface QueuedMessageState {
+  id: string;
+  text: string;
+  attachments: ComposerAttachment[];
+}
+
+function reconcileQueuedAgentOrder(
+  current: readonly string[],
+  messages: ReadonlyMap<string, readonly QueuedMessageState[]>,
+): string[] {
+  const next = current.filter((agentId) => messages.has(agentId));
+  const seen = new Set(next);
+  for (const [agentId, queue] of messages) {
+    if (queue.length === 0 || seen.has(agentId)) continue;
+    next.push(agentId);
+    seen.add(agentId);
+  }
+  return next;
+}
+
 export type WorkspaceRestoreStatus = "restoring" | "failed" | "needs-host-upgrade";
 
 // Per-session state
@@ -443,11 +463,9 @@ export interface SessionState {
   // File explorer
   fileExplorer: Map<string, AgentFileExplorerState>;
 
-  // Queued messages
-  queuedMessages: Map<
-    string,
-    Array<{ id: string; text: string; attachments: ComposerAttachment[] }>
-  >;
+  // Queued messages and the cross-conversation execution order.
+  queuedMessages: Map<string, QueuedMessageState[]>;
+  queuedAgentOrder: string[];
 }
 
 // Global store state
@@ -639,11 +657,10 @@ interface SessionStoreActions {
   setQueuedMessages: (
     serverId: string,
     value:
-      | Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>
-      | ((
-          prev: Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>,
-        ) => Map<string, Array<{ id: string; text: string; attachments: ComposerAttachment[] }>>),
+      | Map<string, QueuedMessageState[]>
+      | ((prev: Map<string, QueuedMessageState[]>) => Map<string, QueuedMessageState[]>),
   ) => void;
+  moveQueuedAgent: (serverId: string, agentId: string, offset: -1 | 1) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -698,6 +715,7 @@ function createInitialSessionState(
     pendingPermissions: new Map(),
     fileExplorer: new Map(),
     queuedMessages: new Map(),
+    queuedAgentOrder: [],
   };
 }
 
@@ -1973,11 +1991,36 @@ export const useSessionStore = create<SessionStore>()(
           if (session.queuedMessages === nextValue) {
             return prev;
           }
+          const queuedAgentOrder = reconcileQueuedAgentOrder(session.queuedAgentOrder, nextValue);
           return {
             ...prev,
             sessions: {
               ...prev.sessions,
-              [serverId]: { ...session, queuedMessages: nextValue },
+              [serverId]: { ...session, queuedMessages: nextValue, queuedAgentOrder },
+            },
+          };
+        });
+      },
+
+      moveQueuedAgent: (serverId, agentId, offset) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) return prev;
+          const index = session.queuedAgentOrder.indexOf(agentId);
+          const target = index + offset;
+          if (index < 0 || target < 0 || target >= session.queuedAgentOrder.length) {
+            return prev;
+          }
+          const queuedAgentOrder = [...session.queuedAgentOrder];
+          [queuedAgentOrder[index], queuedAgentOrder[target]] = [
+            queuedAgentOrder[target]!,
+            queuedAgentOrder[index]!,
+          ];
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, queuedAgentOrder },
             },
           };
         });
