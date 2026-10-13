@@ -31,6 +31,15 @@ describe("parseInlinePathToken", () => {
     });
   });
 
+  it("parses comma-separated line ranges and targets the first range", () => {
+    expect(parseInlinePathToken("src/app.ts:1-180,1950-2145,2145-2225")).toEqual({
+      raw: "src/app.ts:1-180,1950-2145,2145-2225",
+      path: "src/app.ts",
+      lineStart: 1,
+      lineEnd: 180,
+    });
+  });
+
   it("parses filename:line:column as a line target", () => {
     expect(parseInlinePathToken("src/app.ts:12:4")).toEqual({
       raw: "src/app.ts:12:4",

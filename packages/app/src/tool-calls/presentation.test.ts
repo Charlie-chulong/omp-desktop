@@ -79,6 +79,28 @@ describe("tool-call presentation", () => {
     });
   });
 
+  it("opens a read with discontiguous ranges as the underlying file", () => {
+    const presentation = buildToolCallPresentation({
+      toolName: "read",
+      status: "completed",
+      error: null,
+      detail: {
+        type: "read",
+        filePath: "/tmp/repo/src/index.ts:1-180,1950-2145,2145-2225",
+        content: "console.log('hi');",
+      },
+      resolveIcon: fakeResolveIcon,
+      t: i18n.getFixedT("en"),
+    });
+
+    expect(presentation.openFileTarget).toEqual({
+      raw: "/tmp/repo/src/index.ts:1-180,1950-2145,2145-2225",
+      path: "/tmp/repo/src/index.ts",
+      lineStart: 1,
+      lineEnd: 180,
+    });
+  });
+
   it("marks running calls without meaningful detail as loading details", () => {
     const presentation = buildToolCallPresentation({
       toolName: "exec_command",
