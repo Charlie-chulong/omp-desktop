@@ -32,6 +32,9 @@ export interface FakeDesktopBridge extends DesktopSettingsBridge {
 
 const DEFAULT_DESKTOP: DesktopSettings = {
   releaseChannel: "stable",
+  browser: {
+    target: "system",
+  },
   notifications: {
     playSound: true,
   },

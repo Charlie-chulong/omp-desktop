@@ -3,9 +3,13 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { AppReleaseChannel } from "../features/auto-updater.js";
+import { isBrowserTargetId, type BrowserTargetId } from "../features/browser-targets.js";
 
 export interface DesktopSettings {
   releaseChannel: AppReleaseChannel;
+  browser: {
+    target: BrowserTargetId;
+  };
   notifications: {
     playSound: boolean;
   };
@@ -20,6 +24,7 @@ export interface DesktopSettings {
 
 interface DesktopSettingsPatch {
   releaseChannel?: AppReleaseChannel;
+  browser?: Partial<DesktopSettings["browser"]>;
   notifications?: Partial<DesktopSettings["notifications"]>;
   daemon?: Partial<DesktopSettings["daemon"]>;
   window?: Partial<DesktopSettings["window"]>;
@@ -46,6 +51,9 @@ export interface DesktopSettingsStore {
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   releaseChannel: "stable",
+  browser: {
+    target: "system",
+  },
   notifications: {
     playSound: true,
   },
@@ -95,6 +103,7 @@ function buildDefaultDocument(): PersistedDesktopSettingsDocument {
     settings: {
       releaseChannel: DEFAULT_DESKTOP_SETTINGS.releaseChannel,
       notifications: { ...DEFAULT_DESKTOP_SETTINGS.notifications },
+      browser: { ...DEFAULT_DESKTOP_SETTINGS.browser },
       daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon },
       window: { ...DEFAULT_DESKTOP_SETTINGS.window },
     },
@@ -108,6 +117,7 @@ function buildDefaultDocument(): PersistedDesktopSettingsDocument {
 function coerceDesktopSettings(input: unknown): DesktopSettings {
   const result: DesktopSettings = {
     releaseChannel: DEFAULT_DESKTOP_SETTINGS.releaseChannel,
+    browser: { ...DEFAULT_DESKTOP_SETTINGS.browser },
     notifications: { ...DEFAULT_DESKTOP_SETTINGS.notifications },
     daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon },
     window: { ...DEFAULT_DESKTOP_SETTINGS.window },
@@ -120,6 +130,10 @@ function coerceDesktopSettings(input: unknown): DesktopSettings {
   const releaseChannel = coerceReleaseChannel(input.releaseChannel);
   if (releaseChannel) {
     result.releaseChannel = releaseChannel;
+  }
+
+  if (isRecord(input.browser) && isBrowserTargetId(input.browser.target)) {
+    result.browser.target = input.browser.target;
   }
 
   if (isRecord(input.notifications)) {
@@ -161,6 +175,10 @@ function coerceDesktopSettingsPatch(input: unknown): DesktopSettingsPatch {
   const releaseChannel = coerceReleaseChannel(input.releaseChannel);
   if (releaseChannel) {
     patch.releaseChannel = releaseChannel;
+  }
+
+  if (isRecord(input.browser) && isBrowserTargetId(input.browser.target)) {
+    patch.browser = { target: input.browser.target };
   }
 
   if (isRecord(input.notifications)) {
@@ -222,6 +240,7 @@ function mergeDesktopSettings(
 ): DesktopSettings {
   return {
     releaseChannel: patch.releaseChannel ?? current.releaseChannel,
+    browser: { ...current.browser, ...patch.browser },
     notifications: { ...current.notifications, ...patch.notifications },
     daemon: { ...current.daemon, ...patch.daemon },
     window: { ...current.window, ...patch.window },

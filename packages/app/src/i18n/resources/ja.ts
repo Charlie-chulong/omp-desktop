@@ -2093,6 +2093,17 @@ export const ja: TranslationResources = {
       launchAtLoginHint: "ログイン時に OMP Desktop を自動的に起動します",
       unsupportedHint: "macOS と Windows で利用できます",
     },
+    browser: {
+      title: "ブラウザ",
+      openLinksWith: "リンクを開くブラウザ",
+      description: "OMP Desktop がウェブリンクを開くときに使うブラウザを選択します。",
+      systemDefault: "システムのデフォルトブラウザ",
+      unavailable: "{{browser}}（未インストール）",
+      selectedUnavailable:
+        "{{browser}} はインストールされていません。別のブラウザを選択してください。",
+      accessibilityLabel: "{{browser}} でリンクを開く",
+      loadFailed: "利用可能なブラウザを読み込めませんでした。",
+    },
     general: {
       title: "一般",
       defaultSend: {

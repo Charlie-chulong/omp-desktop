@@ -2203,6 +2203,16 @@ export const en = {
       launchAtLoginHint: "Start OMP Desktop automatically when you sign in",
       unsupportedHint: "Available on macOS and Windows",
     },
+    browser: {
+      title: "Browser",
+      openLinksWith: "Open links with",
+      description: "Choose the browser OMP Desktop uses for web links.",
+      systemDefault: "System default",
+      unavailable: "{{browser}} (not installed)",
+      selectedUnavailable: "{{browser}} is not installed. Choose another browser.",
+      accessibilityLabel: "Open links with {{browser}}",
+      loadFailed: "Unable to load available browsers.",
+    },
     general: {
       title: "General",
       defaultSend: {

@@ -2073,6 +2073,16 @@ export const ar: TranslationResources = {
       launchAtLoginHint: "تشغيل OMP Desktop تلقائيًا عند تسجيل الدخول",
       unsupportedHint: "متاح على macOS وWindows",
     },
+    browser: {
+      title: "المتصفح",
+      openLinksWith: "فتح الروابط باستخدام",
+      description: "اختر المتصفح الذي يستخدمه OMP Desktop لفتح روابط الويب.",
+      systemDefault: "متصفح النظام الافتراضي",
+      unavailable: "{{browser}} (غير مثبت)",
+      selectedUnavailable: "المتصفح {{browser}} غير مثبت. اختر متصفحًا آخر.",
+      accessibilityLabel: "فتح الروابط باستخدام {{browser}}",
+      loadFailed: "تعذر تحميل المتصفحات المتاحة.",
+    },
     general: {
       title: "عام",
       defaultSend: {

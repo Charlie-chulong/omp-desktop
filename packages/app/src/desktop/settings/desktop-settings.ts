@@ -8,11 +8,15 @@ import {
 } from "@/desktop/hooks/desktop-ipc-error";
 import type { ReleaseChannel } from "@/hooks/use-settings";
 import { i18n } from "@/i18n/i18next";
+import type { DesktopBrowserTargetId } from "@/desktop/host";
 
 const DESKTOP_SETTINGS_QUERY_KEY = ["desktop-settings"] as const;
 
 export interface DesktopSettings {
   releaseChannel: ReleaseChannel;
+  browser: {
+    target: DesktopBrowserTargetId;
+  };
   notifications: {
     playSound: boolean;
   };
@@ -24,12 +28,16 @@ export interface DesktopSettings {
 
 export interface DesktopSettingsPatch {
   releaseChannel?: ReleaseChannel;
+  browser?: Partial<DesktopSettings["browser"]>;
   notifications?: Partial<DesktopSettings["notifications"]>;
   daemon?: Partial<DesktopSettings["daemon"]>;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   releaseChannel: "stable",
+  browser: {
+    target: "system",
+  },
   notifications: {
     playSound: true,
   },
@@ -153,9 +161,15 @@ function parseDesktopSettings(raw: unknown): DesktopSettings {
   const record = isRecord(raw) ? raw : {};
   const notifications = isRecord(record.notifications) ? record.notifications : {};
   const daemon = isRecord(record.daemon) ? record.daemon : {};
+  const browser = isRecord(record.browser) ? record.browser : {};
 
   return {
     releaseChannel: record.releaseChannel === "beta" ? "beta" : "stable",
+    browser: {
+      target: isDesktopBrowserTargetId(browser.target)
+        ? browser.target
+        : DEFAULT_DESKTOP_SETTINGS.browser.target,
+    },
     notifications: {
       playSound:
         typeof notifications.playSound === "boolean"
@@ -181,6 +195,10 @@ function mergeDesktopSettings(
 ): DesktopSettings {
   return {
     releaseChannel: updates.releaseChannel ?? current.releaseChannel,
+    browser: {
+      ...current.browser,
+      ...updates.browser,
+    },
     notifications: {
       ...current.notifications,
       ...updates.notifications,
@@ -195,9 +213,22 @@ function mergeDesktopSettings(
 function normalizePatch(updates: DesktopSettingsPatch): Record<string, unknown> {
   return {
     ...(updates.releaseChannel ? { releaseChannel: updates.releaseChannel } : {}),
+    ...(updates.browser ? { browser: updates.browser } : {}),
     ...(updates.notifications ? { notifications: updates.notifications } : {}),
     ...(updates.daemon ? { daemon: updates.daemon } : {}),
   };
+}
+
+function isDesktopBrowserTargetId(value: unknown): value is DesktopBrowserTargetId {
+  return (
+    value === "system" ||
+    value === "chrome" ||
+    value === "edge" ||
+    value === "firefox" ||
+    value === "brave" ||
+    value === "chromium" ||
+    value === "safari"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

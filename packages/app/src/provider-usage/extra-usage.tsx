@@ -1,13 +1,14 @@
 import type { OmpProviderAccountQuota } from "@omp-desktop/protocol/messages";
 import { useTranslation } from "react-i18next";
-import { Linking, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { formatOmpExtraUsageUsd, formatPct } from "./format";
+import { openExternalUrl } from "@/utils/open-external-url";
 
 const CLAUDE_USAGE_URL = "https://claude.ai/settings/usage";
 
 function openClaudeUsage(): void {
-  void Linking.openURL(CLAUDE_USAGE_URL);
+  void openExternalUrl(CLAUDE_USAGE_URL);
 }
 
 export function OmpExtraUsageDetails({

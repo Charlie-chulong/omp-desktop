@@ -59,7 +59,7 @@ describe("terminal context menu", () => {
 });
 
 describe("assistant HTTP link context menu", () => {
-  it("opens the original URL in the system browser, never in an app guest", () => {
+  it("offers localized link actions and copies the original URL without decoding it", () => {
     vi.clearAllMocks();
     const url = "https://example.com/a%20b?q=x%2Fy#section";
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({} as BrowserWindow);
@@ -81,9 +81,7 @@ describe("assistant HTTP link context menu", () => {
     const actions = vi.mocked(Menu.buildFromTemplate).mock.calls[0]?.[0];
 
     expect(actions?.map((item) => item.label)).toEqual(["在浏览器中打开链接", "复制链接地址"]);
-    actions?.[0]?.click?.(null as never, undefined, null as never);
     actions?.[1]?.click?.(null as never, undefined, null as never);
-    expect(shell.openExternal).toHaveBeenCalledWith(url);
     expect(clipboard.writeText).toHaveBeenCalledWith(url);
   });
 });

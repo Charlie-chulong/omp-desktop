@@ -2116,6 +2116,16 @@ export const zhCN: TranslationResources = {
       launchAtLoginHint: "登录系统后自动启动 OMP Desktop",
       unsupportedHint: "仅支持 macOS 和 Windows",
     },
+    browser: {
+      title: "浏览器",
+      openLinksWith: "打开链接时使用",
+      description: "选择 OMP Desktop 打开网页链接时使用的浏览器。",
+      systemDefault: "系统默认浏览器",
+      unavailable: "{{browser}}（未安装）",
+      selectedUnavailable: "未安装 {{browser}}，请选择其他浏览器。",
+      accessibilityLabel: "使用 {{browser}} 打开链接",
+      loadFailed: "无法加载可用浏览器。",
+    },
     general: {
       title: "通用",
       defaultSend: {
