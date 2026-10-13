@@ -321,6 +321,26 @@ provider's signed-in state updates. Providers that request an OAuth code or redi
 still support entering it and completing sign-in manually. Catalog refresh does not switch
 an existing conversation's selected model.
 
+## Claude fast mode
+
+The model settings **Fast** switch also supports direct Anthropic Claude Opus 4.8, Opus 5,
+and Opus 5.5. Desktop uses OMP's native `set_fast_mode` RPC; the runtime sends
+`speed: "fast"` and the `fast-mode-2026-02-01` beta header. No prompt instructions or
+thinking-level changes are used to approximate fast mode.
+
+The switch is hidden for older Opus models, Sonnet, Haiku, third-party Claude providers
+(including Bedrock, Vertex, and OpenRouter), and OMP runtimes without fast-mode RPC support.
+Model switches re-read the runtime's per-family state before applying a saved preference.
+New and resumed conversations use the same feature preference as the existing OpenAI
+Fast switch; Desktop does not enable fast mode automatically when no preference is set.
+
+Fast mode costs more and requires Anthropic fast-mode access. Claude subscription users
+need usage credits; fast mode is not included in their subscription limits. The switch
+requests fast mode, not a guarantee of account eligibility or served speed: provider
+rejections, capacity limits, and fallback remain managed by OMP and Anthropic.
+See [Anthropic fast-mode availability and pricing](https://platform.claude.com/docs/en/build-with-claude/fast-mode)
+and [Claude subscription requirements](https://code.claude.com/docs/en/fast-mode#requirements).
+
 ## Conversation setting feedback
 
 Changing Fast mode in an existing conversation adds a system notice after OMP confirms the
