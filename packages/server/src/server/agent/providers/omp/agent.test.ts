@@ -483,6 +483,101 @@ describe("OMP agent client and session", () => {
     expect(omp.latestRuntimeClosed()).toBe(true);
   });
 
+  test.each(["claude-opus-4-8", "claude-opus-5", "claude-opus-5-5"])(
+    "offers fast mode for direct Anthropic %s in drafts and sessions",
+    async (id) => {
+      const omp = new OmpHarness({
+        initialModel: { provider: "anthropic", id, api: "anthropic-messages" },
+      });
+      const model = `anthropic/${id}`;
+      const feature = expect.objectContaining({ id: "fast_mode", type: "toggle", value: false });
+
+      expect(await omp.listFeatures({ model })).toEqual(expect.arrayContaining([feature]));
+      await omp.start({ model });
+      expect(omp.features()).toEqual(expect.arrayContaining([feature]));
+      await omp.setFeature("fast_mode", true);
+      expect(omp.features()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      );
+    },
+  );
+
+  test.each([
+    { provider: "anthropic", id: "claude-opus-4-6", api: "anthropic-messages" },
+    { provider: "anthropic", id: "claude-opus-4-7", api: "anthropic-messages" },
+    { provider: "anthropic", id: "claude-sonnet-4-6", api: "anthropic-messages" },
+    { provider: "anthropic", id: "claude-haiku-4-5", api: "anthropic-messages" },
+    { provider: "amazon-bedrock", id: "claude-opus-5-5", api: "bedrock-converse-stream" },
+    { provider: "google-vertex", id: "claude-opus-5-5", api: "anthropic-messages" },
+    { provider: "openrouter", id: "anthropic/claude-opus-5-5", api: "openai-completions" },
+    { provider: "custom-claude", id: "claude-opus-5-5", api: "anthropic-messages" },
+    { provider: "anthropic", id: "claude-opus-5-5", api: "openai-responses" },
+    { provider: "anthropic", id: "not-opus", name: "Claude Opus 5.5", api: "anthropic-messages" },
+  ])("does not offer Claude fast mode for $provider/$id on $api", async (initialModel) => {
+    const omp = new OmpHarness({ initialModel });
+    const config = {
+      model: `${initialModel.provider}/${initialModel.id}`,
+      featureValues: { fast_mode: true },
+    };
+
+    expect(await omp.listFeatures(config)).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "fast_mode" })]),
+    );
+    await omp.start(config);
+    expect(omp.features()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "fast_mode" })]),
+    );
+    await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
+      "OMP fast mode is unavailable for the current model",
+    );
+  });
+
+  test("uses the resolved Claude model rather than a stale configured model for fast mode", async () => {
+    const omp = new OmpHarness({
+      initialModel: {
+        provider: "anthropic",
+        id: "claude-sonnet-4-6",
+        api: "anthropic-messages",
+      },
+    });
+    await omp.start({ model: "anthropic/claude-opus-5-5" });
+
+    expect(omp.features()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "fast_mode" })]),
+    );
+  });
+
+  test("reapplies fast mode after switching to a family with a different native tier", async () => {
+    const omp = new OmpHarness();
+    await omp.start({
+      model: "openai-codex/gpt-5.6",
+      featureValues: { fast_mode: true },
+    });
+    // OMP stores separate service tiers for OpenAI and Anthropic.
+    omp.runtime().state.fastModeEnabled = false;
+    omp.runtime().state.fastModeActive = false;
+
+    await omp.setModel("anthropic", "claude-opus-5-5", { api: "anthropic-messages" });
+
+    expect(omp.runtime().state.fastModeEnabled).toBe(true);
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+    );
+  });
+
+  test("reads the selected family's native fast state when no preference was configured", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ model: "openai-codex/gpt-5.6" });
+    omp.runtime().state.fastModeEnabled = true;
+    omp.runtime().state.fastModeActive = true;
+
+    await omp.setModel("anthropic", "claude-opus-5-5", { api: "anthropic-messages" });
+
+    expect(omp.features()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+    );
+  });
+
   test("records a model switch only after the conversation has a user message", async () => {
     const omp = new OmpHarness({
       initialModel: { provider: "custom-openai", id: "initial" },
@@ -522,49 +617,56 @@ describe("OMP agent client and session", () => {
     ]);
   });
 
-  test("records only successful fast-mode transitions as system notices", async () => {
-    const omp = new OmpHarness();
-    await omp.start({ model: "openai-codex/gpt-5.6" });
+  test.each(["openai-codex/gpt-5.6", "anthropic/claude-opus-5-5"])(
+    "records only successful fast-mode transitions as system notices for %s",
+    async (model) => {
+      const omp = new OmpHarness();
+      await omp.start({ model });
 
-    await omp.setFeature("fast_mode", true);
-    expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
-    );
-    await omp.setFeature("fast_mode", true);
-    await expect(omp.setFeature("fast_mode", "on")).rejects.toThrow("Invalid OMP fast mode");
+      await omp.setFeature("fast_mode", true);
+      expect(omp.features()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      );
+      await omp.setFeature("fast_mode", true);
+      await expect(omp.setFeature("fast_mode", "on")).rejects.toThrow("Invalid OMP fast mode");
 
-    await omp.setModel("custom-openai", "model");
-    expect(omp.features()).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode" })]),
-    );
+      await omp.setModel("custom-openai", "model");
+      expect(omp.features()).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode" })]),
+      );
 
-    await omp.setModel("openai-codex", "gpt-5.6");
-    expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
-    );
+      const [provider, id] = model.split("/");
+      await omp.setModel(provider!, id!);
+      expect(omp.features()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      );
 
-    await omp.setFeature("fast_mode", false);
-    expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: false })]),
-    );
-    expect(omp.timeline().filter((item) => item.type === "system_notice")).toEqual([
-      { type: "system_notice", notice: "fast_mode_enabled" },
-      { type: "system_notice", notice: "fast_mode_disabled" },
-    ]);
-  });
+      await omp.setFeature("fast_mode", false);
+      expect(omp.features()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: false })]),
+      );
+      expect(omp.timeline().filter((item) => item.type === "system_notice")).toEqual([
+        { type: "system_notice", notice: "fast_mode_enabled" },
+        { type: "system_notice", notice: "fast_mode_disabled" },
+      ]);
+    },
+  );
 
-  test("applies a persisted fast-mode preference without adding a switch notice", async () => {
-    const omp = new OmpHarness();
-    await omp.start({
-      model: "openai-codex/gpt-5.6",
-      featureValues: { fast_mode: true },
-    });
+  test.each(["openai-codex/gpt-5.6", "anthropic/claude-opus-5-5"])(
+    "applies a persisted fast-mode preference without adding a switch notice for %s",
+    async (model) => {
+      const omp = new OmpHarness();
+      await omp.start({
+        model,
+        featureValues: { fast_mode: true },
+      });
 
-    expect(omp.timeline().filter((item) => item.type === "system_notice")).toEqual([]);
-    expect(omp.features()).toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
-    );
-  });
+      expect(omp.timeline().filter((item) => item.type === "system_notice")).toEqual([]);
+      expect(omp.features()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: "fast_mode", value: true })]),
+      );
+    },
+  );
 
   test("enables fast mode for custom GPT models on OpenAI wire APIs", async () => {
     const omp = new OmpHarness({
@@ -607,19 +709,22 @@ describe("OMP agent client and session", () => {
     );
   });
 
-  test("hides fast mode when the installed OMP RPC does not support it", async () => {
-    const omp = new OmpHarness({ fastModeSupported: false });
-    await omp.start({
-      model: "openai-codex/gpt-5.6",
-      featureValues: { fast_mode: true },
-    });
+  test.each(["openai-codex/gpt-5.6", "anthropic/claude-opus-5-5"])(
+    "hides fast mode when the installed OMP RPC does not support it for %s",
+    async (model) => {
+      const omp = new OmpHarness({ fastModeSupported: false });
+      await omp.start({
+        model,
+        featureValues: { fast_mode: true },
+      });
 
-    expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
-    expect(omp.fastModeRequests()).toEqual([]);
-    await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
-      "OMP fast mode is unavailable for the current model",
-    );
-  });
+      expect(omp.features()).toEqual([expect.objectContaining({ id: "workflow_mode" })]);
+      expect(omp.fastModeRequests()).toEqual([]);
+      await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
+        "OMP fast mode is unavailable for the current model",
+      );
+    },
+  );
 
   test("hides OAuth account selection for custom providers", async () => {
     const omp = new OmpHarness({

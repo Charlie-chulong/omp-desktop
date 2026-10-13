@@ -375,6 +375,7 @@ export class FakeOmpSession implements OmpRuntimeSession {
     if (!this.setModelResult) {
       throw new Error("FakeOmp setModel requires setModelResult to be scripted");
     }
+    this.state = { ...this.state, model: this.setModelResult };
     return this.setModelResult;
   }
 
