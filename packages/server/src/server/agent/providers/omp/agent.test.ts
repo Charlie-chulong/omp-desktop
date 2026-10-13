@@ -1055,6 +1055,33 @@ describe("OMP agent client and session", () => {
     expect(omp.runtime().followUpRequests).toEqual([]);
   });
 
+  test("surfaces a sanitized proxy rejection and keeps the session retryable", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+
+    const failure = await omp
+      .runPromptWithTerminalAssistant("finish the task", "", {
+        role: "assistant",
+        content: [],
+        stopReason: "error",
+        errorStatus: 407,
+        errorMessage:
+          "Proxy http://alice:secret@proxy.example refused to open a tunnel: 407 Auth Failed (code: ip_forbidden)",
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      "Provider request failed: proxy tunnel rejected (HTTP 407, ip_forbidden)",
+    );
+    expect((failure as Error).message).not.toContain("alice");
+    expect((failure as Error).message).not.toContain("secret");
+
+    await expect(omp.runPrompt("retry after proxy recovery", "recovered")).resolves.toBeDefined();
+    expect(omp.failedTurnCount()).toBe(1);
+    expect(omp.completedTurnCount()).toBe(1);
+  });
+
   describe("enhanced HTTP error continuation", () => {
     const sessions = new Set<OmpHarness>();
 

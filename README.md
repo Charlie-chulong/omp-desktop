@@ -40,6 +40,11 @@ If an older Desktop build remains running after the final answer, update Desktop
 its daemon after saving any active work. Updating only the bundled OMP executable does not
 update Desktop's RPC adapter.
 
+Provider-request failures after an Agent runtime has started are reported in the conversation as
+sanitized system errors, including the HTTP status and safe proxy error code when available. Proxy
+credentials are omitted. The existing Agent and provider session remain retryable, so a transient
+network or proxy failure does not require creating a new conversation.
+
 ## Enhanced workflow
 
 Select **Enhanced**, identified by the same Sparkles icon in the workflow menu
