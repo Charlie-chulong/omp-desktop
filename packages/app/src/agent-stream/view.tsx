@@ -513,8 +513,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       },
     );
 
-    const handleToolCallOpenFile = useStableEvent((filePath: string) => {
-      handleInlinePathPress({ raw: filePath, path: filePath }, "side");
+    const handleFilePreviewOpen = useStableEvent((input: string | InlinePathTarget) => {
+      const target = typeof input === "string" ? { raw: input, path: input } : input;
+      handleInlinePathPress(target, "side");
     });
 
     // Restores a file the turn deleted: git-discard the deletion via the
@@ -878,7 +879,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               cwd={context.cwd}
               metadata={data.metadata}
               isLastInSequence={isLastInSequence}
-              onOpenFilePath={handleToolCallOpenFile}
+              onOpenFileTarget={handleFilePreviewOpen}
               maxDetailHeight={maxDetailHeight}
             />
           );
@@ -918,7 +919,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             result={data.result}
             status={data.status}
             isLastInSequence={isLastInSequence}
-            onOpenFilePath={handleToolCallOpenFile}
+            onOpenFileTarget={handleFilePreviewOpen}
             maxDetailHeight={maxDetailHeight}
           />
         );
@@ -928,7 +929,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         client,
         context.cwd,
         duplicateToolImagePreviewIds,
-        handleToolCallOpenFile,
+        handleFilePreviewOpen,
         resolvedServerId,
         setInlineDetailsExpanded,
         workspaceRoot,
@@ -1129,7 +1130,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             strategy={streamRenderStrategy}
             supportsTimelineCursor={supportsAgentForkContextCursor}
             turnTokenStats={bottomTurnTokenStats}
-            onOpenFile={handleToolCallOpenFile}
+            onOpenFile={handleFilePreviewOpen}
             onRestoreFile={readOnly ? undefined : handleRestoreDeletedFile}
             onForkAssistantTurn={readOnly ? undefined : handleForkAssistantTurn}
             onForkInFlightTurn={readOnly ? undefined : handleForkInFlightTurn}
@@ -1138,7 +1139,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       [
         handleForkAssistantTurn,
         handleForkInFlightTurn,
-        handleToolCallOpenFile,
+        handleFilePreviewOpen,
         handleRestoreDeletedFile,
         readOnly,
         isTurnActive,

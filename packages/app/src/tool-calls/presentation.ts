@@ -4,6 +4,7 @@ import type { ToolCallDetail } from "@omp-desktop/protocol/agent-types";
 import type { ToolCallDisplayInput } from "@/utils/tool-call-display";
 import { buildToolCallDisplayModel } from "@/utils/tool-call-display";
 import { extractToolCallFilePath } from "@/utils/extract-tool-call-file-path";
+import { parseInlinePathToken, type InlinePathTarget } from "@/assistant-file-links";
 import {
   hasMeaningfulToolCallDetail,
   isPendingToolCallDetail,
@@ -31,7 +32,7 @@ export interface ToolCallPresentation {
   isLoadingDetails: boolean;
   hasDetails: boolean;
   canOpenDetails: boolean;
-  openFilePath: string | null;
+  openFileTarget: InlinePathTarget | null;
   isPlan: boolean;
 }
 
@@ -67,6 +68,10 @@ export function buildToolCallPresentation(
   });
   const hasDetails = Boolean(input.error) || hasMeaningfulToolCallDetail(input.detail);
   const isImageTool = input.toolName === "generate_image" || input.toolName === "present_image";
+  const openFilePath = extractToolCallFilePath(input.detail);
+  const openFileTarget = openFilePath
+    ? (parseInlinePathToken(openFilePath) ?? { raw: openFilePath, path: openFilePath })
+    : null;
 
   return {
     displayName: isImageTool
@@ -82,7 +87,7 @@ export function buildToolCallPresentation(
     isLoadingDetails,
     hasDetails,
     canOpenDetails: hasDetails || isLoadingDetails,
-    openFilePath: extractToolCallFilePath(input.detail),
+    openFileTarget,
     isPlan: input.detail?.type === "plan",
   };
 }
