@@ -7,6 +7,7 @@ export { type AssistantLinkPress, useAssistantLinkPress } from "./link-press-con
 export {
   classifyAssistantFileLink,
   normalizeInlinePathTarget,
+  parseInlinePathToken,
   type InlinePathTarget,
 } from "./parse";
 export {

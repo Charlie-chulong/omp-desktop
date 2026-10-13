@@ -49,8 +49,33 @@ describe("tool-call presentation", () => {
       isLoadingDetails: false,
       hasDetails: true,
       canOpenDetails: true,
-      openFilePath: "/tmp/repo/src/index.ts",
+      openFileTarget: {
+        raw: "/tmp/repo/src/index.ts",
+        path: "/tmp/repo/src/index.ts",
+      },
       isPlan: false,
+    });
+  });
+
+  it("separates a read line range from the path opened in the file preview", () => {
+    const presentation = buildToolCallPresentation({
+      toolName: "read",
+      status: "completed",
+      error: null,
+      detail: {
+        type: "read",
+        filePath: "/tmp/repo/src/index.ts:50-90",
+        content: "console.log('hi');",
+      },
+      resolveIcon: fakeResolveIcon,
+      t: i18n.getFixedT("en"),
+    });
+
+    expect(presentation.openFileTarget).toEqual({
+      raw: "/tmp/repo/src/index.ts:50-90",
+      path: "/tmp/repo/src/index.ts",
+      lineStart: 50,
+      lineEnd: 90,
     });
   });
 
@@ -74,7 +99,7 @@ describe("tool-call presentation", () => {
       isLoadingDetails: true,
       hasDetails: false,
       canOpenDetails: true,
-      openFilePath: null,
+      openFileTarget: null,
       isPlan: false,
     });
   });
