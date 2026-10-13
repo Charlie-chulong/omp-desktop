@@ -27,6 +27,8 @@ import {
   GitPullRequest,
   Image as ImageIcon,
   ClipboardPaste,
+  Globe2,
+  Monitor,
   Paperclip,
   Quote,
 } from "lucide-react-native";
@@ -1064,6 +1066,9 @@ interface ComposerProps {
 }
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const OMP_BROWSER_USE_COMMAND = "/browser visible";
+const OMP_COMPUTER_USE_COMMAND = "/computer on";
+type OmpToolUseCommand = typeof OMP_BROWSER_USE_COMMAND | typeof OMP_COMPUTER_USE_COMMAND;
 
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
 const StableMessageInput = memo(MessageInput);
@@ -1516,6 +1521,35 @@ function ComposerContentImpl({
     hasPendingPermission,
   );
   const hasAgent = agentState.status !== null;
+
+  const supportsOmpToolCommands =
+    inputMode === "chat" && (agentState.provider ?? commandDraftConfig?.provider ?? null) === "omp";
+  const canRunOmpToolCommand =
+    supportsOmpToolCommands &&
+    isConnected &&
+    !isProcessing &&
+    !isSubmitLoading &&
+    !isAgentRunning &&
+    !isComposerLocked &&
+    (hasAgent || (userInput.trim().length === 0 && selectedAttachments.length === 0));
+  const runOmpToolCommand = useCallback(
+    (command: OmpToolUseCommand) => {
+      if (!canRunOmpToolCommand) return;
+
+      setSendError(null);
+      setIsProcessing(true);
+      void submitMessage(command, [])
+        .catch((error) => {
+          console.error("[Composer] Failed to run OMP tool command:", error);
+          setSendError(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          setIsProcessing(false);
+          focusInput();
+        });
+    },
+    [canRunOmpToolCommand, focusInput, submitMessage],
+  );
 
   const queueWriter = useMemo<QueueWriter>(
     () => ({
@@ -2077,26 +2111,46 @@ function ComposerContentImpl({
         },
       });
     }
-    items.push(
-      {
-        id: "github",
-        label: t("composer.attachments.addIssueOrPr", {
-          context: forgePresentation.changeRequestContext,
-        }),
-        icon: renderForgeAttachmentIcon(forgePresentation.icon),
-        onSelect: () => {
-          setIsGithubPickerOpen(true);
-        },
+    items.push({
+      id: "github",
+      label: t("composer.attachments.addIssueOrPr", {
+        context: forgePresentation.changeRequestContext,
+      }),
+      icon: renderForgeAttachmentIcon(forgePresentation.icon),
+      onSelect: () => {
+        setIsGithubPickerOpen(true);
       },
-      {
-        id: "file",
-        label: t("composer.attachments.addFile"),
-        icon: <ThemedPaperclip size={ICON_SIZE.md} uniProps={iconForegroundMutedMapping} />,
-        onSelect: () => {
-          void handlePickFile();
+    });
+    if (supportsOmpToolCommands) {
+      items.push(
+        {
+          id: "browser-use",
+          label: t("composer.attachments.browserUse"),
+          icon: <ThemedGlobe2 size={ICON_SIZE.md} uniProps={iconForegroundMutedMapping} />,
+          disabled: !canRunOmpToolCommand,
+          onSelect: () => {
+            runOmpToolCommand(OMP_BROWSER_USE_COMMAND);
+          },
         },
+        {
+          id: "computer-use",
+          label: t("composer.attachments.computerUse"),
+          icon: <ThemedMonitor size={ICON_SIZE.md} uniProps={iconForegroundMutedMapping} />,
+          disabled: !canRunOmpToolCommand,
+          onSelect: () => {
+            runOmpToolCommand(OMP_COMPUTER_USE_COMMAND);
+          },
+        },
+      );
+    }
+    items.push({
+      id: "file",
+      label: t("composer.attachments.addFile"),
+      icon: <ThemedPaperclip size={ICON_SIZE.md} uniProps={iconForegroundMutedMapping} />,
+      onSelect: () => {
+        void handlePickFile();
       },
-    );
+    });
     if (canPickDirectory) {
       items.push({
         id: "directory",
@@ -2110,11 +2164,14 @@ function ComposerContentImpl({
     return items;
   }, [
     canPickDirectory,
+    canRunOmpToolCommand,
     forgePresentation,
     handlePasteImage,
     handlePickDirectory,
     handlePickFile,
     handlePickImage,
+    runOmpToolCommand,
+    supportsOmpToolCommands,
     t,
   ]);
 
@@ -2567,6 +2624,8 @@ const ThemedCircleDot = withUnistyles(CircleDot);
 const ThemedPaperclip = withUnistyles(Paperclip);
 const ThemedImageIcon = withUnistyles(ImageIcon);
 const ThemedClipboardPaste = withUnistyles(ClipboardPaste);
+const ThemedGlobe2 = withUnistyles(Globe2);
+const ThemedMonitor = withUnistyles(Monitor);
 const ThemedFileText = withUnistyles(FileText);
 const ThemedFolder = withUnistyles(Folder);
 const ThemedQuote = withUnistyles(Quote);

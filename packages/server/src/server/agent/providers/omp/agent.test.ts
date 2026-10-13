@@ -2425,6 +2425,45 @@ describe("OMP agent client and session", () => {
     expect(omp.subagentUpserts().at(-1)).toEqual({ id: "child-1", status: "canceled" });
   });
 
+  test("runs Browser use as an out-of-band OMP command", async () => {
+    const omp = new OmpHarness();
+    omp.queueCommands([{ name: "browser", description: "Toggle browser mode" }]);
+    await omp.start();
+    omp.runtime().promptAck = { agentInvoked: false };
+
+    const events = await omp.runOutOfBand("/browser visible");
+
+    expect(omp.recordedPrompts()).toEqual([{ message: "/browser visible", imageCount: 0 }]);
+    expect(events).toEqual([
+      {
+        type: "timeline",
+        provider: "omp",
+        item: { type: "assistant_message", text: "Browser mode: visible" },
+      },
+    ]);
+  });
+
+  test("runs structured Computer use input as an out-of-band OMP command", async () => {
+    const omp = new OmpHarness();
+    omp.queueCommands([{ name: "computer", description: "Toggle computer use" }]);
+    await omp.start();
+    omp.runtime().promptAck = { agentInvoked: false };
+
+    const events = await omp.runOutOfBand([{ type: "text", text: "/computer on" }]);
+
+    expect(omp.recordedPrompts()).toEqual([{ message: "/computer on", imageCount: 0 }]);
+    expect(events).toEqual([
+      {
+        type: "timeline",
+        provider: "omp",
+        item: {
+          type: "assistant_message",
+          text: "Computer use enabled for this session.",
+        },
+      },
+    ]);
+  });
+
   test("manual compact completes from the RPC response without provider lifecycle events", async () => {
     const omp = new OmpHarness();
     await omp.start();

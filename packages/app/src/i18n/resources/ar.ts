@@ -155,6 +155,8 @@ export const ar: TranslationResources = {
       addDirectory: "إضافة مجلد",
       addIssueOrPr: "أضف مشكلة أو PR",
       addIssueOrPr_mr: "أضف مشكلة أو MR",
+      browserUse: "استخدام المتصفح",
+      computerUse: "استخدام الكمبيوتر",
       dropImagesHere: "إسقاط الصور هنا",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "تحرير الرسالة في قائمة الانتظار",

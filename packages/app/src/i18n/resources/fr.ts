@@ -156,6 +156,8 @@ export const fr: TranslationResources = {
       addDirectory: "Ajouter un dossier",
       addIssueOrPr: "Ajouter un problème ouPR",
       addIssueOrPr_mr: "Ajouter un problème ou MR",
+      browserUse: "Utilisation du navigateur",
+      computerUse: "Utilisation de l’ordinateur",
       dropImagesHere: "Déposez des images ici",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Modifier le message en file d'attente",

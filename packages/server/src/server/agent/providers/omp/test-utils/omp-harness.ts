@@ -9,6 +9,7 @@ import type {
   AgentPermissionResponse,
   AgentPermissionResult,
   AgentInterruptReason,
+  AgentPromptInput,
   AgentRunOptions,
   AgentSteerOptions,
   AgentSessionConfig,
@@ -518,7 +519,7 @@ export class OmpHarness {
     return this.events.flatMap((event) => (event.type === "timeline" ? [event.item] : []));
   }
 
-  async runOutOfBand(prompt: string): Promise<AgentStreamEvent[]> {
+  async runOutOfBand(prompt: AgentPromptInput): Promise<AgentStreamEvent[]> {
     const handler = this.requireSession().tryHandleOutOfBand(prompt);
     if (!handler) {
       throw new Error(`OMP did not recognize out-of-band command: ${prompt}`);

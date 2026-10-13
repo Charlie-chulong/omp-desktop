@@ -155,6 +155,8 @@ export const es: TranslationResources = {
       addDirectory: "Agregar carpeta",
       addIssueOrPr: "Agregar problema oPR",
       addIssueOrPr_mr: "Agregar problema o MR",
+      browserUse: "Uso del navegador",
+      computerUse: "Uso del ordenador",
       dropImagesHere: "Suelta imágenes aquí",
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Editar mensaje en cola",

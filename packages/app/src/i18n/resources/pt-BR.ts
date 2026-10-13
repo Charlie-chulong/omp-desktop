@@ -155,6 +155,8 @@ export const ptBR: TranslationResources = {
       addDirectory: "Adicionar pasta",
       addIssueOrPr: "Adicionar issue ou PR",
       addIssueOrPr_mr: "Adicionar issue ou MR",
+      browserUse: "Uso do navegador",
+      computerUse: "Uso do computador",
       dropImagesHere: "Solte imagens aqui",
       dropFilesHere: "Solte arquivos aqui",
       editQueuedMessage: "Editar mensagem na fila",
