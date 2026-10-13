@@ -810,7 +810,8 @@ function createOmpFeatures(
       type: "toggle",
       id: OMP_FAST_MODE_FEATURE_ID,
       label: "Fast mode",
-      tooltip: "Toggle fast mode.",
+      description: "Faster responses at higher cost.",
+      tooltip: "Requires provider fast-mode access. Additional charges may apply.",
       icon: "zap",
       value: fastMode.enabled,
     });
@@ -1030,8 +1031,15 @@ function isOmpFastModeEligibleModel(
   model: OmpModel | null | undefined,
   configuredModel: string | null | undefined,
 ): boolean {
-  const provider = model?.provider ?? parseModelReference(configuredModel ?? null)?.provider;
+  const reference = model ?? parseModelReference(configuredModel ?? null);
+  if (!reference) return false;
+  const { provider, id } = reference;
   if (provider === "openai" || provider === "openai-codex") return true;
+  if (provider === "anthropic") {
+    if (model?.api && model.api !== "anthropic-messages") return false;
+    // Direct Anthropic only: older Opus, Sonnet, and Haiku do not support fast mode.
+    return id === "claude-opus-4-8" || id === "claude-opus-5" || id === "claude-opus-5-5";
+  }
   if (!model || provider === "fireworks" || provider === "github-copilot") return false;
   const usesOpenAIWireApi =
     model.api === "openai-completions" ||
@@ -2745,12 +2753,9 @@ export class OmpAgentSession implements AgentSession {
     }
     const model = await this.runtimeSession.setModel(parsedReference.provider, parsedReference.id);
     const selectedModelId = `${model.provider}/${model.id}`;
-    this.state = {
-      ...this.state,
-      model,
-    };
     this.config.model = selectedModelId;
-    this.refreshFeatures();
+    // OMP keeps independent fast-mode state per model family.
+    await this.refreshState();
     await this.applyConfiguredFastMode();
     await this.pinInitialOAuthAccount();
     if (this.hasConversationUserMessage && previousModelId !== selectedModelId) {
