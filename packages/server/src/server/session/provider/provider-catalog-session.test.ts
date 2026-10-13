@@ -9,9 +9,9 @@ import { findByType } from "../../test-utils/session-stubs.js";
 import type { SessionOutboundMessage } from "../../messages.js";
 import {
   GLOBAL_PROVIDER_SNAPSHOT_KEY,
-  type ProviderSnapshotManager,
+  ProviderSnapshotManager,
 } from "../../agent/provider-snapshot-manager.js";
-import type { ProviderSnapshotEntry } from "../../agent/agent-sdk-types.js";
+import type { AgentClient, ProviderSnapshotEntry } from "../../agent/agent-sdk-types.js";
 import type { ProviderUsageService } from "../../../services/quota-fetcher/service.js";
 import { expandProviderSnapshot } from "@omp-desktop/protocol/provider-snapshot-codec";
 
@@ -119,21 +119,70 @@ describe("ProviderCatalogSession", () => {
     expect(pull?.payload.entries).toEqual(push?.payload.entries);
   });
 
-  it("returns the canonical cwd used by snapshot updates", async () => {
-    const getSnapshot = vi.fn((_cwd?: string) => makeEntries());
-    const { subsystem, emitted } = makeSubsystem({
-      snapshot: { getSnapshot },
+  it("shares configured models across new projects and refreshes the global catalog", async () => {
+    let revision = 1;
+    const manager = new ProviderSnapshotManager({
+      logger: pino({ level: "silent" }),
+      providerOverrides: { codex: { enabled: false }, pi: { enabled: false } },
+      extraClients: {
+        omp: createStub<AgentClient>({
+          provider: "omp",
+          isAvailable: async () => true,
+          fetchCatalog: async (options: { scope: string }) => ({
+            models:
+              options.scope === "global"
+                ? [{ provider: "omp", id: `shared:${revision}`, label: "Shared" }]
+                : [],
+            modes: [],
+          }),
+        }),
+      },
     });
-
-    await subsystem.handleGetProvidersSnapshotRequest({
-      type: "get_providers_snapshot_request",
-      requestId: "canonical-cwd",
-      cwd: "/repo/./sdk",
+    const emitted: SessionOutboundMessage[] = [];
+    const subsystem = new ProviderCatalogSession({
+      host: createStub<ProviderCatalogSessionHost>({
+        emit: (message: SessionOutboundMessage) => emitted.push(message),
+        isProviderVisibleToClient: () => true,
+        supportsCustomModeIcons: () => true,
+        supportsCompactProviderSnapshots: () => false,
+      }),
+      providerSnapshotManager: manager,
+      providerUsageService: createStub<ProviderUsageService>({}),
+      logger: pino({ level: "silent" }),
     });
-
-    const canonicalCwd = getSnapshot.mock.calls[0]?.[0];
-    expect(canonicalCwd).toEqual(expect.any(String));
-    expect(findByType(emitted, "get_providers_snapshot_response")?.payload.cwd).toBe(canonicalCwd);
+    try {
+      subsystem.start();
+      await manager.warmUpSnapshot({ providers: ["omp"] });
+      for (const cwd of ["/tmp/project-a", "/tmp/project-b"]) {
+        emitted.length = 0;
+        await subsystem.handleGetProvidersSnapshotRequest({
+          type: "get_providers_snapshot_request",
+          cwd,
+          requestId: cwd,
+        });
+        const response = findByType(emitted, "get_providers_snapshot_response");
+        expect(response?.payload.entries.find((entry) => entry.provider === "omp")).toMatchObject({
+          status: "ready",
+          models: [{ id: "shared:1" }],
+        });
+      }
+      revision = 2;
+      await subsystem.handleRefreshProvidersSnapshotRequest({
+        type: "refresh_providers_snapshot_request",
+        cwd: "/tmp/project-b",
+        providers: ["omp"],
+        requestId: "refresh",
+      });
+      expect(await manager.resolveDefaultModel({ provider: "omp" })).toBe("shared:2");
+      const update = emitted.findLast((message) => message.type === "providers_snapshot_update");
+      expect(update?.payload.entries.find((entry) => entry.provider === "omp")).toMatchObject({
+        status: "ready",
+        models: [{ id: "shared:2" }],
+      });
+    } finally {
+      subsystem.dispose();
+      manager.destroy();
+    }
   });
 
   it("pushes the compact encoding to capable clients", () => {
@@ -221,8 +270,7 @@ describe("ProviderCatalogSession", () => {
   });
 
   it("reports a disabled provider on list_provider_models without warming the snapshot", async () => {
-    // warmUpSnapshotForCwd is intentionally unstubbed: createStub throws if it is called,
-    // so the disabled short-circuit is proven by the absence of a throw.
+    // warmUpSnapshot is intentionally unstubbed: disabled providers must not warm.
     const { subsystem, emitted } = makeSubsystem({
       snapshot: { getSnapshot: () => [{ provider: "codex", status: "loading", enabled: false }] },
     });
@@ -269,25 +317,6 @@ describe("ProviderCatalogSession", () => {
     expect(response?.payload.models?.map((model) => model.id)).toEqual(["gpt-5.4"]);
   });
 
-  it("preserves missing cwd as the semantic global snapshot for model list reads", async () => {
-    const getSnapshot = vi.fn(() => [{ provider: "codex", status: "loading", enabled: true }]);
-    const warmUpSnapshotForCwd = vi.fn(async () => {});
-    const { subsystem } = makeSubsystem({
-      snapshot: { getSnapshot, warmUpSnapshotForCwd },
-    });
-
-    await subsystem.handleListProviderModelsRequest({
-      type: "list_provider_models_request",
-      provider: "codex",
-      requestId: "m-global",
-    });
-
-    expect(getSnapshot).toHaveBeenCalledWith(undefined);
-    expect(warmUpSnapshotForCwd).toHaveBeenCalledWith({
-      cwd: undefined,
-      providers: ["codex"],
-    });
-  });
   it("acknowledges provider login cancellation after the runtime flow closes", async () => {
     const cancelOmpProviderLogin = vi.fn(async () => true);
     const { subsystem, emitted } = makeSubsystem({

@@ -57,10 +57,9 @@ export interface CachedProviderSnapshot extends StoredProviderSnapshot {
 }
 
 export interface ProviderSnapshotCache {
-  read(serverId: string, cwd: string | null): Promise<CachedProviderSnapshot | null>;
+  read(serverId: string): Promise<CachedProviderSnapshot | null>;
   write(input: {
     serverId: string;
-    cwd: string | null;
     hash: string;
     generatedAt: string;
     compactSnapshot: CompactProviderSnapshot;
@@ -74,8 +73,9 @@ export class ProviderSnapshotCacheMissError extends Error {
   }
 }
 
-function cacheKey(serverId: string, cwd: string | null): string {
-  return `${CACHE_KEY_PREFIX}:${JSON.stringify([serverId, cwd])}`;
+function cacheKey(serverId: string): string {
+  // Keep the persisted home slot; project paths no longer partition the catalog.
+  return `${CACHE_KEY_PREFIX}:${JSON.stringify([serverId, null])}`;
 }
 
 function storedBytes(key: string, value: string): number {
@@ -160,13 +160,12 @@ export function createProviderSnapshotCache(
 
   async function writeSnapshot(input: {
     serverId: string;
-    cwd: string | null;
     hash: string;
     generatedAt: string;
     compactSnapshot: CompactProviderSnapshot;
   }): Promise<void> {
     const currentIndex = await ensureCacheIndex();
-    const key = cacheKey(input.serverId, input.cwd);
+    const key = cacheKey(input.serverId);
     const stored = StoredProviderSnapshotSchema.safeParse({
       version: CACHE_VERSION,
       hash: input.hash,
@@ -206,11 +205,11 @@ export function createProviderSnapshotCache(
   }
 
   return {
-    async read(serverId, cwd) {
+    async read(serverId) {
       try {
         return await runSerialized(async () => {
           const currentIndex = await ensureCacheIndex();
-          const key = cacheKey(serverId, cwd);
+          const key = cacheKey(serverId);
           const value = await storage.getItem(key);
           if (value === null) return null;
           try {

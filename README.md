@@ -348,7 +348,15 @@ disabled; releasing a display number does not reactivate or reuse an old credent
 
 ## Model catalog refresh
 
-Updating OMP, saving its provider configuration, or logging in or out refreshes the affected provider's catalog globally and in every previously loaded workspace. Workspace catalogs remain workspace-scoped. Open clients receive the refreshed result, or a terminal unavailable/error status, without reopening the model picker or reloading the application.
+Model providers, credentials, and the model catalog are shared by all projects and conversations
+on the same host, using the active OMP configuration/profile. New conversations and project
+switches reuse that host's catalog instead of loading an empty project-specific provider list.
+The project's working directory still controls where the agent runs; it does not scope provider
+configuration. Different hosts retain separate catalogs.
+
+Updating OMP, saving its provider configuration, or logging in or out refreshes the affected
+provider's global catalog. Open clients receive the refreshed result, or a terminal
+unavailable/error status, without reopening the model picker or reloading the application.
 
 Browser OAuth refreshes these catalogs as soon as OMP confirms authorization; clicking
 **Complete sign-in** again is not required. The sign-in panel closes automatically and the
@@ -630,8 +638,9 @@ packages/desktop/release/mac-arm64/OMP Desktop.app
 Desktop packaging keeps build/test-only dependencies out of the production dependency graph and
 excludes third-party TypeScript sources, declarations, and MCP SDK examples from the ASAR.
 Standard packages retain the bundled OMP executable, runtime workers, shell integration, and
-the target platform's native bindings. Windows ConPTY files are loaded from the matching
-node-pty prebuild, not its duplicate `third_party` directory.
+the target platform's native bindings. The early OMP catalog hook is loaded through an encoded
+module URL, so installation directories containing spaces remain valid. Windows ConPTY files are
+loaded from the matching node-pty prebuild, not its duplicate `third_party` directory.
 
 The Electron language allowlists retain all nine application languages and common regional
 variants. macOS also retains each selected language's grammatical-gender `.lproj` variants.

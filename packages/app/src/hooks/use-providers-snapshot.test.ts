@@ -97,37 +97,19 @@ function createCache(initial: CachedProviderSnapshot | null = null): ProviderSna
 }
 
 describe("providersSnapshotQueryKey", () => {
-  it("uses separate keys for home and workspace scopes", () => {
-    expect(providersSnapshotQueryKey(serverId)).toEqual(["providersSnapshot", serverId, "home"]);
-    expect(providersSnapshotQueryKey(serverId, "/repo-a")).toEqual([
-      "providersSnapshot",
-      serverId,
-      "cwd",
-      "/repo-a",
-    ]);
+  it("uses one catalog key per host", () => {
+    expect(providersSnapshotQueryKey(serverId)).toEqual(["providersSnapshot", serverId]);
+    expect(providersSnapshotQueryKey("server-2")).not.toEqual(providersSnapshotQueryKey(serverId));
   });
 });
 
 describe("fetchProvidersSnapshot", () => {
-  it("sends no cwd for the home scope", async () => {
+  it("requests the global catalog without a workspace cwd", async () => {
     const client = createClient({ snapshots: [providersSnapshot([])] });
 
-    await fetchProvidersSnapshot({ client, serverId, cwd: null, cache: createCache() });
+    await fetchProvidersSnapshot({ client, serverId, cache: createCache() });
 
     expect(client.getCalls).toEqual([{}]);
-  });
-
-  it("sends the workspace cwd for the workspace scope", async () => {
-    const client = createClient({ snapshots: [providersSnapshot([])] });
-
-    await fetchProvidersSnapshot({
-      client,
-      serverId,
-      cwd: "/repo-a",
-      cache: createCache(),
-    });
-
-    expect(client.getCalls).toEqual([{ cwd: "/repo-a" }]);
   });
 
   it("reuses a cached snapshot when the daemon reports its hash unchanged", async () => {
@@ -155,11 +137,10 @@ describe("fetchProvidersSnapshot", () => {
     const snapshot = await fetchProvidersSnapshot({
       client,
       serverId,
-      cwd: "/repo-a",
       cache,
     });
 
-    expect(client.getCalls).toEqual([{ cwd: "/repo-a", ifNoneMatch: "snapshot-hash" }]);
+    expect(client.getCalls).toEqual([{ ifNoneMatch: "snapshot-hash" }]);
     expect(snapshot.entries).toBe(entries);
     expect(cache.writes).toEqual([]);
   });
@@ -180,12 +161,11 @@ describe("fetchProvidersSnapshot", () => {
       ],
     });
 
-    await fetchProvidersSnapshot({ client, serverId, cwd: "/repo-a", cache });
+    await fetchProvidersSnapshot({ client, serverId, cache });
 
     expect(cache.writes).toEqual([
       {
         serverId,
-        cwd: "/repo-a",
         hash: "next-hash",
         generatedAt: "2026-01-02T00:00:00.000Z",
         compactSnapshot,
@@ -209,7 +189,6 @@ describe("fetchProvidersSnapshot", () => {
     const snapshot = await fetchProvidersSnapshot({
       client,
       serverId,
-      cwd: "/repo-a",
       cache,
     });
 
@@ -250,7 +229,6 @@ describe("fetchProvidersSnapshot", () => {
     const snapshot = await fetchProvidersSnapshot({
       client,
       serverId,
-      cwd: "/repo-a",
       cache,
     });
 
@@ -272,7 +250,7 @@ describe("refreshAndApplyProvidersSnapshot", () => {
     queryClient = new QueryClient();
   });
 
-  it("refreshes then re-fetches the home snapshot and writes it into the home query cache", async () => {
+  it("refreshes then writes the global catalog used by every project", async () => {
     const client = createClient({
       snapshots: [providersSnapshot([codexEntry("ready", [readyCodexModel])])],
     });
@@ -281,7 +259,6 @@ describe("refreshAndApplyProvidersSnapshot", () => {
       client,
       queryClient,
       serverId,
-      cwd: null,
       providers: ["codex"],
       cache: createCache(),
     });
@@ -293,67 +270,30 @@ describe("refreshAndApplyProvidersSnapshot", () => {
     );
   });
 
-  it("refreshes then re-fetches the workspace snapshot with the cwd preserved", async () => {
+  it("refreshes only the selected host without invalidating the applied catalog", async () => {
     const client = createClient({
       snapshots: [providersSnapshot([codexEntry("ready", [readyCodexModel])])],
     });
+    const otherHostKey = providersSnapshotQueryKey("server-2");
+    queryClient.setQueryData(otherHostKey, providersSnapshot([]));
 
     await refreshAndApplyProvidersSnapshot({
       client,
       queryClient,
       serverId,
-      cwd: "/repo-a",
-      providers: ["codex"],
       cache: createCache(),
     });
 
-    expect(client.refreshCalls).toEqual([{ cwd: "/repo-a", providers: ["codex"] }]);
-    expect(client.getCalls).toEqual([{ cwd: "/repo-a" }]);
-    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId, "/repo-a"))).toEqual(
+    expect(client.refreshCalls).toEqual([{}]);
+    expect(client.getCalls).toEqual([{}]);
+    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId))).toEqual(
       providersSnapshot([codexEntry("ready", [readyCodexModel])]),
     );
-  });
-
-  it("invalidates every scope under the server when refreshing the home snapshot", async () => {
-    const client = createClient({ snapshots: [providersSnapshot([])] });
-    queryClient.setQueryData(providersSnapshotQueryKey(serverId, "/repo-a"), providersSnapshot([]));
-    queryClient.setQueryData(providersSnapshotQueryKey(serverId, "/repo-b"), providersSnapshot([]));
-
-    await refreshAndApplyProvidersSnapshot({
-      client,
-      queryClient,
-      serverId,
-      cwd: null,
-      cache: createCache(),
-    });
-
-    expect(
-      queryClient.getQueryState(providersSnapshotQueryKey(serverId, "/repo-a"))?.isInvalidated,
-    ).toBe(true);
-    expect(
-      queryClient.getQueryState(providersSnapshotQueryKey(serverId, "/repo-b"))?.isInvalidated,
-    ).toBe(true);
-  });
-
-  it("does not invalidate sibling scopes when refreshing a workspace snapshot", async () => {
-    const client = createClient({ snapshots: [providersSnapshot([])] });
-    queryClient.setQueryData(providersSnapshotQueryKey(serverId), providersSnapshot([]));
-    queryClient.setQueryData(providersSnapshotQueryKey(serverId, "/repo-b"), providersSnapshot([]));
-
-    await refreshAndApplyProvidersSnapshot({
-      client,
-      queryClient,
-      serverId,
-      cwd: "/repo-a",
-      cache: createCache(),
-    });
-
     expect(queryClient.getQueryState(providersSnapshotQueryKey(serverId))?.isInvalidated).toBe(
       false,
     );
-    expect(
-      queryClient.getQueryState(providersSnapshotQueryKey(serverId, "/repo-b"))?.isInvalidated,
-    ).toBe(false);
+    expect(queryClient.getQueryData(otherHostKey)).toEqual(providersSnapshot([]));
+    expect(queryClient.getQueryState(otherHostKey)?.isInvalidated).toBe(false);
   });
 
   it("invalidates cached agent commands when refreshing providers", async () => {
@@ -368,7 +308,6 @@ describe("refreshAndApplyProvidersSnapshot", () => {
       client,
       queryClient,
       serverId,
-      cwd: "/repo-a",
       cache: createCache(),
     });
 
@@ -394,7 +333,7 @@ describe("applyProvidersSnapshotUpdate", () => {
     };
   }
 
-  it("routes updates to the home query cache when the message carries no cwd", () => {
+  it("routes global pushes to the catalog shared by every project", () => {
     applyProvidersSnapshotUpdate({
       serverId,
       queryClient,
@@ -408,8 +347,9 @@ describe("applyProvidersSnapshotUpdate", () => {
     });
   });
 
-  it("routes workspace updates to the matching scope without touching siblings", () => {
-    queryClient.setQueryData(providersSnapshotQueryKey(serverId, "/repo-b"), providersSnapshot([]));
+  it("uses the host catalog even when the protocol payload contains a cwd", () => {
+    const otherHostKey = providersSnapshotQueryKey("server-2");
+    queryClient.setQueryData(otherHostKey, providersSnapshot([]));
 
     applyProvidersSnapshotUpdate({
       serverId,
@@ -417,14 +357,12 @@ describe("applyProvidersSnapshotUpdate", () => {
       message: updateMessage([codexEntry("ready", [readyCodexModel])], "/repo-a"),
     });
 
-    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId, "/repo-a"))).toEqual({
+    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId))).toEqual({
       entries: [codexEntry("ready", [readyCodexModel])],
       generatedAt: "2026-01-01T00:00:01.000Z",
       requestId: "providers_snapshot_update",
     });
-    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId, "/repo-b"))).toEqual(
-      providersSnapshot([]),
-    );
+    expect(queryClient.getQueryData(otherHostKey)).toEqual(providersSnapshot([]));
   });
 
   it("persists compact push updates", () => {
@@ -440,7 +378,6 @@ describe("applyProvidersSnapshotUpdate", () => {
     expect(cache.writes).toEqual([
       {
         serverId,
-        cwd: "/repo-a",
         hash: "push-hash",
         generatedAt: "2026-01-01T00:00:01.000Z",
         compactSnapshot,
@@ -449,7 +386,7 @@ describe("applyProvidersSnapshotUpdate", () => {
   });
 
   it("keeps visible models across loading and failed push updates", () => {
-    const queryKey = providersSnapshotQueryKey(serverId, "/repo-a");
+    const queryKey = providersSnapshotQueryKey(serverId);
     queryClient.setQueryData(queryKey, providersSnapshot([codexEntry("ready", [readyCodexModel])]));
 
     applyProvidersSnapshotUpdate({
@@ -476,21 +413,22 @@ describe("applyProvidersSnapshotUpdate", () => {
     });
   });
 
-  it("applies Windows daemon updates to app-normalized workspace paths", () => {
-    const workspaceCwd = "C:/Users/Ezekiel Bulver/project";
-    const daemonCwd = "C:\\Users\\Ezekiel Bulver\\project";
+  it("applies Windows project pushes to the same global catalog", () => {
     queryClient.setQueryData(
-      providersSnapshotQueryKey(serverId, workspaceCwd),
+      providersSnapshotQueryKey(serverId),
       providersSnapshot([codexEntry("loading")]),
     );
 
     applyProvidersSnapshotUpdate({
       serverId,
       queryClient,
-      message: updateMessage([codexEntry("ready", [readyCodexModel])], daemonCwd),
+      message: updateMessage(
+        [codexEntry("ready", [readyCodexModel])],
+        "C:\\Users\\Ezekiel Bulver\\project",
+      ),
     });
 
-    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId, workspaceCwd))).toEqual({
+    expect(queryClient.getQueryData(providersSnapshotQueryKey(serverId))).toEqual({
       entries: [codexEntry("ready", [readyCodexModel])],
       generatedAt: "2026-01-01T00:00:01.000Z",
       requestId: "providers_snapshot_update",

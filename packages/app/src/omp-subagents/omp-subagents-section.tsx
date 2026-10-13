@@ -91,7 +91,7 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
   const { t } = useTranslation();
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
-  const { entries, isLoading: catalogLoading } = useProvidersSnapshot(serverId, { cwd: null });
+  const { entries, isLoading: catalogLoading } = useProvidersSnapshot(serverId);
   const isSupported = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.ompSubagentSettings === true,
   );

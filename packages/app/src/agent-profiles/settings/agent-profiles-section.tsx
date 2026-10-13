@@ -30,7 +30,7 @@ export function AgentProfilesSection({ serverId }: { serverId: string }): ReactE
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const { profiles, isSupported, saveProfiles } = useAgentProfiles(serverId);
-  const { entries } = useProvidersSnapshot(serverId, { cwd: null });
+  const { entries } = useProvidersSnapshot(serverId);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   const handleAddOpen = useCallback(() => setEditTarget({ mode: "create" }), []);

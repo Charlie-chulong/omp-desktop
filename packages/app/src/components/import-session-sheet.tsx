@@ -273,7 +273,6 @@ export function ImportSessionSheet({
   const { theme } = useUnistyles();
 
   const { entries: snapshotEntries, supportsSnapshot } = useProvidersSnapshot(serverId, {
-    cwd,
     enabled: visible,
   });
   const supportsWorkspaceTarget = useHostFeature(serverId, "importSessionWorkspaceTarget");

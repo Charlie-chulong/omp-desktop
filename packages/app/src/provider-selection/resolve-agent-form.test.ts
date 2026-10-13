@@ -1254,7 +1254,7 @@ describe("resolveAgentForm", () => {
           label: "Codex",
           description: "",
           defaultModeId: "auto",
-          modes: [],
+          modes: TEST_CODEX_DEFINITION.modes,
         },
         {
           provider: "claude",
@@ -1263,16 +1263,50 @@ describe("resolveAgentForm", () => {
           label: "Claude",
           description: "",
           defaultModeId: "default",
-          modes: [],
+          modes: TEST_CLAUDE_DEFINITION.modes,
+        },
+        {
+          provider: "pi",
+          status: "ready",
+          enabled: false,
+          modes: TEST_CODEX_DEFINITION.modes,
         },
       ];
       const map = buildProviderDefinitionMapForStatuses({
         snapshotEntries: entries,
-        providerDefinitions: [TEST_CODEX_DEFINITION, TEST_CLAUDE_DEFINITION],
+        providerDefinitions: [TEST_CODEX_DEFINITION, TEST_CLAUDE_DEFINITION, TEST_PI_DEFINITION],
         statuses: new Set<ProviderSnapshotEntry["status"]>(["ready"]),
       });
 
       expect([...map.keys()]).toEqual(["codex"]);
+    });
+
+    it("does not resolve an import-only provider as a new-agent target", () => {
+      const entries: ProviderSnapshotEntry[] = [
+        {
+          provider: "codex",
+          status: "ready",
+          enabled: true,
+          modes: [],
+          models: CODEX_MODELS,
+        },
+      ];
+      const allowedProviderMap = buildProviderDefinitionMapForStatuses({
+        snapshotEntries: entries,
+        providerDefinitions: [TEST_CODEX_DEFINITION],
+        statuses: new Set<ProviderSnapshotEntry["status"]>(["ready"]),
+      });
+      const resolved = resolveFormState(
+        { serverId: "host-a", workingDir: "/repo", provider: "codex" },
+        null,
+        CODEX_MODELS,
+        INITIAL_USER_MODIFIED,
+        makeState().form,
+        allowedProviderMap,
+      );
+
+      expect(resolved.provider).toBeNull();
+      expect(resolved.workingDir).toBe("/repo");
     });
   });
 });

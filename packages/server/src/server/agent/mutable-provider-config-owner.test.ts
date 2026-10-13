@@ -15,15 +15,15 @@ import type {
   ProviderSnapshotEntry,
 } from "./agent-sdk-types.js";
 import { attachMutableProviderConfigOwner } from "./mutable-provider-config-owner.js";
-import { ProviderSnapshotManager } from "./provider-snapshot-manager.js";
+import {
+  GLOBAL_PROVIDER_SNAPSHOT_KEY,
+  ProviderSnapshotManager,
+} from "./provider-snapshot-manager.js";
 
 const tempDirs: string[] = [];
 const CONTROLLED_PROVIDERS = {
-  claude: { enabled: false },
   codex: { enabled: true },
-  copilot: { enabled: false },
   omp: { enabled: false },
-  opencode: { enabled: false },
   pi: { enabled: false },
 } as const;
 
@@ -68,10 +68,6 @@ function recordCodexEvent(events: string[]): (entries: ProviderSnapshotEntry[]) 
   };
 }
 
-function getCodexSnapshot(manager: ProviderSnapshotManager, cwd: string) {
-  return manager.getSnapshot(cwd).find((entry) => entry.provider === "codex");
-}
-
 function mutableConfig(persisted: PersistedConfig): MutableDaemonConfig {
   return {
     relay: { enabled: false },
@@ -104,8 +100,7 @@ describe("mutable provider config owner", () => {
       logger: createTestLogger(),
       providerOverrides: { codex: { enabled: true } },
     });
-    const cwd = path.resolve("/tmp/provider-config-owner");
-    manager.getSnapshot(cwd);
+    manager.getSnapshot();
     const events: string[] = [];
     manager.on("change", (_entries, changedCwd) => events.push(changedCwd));
     let agentManagerState = manager.getAgentManagerProviderState();
@@ -123,7 +118,7 @@ describe("mutable provider config owner", () => {
 
     try {
       store.patch({ providers: { codex: { enabled: false } } });
-      expect(events).toEqual([cwd]);
+      expect(events).toEqual([GLOBAL_PROVIDER_SNAPSHOT_KEY]);
       expect(agentManagerState.providerDefinitions.codex).toMatchObject({ enabled: false });
 
       events.length = 0;
@@ -174,7 +169,7 @@ describe("mutable provider config owner", () => {
       logger: createTestLogger(),
       providerOverrides: { codex: { enabled: true } },
     });
-    manager.getSnapshot("/tmp/provider-config-owner");
+    manager.getSnapshot();
     const events: string[] = [];
     manager.on("change", (_entries, cwd) => events.push(cwd));
     let registryUpdates = 0;
@@ -229,7 +224,6 @@ describe("mutable provider config owner", () => {
         ),
       },
     });
-    const cwd = path.resolve("/tmp/provider-config-commit");
     const events: string[] = [];
     manager.on("change", recordCodexEvent(events));
     const unsubscribe = attachMutableProviderConfigOwner({
@@ -239,7 +233,7 @@ describe("mutable provider config owner", () => {
     });
 
     try {
-      const originalRead = manager.getProvider({ cwd, provider: "codex", wait: true });
+      const originalRead = manager.getProvider({ provider: "codex", wait: true });
       await vi.waitFor(() => expect(catalogResolvers).toHaveLength(1));
 
       store.patch({ providers: { codex: { enabled: true, label: "Reloaded Codex" } } });
@@ -252,7 +246,7 @@ describe("mutable provider config owner", () => {
 
       catalogResolvers[1]?.(catalog("current-model"));
       await vi.waitFor(() =>
-        expect(getCodexSnapshot(manager, cwd)).toMatchObject({
+        expect(manager.getSnapshot().find((entry) => entry.provider === "codex")).toMatchObject({
           status: "ready",
           models: [{ id: "current-model" }],
         }),
@@ -278,7 +272,6 @@ describe("mutable provider config owner", () => {
         ),
       },
     });
-    const cwd = path.resolve("/tmp/provider-config-rollback");
     const events: string[] = [];
     manager.on("change", recordCodexEvent(events));
     const unsubscribe = attachMutableProviderConfigOwner({
@@ -291,7 +284,7 @@ describe("mutable provider config owner", () => {
     });
 
     try {
-      const originalRead = manager.getProvider({ cwd, provider: "codex", wait: true });
+      const originalRead = manager.getProvider({ provider: "codex", wait: true });
       await vi.waitFor(() => expect(catalogResolvers).toHaveLength(1));
 
       expect(() =>
@@ -304,7 +297,7 @@ describe("mutable provider config owner", () => {
         status: "ready",
         models: [{ id: "original-model" }],
       });
-      expect(getCodexSnapshot(manager, cwd)).toMatchObject({
+      expect(manager.getSnapshot().find((entry) => entry.provider === "codex")).toMatchObject({
         status: "ready",
         models: [{ id: "original-model" }],
       });

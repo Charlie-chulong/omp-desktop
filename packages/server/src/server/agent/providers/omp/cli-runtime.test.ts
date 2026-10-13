@@ -2,13 +2,18 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 import pino from "pino";
 import { describe, expect, test, vi } from "vitest";
 
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
 import { OmpAgentSession } from "./agent.js";
 import { OmpHistoryMapper } from "./message-history.js";
-import { OmpCliRuntime, resolveOmpBackgroundJobsExtensionPath } from "./cli-runtime.js";
+import {
+  OmpCliRuntime,
+  resolveOmpBackgroundJobsExtensionPath,
+  resolveOmpCodexCatalogPreloadPath,
+} from "./cli-runtime.js";
 import type { OmpRuntimeLaunch } from "./runtime.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 
@@ -114,6 +119,26 @@ describe("OMP CLI runtime", () => {
     expect(resolveOmpBackgroundJobsExtensionPath(moduleUrl, () => true)).toBe(
       "/Applications/OMP Desktop.app/Contents/Resources/app.asar.unpacked/node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/background-jobs-extension.js",
     );
+  });
+
+  test("keeps a packaged preload path out of whitespace-tokenized BUN_OPTIONS", async () => {
+    const child = createOmpChild();
+    const launches: OmpRuntimeLaunch[] = [];
+    const session = await createRuntime(child, launches).startSession({
+      cwd: "/workspace/project",
+      env: { BUN_OPTIONS: "--inspect" },
+    });
+
+    const launch = launches[0]!;
+    const preloadPath = resolveOmpCodexCatalogPreloadPath();
+    expect(launch.env).toMatchObject({
+      BUN_OPTIONS:
+        "--inspect --preload=data:text/javascript,await%20import(process%2Eenv%2EOMP_DESKTOP_CODEX_CATALOG_PRELOAD_URL)",
+      OMP_DESKTOP_CODEX_CATALOG_PRELOAD_URL: pathToFileURL(preloadPath).href,
+    });
+    expect(launch.env?.BUN_OPTIONS).not.toContain(preloadPath);
+
+    await session.close();
   });
 
   test("rejects custom tool flags in command and session options while a policy is set", async () => {

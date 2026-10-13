@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
@@ -51,107 +49,77 @@ function observeSnapshots(manager: ProviderSnapshotManager) {
 }
 
 describe("ProviderSnapshotManager settings refresh", () => {
-  test("publishes refreshed catalogs for every cached scope without another workspace read", async () => {
-    const workspaces = [resolve("snapshot-project"), resolve(homedir())];
+  test("publishes refreshed global models while retaining unrefreshed providers", async () => {
     let revision = 1;
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: { codex: { enabled: false } },
       extraClients: {
-        omp: createCatalogClient("omp", async (options) =>
-          catalog(`${options.scope === "global" ? "global" : options.cwd}:${revision}`),
-        ),
+        omp: createCatalogClient("omp", async () => catalog(`global:${revision}`)),
         pi: createCatalogClient("pi", async () => catalog(`import:${revision}`, "pi")),
       },
     });
     const updates = observeSnapshots(manager);
 
     try {
-      for (const cwd of [undefined, ...workspaces]) {
-        await manager.warmUpSnapshotForCwd({ cwd, providers: ["omp", "pi"] });
-      }
+      await manager.warmUpSnapshot({ providers: ["omp", "pi"] });
       updates.clear();
       revision = 2;
 
       await manager.refreshSettingsSnapshot({ providers: ["omp"] });
 
-      // Read only pushed snapshots: a getSnapshot/listModels call would warm a
-      // stranded workspace and conceal the regression seen by existing clients.
-      for (const cwd of [GLOBAL_PROVIDER_SNAPSHOT_KEY, ...workspaces]) {
-        const history = updates.get(cwd) ?? [];
-        expect(history[0]?.find((entry) => entry.provider === "omp")?.status).toBe("loading");
-        const latest = history.at(-1);
-        expect(latest?.find((entry) => entry.provider === "omp")).toMatchObject({
-          status: "ready",
-          models: [{ id: `${cwd === GLOBAL_PROVIDER_SNAPSHOT_KEY ? "global" : cwd}:2` }],
-        });
-        expect(latest?.find((entry) => entry.provider === "pi")).toMatchObject({
-          status: "ready",
-          models: [{ id: "import:1" }],
-        });
-      }
-      expect([...updates.keys()].sort()).toEqual(
-        [GLOBAL_PROVIDER_SNAPSHOT_KEY, ...workspaces].sort(),
-      );
+      const history = updates.get(GLOBAL_PROVIDER_SNAPSHOT_KEY) ?? [];
+      expect(history[0]?.find((entry) => entry.provider === "omp")?.status).toBe("loading");
+      const latest = history.at(-1);
+      expect(latest?.find((entry) => entry.provider === "omp")).toMatchObject({
+        status: "ready",
+        models: [{ id: "global:2" }],
+      });
+      expect(latest?.find((entry) => entry.provider === "pi")).toMatchObject({
+        status: "ready",
+        models: [{ id: "import:1" }],
+      });
     } finally {
       manager.destroy();
     }
   });
 
-  test("publishes a workspace failure without leaving it loading or blocking healthy scopes", async () => {
-    const failedCwd = resolve("unavailable-snapshot-project");
-    const healthyCwd = resolve("healthy-snapshot-project");
-    let failWorkspace = false;
+  test("publishes a catalog failure without leaving the provider loading", async () => {
+    let failCatalog = false;
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: { pi: { enabled: false }, codex: { enabled: false } },
       extraClients: {
-        omp: createCatalogClient("omp", async (options) => {
-          if (failWorkspace && options.scope === "workspace" && options.cwd === failedCwd) {
-            throw new Error("Workspace catalog unavailable");
-          }
-          return catalog(failWorkspace ? "updated-model" : "original-model");
+        omp: createCatalogClient("omp", async () => {
+          if (failCatalog) throw new Error("Global catalog unavailable");
+          return catalog("original-model");
         }),
       },
     });
     const updates = observeSnapshots(manager);
 
     try {
-      for (const cwd of [failedCwd, healthyCwd]) {
-        await manager.warmUpSnapshotForCwd({ cwd, providers: ["omp"] });
-      }
+      await manager.warmUpSnapshot({ providers: ["omp"] });
       updates.clear();
-      failWorkspace = true;
+      failCatalog = true;
 
       await manager.refreshSettingsSnapshot({ providers: ["omp"] });
 
       expect(
         updates
-          .get(failedCwd)
+          .get(GLOBAL_PROVIDER_SNAPSHOT_KEY)
           ?.at(-1)
           ?.find((entry) => entry.provider === "omp"),
       ).toMatchObject({
         status: "error",
-        error: "Workspace catalog unavailable",
+        error: "Global catalog unavailable",
       });
-      for (const cwd of [GLOBAL_PROVIDER_SNAPSHOT_KEY, healthyCwd]) {
-        expect(
-          updates
-            .get(cwd)
-            ?.at(-1)
-            ?.find((entry) => entry.provider === "omp"),
-        ).toMatchObject({
-          status: "ready",
-          models: [{ id: "updated-model" }],
-        });
-      }
     } finally {
       manager.destroy();
     }
   });
 
-  test("replaces an in-flight workspace load and ignores its late catalog", async () => {
-    const cwd = resolve("pending-snapshot-project");
+  test("replaces an in-flight load and ignores its late catalog", async () => {
     const started = Promise.withResolvers<void>();
     const oldCatalog = Promise.withResolvers<ProviderCatalog>();
     const manager = new ProviderSnapshotManager({
@@ -159,7 +127,7 @@ describe("ProviderSnapshotManager settings refresh", () => {
       providerOverrides: { pi: { enabled: false }, codex: { enabled: false } },
       extraClients: {
         omp: createCatalogClient("omp", async (options) => {
-          if (options.scope === "workspace" && !options.force) {
+          if (!options.force) {
             started.resolve();
             return oldCatalog.promise;
           }
@@ -168,7 +136,7 @@ describe("ProviderSnapshotManager settings refresh", () => {
       },
     });
     const updates = observeSnapshots(manager);
-    const initialLoad = manager.warmUpSnapshotForCwd({ cwd, providers: ["omp"] });
+    const initialLoad = manager.warmUpSnapshot({ providers: ["omp"] });
 
     try {
       await started.promise;
@@ -178,7 +146,7 @@ describe("ProviderSnapshotManager settings refresh", () => {
 
       expect(
         updates
-          .get(cwd)
+          .get(GLOBAL_PROVIDER_SNAPSHOT_KEY)
           ?.at(-1)
           ?.find((entry) => entry.provider === "omp"),
       ).toMatchObject({
@@ -187,7 +155,7 @@ describe("ProviderSnapshotManager settings refresh", () => {
       });
       oldCatalog.resolve(catalog("obsolete-model"));
       await initialLoad;
-      expect(manager.getSnapshot(cwd).find((entry) => entry.provider === "omp")).toMatchObject({
+      expect(manager.getSnapshot().find((entry) => entry.provider === "omp")).toMatchObject({
         status: "ready",
         models: [{ id: "updated-model" }],
       });

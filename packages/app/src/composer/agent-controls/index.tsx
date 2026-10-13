@@ -1665,7 +1665,7 @@ export const AgentControls = memo(function AgentControls({
     isRefreshing: snapshotIsRefreshing,
     refresh: refreshSnapshot,
     refetchIfStale: refetchSnapshotIfStale,
-  } = useProvidersSnapshot(serverId, { cwd: agent?.cwd });
+  } = useProvidersSnapshot(serverId);
 
   const snapshotSelectedEntry = useMemo(
     () => resolveSnapshotSelectedEntry(snapshotEntries, agent?.provider),

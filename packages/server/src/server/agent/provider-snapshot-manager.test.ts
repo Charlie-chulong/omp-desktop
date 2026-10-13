@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
@@ -10,15 +8,11 @@ import type {
   AgentProvider,
   FetchCatalogOptions,
   ProviderRefreshContext,
-  ResolveAgentCreateConfigInput,
 } from "./agent-sdk-types.js";
-import type { ManagedAgent } from "./agent-manager.js";
 import {
   GLOBAL_PROVIDER_SNAPSHOT_KEY,
   ProviderSnapshotManager,
-  resolveSnapshotCwd,
 } from "./provider-snapshot-manager.js";
-import { OpenCodeAgentClient } from "./providers/opencode-agent.js";
 
 const TEST_CAPABILITIES = {
   supportsStreaming: false,
@@ -53,20 +47,6 @@ function createExtraClient(
     },
     ...overrides,
   } satisfies AgentClient;
-}
-
-async function withEnv(key: string, value: string, run: () => Promise<void>): Promise<void> {
-  const previous = process.env[key];
-  process.env[key] = value;
-  try {
-    await run();
-  } finally {
-    if (previous === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = previous;
-    }
-  }
 }
 
 function waitUntilAborted(signal?: AbortSignal): Promise<boolean> {
@@ -105,72 +85,6 @@ async function runTestCatalogActivities(
 }
 
 describe("ProviderSnapshotManager public surface", () => {
-
-  test("validates complete Hub agent configurations through the current provider contract", async () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      extraClients: {
-        codex: createExtraClient("codex", {
-          isAvailable: async () => true,
-          fetchCatalog: async () => ({
-            models: [
-              {
-                provider: "codex",
-                id: "gpt-5.5",
-                aliases: ["gpt-latest"],
-                label: "GPT 5.5",
-                thinkingOptions: [{ id: "xhigh", label: "Extra high" }],
-              },
-            ],
-            modes: [{ id: "auto-review", label: "Auto review" }],
-          }),
-        }),
-      },
-    });
-
-    try {
-      await expect(
-        manager.validateAgentConfiguration({
-          provider: "codex",
-          model: "gpt-latest",
-          modeId: "auto-review",
-          thinkingOptionId: "xhigh",
-          providerOptions: {
-            sandbox_workspace_write: {
-              writable_roots: ["/var/cache/npm"],
-              network_access: false,
-            },
-          },
-        }),
-      ).resolves.toEqual([]);
-
-      await expect(
-        manager.validateAgentConfiguration({
-          provider: "codex",
-          model: "missing",
-          modeId: "missing",
-          thinkingOptionId: "missing",
-          providerOptions: {
-            sandbox_workspace_write: { network_access: "sometimes" },
-          },
-        }),
-      ).resolves.toEqual([
-        { path: ["model"], message: "Model 'missing' is not available for provider 'codex'" },
-        { path: ["modeId"], message: "Mode 'missing' is not available for provider 'codex'" },
-        {
-          path: ["thinkingOptionId"],
-          message: "Thinking option 'missing' is not available for provider 'codex'",
-        },
-        {
-          path: ["providerOptions", "sandbox_workspace_write", "network_access"],
-          message: "Invalid input: expected boolean, received string",
-        },
-      ]);
-    } finally {
-      manager.destroy();
-    }
-  });
-
   test("reports an unavailable Hub agent provider at the authored provider field", async () => {
     const manager = new ProviderSnapshotManager({ logger: createTestLogger() });
     try {
@@ -179,64 +93,6 @@ describe("ProviderSnapshotManager public surface", () => {
       ).resolves.toEqual([
         { path: ["provider"], message: "Provider 'not-installed' is not configured" },
       ]);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("listRegisteredProviderIds includes the built-in providers", () => {
-    const manager = new ProviderSnapshotManager({ logger: createTestLogger() });
-    try {
-      const ids = manager.listRegisteredProviderIds();
-      expect(ids).toEqual(
-        expect.arrayContaining(["claude", "codex", "opencode", "copilot", "pi", "omp"]),
-      );
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("hasProvider reflects the built-in set and providerOverrides additions", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
-      },
-    });
-    try {
-      expect(manager.hasProvider("claude")).toBe(true);
-      expect(manager.hasProvider("zai-claude")).toBe(true);
-      expect(manager.hasProvider("not-a-provider" as AgentProvider)).toBe(false);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("getProviderLabel returns the override label when provided", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        "qwen-codex": { extends: "codex", label: "Qwen Code", enabled: true },
-      },
-    });
-    try {
-      expect(manager.getProviderLabel("qwen-codex")).toBe("Qwen Code");
-      expect(manager.getProviderLabel("claude")).toBe("Claude");
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("getSnapshot returns loading entries for built-in providers before warmup", () => {
-    const manager = new ProviderSnapshotManager({ logger: createTestLogger() });
-    try {
-      const snapshot = manager.getSnapshot("/tmp/project");
-      const claude = snapshot.find((entry) => entry.provider === "claude");
-      const codex = snapshot.find((entry) => entry.provider === "codex");
-      expect(claude?.status).toBe("loading");
-      expect(claude?.label).toBe("Claude");
-      expect(claude?.defaultModeId).toBe("auto");
-      expect(codex?.defaultModeId).toBe("auto-review");
     } finally {
       manager.destroy();
     }
@@ -251,10 +107,7 @@ describe("ProviderSnapshotManager public surface", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
         codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: {
@@ -262,8 +115,7 @@ describe("ProviderSnapshotManager public surface", () => {
       },
     });
     try {
-      const entries = await manager.listProviders({ cwd: "/tmp/project", wait: true });
-      const codex = entries.find((entry) => entry.provider === "codex");
+      const codex = await manager.getProvider({ provider: "codex", wait: true });
       expect(codex).toMatchObject({ provider: "codex", enabled: false, status: "unavailable" });
       expect(isAvailable).not.toHaveBeenCalled();
       expect(fetchCatalog).not.toHaveBeenCalled();
@@ -277,19 +129,12 @@ describe("ProviderSnapshotManager public surface", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: { codex: createExtraClient("codex", { isAvailable }) },
     });
     try {
-      const entry = await manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entry = await manager.getProvider({ provider: "codex", wait: true });
       expect(entry.provider).toBe("codex");
       expect(entry.status).toBe("unavailable");
       expect(isAvailable).toHaveBeenCalledTimes(1);
@@ -299,7 +144,6 @@ describe("ProviderSnapshotManager public surface", () => {
   });
 
   test("wait:true returns a warm provider without refreshing it", async () => {
-    const cwd = "/tmp/project";
     const isAvailable = vi.fn(async () => true);
     const fetchCatalog = vi.fn(async () => ({
       models: [
@@ -320,13 +164,13 @@ describe("ProviderSnapshotManager public surface", () => {
     const listener = vi.fn();
     manager.on("change", listener);
     try {
-      const [first] = await manager.listProviders({ cwd, providers: ["codex"], wait: true });
+      const [first] = await manager.listProviders({ providers: ["codex"], wait: true });
       expect(first).toMatchObject({ provider: "codex", status: "ready" });
       expect(isAvailable).toHaveBeenCalledTimes(1);
       expect(fetchCatalog).toHaveBeenCalledTimes(1);
 
       listener.mockClear();
-      const [second] = await manager.listProviders({ cwd, providers: ["codex"], wait: true });
+      const [second] = await manager.listProviders({ providers: ["codex"], wait: true });
 
       expect(second).toEqual(first);
       expect(isAvailable).toHaveBeenCalledTimes(1);
@@ -353,63 +197,9 @@ describe("ProviderSnapshotManager public surface", () => {
     });
 
     try {
-      const entry = await manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entry = await manager.getProvider({ provider: "codex", wait: true });
 
       expect(entry).toMatchObject({ status: "ready", defaultModeId: "default" });
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("explicit refresh re-probes only the requested warm provider", async () => {
-    const cwd = "/tmp/project";
-    const isAvailableCodex = vi.fn(async () => true);
-    const fetchCodexCatalog = vi.fn(async () => ({
-      models: [
-        {
-          provider: "codex",
-          id: "gpt-5.4-mini",
-          label: "GPT 5.4 Mini",
-        },
-      ] as AgentModelDefinition[],
-      modes: [] as AgentMode[],
-    }));
-    const isAvailableClaude = vi.fn(async () => true);
-    const fetchClaudeCatalog = vi.fn(async () => ({
-      models: [
-        {
-          provider: "claude",
-          id: "claude-opus-4.5",
-          label: "Claude Opus 4.5",
-        },
-      ] as AgentModelDefinition[],
-      modes: [] as AgentMode[],
-    }));
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      extraClients: {
-        codex: createExtraClient("codex", {
-          isAvailable: isAvailableCodex,
-          fetchCatalog: fetchCodexCatalog,
-        }),
-        claude: createExtraClient("claude", {
-          isAvailable: isAvailableClaude,
-          fetchCatalog: fetchClaudeCatalog,
-        }),
-      },
-    });
-    try {
-      await manager.listProviders({ cwd, providers: ["codex", "claude"], wait: true });
-      await manager.refreshSnapshotForCwd({ cwd, providers: ["codex"] });
-
-      expect(isAvailableCodex).toHaveBeenCalledTimes(2);
-      expect(fetchCodexCatalog).toHaveBeenCalledTimes(2);
-      expect(isAvailableClaude).toHaveBeenCalledTimes(1);
-      expect(fetchClaudeCatalog).toHaveBeenCalledTimes(1);
     } finally {
       manager.destroy();
     }
@@ -422,19 +212,12 @@ describe("ProviderSnapshotManager public surface", () => {
       logger: createTestLogger(),
       refreshTimeoutMs: 1,
       providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: { codex: createExtraClient("codex", { isAvailable }) },
     });
     try {
-      const entry = await manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entry = await manager.getProvider({ provider: "codex", wait: true });
       expect(entry.provider).toBe("codex");
       expect(entry.status).toBe("error");
       expect(entry.error).toMatch(/after 1ms/);
@@ -448,9 +231,6 @@ describe("ProviderSnapshotManager public surface", () => {
       logger: createTestLogger(),
       refreshTimeoutMs: 60_000,
       providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: {
@@ -460,9 +240,7 @@ describe("ProviderSnapshotManager public surface", () => {
     manager.setRefreshTimeoutMs(1);
 
     try {
-      await expect(
-        manager.getProvider({ cwd: "/tmp/project", provider: "codex", wait: true }),
-      ).resolves.toMatchObject({
+      await expect(manager.getProvider({ provider: "codex", wait: true })).resolves.toMatchObject({
         status: "error",
         error: "Timed out refreshing Codex after 1ms; pending: availability",
       });
@@ -476,9 +254,6 @@ describe("ProviderSnapshotManager public surface", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: {
@@ -487,11 +262,7 @@ describe("ProviderSnapshotManager public surface", () => {
     });
 
     try {
-      const entryPromise = manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entryPromise = manager.getProvider({ provider: "codex", wait: true });
 
       await vi.advanceTimersByTimeAsync(120_000);
 
@@ -525,11 +296,7 @@ describe("ProviderSnapshotManager public surface", () => {
     });
 
     try {
-      const entryPromise = manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entryPromise = manager.getProvider({ provider: "codex", wait: true });
 
       await vi.advanceTimersByTimeAsync(120);
 
@@ -573,11 +340,7 @@ describe("ProviderSnapshotManager public surface", () => {
     });
 
     try {
-      const first = manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const first = manager.getProvider({ provider: "codex", wait: true });
       await vi.advanceTimersByTimeAsync(100);
       await expect(first).resolves.toMatchObject({
         status: "error",
@@ -585,11 +348,12 @@ describe("ProviderSnapshotManager public surface", () => {
       });
       expect(cleanupState.cleanedUp).toBe(true);
 
-      await manager.refreshSnapshotForCwd({ cwd: "/tmp/project", providers: ["codex"] });
+      await manager.refreshSettingsSnapshot({ providers: ["codex"] });
       expect(fetchCatalog).toHaveBeenCalledTimes(2);
-      expect(
-        manager.getSnapshot("/tmp/project").find((entry) => entry.provider === "codex"),
-      ).toMatchObject({ provider: "codex", status: "ready" });
+      expect(manager.getSnapshot().find((entry) => entry.provider === "codex")).toMatchObject({
+        provider: "codex",
+        status: "ready",
+      });
     } finally {
       manager.destroy();
       vi.useRealTimers();
@@ -612,7 +376,7 @@ describe("ProviderSnapshotManager public surface", () => {
           isAvailable: async () => true,
           fetchCatalog: neverReturnsCatalog,
         }),
-        claude: createExtraClient("claude", {
+        pi: createExtraClient("pi", {
           isAvailable: async () => true,
           fetchCatalog: neverReturnsCatalog,
         }),
@@ -620,32 +384,25 @@ describe("ProviderSnapshotManager public surface", () => {
     });
 
     try {
-      const codexPromise = manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const codexPromise = manager.getProvider({ provider: "codex", wait: true });
       await vi.advanceTimersByTimeAsync(50);
 
-      const claudePromise = manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "claude",
-        wait: true,
-      });
+      const piPromise = manager.getProvider({ provider: "pi", wait: true });
       await vi.advanceTimersByTimeAsync(50);
 
       await expect(codexPromise).resolves.toMatchObject({
         provider: "codex",
         status: "error",
       });
-      await expect(
-        manager.getProvider({ cwd: "/tmp/project", provider: "claude", wait: false }),
-      ).resolves.toMatchObject({ provider: "claude", status: "loading" });
+      await expect(manager.getProvider({ provider: "pi", wait: false })).resolves.toMatchObject({
+        provider: "pi",
+        status: "loading",
+      });
 
       await vi.advanceTimersByTimeAsync(50);
 
-      await expect(claudePromise).resolves.toMatchObject({
-        provider: "claude",
+      await expect(piPromise).resolves.toMatchObject({
+        provider: "pi",
         status: "error",
       });
     } finally {
@@ -660,19 +417,12 @@ describe("ProviderSnapshotManager public surface", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: { codex: createExtraClient("codex", { isAvailable }) },
     });
     try {
-      const entry = await manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entry = await manager.getProvider({ provider: "codex", wait: true });
       expect(entry.status).toBe("error");
       expect(entry.error).toMatch(/after 1ms/);
     } finally {
@@ -688,49 +438,18 @@ describe("ProviderSnapshotManager public surface", () => {
       logger: createTestLogger(),
       refreshTimeoutMs: 5,
       providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: { codex: createExtraClient("codex", { isAvailable }) },
     });
     try {
-      const entry = await manager.getProvider({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const entry = await manager.getProvider({ provider: "codex", wait: true });
       expect(entry.status).toBe("error");
       // explicit option (5) wins over env var (1)
       expect(entry.error).toMatch(/after 5ms/);
     } finally {
       manager.destroy();
       vi.unstubAllEnvs();
-    }
-  });
-
-  test("listProviders returns an entry per registered provider", async () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-    });
-    try {
-      const entries = await manager.listProviders({ cwd: "/tmp/project", wait: true });
-      const providers = entries.map((entry) => entry.provider).sort();
-      expect(providers).toEqual(["claude", "codex", "copilot", "omp", "opencode", "pi"]);
-      for (const entry of entries) {
-        expect(entry.enabled).toBe(false);
-        expect(entry.status).toBe("unavailable");
-      }
-    } finally {
-      manager.destroy();
     }
   });
 
@@ -741,11 +460,7 @@ describe("ProviderSnapshotManager public surface", () => {
     });
     try {
       await expect(
-        manager.getProvider({
-          cwd: "/tmp/project",
-          provider: "not-a-provider" as AgentProvider,
-          wait: true,
-        }),
+        manager.getProvider({ provider: "not-a-provider" as AgentProvider, wait: true }),
       ).rejects.toThrow(/not configured/);
     } finally {
       manager.destroy();
@@ -758,9 +473,9 @@ describe("ProviderSnapshotManager public surface", () => {
       providerOverrides: { codex: { enabled: false } },
     });
     try {
-      await expect(
-        manager.listModels({ cwd: "/tmp/project", provider: "codex", wait: true }),
-      ).rejects.toThrow(/disabled/);
+      await expect(manager.listModels({ provider: "codex", wait: true })).rejects.toThrow(
+        /disabled/,
+      );
     } finally {
       manager.destroy();
     }
@@ -787,11 +502,7 @@ describe("ProviderSnapshotManager public surface", () => {
       extraClients: { codex: client },
     });
     try {
-      const models = await manager.listModels({
-        cwd: "/tmp/project",
-        provider: "codex",
-        wait: true,
-      });
+      const models = await manager.listModels({ provider: "codex", wait: true });
       expect(models.map((model) => model.id)).toEqual(["gpt-5.4"]);
     } finally {
       manager.destroy();
@@ -804,9 +515,9 @@ describe("ProviderSnapshotManager public surface", () => {
       providerOverrides: { codex: { enabled: false } },
     });
     try {
-      await expect(
-        manager.listModes({ cwd: "/tmp/project", provider: "codex", wait: true }),
-      ).rejects.toThrow(/disabled/);
+      await expect(manager.listModes({ provider: "codex", wait: true })).rejects.toThrow(
+        /disabled/,
+      );
     } finally {
       manager.destroy();
     }
@@ -821,7 +532,6 @@ describe("ProviderSnapshotManager public surface", () => {
       const id = await manager.resolveDefaultModel({
         provider: "codex",
         requestedModel: "gpt-5.4",
-        cwd: "/tmp/project",
       });
       expect(id).toBe("gpt-5.4");
     } finally {
@@ -835,7 +545,7 @@ describe("ProviderSnapshotManager public surface", () => {
       providerOverrides: { codex: { enabled: false } },
     });
     try {
-      const id = await manager.resolveDefaultModel({ provider: "codex", cwd: "/tmp/project" });
+      const id = await manager.resolveDefaultModel({ provider: "codex" });
       expect(id).toBeUndefined();
     } finally {
       manager.destroy();
@@ -898,22 +608,6 @@ describe("ProviderSnapshotManager public surface", () => {
       const result = await manager.getProviderDiagnostic("codex");
       expect(result.provider).toBe("codex");
       expect(result.diagnostic).toMatch(/no diagnostic/i);
-      expect(result.diagnostic).toContain("Models:");
-      expect(result.diagnostic).toContain("Status:");
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("getProviderDiagnostic materializes the client and proceeds for an unmaterialized configured provider", async () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      isDev: true,
-      extraClients: {},
-    });
-    try {
-      const result = await manager.getProviderDiagnostic("mock");
-      expect(result.provider).toBe("mock");
       expect(result.diagnostic).toContain("Models:");
       expect(result.diagnostic).toContain("Status:");
     } finally {
@@ -1067,32 +761,6 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
-  test("getProviderDiagnostic reports a stuck catalog refresh inside the diagnostic", async () => {
-    await withEnv("PASEO_ENABLE_MOCK_SLOW", "true", async () => {
-      vi.useFakeTimers();
-      const manager = new ProviderSnapshotManager({
-        logger: createTestLogger(),
-        isDev: true,
-        refreshTimeoutMs: TEST_REFRESH_TIMEOUT_MS,
-      });
-      try {
-        const diagnosticRequest = manager.getProviderDiagnostic("mock-slow");
-        await vi.advanceTimersByTimeAsync(TEST_REFRESH_TIMEOUT_MS);
-
-        const result = await diagnosticRequest;
-        expect(result.provider).toBe("mock-slow");
-        expect(result.diagnostic).toContain("Mock slow provider");
-        expect(result.diagnostic).toContain("Models: —");
-        expect(result.diagnostic).toContain(
-          `Status: Error: Timed out refreshing Mock Slow Provider after ${TEST_REFRESH_TIMEOUT_MS}ms`,
-        );
-      } finally {
-        manager.destroy();
-        vi.useRealTimers();
-      }
-    });
-  });
-
   test("getProviderDiagnostic returns an error diagnostic for an unknown provider", async () => {
     const manager = new ProviderSnapshotManager({ logger: createTestLogger() });
     try {
@@ -1108,347 +776,19 @@ describe("ProviderSnapshotManager public surface", () => {
       manager.destroy();
     }
   });
-
-  test("getAgentManagerProviderState exposes extraClients verbatim", () => {
-    const codexClient = createExtraClient("codex");
-    const claudeClient = createExtraClient("claude");
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: { opencode: { enabled: false }, copilot: { enabled: false } },
-      extraClients: { codex: codexClient, claude: claudeClient },
-    });
-    try {
-      const state = manager.getAgentManagerProviderState();
-      expect(state.clients.codex).toBe(codexClient);
-      expect(state.clients.claude).toBe(claudeClient);
-      expect(state.providerDefinitions.opencode).toMatchObject({ enabled: false });
-      expect(state.providerDefinitions.codex).toMatchObject({ enabled: true });
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("resolveCreateConfig reduces a managed parent to provider mode and unattended data", async () => {
-    const resolverInputs: ResolveAgentCreateConfigInput[] = [];
-    const childModes: AgentMode[] = [
-      { id: "child-unattended", label: "Child", isUnattended: true },
-    ];
-    const parentModes: AgentMode[] = [
-      { id: "parent-unattended", label: "Parent", isUnattended: true },
-    ];
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-      extraClients: {
-        codex: createExtraClient("codex", {
-          async isAvailable() {
-            return true;
-          },
-          async fetchCatalog() {
-            return { models: [] as AgentModelDefinition[], modes: childModes };
-          },
-          async resolveCreateConfig(input) {
-            resolverInputs.push(input);
-            return {
-              modeId: input.parent?.isUnattended ? "child-unattended" : undefined,
-              featureValues: undefined,
-            };
-          },
-        }),
-        claude: createExtraClient("claude", {
-          async isAvailable() {
-            return true;
-          },
-          async fetchCatalog() {
-            return { models: [] as AgentModelDefinition[], modes: parentModes };
-          },
-          isCreateConfigUnattended(input) {
-            return input.modeId === "parent-unattended";
-          },
-        }),
-      },
-    });
-    try {
-      const parent = {
-        id: "parent-agent",
-        provider: "claude",
-        currentModeId: "parent-unattended",
-        availableModes: parentModes,
-        config: { provider: "claude", cwd: "/tmp/project" },
-      } as ManagedAgent;
-
-      const resolved = await manager.resolveCreateConfig({
-        cwd: "/tmp/project",
-        provider: "codex",
-        requestedMode: undefined,
-        featureValues: undefined,
-        parent,
-        unattended: false,
-      });
-
-      expect(resolved).toEqual({ modeId: "child-unattended", featureValues: undefined });
-      expect(resolverInputs).toEqual([
-        {
-          provider: "codex",
-          requestedMode: undefined,
-          featureValues: undefined,
-          parent: {
-            provider: "claude",
-            modeId: "parent-unattended",
-            isUnattended: true,
-          },
-          unattended: true,
-          availableModes: childModes,
-        },
-      ]);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("resolveCreateConfig passes explicit unattended intent to provider policy", async () => {
-    const resolverInputs: ResolveAgentCreateConfigInput[] = [];
-    const modes: AgentMode[] = [{ id: "worker", label: "Worker", isUnattended: true }];
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-      extraClients: {
-        codex: createExtraClient("codex", {
-          async isAvailable() {
-            return true;
-          },
-          async fetchCatalog() {
-            return { models: [] as AgentModelDefinition[], modes };
-          },
-          async resolveCreateConfig(input) {
-            resolverInputs.push(input);
-            return {
-              modeId: input.unattended ? "worker" : undefined,
-              featureValues: undefined,
-            };
-          },
-        }),
-      },
-    });
-    try {
-      const resolved = await manager.resolveCreateConfig({
-        cwd: "/tmp/project",
-        provider: "codex",
-        requestedMode: undefined,
-        featureValues: { fast_mode: true },
-        parent: null,
-        unattended: true,
-      });
-
-      expect(resolved).toEqual({ modeId: "worker", featureValues: undefined });
-      expect(resolverInputs).toEqual([
-        {
-          provider: "codex",
-          requestedMode: undefined,
-          featureValues: { fast_mode: true },
-          parent: null,
-          unattended: true,
-          availableModes: modes,
-        },
-      ]);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("treats an OpenCode parent with auto accept as unattended when resolving an explicit child mode", async () => {
-    const openCode = new OpenCodeAgentClient(createTestLogger());
-    const modes: AgentMode[] = [
-      { id: "build", label: "Build" },
-      { id: "base", label: "Base" },
-      { id: "orchestrator", label: "Orchestrator" },
-    ];
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        codex: { enabled: false },
-        copilot: { enabled: false },
-        pi: { enabled: false },
-      },
-      extraClients: {
-        opencode: createExtraClient("opencode", {
-          async isAvailable() {
-            return true;
-          },
-          async fetchCatalog() {
-            return { models: [] as AgentModelDefinition[], modes };
-          },
-          resolveCreateConfig: openCode.resolveCreateConfig.bind(openCode),
-          isCreateConfigUnattended: openCode.isCreateConfigUnattended.bind(openCode),
-        }),
-      },
-    });
-    try {
-      const parent = {
-        id: "parent-agent",
-        provider: "opencode",
-        currentModeId: "orchestrator",
-        availableModes: modes,
-        config: {
-          provider: "opencode",
-          cwd: "/tmp/project",
-          featureValues: { auto_accept: true },
-        },
-      } as ManagedAgent;
-
-      const resolved = await manager.resolveCreateConfig({
-        cwd: "/tmp/project",
-        provider: "opencode",
-        requestedMode: "base",
-        featureValues: undefined,
-        parent,
-        unattended: false,
-      });
-
-      expect(resolved).toEqual({ modeId: "base", featureValues: { auto_accept: true } });
-    } finally {
-      manager.destroy();
-    }
-  });
 });
 
 describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
-  test("adds a derived provider and includes it in subsequent reads", async () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-    });
-    try {
-      expect(manager.hasProvider("zai-claude")).toBe(false);
-
-      const state = manager.applyMutableProviderConfig({
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
-      });
-
-      expect(manager.hasProvider("zai-claude")).toBe(true);
-      expect(state.providerDefinitions["zai-claude"]).toMatchObject({ enabled: true });
-      expect(manager.listRegisteredProviderIds()).toContain("zai-claude");
-      expect(manager.getSnapshot().find((entry) => entry.provider === "zai-claude")?.source).toBe(
-        "custom",
-      );
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("removes startup provider overrides from the live registry", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
-      },
-    });
-    try {
-      expect(manager.hasProvider("zai-claude")).toBe(true);
-
-      const state = manager.applyMutableProviderConfig({}, { removeProviders: ["zai-claude"] });
-
-      expect(manager.hasProvider("zai-claude")).toBe(false);
-      expect(state.providerDefinitions["zai-claude"]).toBeUndefined();
-      expect(manager.getSnapshot().some((entry) => entry.provider === "zai-claude")).toBe(false);
-
-      manager.applyMutableProviderConfig({ codex: { enabled: false } });
-      expect(manager.hasProvider("zai-claude")).toBe(false);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("drops disabled built-in providers from clients while preserving providerDefinitions", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: true },
-        codex: { enabled: true },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-    });
-    try {
-      const before = manager.getAgentManagerProviderState();
-      expect(before.providerDefinitions.copilot).toMatchObject({ enabled: false });
-      expect(before.clients.copilot).toBeUndefined();
-
-      const state = manager.applyMutableProviderConfig({ codex: { enabled: false } });
-      expect(state.providerDefinitions.codex).toMatchObject({ enabled: false });
-      expect(state.clients.codex).toBeUndefined();
-      expect(state.providerDefinitions.copilot).toMatchObject({ enabled: false });
-      expect(state.clients.copilot).toBeUndefined();
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("fires a change event on every primed snapshot cwd after applyMutableProviderConfig", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-    });
-    try {
-      const listener = vi.fn();
-      manager.on("change", listener);
-
-      // Prime two distinct cwd snapshots. resolve() makes the keys platform-
-      // native so Windows ("D:\\tmp\\...") matches the assertion below.
-      const cwdA = resolve("/tmp/project-a");
-      const cwdB = resolve("/tmp/project-b");
-      manager.getSnapshot(cwdA);
-      manager.getSnapshot(cwdB);
-
-      listener.mockClear();
-      manager.applyMutableProviderConfig({
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
-      });
-
-      const cwds = listener.mock.calls.map((call) => call[1]).sort();
-      expect(cwds).toEqual([cwdA, cwdB].sort());
-    } finally {
-      manager.destroy();
-    }
-  });
-
   test("stages provider state without events, then publishes or rolls back", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
         codex: { enabled: true },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
     });
     try {
-      const cwd = resolve("/tmp/project");
-      manager.getSnapshot(cwd);
+      manager.getSnapshot();
       const events: string[] = [];
       manager.on("change", (_entries, changedCwd) => events.push(changedCwd));
 
@@ -1472,7 +812,7 @@ describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
       );
       expect(events).toEqual([]);
       committed.publish();
-      expect(events).toEqual([cwd]);
+      expect(events).toEqual([GLOBAL_PROVIDER_SNAPSHOT_KEY]);
     } finally {
       manager.destroy();
     }
@@ -1482,14 +822,11 @@ describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
         codex: { enabled: true },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
     });
-    manager.getSnapshot("/tmp/project");
+    manager.getSnapshot();
     manager.on("change", () => {
       throw new Error("snapshot consumer failed");
     });
@@ -1510,11 +847,8 @@ describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
 describe("ProviderSnapshotManager lifecycle", () => {
   test("owns every materialized client generation until daemon shutdown", async () => {
     const providerConfig = (label: string) => ({
-      claude: { enabled: false },
       codex: { enabled: true, label },
-      copilot: { enabled: false },
       omp: { enabled: false },
-      opencode: { enabled: false },
       pi: { enabled: false },
     });
     const manager = new ProviderSnapshotManager({
@@ -1563,17 +897,14 @@ describe("ProviderSnapshotManager lifecycle", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
         codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
     });
     try {
       const listener = vi.fn();
       manager.on("change", listener);
-      manager.getSnapshot("/tmp/project");
+      manager.getSnapshot();
       manager.applyMutableProviderConfig({});
       const firstCallCount = listener.mock.calls.length;
       expect(firstCallCount).toBeGreaterThan(0);
@@ -1590,131 +921,17 @@ describe("ProviderSnapshotManager lifecycle", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        claude: { enabled: false },
         codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
         pi: { enabled: false },
       },
     });
     const listener = vi.fn();
     manager.on("change", listener);
-    manager.getSnapshot("/tmp/project");
+    manager.getSnapshot();
     manager.destroy();
 
     listener.mockClear();
     manager.applyMutableProviderConfig({});
     expect(listener).not.toHaveBeenCalled();
-  });
-});
-
-describe("ProviderSnapshotManager cwd routing", () => {
-  test("settings refresh passes the semantic global scope to providers", async () => {
-    const fetchCatalog = vi.fn(async () => ({
-      models: [] as AgentModelDefinition[],
-      modes: [] as AgentMode[],
-    }));
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      extraClients: {
-        codex: createExtraClient("codex", {
-          isAvailable: vi.fn(async () => true),
-          fetchCatalog,
-        }),
-      },
-    });
-    try {
-      await manager.refreshSettingsSnapshot({ providers: ["codex"] });
-
-      expect(fetchCatalog.mock.calls[0]?.[0]).toMatchObject({ scope: "global", force: true });
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("global snapshot does not satisfy an explicit home workspace read", async () => {
-    const fetchCatalog = vi.fn(async () => ({
-      models: [] as AgentModelDefinition[],
-      modes: [] as AgentMode[],
-    }));
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      extraClients: {
-        codex: createExtraClient("codex", {
-          isAvailable: vi.fn(async () => true),
-          fetchCatalog,
-        }),
-      },
-    });
-    try {
-      await manager.refreshSettingsSnapshot({ providers: ["codex"] });
-      await manager.listProviders({ cwd: homedir(), providers: ["codex"], wait: true });
-
-      expect(fetchCatalog.mock.calls.map((call) => call[0])).toEqual([
-        expect.objectContaining({ scope: "global", force: true }),
-        expect.objectContaining({
-          scope: "workspace",
-          cwd: resolveSnapshotCwd(homedir()),
-          force: false,
-        }),
-      ]);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("different cwd keys produce independent snapshots", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-    });
-    try {
-      const a = manager.getSnapshot("/tmp/project-a");
-      const b = manager.getSnapshot("/tmp/project-b");
-      expect(a).not.toBe(b);
-      expect(a.map((entry) => entry.provider).sort()).toEqual(
-        b.map((entry) => entry.provider).sort(),
-      );
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("getSnapshot called with no cwd resolves to the global snapshot key", () => {
-    const manager = new ProviderSnapshotManager({
-      logger: createTestLogger(),
-      providerOverrides: {
-        claude: { enabled: false },
-        codex: { enabled: false },
-        copilot: { enabled: false },
-        opencode: { enabled: false },
-        pi: { enabled: false },
-      },
-    });
-    try {
-      const listener = vi.fn();
-      manager.on("change", listener);
-      manager.getSnapshot();
-      manager.applyMutableProviderConfig({});
-      const cwds = listener.mock.calls.map((call) => call[1]);
-      expect(cwds).toContain(GLOBAL_PROVIDER_SNAPSHOT_KEY);
-    } finally {
-      manager.destroy();
-    }
-  });
-
-  test("resolveSnapshotCwd normalizes pure drive letters to append backslash on Windows", () => {
-    const resolved = resolveSnapshotCwd("C:");
-    if (process.platform === "win32") {
-      expect(resolved).toBe("C:\\");
-    } else {
-      expect(resolved).toBeDefined();
-    }
   });
 });

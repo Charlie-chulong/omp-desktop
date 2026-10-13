@@ -17,7 +17,7 @@ export function useAgentProfileFormCatalog(input: {
   serverId: string;
   model: AgentProfileFormModel;
 }): void {
-  const { entries } = useProvidersSnapshot(input.serverId, { cwd: null });
+  const { entries } = useProvidersSnapshot(input.serverId);
 
   useEffect(() => {
     if (!entries) {

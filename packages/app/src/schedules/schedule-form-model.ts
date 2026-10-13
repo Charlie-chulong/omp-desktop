@@ -67,7 +67,6 @@ export interface ScheduleDisclosureState {
 
 export interface ScheduleProviderSnapshotRequest {
   serverId: string;
-  cwd: string;
 }
 
 export interface ScheduleFormProjectOption {
@@ -386,12 +385,11 @@ function resolveTargetKind(snapshot: ScheduleFormSnapshot): ScheduleFormTargetKi
 function buildProviderSnapshotRequest(input: {
   targetKind: ScheduleFormTargetKind;
   selectedServerId: string | null;
-  workingDir: string;
 }): ScheduleProviderSnapshotRequest | null {
-  if (input.targetKind !== "new-agent" || !input.selectedServerId || !input.workingDir.trim()) {
+  if (input.targetKind !== "new-agent" || !input.selectedServerId) {
     return null;
   }
-  return { serverId: input.selectedServerId, cwd: input.workingDir };
+  return { serverId: input.selectedServerId };
 }
 
 function buildInitialProjectDisplay(input: {
@@ -645,7 +643,6 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
   const providerSnapshotRequest = buildProviderSnapshotRequest({
     targetKind,
     selectedServerId,
-    workingDir,
   });
   const initialCadence = normalizeScheduleFormCadence(
     snapshot.schedule?.cadence ?? DEFAULT_CADENCE,
@@ -885,9 +882,8 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
     }
   }
 
-  function requestProviderSnapshot(serverId: string | null, cwd: string): void {
-    const trimmedCwd = cwd.trim();
-    if (!serverId || !trimmedCwd) {
+  function requestProviderSnapshot(serverId: string | null): void {
+    if (!serverId) {
       publish({
         ...state,
         providerSnapshotRequest: null,
@@ -900,7 +896,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
         ...state.providerResolutionByServerId,
         [serverId]: "pending",
       },
-      providerSnapshotRequest: { serverId, cwd: trimmedCwd },
+      providerSnapshotRequest: { serverId },
     });
   }
 
@@ -1032,6 +1028,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
           providerResolutionByServerId: {},
         }),
       );
+      requestProviderSnapshot(serverId);
     },
     setProject(optionId, display) {
       if (closed) {
@@ -1041,8 +1038,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       if (!target) {
         return;
       }
-      const providerScopeChanged =
-        state.selectedServerId !== target.serverId || state.workingDir !== target.cwd;
+      const providerScopeChanged = state.selectedServerId !== target.serverId;
       if (!providerScopeChanged && state.selectedProjectOptionId === target.optionId) {
         return;
       }
@@ -1058,7 +1054,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       if (!providerScopeChanged) {
         return;
       }
-      requestProviderSnapshot(target.serverId, target.cwd);
+      requestProviderSnapshot(target.serverId);
     },
     setModel(provider, modelId) {
       if (closed) {

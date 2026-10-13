@@ -227,7 +227,6 @@ describe("schedule form model", () => {
       providerResolutionByServerId: { "host-b": "pending" },
       providerSnapshotRequest: {
         serverId: "host-b",
-        cwd: "/repo/b",
       },
     });
 
@@ -339,7 +338,7 @@ describe("schedule form model", () => {
       archiveOnFinish: false,
       isolation: "local",
       effectiveIsolation: "local",
-      providerResolutionByServerId: {},
+      providerResolutionByServerId: { "host-a": "pending" },
     });
   });
 
@@ -584,7 +583,7 @@ describe("schedule form model", () => {
     });
   });
 
-  it("clears provider selection while resolving a different project", () => {
+  it("clears provider selection while resolving a project on a different host", () => {
     const form = open({
       mode: "create",
       defaults: { serverId: "host-a", projectTargets: PROJECT_TARGETS, preferences: {} },
@@ -612,7 +611,7 @@ describe("schedule form model", () => {
       modelSelectorProviders: [],
       canSubmit: false,
       providerResolutionByServerId: { "host-a": "complete", "host-b": "pending" },
-      providerSnapshotRequest: { serverId: "host-b", cwd: "/repo/b" },
+      providerSnapshotRequest: { serverId: "host-b" },
     });
 
     form.applyProviderSnapshot("host-b", providerSnapshot(HOST_B_MODELS));
@@ -624,6 +623,62 @@ describe("schedule form model", () => {
       providerResolutionByServerId: { "host-a": "complete", "host-b": "complete" },
       providerSnapshotRequest: null,
       modelSelectorProviders: [expect.objectContaining({ id: "mock", label: "Mock" })],
+    });
+  });
+
+  it("loads the host catalog before a project is selected", () => {
+    const form = open({
+      mode: "create",
+      defaults: { serverId: "host-a", projectTargets: PROJECT_TARGETS, preferences: {} },
+    });
+    expect(form.getState()).toMatchObject({
+      workingDir: "",
+      providerSnapshotRequest: { serverId: "host-a" },
+    });
+
+    form.applyProviderSnapshot("host-a", providerSnapshot(HOST_A_MODELS));
+
+    expect(form.getState()).toMatchObject({
+      workingDir: "",
+      providerSnapshotRequest: null,
+      providerResolutionByServerId: { "host-a": "complete" },
+      modelSelectorProviders: [expect.objectContaining({ id: "mock" })],
+      canSubmit: false,
+    });
+  });
+
+  it("preserves the shared catalog and send readiness when switching projects on one host", () => {
+    const secondProject = target({
+      serverId: "host-a",
+      projectKey: "project-a2",
+      projectName: "Project A2",
+      cwd: "/repo/a2",
+    });
+    const form = open({
+      mode: "create",
+      defaults: {
+        serverId: "host-a",
+        projectTargets: [...PROJECT_TARGETS, secondProject],
+        preferences: {},
+      },
+    });
+    form.setPrompt("Run on either project.");
+    form.setProject(buildProjectOptionId("host-a", "project-a"), { label: "Project A" });
+    form.applyProviderSnapshot("host-a", providerSnapshot(HOST_A_MODELS));
+    form.setModel("mock", "model-a");
+    const catalog = form.getState().modelSelectorProviders;
+
+    form.setProject(secondProject.optionId, { label: "Project A2" });
+
+    expect(form.getState()).toMatchObject({
+      selectedServerId: "host-a",
+      workingDir: "/repo/a2",
+      selectedProvider: "mock",
+      selectedModel: "model-a",
+      modelSelectorProviders: catalog,
+      providerResolutionByServerId: { "host-a": "complete" },
+      providerSnapshotRequest: null,
+      canSubmit: true,
     });
   });
 
