@@ -1,3 +1,5 @@
+import type { ExternalAppRuntime } from "../external-app-runtime.js";
+
 export type EditorTargetKind = "editor" | "file-manager";
 
 export interface EditorTargetDescriptor {
@@ -13,18 +15,10 @@ export interface EditorTargetLaunchInput {
   column?: number;
 }
 
-export interface EditorTargetRuntime {
-  readonly platform: NodeJS.Platform;
-  readonly env: NodeJS.ProcessEnv;
-
-  pathExists(path: string): boolean;
+export interface EditorTargetRuntime extends ExternalAppRuntime {
   isAbsolutePath(path: string): boolean;
-  resolveCommand(commands: readonly string[]): string | null;
-  spawnDetached(input: { command: string; args: readonly string[] }): Promise<void>;
   openPath(path: string): Promise<void>;
   revealPath(path: string): void;
-  hasMacApplication(applicationName: string): boolean;
-  openMacApplication(input: { applicationName: string; paths: readonly string[] }): Promise<void>;
 }
 
 export interface EditorTarget {

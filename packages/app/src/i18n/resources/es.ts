@@ -2122,6 +2122,16 @@ export const es: TranslationResources = {
       launchAtLoginHint: "Inicia OMP Desktop automáticamente al iniciar sesión",
       unsupportedHint: "Disponible en macOS y Windows",
     },
+    browser: {
+      title: "Navegador",
+      openLinksWith: "Abrir enlaces con",
+      description: "Elige el navegador que OMP Desktop usa para los enlaces web.",
+      systemDefault: "Navegador predeterminado del sistema",
+      unavailable: "{{browser}} (no instalado)",
+      selectedUnavailable: "{{browser}} no está instalado. Elige otro navegador.",
+      accessibilityLabel: "Abrir enlaces con {{browser}}",
+      loadFailed: "No se pudieron cargar los navegadores disponibles.",
+    },
     general: {
       title: "General",
       defaultSend: {

@@ -2117,6 +2117,16 @@ export const ru: TranslationResources = {
       launchAtLoginHint: "Автоматически запускать OMP Desktop при входе в систему",
       unsupportedHint: "Доступно в macOS и Windows",
     },
+    browser: {
+      title: "Браузер",
+      openLinksWith: "Открывать ссылки в",
+      description: "Выберите браузер, в котором OMP Desktop будет открывать веб-ссылки.",
+      systemDefault: "Системный браузер по умолчанию",
+      unavailable: "{{browser}} (не установлен)",
+      selectedUnavailable: "Браузер {{browser}} не установлен. Выберите другой браузер.",
+      accessibilityLabel: "Открывать ссылки в {{browser}}",
+      loadFailed: "Не удалось загрузить список доступных браузеров.",
+    },
     general: {
       title: "Основные",
       defaultSend: {

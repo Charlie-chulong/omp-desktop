@@ -6,14 +6,21 @@ import { ipcMain, shell } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isAllowedExternalUrl, registerOpenerHandlers } from "./opener";
+import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
+import type { ExternalAppRuntime } from "./external-app-runtime";
 
 vi.mock("electron", () => ({
   ipcMain: { handle: vi.fn() },
   shell: { openExternal: vi.fn(), openPath: vi.fn(), showItemInFolder: vi.fn() },
 }));
 
-function getRegisteredOpenUrlHandler(): (_event: unknown, url: unknown) => Promise<void> {
-  registerOpenerHandlers();
+function getRegisteredOpenUrlHandler(
+  options: Parameters<typeof registerOpenerHandlers>[0] = {},
+): (_event: unknown, url: unknown) => Promise<void> {
+  registerOpenerHandlers({
+    settingsStore: { get: async () => DEFAULT_DESKTOP_SETTINGS },
+    ...options,
+  });
   const handler = vi.mocked(ipcMain.handle).mock.calls.find(([channel]) => {
     return channel === "paseo:opener:openUrl";
   })?.[1];
@@ -62,6 +69,36 @@ describe("desktop opener", () => {
     await handler({}, "https://example.com");
 
     expect(shell.openExternal).toHaveBeenCalledWith("https://example.com");
+  });
+
+  it("uses the browser selected in desktop settings", async () => {
+    const spawnDetached = vi.fn(async () => {});
+    const runtime: ExternalAppRuntime = {
+      platform: "linux",
+      env: {},
+      pathExists: () => false,
+      resolveCommand: (commands) => (commands.includes("firefox") ? "/usr/bin/firefox" : null),
+      spawnDetached,
+      hasMacApplication: () => false,
+      openMacApplication: vi.fn(async () => {}),
+    };
+    const handler = getRegisteredOpenUrlHandler({
+      runtime,
+      settingsStore: {
+        get: async () => ({
+          ...DEFAULT_DESKTOP_SETTINGS,
+          browser: { target: "firefox" },
+        }),
+      },
+    });
+
+    await handler({}, "https://example.com/a%20b");
+
+    expect(spawnDetached).toHaveBeenCalledWith({
+      command: "/usr/bin/firefox",
+      args: ["https://example.com/a%20b"],
+    });
+    expect(shell.openExternal).not.toHaveBeenCalled();
   });
 
   it("rejects blocked URLs before invoking Electron shell", async () => {

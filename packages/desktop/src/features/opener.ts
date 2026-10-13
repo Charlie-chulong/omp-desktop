@@ -3,7 +3,12 @@ import path from "node:path";
 
 import { shell, ipcMain } from "electron";
 
-const ALLOWED_EXTERNAL_URL_PROTOCOLS = new Set(["http:", "https:"]);
+import { listBrowserTargets, openBrowserTarget } from "./browser-targets.js";
+import { createExternalAppRuntime, type ExternalAppRuntime } from "./external-app-runtime.js";
+import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
+import type { DesktopSettingsStore } from "../settings/desktop-settings.js";
+
+const ALLOWED_EXTERNAL_URL_PROTOCOLS: Record<string, true> = { "http:": true, "https:": true };
 // Electron may launch these targets rather than showing their contents.
 const EXECUTABLE_EXTENSIONS: Record<string, true> = {
   ".app": true,
@@ -43,7 +48,7 @@ export function isAllowedExternalUrl(value: unknown): value is string {
 
   try {
     const url = new URL(value);
-    return ALLOWED_EXTERNAL_URL_PROTOCOLS.has(url.protocol);
+    return ALLOWED_EXTERNAL_URL_PROTOCOLS[url.protocol] === true;
   } catch {
     return false;
   }
@@ -98,15 +103,50 @@ async function resolveWorkspacePath(
   return { target, revealOnly };
 }
 
-export function registerOpenerHandlers(): void {
-  ipcMain.handle("paseo:opener:openUrl", async (_event, url: unknown) => {
-    if (!isAllowedExternalUrl(url)) {
-      throw new Error("Unsupported external URL");
-    }
-    await shell.openExternal(url);
+interface IpcHandlerRegistry {
+  handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void;
+}
+
+interface BrowserOpenerOptions {
+  ipc?: IpcHandlerRegistry;
+  runtime?: ExternalAppRuntime;
+  settingsStore?: Pick<DesktopSettingsStore, "get">;
+  openSystemUrl?: (url: string) => Promise<void>;
+}
+
+const defaultBrowserRuntime = createExternalAppRuntime();
+const defaultSystemUrlOpener = (url: string) => shell.openExternal(url);
+
+export async function openExternalUrl(
+  url: unknown,
+  options: Omit<BrowserOpenerOptions, "ipc"> = {},
+): Promise<void> {
+  if (!isAllowedExternalUrl(url)) {
+    throw new Error("Unsupported external URL");
+  }
+  const settingsStore = options.settingsStore ?? getDesktopSettingsStore();
+  const settings = await settingsStore.get();
+  await openBrowserTarget(
+    settings.browser.target,
+    url,
+    options.runtime ?? defaultBrowserRuntime,
+    options.openSystemUrl ?? defaultSystemUrlOpener,
+  );
+}
+
+export function registerOpenerHandlers(options: BrowserOpenerOptions = {}): void {
+  const ipc = options.ipc ?? ipcMain;
+  const runtime = options.runtime ?? defaultBrowserRuntime;
+  ipc.handle("paseo:opener:listBrowsers", () => listBrowserTargets(runtime));
+  ipc.handle("paseo:opener:openUrl", async (_event, url: unknown) => {
+    await openExternalUrl(url, {
+      runtime,
+      settingsStore: options.settingsStore,
+      openSystemUrl: options.openSystemUrl,
+    });
   });
 
-  ipcMain.handle("paseo:opener:openPath", async (_event, input: unknown) => {
+  ipc.handle("paseo:opener:openPath", async (_event, input: unknown) => {
     const { target, revealOnly } = await resolveWorkspacePath(input);
     if (revealOnly) {
       shell.showItemInFolder(target);
@@ -118,7 +158,7 @@ export function registerOpenerHandlers(): void {
     }
   });
 
-  ipcMain.handle("paseo:opener:revealPath", async (_event, input: unknown) => {
+  ipc.handle("paseo:opener:revealPath", async (_event, input: unknown) => {
     const { target } = await resolveWorkspacePath(input);
     shell.showItemInFolder(target);
   });

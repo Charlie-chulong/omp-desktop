@@ -101,6 +101,20 @@ describe("desktop-settings", () => {
     expect(files).toEqual(["desktop-settings.json"]);
   });
 
+  it("persists a selected browser and rejects unknown targets", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+
+    const selected = await store.patch({ browser: { target: "firefox" } });
+    const rejected = await store.patch({ browser: { target: "arbitrary-executable" } });
+    const restored = await createDesktopSettingsStore({ userDataPath }).get();
+
+    expect(selected.browser.target).toBe("firefox");
+    expect(rejected.browser.target).toBe("firefox");
+    expect(restored.browser.target).toBe("firefox");
+  });
+
   it("defaults notification sounds on for existing settings documents", async () => {
     const userDataPath = await createTempUserDataDir();
     directories.add(userDataPath);

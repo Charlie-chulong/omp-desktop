@@ -101,6 +101,10 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       ipcRenderer.invoke("paseo:notification:send", payload),
   },
   opener: {
+    listBrowsers: () =>
+      ipcRenderer.invoke("paseo:opener:listBrowsers") as Promise<
+        Array<{ id: string; label: string; available: boolean }>
+      >,
     openUrl: (url: string) => ipcRenderer.invoke("paseo:opener:openUrl", url),
     openPath: (input: { path: string; workspaceRoot: string }) =>
       ipcRenderer.invoke("paseo:opener:openPath", input),

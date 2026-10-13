@@ -48,7 +48,23 @@ export interface DesktopNotificationBridge {
   ) => Promise<boolean>;
 }
 
+export type DesktopBrowserTargetId =
+  | "system"
+  | "chrome"
+  | "edge"
+  | "firefox"
+  | "brave"
+  | "chromium"
+  | "safari";
+
+export interface DesktopBrowserTargetDescriptor {
+  id: DesktopBrowserTargetId;
+  label: string;
+  available: boolean;
+}
+
 export interface DesktopOpenerBridge {
+  listBrowsers?: () => Promise<DesktopBrowserTargetDescriptor[]>;
   openUrl?: (url: string) => Promise<void>;
   openPath?: (input: { path: string; workspaceRoot: string }) => Promise<void>;
   revealPath?: (input: { path: string; workspaceRoot: string }) => Promise<void>;

@@ -29,7 +29,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Linking, Pressable, type PressableStateCallbackType, Text, View } from "react-native";
+import { Pressable, type PressableStateCallbackType, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   AdaptiveModalSheet,
@@ -75,6 +75,7 @@ import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { formatTimeAgo } from "@/utils/time";
+import { openExternalUrl } from "@/utils/open-external-url";
 import { compareMatchScores, scoreTextFields } from "@omp-desktop/protocol/search/text-match";
 import type { AgentModelDefinition } from "@omp-desktop/protocol/agent-types";
 import type {
@@ -2069,7 +2070,7 @@ function OmpManagementPanel({
           return;
         }
         setLoginFlow(nextFlow);
-        await Linking.openURL(flow.launchUrl ?? flow.url).catch((openError) => {
+        await openExternalUrl(flow.launchUrl ?? flow.url).catch((openError) => {
           setError(
             t("settings.providers.omp.login.openFailed", {
               error: openError instanceof Error ? openError.message : String(openError),
@@ -2254,7 +2255,7 @@ function OmpManagementPanel({
   const handleSavePress = useCallback(() => void save(), [save]);
   const handleFinishLoginPress = useCallback(() => void finishLogin(), [finishLogin]);
   const handleOpenAuthorizationPress = useCallback(() => {
-    if (loginFlow) void Linking.openURL(loginFlow.launchUrl ?? loginFlow.url);
+    if (loginFlow) void openExternalUrl(loginFlow.launchUrl ?? loginFlow.url);
   }, [loginFlow]);
   const providerFormHeader = useMemo<SheetHeader>(
     () => ({

@@ -1,5 +1,6 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, shell } from "electron";
-import { isAllowedExternalUrl } from "./opener.js";
+import { app, BrowserWindow, clipboard, ipcMain, Menu } from "electron";
+import log from "electron-log/main";
+import { isAllowedExternalUrl, openExternalUrl } from "./opener.js";
 import { getDesktopContextMenuLabels, setDesktopContextMenuLabels } from "./context-menu-labels.js";
 
 interface TerminalContextMenuInput {
@@ -237,7 +238,9 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
       } else if (input.kind === "assistant-http-link" && isAllowedExternalUrl(input.url)) {
         template = buildLinkContextMenuTemplate(input, {
           onOpenExternal: () => {
-            void shell.openExternal(input.url);
+            void openExternalUrl(input.url).catch((error) => {
+              log.error("[opener] failed to open context-menu URL", error);
+            });
           },
           onCopyAddress: () => {
             clipboard.writeText(input.url);

@@ -2,11 +2,11 @@ import * as Linking from "expo-linking";
 import { getDesktopHost } from "@/desktop/host";
 import { isWeb } from "@/constants/platform";
 
-const ALLOWED_EXTERNAL_URL_PROTOCOLS = new Set(["http:", "https:"]);
+const ALLOWED_EXTERNAL_URL_PROTOCOLS: Record<string, true> = { "http:": true, "https:": true };
 
 function isAllowedExternalUrl(url: string): boolean {
   try {
-    return ALLOWED_EXTERNAL_URL_PROTOCOLS.has(new URL(url).protocol);
+    return ALLOWED_EXTERNAL_URL_PROTOCOLS[new URL(url).protocol] === true;
   } catch {
     return false;
   }

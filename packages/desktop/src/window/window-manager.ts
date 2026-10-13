@@ -7,11 +7,12 @@ import {
   clipboard,
   ipcMain,
   nativeTheme,
-  shell,
 } from "electron";
+import log from "electron-log/main";
 
 import type { WindowState, WindowStateStore } from "../settings/window-state.js";
 import { getDesktopContextMenuLabels } from "../features/context-menu-labels.js";
+import { openExternalUrl } from "../features/opener.js";
 
 const WINDOW_STATE_SAVE_DEBOUNCE_MS = 400;
 const MAC_TRAFFIC_LIGHT_POSITION = { x: 16, y: 14 } as const;
@@ -501,7 +502,9 @@ export function buildStandardContextMenuItems(
     items.push({
       label: labels.openExternal,
       click: () => {
-        void shell.openExternal(params.linkURL);
+        void openExternalUrl(params.linkURL).catch((error) => {
+          log.error("[opener] failed to open native context-menu URL", error);
+        });
       },
     });
     items.push({

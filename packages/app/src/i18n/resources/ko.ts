@@ -2086,6 +2086,16 @@ export const ko: TranslationResources = {
       launchAtLoginHint: "로그인할 때 OMP Desktop을 자동으로 실행합니다",
       unsupportedHint: "macOS 및 Windows에서 사용할 수 있습니다",
     },
+    browser: {
+      title: "브라우저",
+      openLinksWith: "링크를 열 브라우저",
+      description: "OMP Desktop이 웹 링크를 열 때 사용할 브라우저를 선택합니다.",
+      systemDefault: "시스템 기본 브라우저",
+      unavailable: "{{browser}}(설치되지 않음)",
+      selectedUnavailable: "{{browser}}이(가) 설치되어 있지 않습니다. 다른 브라우저를 선택하세요.",
+      accessibilityLabel: "{{browser}}로 링크 열기",
+      loadFailed: "사용 가능한 브라우저를 불러올 수 없습니다.",
+    },
     general: {
       title: "일반",
       defaultSend: {
