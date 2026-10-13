@@ -32,12 +32,11 @@ export type PluginWorkspaceTabTarget =
       agentId: string;
     };
 
-export type WorkspaceTabTarget =
+export type WorkspaceTabTarget = (
   | { kind: "new_tab" }
   | {
       kind: "draft";
       draftId: string;
-      workspaceId?: string;
       setup?: WorkspaceDraftTabSetup;
     }
   | { kind: "agent"; agentId: string }
@@ -51,7 +50,8 @@ export type WorkspaceTabTarget =
   | WorkspaceWorkingDiffTabTarget
   | PluginWorkspaceTabTarget
   | { kind: "setup"; workspaceId: string }
-  | { kind: "commit_diff"; sha: string };
+  | { kind: "commit_diff"; sha: string }
+) & { workspaceId?: string };
 
 export interface WorkspaceTab {
   tabId: string;
@@ -70,4 +70,14 @@ export function buildWorkspaceTabPersistenceKey(input: {
     return null;
   }
   return `${serverId}:${workspaceId}`;
+}
+
+/** A project owns one pane tree irrespective of the number of its workspaces. */
+export function buildProjectLayoutKey(input: {
+  serverId: string;
+  projectId: string;
+}): string | null {
+  const serverId = input.serverId.trim();
+  const projectId = input.projectId.trim();
+  return serverId && projectId ? `${serverId}:project:${encodeURIComponent(projectId)}` : null;
 }

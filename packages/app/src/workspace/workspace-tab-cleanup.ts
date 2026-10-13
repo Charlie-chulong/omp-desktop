@@ -1,9 +1,11 @@
 import { useSessionStore } from "@/stores/session-store";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { ensureProjectLayoutsMigrated } from "@/workspace-tabs/project-scope";
 import { normalizeWorkspaceOpaqueId } from "@/utils/workspace-identity";
 
 export interface WorkspaceTabCleanupSnapshot {
   serverId: string;
+  workspaceId: string;
   agentIds: ReadonlySet<string>;
 }
 
@@ -29,13 +31,14 @@ export function captureWorkspaceTabCleanup(input: {
     }
   }
 
-  return { serverId, agentIds };
+  return { serverId, workspaceId: workspaceId ?? "", agentIds };
 }
 
 export function closeWorkspaceAgentTabs(snapshot: WorkspaceTabCleanupSnapshot): void {
-  if (!snapshot.serverId || snapshot.agentIds.size === 0) {
+  if (!snapshot.serverId || !snapshot.workspaceId) {
     return;
   }
+  ensureProjectLayoutsMigrated(snapshot.serverId);
 
   const layoutStore = useWorkspaceLayoutStore.getState();
   const workspaceKeyPrefix = `${snapshot.serverId}:`;
@@ -45,13 +48,19 @@ export function closeWorkspaceAgentTabs(snapshot: WorkspaceTabCleanupSnapshot): 
     }
 
     for (const tab of collectAllTabs(layout.root)) {
-      let ownerAgentId: string | null = null;
-      if (tab.target.kind === "agent") {
-        ownerAgentId = tab.target.agentId;
-      } else if (tab.target.kind === "provider_subagent") {
-        ownerAgentId = tab.target.parentAgentId;
-      }
-      if (ownerAgentId && snapshot.agentIds.has(ownerAgentId)) {
+      const target = tab.target;
+      const ownerAgentId =
+        target.kind === "agent" || target.kind === "background_process"
+          ? target.agentId
+          : target.kind === "provider_subagent"
+            ? target.parentAgentId
+            : target.kind === "plugin" && target.context === "agent"
+              ? target.agentId
+              : null;
+      if (
+        target.workspaceId === snapshot.workspaceId ||
+        (!target.workspaceId && ownerAgentId && snapshot.agentIds.has(ownerAgentId))
+      ) {
         layoutStore.closeTab(workspaceKey, tab.tabId);
       }
     }

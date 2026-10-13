@@ -510,6 +510,10 @@ export const ko: TranslationResources = {
     },
   },
   workspace: {
+    projectEmpty: {
+      description: "아직 대화가 없습니다",
+      newConversation: "새 대화",
+    },
     route: {
       loading: "워크스페이스 불러오는 중",
       connecting: "연결 중",
@@ -685,6 +689,8 @@ export const ko: TranslationResources = {
         copyAgentId: "에이전트 ID 복사",
         copyTerminalId: "터미널 ID 복사",
         copyFilePath: "파일 경로 복사",
+        revealInFiles: "파일 트리에서 표시",
+        revealOutsideWorkspace: "이 워크스페이스 밖의 파일입니다",
         rename: "이름 변경",
         closeAbove: "위쪽 탭 닫기",
         closeBelow: "아래쪽 탭 닫기",
@@ -1330,6 +1336,7 @@ export const ko: TranslationResources = {
   },
   newWorkspace: {
     title: "새 워크스페이스",
+    deleteDraft: "새 워크스페이스 삭제",
     create: "생성",
     fields: {
       project: "프로젝트",

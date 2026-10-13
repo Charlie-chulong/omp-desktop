@@ -9,6 +9,7 @@ import {
 } from "@/stores/last-workspace-selection";
 import {
   navigateToLastWorkspace as navigateToLastWorkspacePure,
+  navigateToProject as navigateToProjectPure,
   navigateToSidebarWorkspace as navigateToSidebarWorkspacePure,
   navigateToWorkspace as navigateToWorkspacePure,
   parseActiveWorkspaceSelection,
@@ -17,7 +18,7 @@ import {
   type NavigateToWorkspaceDeps,
   type NavigateToWorkspaceInput,
 } from "./navigation";
-import { useSessionStore } from "@/stores/session-store";
+import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   collectAllTabs,
   findPaneById,
@@ -26,7 +27,17 @@ import {
 import { stripHostWorkspaceRouteEchoSearchFromBrowserUrlAfterCommit } from "@/utils/host-route-browser";
 import { navigateToHostWorkspaceRoute } from "@/navigation/workspace-route-navigation";
 import { getParentAgentIdFromLabels } from "@omp-desktop/protocol/agent-labels";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import {
+  resolveProjectLayoutKey,
+  ensureProjectLayoutsMigrated,
+} from "@/workspace-tabs/project-scope";
+import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
+import { parseHostProjectRouteFromPathname } from "@/utils/host-routes";
+import {
+  createProjectSelectionStore,
+  PROJECT_SELECTION_STORAGE_KEY,
+  type ActiveProjectSelection,
+} from "./project-selection";
 import {
   resolveWorkspaceToolSelection,
   type WorkspaceToolSelection,
@@ -34,6 +45,7 @@ import {
 
 export type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection";
 export type { NavigateToWorkspaceInput } from "./navigation";
+export type { ActiveProjectSelection } from "./project-selection";
 
 const lastWorkspaceSelectionStorage: LastWorkspaceSelectionStorage = {
   read: () => AsyncStorage.getItem(LAST_WORKSPACE_SELECTION_STORAGE_KEY),
@@ -44,6 +56,27 @@ const lastWorkspaceSelectionStorage: LastWorkspaceSelectionStorage = {
 const lastWorkspaceSelectionStore = createLastWorkspaceSelectionStore(
   lastWorkspaceSelectionStorage,
 );
+const projectSelectionStore = createProjectSelectionStore({
+  read: () => AsyncStorage.getItem(PROJECT_SELECTION_STORAGE_KEY),
+  write: (value) => AsyncStorage.setItem(PROJECT_SELECTION_STORAGE_KEY, value),
+});
+void projectSelectionStore.hydrate();
+
+function projectIdForWorkspace(
+  workspaces: Map<string, WorkspaceDescriptor> | null | undefined,
+  workspaceId: string,
+): string | null {
+  const key = resolveWorkspaceMapKeyByIdentity({ workspaces, workspaceId });
+  return key ? (workspaces?.get(key)?.projectId ?? null) : null;
+}
+
+function rememberProjectWorkspace(selection: ActiveWorkspaceSelection) {
+  const workspaces = useSessionStore.getState().sessions[selection.serverId]?.workspaces;
+  const projectId = projectIdForWorkspace(workspaces, selection.workspaceId);
+  if (projectId) {
+    projectSelectionStore.remember({ serverId: selection.serverId, projectId }, selection);
+  }
+}
 
 function navigateDeps(): NavigateToWorkspaceDeps {
   return {
@@ -53,7 +86,10 @@ function navigateDeps(): NavigateToWorkspaceDeps {
     openTab: (input) => useWorkspaceLayoutStore.getState().openTab(input),
     pinAgent: (workspaceKey, agentId) =>
       useWorkspaceLayoutStore.getState().pinAgent(workspaceKey, agentId),
-    rememberLastWorkspace: (selection) => lastWorkspaceSelectionStore.remember(selection),
+    rememberLastWorkspace: (selection) => {
+      lastWorkspaceSelectionStore.remember(selection);
+      rememberProjectWorkspace(selection);
+    },
     navigateToRoute: (route) => {
       navigateToHostWorkspaceRoute(route);
       stripHostWorkspaceRouteEchoSearchFromBrowserUrlAfterCommit();
@@ -74,16 +110,29 @@ export function getIsLastWorkspaceSelectionHydrated(): boolean {
 }
 
 export function navigateToWorkspace(input: NavigateToWorkspaceInput): string {
+  ensureProjectLayoutsMigrated(input.serverId);
   return navigateToWorkspacePure(input, navigateDeps());
+}
+
+/** Project switches retain the project's focused pane and never open an attention tab. */
+export function navigateToProject(project: ActiveProjectSelection): string {
+  ensureProjectLayoutsMigrated(project.serverId);
+  return navigateToProjectPure(project, {
+    ...navigateDeps(),
+    getProjectLastWorkspace: (target) =>
+      projectSelectionStore.get(target) ??
+      (lastWorkspaceSelectionStore.getSelection()?.serverId === target.serverId
+        ? lastWorkspaceSelectionStore.getSelection()
+        : null),
+  });
 }
 
 export async function navigateToSidebarWorkspace(
   input: NavigateToSidebarWorkspaceInput,
 ): Promise<string> {
+  ensureProjectLayoutsMigrated(input.serverId);
   const deps: NavigateToSidebarWorkspaceDeps = {
     ...navigateDeps(),
-    getWorkspaceTabs: (workspaceKey) =>
-      useWorkspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey),
     getSessionAgentsHydrated: (serverId) =>
       useSessionStore.getState().sessions[serverId]?.hasHydratedAgents ?? false,
     fetchWorkspaceAgentHistory: async (serverId, workspaceId) => {
@@ -111,6 +160,35 @@ export async function navigateToSidebarWorkspace(
   return navigateToSidebarWorkspacePure(input, deps);
 }
 
+export function useActiveProjectSelection(): ActiveProjectSelection | null {
+  const pathname = usePathname();
+  const params = useLocalSearchParams<{
+    serverId?: string | string[];
+    projectId?: string | string[];
+    workspaceId?: string | string[];
+  }>();
+  const workspaceSelection = parseActiveWorkspaceSelection({ pathname, params });
+  const workspaceProjectId = useSessionStore((state) => {
+    if (!workspaceSelection) return null;
+    return projectIdForWorkspace(
+      state.sessions[workspaceSelection.serverId]?.workspaces,
+      workspaceSelection.workspaceId,
+    );
+  });
+  const projectRoute = parseHostProjectRouteFromPathname(pathname);
+  if (projectRoute) return projectRoute;
+  if (
+    /^\/h\/[^/]+\/project\//.test(pathname) &&
+    typeof params.serverId === "string" &&
+    typeof params.projectId === "string"
+  ) {
+    return { serverId: params.serverId, projectId: params.projectId };
+  }
+  return workspaceSelection && workspaceProjectId
+    ? { serverId: workspaceSelection.serverId, projectId: workspaceProjectId }
+    : null;
+}
+
 export function navigateToLastWorkspace(): boolean {
   return navigateToLastWorkspacePure({
     ...navigateDeps(),
@@ -126,17 +204,24 @@ export function useActiveWorkspaceSelection(): ActiveWorkspaceSelection | null {
   const selection = parseActiveWorkspaceSelection({ pathname: usePathname(), params });
   const serverId = selection?.serverId ?? null;
   const workspaceId = selection?.workspaceId ?? null;
+  const projectId = useSessionStore((state) =>
+    serverId && workspaceId
+      ? projectIdForWorkspace(state.sessions[serverId]?.workspaces, workspaceId)
+      : null,
+  );
   useEffect(() => {
-    if (!serverId || !workspaceId) {
-      return;
+    if (!serverId || !workspaceId) return;
+    const current = { serverId, workspaceId };
+    lastWorkspaceSelectionStore.remember(current);
+    if (projectId) {
+      projectSelectionStore.remember({ serverId, projectId }, current);
     }
-    lastWorkspaceSelectionStore.remember({ serverId, workspaceId });
-  }, [serverId, workspaceId]);
+  }, [serverId, workspaceId, projectId]);
   return selection;
 }
 export function useSidebarActiveWorkspaceSelection(): ActiveWorkspaceSelection | null {
   const routeSelection = useActiveWorkspaceSelection();
-  const workspaceKey = routeSelection ? buildWorkspaceTabPersistenceKey(routeSelection) : null;
+  const workspaceKey = routeSelection ? resolveProjectLayoutKey(routeSelection) : null;
   const focusedTarget = useWorkspaceLayoutStore((state) => {
     const layout = workspaceKey ? state.layoutByWorkspace[workspaceKey] : null;
     if (!layout) {

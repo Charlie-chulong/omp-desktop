@@ -659,4 +659,13 @@ describe("useAgentInputDraft live contract", () => {
       input: { text: "", attachments: [] },
     });
   });
+
+  it("records an abandoned draft even when no text has been persisted yet", () => {
+    const draftKey = "draft:unpersisted-close";
+    useDraftStore.getState().clearDraftInput({ draftKey, lifecycle: "abandoned" });
+    expect(useDraftStore.getState().drafts[draftKey]).toMatchObject({
+      lifecycle: "abandoned",
+      input: { text: "", attachments: [] },
+    });
+  });
 });

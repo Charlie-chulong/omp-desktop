@@ -33,7 +33,14 @@ const projects: SidebarProjectEntry[] = [
     projectName: "Host project",
     projectKind: "git",
     iconWorkingDir: "/host",
-    hosts: [],
+    hosts: [
+      {
+        serverId: "server-1",
+        projectId: "project-host",
+        iconWorkingDir: "/host",
+        worktreeSupport: "supported",
+      },
+    ],
     workspaces: [hostWorkspace],
   },
   {
@@ -41,7 +48,14 @@ const projects: SidebarProjectEntry[] = [
     projectName: "Target project",
     projectKind: "git",
     iconWorkingDir: "/target",
-    hosts: [],
+    hosts: [
+      {
+        serverId: "server-1",
+        projectId: "project-target",
+        iconWorkingDir: "/target",
+        worktreeSupport: "supported",
+      },
+    ],
     workspaces: [targetWorkspace],
   },
 ];
@@ -51,8 +65,8 @@ const hostLayout: WorkspaceLayout = {
     kind: "pane",
     pane: {
       id: "main",
-      tabIds: ["agent_existing", "draft-new"],
-      focusedTabId: "draft-new",
+      tabIds: ["agent_existing", "tab-draft-new"],
+      focusedTabId: "tab-draft-new",
       tabs: [
         {
           tabId: "agent_existing",
@@ -60,7 +74,7 @@ const hostLayout: WorkspaceLayout = {
           createdAt: 1,
         },
         {
-          tabId: "draft-new",
+          tabId: "tab-draft-new",
           target: {
             kind: "draft",
             draftId: "draft-new",
@@ -74,13 +88,13 @@ const hostLayout: WorkspaceLayout = {
 };
 
 describe("sidebar agent drafts", () => {
-  it("groups a hosted draft under its execution project without moving the tab host", () => {
+  it("groups a draft under its owning project", () => {
     const grouped = groupSidebarAgentDrafts({
       projects,
-      workspaceLayouts: { [hostWorkspace.workspaceKey]: hostLayout },
+      workspaceLayouts: { "server-1:project:project-target": hostLayout },
       activeRouteSelection: {
-        serverId: hostWorkspace.serverId,
-        workspaceId: hostWorkspace.workspaceId,
+        serverId: targetWorkspace.serverId,
+        workspaceId: targetWorkspace.workspaceId,
       },
     });
 
@@ -89,10 +103,49 @@ describe("sidebar agent drafts", () => {
       {
         serverId: "server-1",
         workspaceId: "workspace-target",
-        tabHostWorkspaceId: "workspace-host",
+        tabHostWorkspaceId: "workspace-target",
         draftId: "draft-new",
+        tabId: "tab-draft-new",
         selected: true,
       },
     ]);
+  });
+
+  it("groups project-scoped drafts by their owner checkout, not the selected checkout", () => {
+    const otherCheckout = {
+      ...targetWorkspace,
+      workspaceKey: "server-1:workspace-other",
+      workspaceId: "workspace-other",
+    };
+    const grouped = groupSidebarAgentDrafts({
+      projects: [projects[0]!, { ...projects[1]!, workspaces: [targetWorkspace, otherCheckout] }],
+      workspaceLayouts: { "server-1:project:project-target": hostLayout },
+      activeRouteSelection: { serverId: "server-1", workspaceId: otherCheckout.workspaceId },
+    });
+
+    expect(grouped.get("project-host")).toBeUndefined();
+    expect(grouped.get("project-target")).toEqual([
+      {
+        serverId: "server-1",
+        workspaceId: "workspace-target",
+        tabHostWorkspaceId: "workspace-other",
+        draftId: "draft-new",
+        tabId: "tab-draft-new",
+        selected: true,
+      },
+    ]);
+  });
+
+  it("does not advertise a draft tab under a different project's layout", () => {
+    const grouped = groupSidebarAgentDrafts({
+      projects,
+      workspaceLayouts: { "server-1:project:project-host": hostLayout },
+      activeRouteSelection: {
+        serverId: hostWorkspace.serverId,
+        workspaceId: hostWorkspace.workspaceId,
+      },
+    });
+    expect(grouped.get("project-target")).toBeUndefined();
+    expect(grouped.get("project-host")).toBeUndefined();
   });
 });

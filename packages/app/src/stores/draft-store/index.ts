@@ -350,7 +350,17 @@ export const useDraftStore = create<DraftStore>()(
         set((state) => {
           const existing = state.drafts[draftKey];
           if (!existing) {
-            return state;
+            return lifecycle
+              ? {
+                  drafts: {
+                    ...state.drafts,
+                    [draftKey]: createDraftRecord({
+                      draft: { text: "", attachments: [] },
+                      lifecycle,
+                    }),
+                  },
+                }
+              : state;
           }
           const cleared = applyClearDraftRecord({
             record: existing,

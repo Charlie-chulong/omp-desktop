@@ -24,7 +24,26 @@ function createFakeDeps(overrides: Partial<NavigateToWorkspaceDeps> = {}) {
   const openedTabs: RecordedTab[] = [];
   const pinnedAgents: Array<{ workspaceKey: string; agentId: string }> = [];
   const deps: NavigateToWorkspaceDeps = {
-    getSessionWorkspaces: () => null,
+    getSessionWorkspaces: () =>
+      new Map(
+        [
+          "workspace-a",
+          "workspace-host",
+          "workspace-conversation",
+          "workspace-other",
+          "workspace-empty",
+        ].map(
+          (id) =>
+            [
+              id,
+              {
+                id,
+                projectId:
+                  id === "workspace-other" || id === "workspace-empty" ? "project-b" : "project-a",
+              } as WorkspaceDescriptor,
+            ] as const,
+        ),
+      ),
     getSessionAgents: () => [] as Agent[],
     openTab: ({ workspaceKey, target }) => {
       openedTabs.push({ workspaceKey, target });
@@ -44,7 +63,6 @@ function createSidebarFakeDeps(overrides: Partial<NavigateToSidebarWorkspaceDeps
   const deps: NavigateToSidebarWorkspaceDeps = {
     ...base.deps,
     getSessionAgentsHydrated: () => true,
-    getWorkspaceTabs: () => [],
     fetchWorkspaceAgentHistory: async (serverId, workspaceId) => {
       historyRequests.push({ serverId, workspaceId });
       return [];
@@ -96,6 +114,7 @@ describe("workspace navigation", () => {
   it("focuses the attention agent's tab when a workspace has one", () => {
     const workspace = {
       id: "workspace-a",
+      projectId: "project-a",
       workspaceDirectory: "/repo/workspace-a",
     } as WorkspaceDescriptor;
     const agent = {
@@ -114,8 +133,8 @@ describe("workspace navigation", () => {
 
     expect(openedTabs).toEqual([
       {
-        workspaceKey: "server-1:workspace-a",
-        target: { kind: "agent", agentId: "agent-1" },
+        workspaceKey: "server-1:project:project-a",
+        target: { kind: "agent", agentId: "agent-1", workspaceId: "workspace-a" },
       },
     ]);
   });
@@ -123,6 +142,7 @@ describe("workspace navigation", () => {
   it("keeps an explicit tab authoritative over an attention agent", () => {
     const workspace = {
       id: "workspace-a",
+      projectId: "project-a",
       workspaceDirectory: "/repo/workspace-a",
     } as WorkspaceDescriptor;
     const agent = {
@@ -148,8 +168,8 @@ describe("workspace navigation", () => {
 
     expect(openedTabs).toEqual([
       {
-        workspaceKey: "server-1:workspace-a",
-        target: { kind: "draft", draftId: "draft-1" },
+        workspaceKey: "server-1:project:project-a",
+        target: { kind: "draft", draftId: "draft-1", workspaceId: "workspace-a" },
       },
     ]);
   });
@@ -175,6 +195,7 @@ describe("workspace navigation", () => {
   it("opens the latest archived root agent when a sidebar workspace has no active agent", async () => {
     const workspace = {
       id: "workspace-a",
+      projectId: "project-a",
       workspaceDirectory: "/repo/workspace-a",
     } as WorkspaceDescriptor;
     const fetchWorkspaceAgentHistory = vi.fn(async () => [
@@ -199,6 +220,7 @@ describe("workspace navigation", () => {
   it("navigates with the active agent open intent when no tab host is available", async () => {
     const workspace = {
       id: "workspace-a",
+      projectId: "project-a",
       workspaceDirectory: "/repo/workspace-a",
     } as WorkspaceDescriptor;
     const activeAgent = {
@@ -226,6 +248,7 @@ describe("workspace navigation", () => {
   it("selects the same oldest root regardless of directory order", async () => {
     const workspace = {
       id: "workspace-a",
+      projectId: "project-a",
       workspaceDirectory: "/repo/workspace-a",
     } as WorkspaceDescriptor;
     const newer = {
@@ -249,18 +272,20 @@ describe("workspace navigation", () => {
     await navigateToSidebarWorkspace({ serverId: "server-1", workspaceId: workspace.id }, deps);
     expect(navigations).toEqual(["/h/server-1/workspace/workspace-a?open=agent%3Aprimary"]);
     expect(pinnedAgents).toEqual([
-      { workspaceKey: "server-1:workspace-a", agentId: "primary" },
-      { workspaceKey: "server-1:workspace-a", agentId: "newer" },
+      { workspaceKey: "server-1:project:project-a", agentId: "primary" },
+      { workspaceKey: "server-1:project:project-a", agentId: "newer" },
     ]);
   });
 
   it("opens a sidebar conversation in the current center tab host without navigating", async () => {
     const hostWorkspace = {
       id: "workspace-host",
+      projectId: "project-a",
       workspaceDirectory: "/repo/host",
     } as WorkspaceDescriptor;
     const conversationWorkspace = {
       id: "workspace-conversation",
+      projectId: "project-a",
       workspaceDirectory: "/repo/conversation",
     } as WorkspaceDescriptor;
     const rootAgent = {
@@ -298,12 +323,12 @@ describe("workspace navigation", () => {
     expect(historyRequests).toEqual([]);
     expect(openedTabs).toEqual([
       {
-        workspaceKey: "server-1:workspace-host",
-        target: { kind: "agent", agentId: "agent-root" },
+        workspaceKey: "server-1:project:project-a",
+        target: { kind: "agent", agentId: "agent-root", workspaceId: "workspace-conversation" },
       },
     ]);
     expect(pinnedAgents).toEqual([
-      { workspaceKey: "server-1:workspace-host", agentId: "agent-root" },
+      { workspaceKey: "server-1:project:project-a", agentId: "agent-root" },
     ]);
     expect(navigations).toEqual([]);
     expect(remembered).toEqual([]);
@@ -344,51 +369,29 @@ describe("workspace navigation", () => {
     expect(route).toBe("/h/server-1/workspace/workspace-host");
     expect(openedTabs).toEqual([
       {
-        workspaceKey: "server-1:workspace-host",
-        target: { kind: "agent", agentId: "root-primary" },
+        workspaceKey: "server-1:project:project-a",
+        target: { kind: "agent", agentId: "root-primary", workspaceId: "workspace-conversation" },
       },
       {
-        workspaceKey: "server-1:workspace-host",
-        target: { kind: "agent", agentId: "root-hidden-attention" },
+        workspaceKey: "server-1:project:project-a",
+        target: {
+          kind: "agent",
+          agentId: "root-hidden-attention",
+          workspaceId: "workspace-conversation",
+        },
       },
     ]);
     expect(pinnedAgents).toEqual([
-      { workspaceKey: "server-1:workspace-host", agentId: "root-primary" },
-      { workspaceKey: "server-1:workspace-host", agentId: "root-hidden-attention" },
+      { workspaceKey: "server-1:project:project-a", agentId: "root-primary" },
+      { workspaceKey: "server-1:project:project-a", agentId: "root-hidden-attention" },
     ]);
     expect(navigations).toEqual([]);
   });
 
-  it("leaves a draft-only host when opening another project's conversation", async () => {
+  it("switches layouts instead of hosting another project's conversation", async () => {
     const { deps, navigations, openedTabs } = createSidebarFakeDeps({
       getSessionAgents: () =>
         [{ id: "agent-root", workspaceId: "workspace-other", archivedAt: null }] as Agent[],
-      getWorkspaceTabs: () => [
-        { tabId: "draft", target: { kind: "draft", draftId: "unused" }, createdAt: 0 },
-      ],
-    });
-
-    await navigateToSidebarWorkspace(
-      {
-        serverId: "server-1",
-        workspaceId: "workspace-other",
-        tabHost: { serverId: "server-1", workspaceId: "workspace-empty" },
-      },
-      deps,
-    );
-
-    expect(navigations).toEqual(["/h/server-1/workspace/workspace-other?open=agent%3Aagent-root"]);
-    expect(openedTabs).toEqual([]);
-  });
-
-  it("keeps a host containing both drafts and existing conversations", async () => {
-    const { deps, navigations, openedTabs } = createSidebarFakeDeps({
-      getSessionAgents: () =>
-        [{ id: "agent-root", workspaceId: "workspace-other", archivedAt: null }] as Agent[],
-      getWorkspaceTabs: () => [
-        { tabId: "draft", target: { kind: "draft", draftId: "unused" }, createdAt: 0 },
-        { tabId: "existing", target: { kind: "agent", agentId: "existing" }, createdAt: 0 },
-      ],
     });
 
     await navigateToSidebarWorkspace(
@@ -400,11 +403,30 @@ describe("workspace navigation", () => {
       deps,
     );
 
+    expect(navigations).toEqual(["/h/server-1/workspace/workspace-other?open=agent%3Aagent-root"]);
+    expect(openedTabs).toEqual([]);
+  });
+
+  it("keeps same-project conversations beside existing drafts", async () => {
+    const { deps, navigations, openedTabs } = createSidebarFakeDeps({
+      getSessionAgents: () =>
+        [{ id: "agent-root", workspaceId: "workspace-conversation", archivedAt: null }] as Agent[],
+    });
+
+    await navigateToSidebarWorkspace(
+      {
+        serverId: "server-1",
+        workspaceId: "workspace-conversation",
+        tabHost: { serverId: "server-1", workspaceId: "workspace-host" },
+      },
+      deps,
+    );
+
     expect(navigations).toEqual([]);
     expect(openedTabs).toEqual([
       {
-        workspaceKey: "server-1:workspace-host",
-        target: { kind: "agent", agentId: "agent-root" },
+        workspaceKey: "server-1:project:project-a",
+        target: { kind: "agent", agentId: "agent-root", workspaceId: "workspace-conversation" },
       },
     ]);
   });
@@ -412,10 +434,12 @@ describe("workspace navigation", () => {
   it("opens an archived sidebar conversation in the current center tab host", async () => {
     const hostWorkspace = {
       id: "workspace-host",
+      projectId: "project-a",
       workspaceDirectory: "/repo/host",
     } as WorkspaceDescriptor;
     const conversationWorkspace = {
       id: "workspace-conversation",
+      projectId: "project-a",
       workspaceDirectory: "/repo/conversation",
     } as WorkspaceDescriptor;
     const { deps, openedTabs, pinnedAgents, navigations } = createSidebarFakeDeps({
@@ -444,12 +468,12 @@ describe("workspace navigation", () => {
 
     expect(openedTabs).toEqual([
       {
-        workspaceKey: "server-1:workspace-host",
-        target: { kind: "agent", agentId: "agent-archived" },
+        workspaceKey: "server-1:project:project-a",
+        target: { kind: "agent", agentId: "agent-archived", workspaceId: "workspace-conversation" },
       },
     ]);
     expect(pinnedAgents).toEqual([
-      { workspaceKey: "server-1:workspace-host", agentId: "agent-archived" },
+      { workspaceKey: "server-1:project:project-a", agentId: "agent-archived" },
     ]);
     expect(navigations).toEqual([]);
   });
@@ -457,10 +481,12 @@ describe("workspace navigation", () => {
   it("navigates to an empty workspace instead of leaving the previous project's tab visible", async () => {
     const hostWorkspace = {
       id: "workspace-host",
+      projectId: "project-a",
       workspaceDirectory: "/repo/host",
     } as WorkspaceDescriptor;
     const emptyWorkspace = {
       id: "workspace-empty",
+      projectId: "project-b",
       workspaceDirectory: "/repo/empty",
     } as WorkspaceDescriptor;
     const { deps, openedTabs, navigations, remembered } = createSidebarFakeDeps({
@@ -489,6 +515,7 @@ describe("workspace navigation", () => {
   it("navigates when the active tab host belongs to another server", async () => {
     const conversationWorkspace = {
       id: "workspace-conversation",
+      projectId: "project-a",
       workspaceDirectory: "/repo/conversation",
     } as WorkspaceDescriptor;
     const activeAgent = {

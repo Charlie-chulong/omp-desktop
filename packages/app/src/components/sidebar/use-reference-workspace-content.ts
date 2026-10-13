@@ -15,7 +15,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { pickWorkspacePrimaryAgentId } from "@/subagents/policies";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { getParentAgentIdFromLabels } from "@omp-desktop/protocol/agent-labels";
 
 export function useReferenceWorkspaceContent(workspace: SidebarWorkspaceEntry) {
@@ -23,9 +23,7 @@ export function useReferenceWorkspaceContent(workspace: SidebarWorkspaceEntry) {
   const toast = useToast();
   const activeWorkspace = useActiveWorkspaceSelection();
   const supportsAgentForkContext = useHostFeature(workspace.serverId, "agentForkContext");
-  const activeWorkspaceKey = activeWorkspace
-    ? buildWorkspaceTabPersistenceKey(activeWorkspace)
-    : null;
+  const activeWorkspaceKey = activeWorkspace ? resolveProjectLayoutKey(activeWorkspace) : null;
   const layout = useWorkspaceLayoutStore((state) =>
     activeWorkspaceKey ? state.layoutByWorkspace[activeWorkspaceKey] : undefined,
   );

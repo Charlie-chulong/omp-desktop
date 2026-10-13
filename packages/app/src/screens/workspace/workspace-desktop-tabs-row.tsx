@@ -22,6 +22,7 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Copy,
+  FolderTree,
   Pencil,
   RotateCw,
   Maximize2,
@@ -73,6 +74,11 @@ import {
   type WorkspaceTabMenuEntry,
   type WorkspaceTabMenuLabels,
 } from "@/screens/workspace/workspace-tab-menu";
+import { openTabInSidePanel } from "@/workspace-tabs/side-panel";
+import { resolveWorkspaceFilePaths } from "@/workspace/file-open";
+import { buildWorkspaceExplorerStateKey } from "@/hooks/use-file-explorer-actions";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
+import { usePanelStore } from "@/stores/panel-store";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import type { Theme } from "@/styles/theme";
@@ -170,6 +176,7 @@ const ThemedCopyX = withUnistyles(CopyX);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedMaximize2 = withUnistyles(Maximize2);
 const ThemedMinimize2 = withUnistyles(Minimize2);
+const ThemedFolderTree = withUnistyles(FolderTree);
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const extraMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundExtraMuted });
@@ -320,6 +327,8 @@ function TabContextMenuItem({
     switch (entry.icon) {
       case "copy":
         return <ThemedCopy size={16} uniProps={mutedColorMapping} />;
+      case "folder-tree":
+        return <ThemedFolderTree size={16} uniProps={mutedColorMapping} />;
       case "rotate-cw":
         return <ThemedRotateCw size={16} uniProps={mutedColorMapping} />;
       case "arrow-left-to-line":
@@ -944,8 +953,6 @@ function ResolvedWorkspaceDesktopTabsRow({
 }: ResolvedWorkspaceDesktopTabsRowProps) {
   const { t } = useTranslation();
   const isLocalDaemon = useIsLocalDaemon(normalizedServerId);
-  const workspace = useWorkspace(normalizedServerId, normalizedWorkspaceId);
-  const revealWorkspacePath = isLocalDaemon ? (workspace?.workspaceDirectory ?? null) : null;
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
   const [paneMaximizeButtonWidth, setPaneMaximizeButtonWidth] = useState<number>(0);
   const [, setExitFocusModeWidth] = useState<number>(0);
@@ -1038,6 +1045,8 @@ function ResolvedWorkspaceDesktopTabsRow({
       copyAgentId: t("workspace.tabs.menu.copyAgentId"),
       copyTerminalId: t("workspace.tabs.menu.copyTerminalId"),
       copyFilePath: t("workspace.tabs.menu.copyFilePath"),
+      revealInFiles: t("workspace.tabs.menu.revealInFiles"),
+      revealOutsideWorkspace: t("workspace.tabs.menu.revealOutsideWorkspace"),
       rename: t("workspace.tabs.menu.rename"),
       closeAbove: t("workspace.tabs.menu.closeAbove"),
       closeBelow: t("workspace.tabs.menu.closeBelow"),
@@ -1201,7 +1210,9 @@ function ResolvedWorkspaceDesktopTabsRow({
         <ResolvedDesktopTabChip
           key={`${item.tab.key}:${item.tab.kind}`}
           item={item}
-          revealWorkspacePath={revealWorkspacePath}
+          serverId={normalizedServerId}
+          fallbackWorkspaceId={normalizedWorkspaceId}
+          isLocalDaemon={isLocalDaemon}
           isFocused={isFocused}
           isDragging={isActive}
           index={index}
@@ -1230,7 +1241,9 @@ function ResolvedWorkspaceDesktopTabsRow({
     },
     [
       activeDragTabId,
-      revealWorkspacePath,
+      isLocalDaemon,
+      normalizedServerId,
+      normalizedWorkspaceId,
       isFocused,
       layout.closeButtonPolicy,
       layout.items,
@@ -1333,7 +1346,9 @@ function ResolvedWorkspaceDesktopTabsRow({
 }
 function ResolvedDesktopTabChip({
   item,
-  revealWorkspacePath,
+  serverId,
+  fallbackWorkspaceId,
+  isLocalDaemon,
   isFocused,
   isDragging,
   index,
@@ -1359,7 +1374,9 @@ function ResolvedDesktopTabChip({
   showDropIndicatorAfter,
 }: {
   item: ResolvedWorkspaceDesktopTabRowItem;
-  revealWorkspacePath: string | null;
+  serverId: string;
+  fallbackWorkspaceId: string;
+  isLocalDaemon: boolean;
   isFocused: boolean;
   isDragging: boolean;
   index: number;
@@ -1385,6 +1402,38 @@ function ResolvedDesktopTabChip({
   showDropIndicatorAfter: boolean;
 }) {
   const { t } = useTranslation();
+  const ownerWorkspaceId = item.tab.target.workspaceId?.trim() || fallbackWorkspaceId;
+  const ownerWorkspace = useWorkspace(serverId, ownerWorkspaceId);
+  const workspaceRoot = ownerWorkspace?.workspaceDirectory ?? "";
+  const revealWorkspacePath = isLocalDaemon ? workspaceRoot || null : null;
+  const revealExplorerFile = usePanelStore((state) => state.revealExplorerFile);
+  const canRevealFileInExplorer = useCallback(
+    (path: string) =>
+      Boolean(
+        resolveProjectLayoutKey({ serverId, workspaceId: ownerWorkspaceId }) &&
+        resolveWorkspaceFilePaths({ path, workspaceRoot })?.relativePath,
+      ),
+    [ownerWorkspaceId, serverId, workspaceRoot],
+  );
+  const onRevealFileInExplorer = useCallback(
+    (path: string) => {
+      const relativePath = resolveWorkspaceFilePaths({ path, workspaceRoot })?.relativePath;
+      const workspaceKey = buildWorkspaceExplorerStateKey({
+        workspaceId: ownerWorkspaceId,
+        workspaceRoot,
+      });
+      const projectKey = resolveProjectLayoutKey({ serverId, workspaceId: ownerWorkspaceId });
+      if (!relativePath || !workspaceKey || !projectKey) return;
+      revealExplorerFile({ serverId, workspaceKey, path: relativePath });
+      openTabInSidePanel({
+        isCompact: false,
+        workspaceKey: projectKey,
+        checkout: null,
+        target: { kind: "files", workspaceId: ownerWorkspaceId },
+      });
+    },
+    [ownerWorkspaceId, revealExplorerFile, serverId, workspaceRoot],
+  );
   const presentation = item.presentation;
   const resolvedTab = useMemo(
     () =>
@@ -1398,6 +1447,8 @@ function ResolvedDesktopTabChip({
         onCopyFilePath,
         onReloadAgent,
         onRenameTab,
+        onRevealFileInExplorer,
+        canRevealFileInExplorer,
         onCloseTab,
         onCloseTabsToLeft,
         onCloseTabsToRight,
@@ -1417,6 +1468,8 @@ function ResolvedDesktopTabChip({
       onCopyResumeCommand,
       labels,
       onReloadAgent,
+      onRevealFileInExplorer,
+      canRevealFileInExplorer,
       onRenameTab,
       tabCount,
     ],

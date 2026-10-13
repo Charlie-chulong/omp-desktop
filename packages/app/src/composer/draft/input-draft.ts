@@ -203,9 +203,14 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       if (canListenForPageHide) {
         window.removeEventListener("pagehide", flush);
       }
-      textPublication.flush();
+      const lifecycle = useDraftStore.getState().drafts[draftKey]?.lifecycle;
+      if (lifecycle === "abandoned" || lifecycle === "sent") {
+        textPublication.cancel();
+      } else {
+        textPublication.flush();
+      }
     };
-  }, [textPublication]);
+  }, [draftKey, textPublication]);
 
   useEffect(() => {
     let cancelled = false;

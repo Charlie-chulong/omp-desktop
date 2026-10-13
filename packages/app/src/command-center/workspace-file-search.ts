@@ -6,7 +6,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceDirectory } from "@/stores/session-store-hooks";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import {
   describeWorkspaceFilePath,
   type WorkspaceFileSearchEntry,
@@ -130,12 +130,12 @@ export function useWorkspaceFileSearch(input: { enabled: boolean; query: string 
       clearCommandCenterFocusRestoreElement();
       openWorkspaceFileFromExplorer({
         location: { path },
-        persistenceKey: buildWorkspaceTabPersistenceKey({ serverId, workspaceId }),
+        persistenceKey: resolveProjectLayoutKey({ serverId, workspaceId }),
         showMobileAgent: usePanelStore.getState().showMobileAgent,
         openWorkspaceTabInFocusedPane: (workspaceKey, target, placement) =>
           useWorkspaceLayoutStore.getState().openTab({
             workspaceKey,
-            target,
+            target: { ...target, workspaceId },
             intent: "reveal",
             placement,
           }),

@@ -17,6 +17,7 @@ vi.mock("@react-native-async-storage/async-storage", () => {
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildWorkspaceTabPersistenceKey, type WorkspaceTab } from "@/workspace-tabs/model";
+import { migrateLegacyProjectLayouts } from "@/workspace-tabs/project-scope";
 import { defaultChangesState, type ChangesState } from "@/panels/changes/state";
 import { defaultFileState, type FileState } from "@/panels/file/state";
 import {
@@ -203,6 +204,90 @@ describe("workspace-layout-store helpers", () => {
     });
   });
 
+  it("keeps saved tabs and panel state when upgrading a manual-recovery layout blob", async () => {
+    const workspaceKey = createWorkspaceKey();
+    const saved = {
+      root: createPane({
+        id: "main",
+        tabIds: ["old-file"],
+        targetsByTabId: { "old-file": { kind: "file", path: "src/index.ts" } },
+      }),
+      focusedPaneId: "main",
+    };
+    collectAllTabs(saved.root)[0].state = { treeWidth: 310, treeVisible: true };
+    await AsyncStorage.setItem(
+      "workspace-layout-state",
+      JSON.stringify({
+        version: 2,
+        state: {
+          layoutByWorkspace: { [workspaceKey]: saved },
+          unresolvedProjectTabIdsByWorkspace: { [workspaceKey]: ["old-file"] },
+          splitSizesByWorkspace: {},
+          explorerPaneIdByWorkspace: {},
+        },
+      }),
+    );
+    const restored = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+    await restored.persist.rehydrate();
+    const file = restored
+      .getState()
+      .getWorkspaceTabs(workspaceKey)
+      .find((item) => item.tabId === "old-file");
+    expect(file).toMatchObject({
+      target: { kind: "file", path: "src/index.ts" },
+      state: { treeWidth: 310, treeVisible: true },
+    });
+    const root = restored.getState().layoutByWorkspace[workspaceKey].root;
+    expect(findPaneById(root, "main")?.focusedTabId).toBe("old-file");
+  });
+
+  it("preserves a legacy child's migrated opener through saving and reload so it joins the right project", async () => {
+    const rawKey = `${SERVER_ID}:${WORKSPACE_ID}`;
+    const projectKey = `${SERVER_ID}:project:other`;
+    const childLayout = {
+      root: createPane({
+        id: "main",
+        tabIds: ["legacy-child"],
+        targetsByTabId: { "legacy-child": { kind: "file", path: "src/index.ts" } },
+      }),
+      focusedPaneId: "main",
+      parentTabIdByTabId: { "legacy-child": "opener" },
+    };
+    const openerLayout = {
+      root: createPane({
+        id: "main",
+        tabIds: ["opener"],
+        targetsByTabId: {
+          opener: { kind: "agent", agentId: "agent-other", workspaceId: "ws-other" },
+        },
+      }),
+      focusedPaneId: "main",
+    };
+    const first = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+    await first.persist.rehydrate();
+    first.setState({ layoutByWorkspace: { [rawKey]: childLayout, [projectKey]: openerLayout } });
+    const restored = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+    await restored.persist.rehydrate();
+    const migrated = migrateLegacyProjectLayouts({
+      serverId: SERVER_ID,
+      layouts: restored.getState().layoutByWorkspace,
+      workspaces: new Map([
+        [WORKSPACE_ID, { id: WORKSPACE_ID, projectId: "original" }],
+        ["ws-other", { id: "ws-other", projectId: "other" }],
+      ]),
+    });
+    expect(
+      collectAllTabs(migrated.layouts[projectKey].root).find(
+        (item) => item.tabId === "legacy-child",
+      )?.target,
+    ).toMatchObject({
+      kind: "file",
+      path: "src/index.ts",
+      workspaceId: "ws-other",
+    });
+    expect(migrated.layouts[rawKey]).toBeUndefined();
+  });
+
   it.each([1, 2])(
     "recovers other tabs, panes, focus and workspaces from version %i layouts with browser tabs",
     async (version) => {
@@ -277,7 +362,6 @@ describe("workspace-layout-store helpers", () => {
         "draft-a",
       ]);
       expect(findPaneById(first.root, "other-pane")).toBeTruthy();
-      expect(first.parentTabIdByTabId).toBeUndefined();
       expect(collectContentTabs(second.root).map((tab) => tab.tabId)).toEqual(["agent-b"]);
       expect(restored.getState().splitSizesByWorkspace.first?.["user-split"]).toEqual([0.6, 0.4]);
     },
@@ -3070,12 +3154,7 @@ describe("workspace-layout-store actions", () => {
     const layout = stripEphemeralTabsFromLayout(currentState.layoutByWorkspace[workspaceKey]);
     const persisted = partialize(currentState);
 
-    expect(persisted).toEqual({
-      layoutByWorkspace: { [workspaceKey]: layout },
-      splitSizesByWorkspace: currentState.splitSizesByWorkspace,
-      // The persisted key keeps its pre-rename spelling for older clients.
-      explorerPaneIdByWorkspace: {},
-    });
+    expect(persisted.layoutByWorkspace?.[workspaceKey]).toEqual(layout);
     expect(layout && collectAllTabs(layout.root).map((tab) => tab.target)).toEqual([
       {
         kind: "working_diff",
@@ -3239,11 +3318,7 @@ describe("workspace-layout-store actions", () => {
 
     const partialize = workspaceLayoutStore.persist.getOptions().partialize;
     expect(partialize).toBeTypeOf("function");
-    expect(partialize?.(state)).toEqual({
-      layoutByWorkspace: {},
-      splitSizesByWorkspace: {},
-      explorerPaneIdByWorkspace: {},
-    });
+    expect("pinnedAgentIdsByWorkspace" in (partialize?.(state) ?? {})).toBe(false);
   });
 
   it("keeps hidden agent intents in memory per workspace without persisting them", () => {
@@ -3276,11 +3351,7 @@ describe("workspace-layout-store actions", () => {
 
     const partialize = workspaceLayoutStore.persist.getOptions().partialize;
     expect(partialize).toBeTypeOf("function");
-    expect(partialize?.(state)).toEqual({
-      layoutByWorkspace: {},
-      splitSizesByWorkspace: {},
-      explorerPaneIdByWorkspace: {},
-    });
+    expect("hiddenAgentIdsByWorkspace" in (partialize?.(state) ?? {})).toBe(false);
   });
 
   it("convertDraftToAgent removes the draft and focuses the existing split conversation", () => {
@@ -4229,5 +4300,33 @@ describe("workspace-layout-store actions", () => {
     expect(findPaneById(layout.root, "main")?.tabIds).toEqual([agentTabId]);
     expect(findPaneContainingTab(layout.root, filesTabId!)?.id).toBe("explorer");
     expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual(["main"]);
+  });
+  it("does not prune another checkout's process or terminal when reconciling project tabs", () => {
+    const workspaceKey = "host:project:one";
+    const store = workspaceLayoutStore.getState();
+    const siblingTerminal = store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "sibling-terminal", workspaceId: "second" },
+      intent: "reveal",
+    });
+    const siblingAgent = store.openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "sibling-agent", workspaceId: "second" },
+      intent: "reveal",
+    });
+    store.reconcileTabs(workspaceKey, {
+      workspaceId: "first",
+      terminalWorkspaceId: "first",
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: [],
+      autoOpenAgentIds: [],
+      knownAgentIds: [],
+      knownTerminalIds: [],
+      standaloneTerminalIds: [],
+    });
+    const project = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneContainingTab(project.root, siblingTerminal!)).not.toBeNull();
+    expect(findPaneContainingTab(project.root, siblingAgent!)).not.toBeNull();
   });
 });

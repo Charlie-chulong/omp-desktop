@@ -512,6 +512,10 @@ export const fr: TranslationResources = {
     },
   },
   workspace: {
+    projectEmpty: {
+      description: "Aucune conversation pour le moment",
+      newConversation: "Nouvelle conversation",
+    },
     route: {
       loading: "Chargement de l'espace de travail",
       connecting: "De liaison",
@@ -687,6 +691,8 @@ export const fr: TranslationResources = {
         copyAgentId: "Copier l'identifiant de l'agent",
         copyTerminalId: "Copier l'identifiant du terminal",
         copyFilePath: "Copy file path",
+        revealInFiles: "Afficher dans Fichiers",
+        revealOutsideWorkspace: "Le fichier est en dehors de cet espace de travail",
         rename: "Rebaptiser",
         closeAbove: "Fermer les onglets ci-dessus",
         closeBelow: "Fermer les onglets ci-dessous",
@@ -1357,6 +1363,7 @@ export const fr: TranslationResources = {
   },
   newWorkspace: {
     title: "Nouvel espace de travail",
+    deleteDraft: "Supprimer le nouvel espace de travail",
     create: "Créer",
     fields: {
       project: "Projet",

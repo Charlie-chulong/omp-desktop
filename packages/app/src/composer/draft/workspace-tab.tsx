@@ -48,10 +48,8 @@ import {
   useIsCompactFormFactor,
 } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
-import {
-  buildWorkspaceTabPersistenceKey,
-  type WorkspaceDraftTabSetup,
-} from "@/workspace-tabs/model";
+import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { openSidePanelView } from "@/workspace-tabs/side-panel";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
@@ -453,8 +451,13 @@ export function WorkspaceDraftAgentTab({
       }
       openSidePanelView({
         isCompact: isCompactFormFactor,
-        workspaceKey: buildWorkspaceTabPersistenceKey({ serverId, workspaceId: workspaceId ?? "" }),
-        checkout: { serverId, cwd: attachment.attachment.cwd, isGit: true },
+        workspaceKey: resolveProjectLayoutKey({ serverId, workspaceId: workspaceId ?? "" }),
+        checkout: {
+          serverId,
+          workspaceId: workspaceId ?? undefined,
+          cwd: attachment.attachment.cwd,
+          isGit: true,
+        },
         view: "changes",
       });
     },

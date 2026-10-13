@@ -75,7 +75,7 @@ import { buildWorkspaceExplorerStateKey } from "@/hooks/use-file-explorer-action
 import { usePanelStore, type ExpandedPathsUpdate, type SortOption } from "@/stores/panel-store";
 import { formatTimeAgo } from "@/utils/time";
 import { buildAbsoluteExplorerPath, parentExplorerPath } from "@/utils/explorer-paths";
-import { isHiddenExplorerPath } from "@/file-explorer/visibility";
+import { filterVisibleExplorerEntries, isHiddenExplorerPath } from "@/file-explorer/visibility";
 import {
   flattenExplorerTree,
   reconcileRestoredExpandedPaths,
@@ -515,6 +515,7 @@ interface FileExplorerPaneProps {
   onOpenFile?: (location: WorkspaceFileLocation) => void;
   onAddToChat?: (path: string) => void;
   onAddDirectoryToChat?: (path: string) => void;
+  revealRequests?: boolean;
 }
 
 export function FileExplorerPane({
@@ -524,6 +525,7 @@ export function FileExplorerPane({
   onOpenFile,
   onAddToChat,
   onAddDirectoryToChat,
+  revealRequests = false,
 }: FileExplorerPaneProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
@@ -602,6 +604,15 @@ export function FileExplorerPane({
     workspaceStateKey ? state.expandedPathsByWorkspace[workspaceStateKey] : undefined,
   );
   const setExpandedPathsForWorkspace = usePanelStore((state) => state.setExpandedPathsForWorkspace);
+  const revealRequest = usePanelStore((state) => {
+    const request = state.explorerRevealRequest;
+    return revealRequests &&
+      request?.serverId === serverId &&
+      request.workspaceKey === workspaceStateKey
+      ? request
+      : null;
+  });
+  const [scrollReveal, setScrollReveal] = useState<{ path: string; revision: number } | null>(null);
   const expandedPaths = useMemo(
     () => new Set(expandedPathsArray && expandedPathsArray.length > 0 ? expandedPathsArray : ["."]),
     [expandedPathsArray],
@@ -625,6 +636,7 @@ export function FileExplorerPane({
 
   useEffect(() => {
     hasInitializedRef.current = false;
+    setScrollReveal(null);
     const currentPath = selectedEntryPathRef.current;
     const next = currentPath ? new Set([currentPath]) : new Set<string>();
     selectionAnchorPathRef.current = currentPath;
@@ -656,6 +668,58 @@ export function FileExplorerPane({
     requestDirectoryListing,
     setExpandedPathsForWorkspace,
     showHiddenFiles,
+    workspaceStateKey,
+  ]);
+  useEffect(() => {
+    if (!revealRequest || !hasWorkspaceScope || !workspaceStateKey) return;
+    let cancelled = false;
+    const reveal = async () => {
+      const segments = revealRequest.path.split("/");
+      let parentPath = ".";
+      const ancestors = ["."];
+      // Validate each step against the daemon listing rather than selecting a stale or
+      // outside-workspace path that the tree cannot actually display.
+      for (const [index, segment] of segments.entries()) {
+        const directory = await requestDirectoryListing(parentPath, {
+          recordHistory: false,
+          setCurrentPath: false,
+        });
+        if (cancelled || !directory) return;
+        const path = parentPath === "." ? segment : `${parentPath}/${segment}`;
+        const entry = filterVisibleExplorerEntries(directory.entries, true).find(
+          (candidate) =>
+            candidate.path === path &&
+            candidate.kind === (index === segments.length - 1 ? "file" : "directory"),
+        );
+        if (!entry) return;
+        if (index === segments.length - 1) {
+          if (isHiddenExplorerPath(path) && !usePanelStore.getState().explorerShowHiddenFiles) {
+            usePanelStore.getState().toggleExplorerShowHiddenFiles();
+          }
+          setExpandedPathsForWorkspace(workspaceStateKey, (current) =>
+            Array.from(new Set([...current, ...ancestors])),
+          );
+          selectionAnchorPathRef.current = path;
+          commitSelectedEntryPaths(new Set([path]));
+          selectExplorerEntry(path);
+          setScrollReveal({ path, revision: revealRequest.revision });
+          return;
+        }
+        parentPath = path;
+        ancestors.push(path);
+      }
+    };
+    void reveal();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    commitSelectedEntryPaths,
+    hasWorkspaceScope,
+    requestDirectoryListing,
+    revealRequest,
+    selectExplorerEntry,
+    setExpandedPathsForWorkspace,
     workspaceStateKey,
   ]);
 
@@ -1367,6 +1431,7 @@ export function FileExplorerPane({
         currentSortLabel={currentSortLabel}
         isRefreshFetching={isRefreshFetching}
         treeListRef={treeListRef}
+        scrollReveal={scrollReveal}
         scrollbar={scrollbar}
         renderTreeRow={renderTreeRow}
         handleSortCycle={handleSortCycle}
@@ -1448,6 +1513,7 @@ interface FileExplorerPaneContentProps {
   currentSortLabel: string;
   isRefreshFetching: boolean;
   treeListRef: RefObject<FlatList<ExplorerListRow> | null>;
+  scrollReveal: { path: string; revision: number } | null;
   scrollbar: OverlayFlatListScrollbar;
   renderTreeRow: (info: ListRenderItemInfo<ExplorerListRow>) => ReactElement;
   handleSortCycle: () => void;
@@ -1478,6 +1544,7 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
     currentSortLabel,
     isRefreshFetching,
     treeListRef,
+    scrollReveal,
     scrollbar,
     renderTreeRow,
     handleSortCycle,
@@ -1491,6 +1558,95 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
 
   const showHiddenFiles = usePanelStore((state) => state.explorerShowHiddenFiles);
   const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    if (scrollReveal) setSearchOpen(false);
+  }, [scrollReveal]);
+  const pendingRevealRef = useRef<{ index: number; revision: number } | null>(null);
+  const lastRequestedRevealRevision = useRef<number | null>(null);
+  const revealFrameRef = useRef<number | null>(null);
+  const scrollRevealedRow = useCallback(() => {
+    revealFrameRef.current = null;
+    const pending = pendingRevealRef.current;
+    const list = treeListRef.current;
+    if (!pending || !list) return;
+
+    if (isWeb) {
+      const scrollNode = list.getScrollableNode();
+      if (scrollNode instanceof HTMLElement) {
+        const viewport = scrollNode.getBoundingClientRect();
+        if (viewport.width === 0 || viewport.height === 0) {
+          pendingRevealRef.current = null;
+          return;
+        }
+        const row = scrollNode.querySelector<HTMLElement>(
+          `[data-testid="file-explorer-row-${pending.index}"]`,
+        );
+        if (row) {
+          const bounds = row.getBoundingClientRect();
+          if (bounds.top >= viewport.top && bounds.bottom <= viewport.bottom) {
+            pendingRevealRef.current = null;
+            return;
+          }
+          scrollNode.scrollTop += bounds.top - viewport.top - (viewport.height - bounds.height) / 2;
+        } else {
+          // Virtualized rows are not in the DOM until the list reaches them.
+          list.scrollToIndex({ index: pending.index, viewPosition: 0.5, animated: false });
+        }
+      } else {
+        list.scrollToIndex({ index: pending.index, viewPosition: 0.5, animated: false });
+      }
+    } else {
+      list.scrollToIndex({ index: pending.index, viewPosition: 0.5, animated: false });
+    }
+    if (pendingRevealRef.current) {
+      revealFrameRef.current = requestAnimationFrame(scrollRevealedRow);
+    }
+  }, [treeListRef]);
+  const handleRevealScrollFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      if (pendingRevealRef.current?.index !== info.index) return;
+      treeListRef.current?.scrollToOffset({
+        offset: info.index * info.averageItemLength,
+        animated: false,
+      });
+    },
+    [treeListRef],
+  );
+  const handleRevealViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+      if (!isWeb && viewableItems.some((item) => item.index === pendingRevealRef.current?.index)) {
+        pendingRevealRef.current = null;
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!scrollReveal || error) {
+      pendingRevealRef.current = null;
+      return;
+    }
+    if (
+      showInitialLoading ||
+      searchOpen ||
+      lastRequestedRevealRevision.current === scrollReveal.revision
+    )
+      return;
+    const index = listRows.findIndex(
+      (row) => row.type === "entry" && row.row.entry.path === scrollReveal.path,
+    );
+    if (index < 0) return;
+    lastRequestedRevealRevision.current = scrollReveal.revision;
+    pendingRevealRef.current = { index, revision: scrollReveal.revision };
+    if (revealFrameRef.current === null) {
+      revealFrameRef.current = requestAnimationFrame(scrollRevealedRow);
+    }
+  }, [error, listRows, scrollReveal, scrollRevealedRow, searchOpen, showInitialLoading]);
+  useEffect(
+    () => () => {
+      if (revealFrameRef.current !== null) cancelAnimationFrame(revealFrameRef.current);
+    },
+    [],
+  );
 
   const handleOpenSearch = useCallback(() => {
     setSearchOpen(true);
@@ -1700,6 +1856,8 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
           ) : (
             <FlatList
               ref={treeListRef}
+              onScrollToIndexFailed={handleRevealScrollFailed}
+              onViewableItemsChanged={handleRevealViewableItemsChanged}
               style={styles.treeList}
               data={listRows}
               renderItem={renderTreeRow}

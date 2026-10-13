@@ -36,11 +36,11 @@ import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-targ
 const SIDE_PANEL_TAB_KINDS = ["working_diff", "files", "pull_request"] as const;
 type SidePanelTabKind = (typeof SIDE_PANEL_TAB_KINDS)[number];
 
-const SIDE_PANEL_VIEW_TARGETS: Record<ExplorerTab, WorkspaceTabTarget> = {
+const SIDE_PANEL_VIEW_TARGETS = {
   changes: { kind: "working_diff" },
   files: { kind: "files" },
   pr: { kind: "pull_request" },
-};
+} satisfies Record<ExplorerTab, WorkspaceTabTarget>;
 
 export interface SidePanelQuery {
   isCompact: boolean;
@@ -237,7 +237,7 @@ export function openSidePanelView(input: SidePanelInput & { view: ExplorerTab })
   openSupportingTab({
     isCompact: input.isCompact,
     workspaceKey: input.workspaceKey,
-    target: SIDE_PANEL_VIEW_TARGETS[input.view],
+    target: { ...SIDE_PANEL_VIEW_TARGETS[input.view], workspaceId: input.checkout?.workspaceId },
   });
 }
 
@@ -297,7 +297,7 @@ export function toggleSidePanel(input: SidePanelInput): void {
   if (!canUseSidePanelPane(input)) {
     useWorkspaceLayoutStore.getState().openTab({
       workspaceKey: input.workspaceKey,
-      target: SIDE_PANEL_VIEW_TARGETS.changes,
+      target: { ...SIDE_PANEL_VIEW_TARGETS.changes, workspaceId: input.checkout?.workspaceId },
       intent: "reveal",
     });
     return;
@@ -307,14 +307,14 @@ export function toggleSidePanel(input: SidePanelInput): void {
     isCompact: input.isCompact,
     supportsPaneSplits: input.supportsPaneSplits,
     workspaceKey: input.workspaceKey,
-    target: SIDE_PANEL_VIEW_TARGETS.files,
+    target: { ...SIDE_PANEL_VIEW_TARGETS.files, workspaceId: input.checkout?.workspaceId },
     background: true,
   });
   openSupportingTab({
     isCompact: input.isCompact,
     supportsPaneSplits: input.supportsPaneSplits,
     workspaceKey: input.workspaceKey,
-    target: SIDE_PANEL_VIEW_TARGETS.changes,
+    target: { ...SIDE_PANEL_VIEW_TARGETS.changes, workspaceId: input.checkout?.workspaceId },
     background: true,
   });
 }

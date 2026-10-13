@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHostAgentDetailRoute,
+  buildHostProjectRoute,
   buildHostRootRoute,
   buildHostWorkspaceOpenRoute,
   buildHostWorkspaceRoute,
@@ -19,6 +20,7 @@ import {
   normalizeProjectSettingsRouteId,
   parseHostAgentRouteFromPathname,
   parseHostWorkspaceOpenIntentFromPathname,
+  parseHostProjectRouteFromPathname,
   parseHostWorkspaceRouteFromPathname,
   parseWorkspaceOpenIntent,
   stripHostWorkspaceRouteEchoSearch,
@@ -30,6 +32,18 @@ describe("parseHostAgentRouteFromPathname", () => {
       serverId: "local",
       agentId: "abc123",
     });
+  });
+});
+
+describe("project focus routes", () => {
+  it("round-trips project IDs without inventing a backend workspace", () => {
+    const route = buildHostProjectRoute("my host", "remote:git/example/repo");
+    expect(route).toBe("/h/my%20host/project/remote%3Agit%2Fexample%2Frepo");
+    expect(parseHostProjectRouteFromPathname(route)).toEqual({
+      serverId: "my host",
+      projectId: "remote:git/example/repo",
+    });
+    expect(parseHostWorkspaceRouteFromPathname(route)).toBeNull();
   });
 });
 

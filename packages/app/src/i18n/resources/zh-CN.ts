@@ -534,6 +534,10 @@ export const zhCN: TranslationResources = {
     },
   },
   workspace: {
+    projectEmpty: {
+      description: "此 project 暂无对话",
+      newConversation: "新建对话",
+    },
     route: {
       loading: "正在加载 workspace",
       connecting: "正在连接",
@@ -709,6 +713,8 @@ export const zhCN: TranslationResources = {
         copyAgentId: "复制 Agent ID",
         copyTerminalId: "复制 Terminal ID",
         copyFilePath: "Copy file path",
+        revealInFiles: "在文件树中定位",
+        revealOutsideWorkspace: "文件不在当前工作区内",
         rename: "重命名",
         closeAbove: "关闭上方标签",
         closeBelow: "关闭下方标签",
@@ -1337,6 +1343,7 @@ export const zhCN: TranslationResources = {
   },
   newWorkspace: {
     title: "新建对话",
+    deleteDraft: "删除新建对话",
     create: "创建",
     fields: {
       project: "项目",

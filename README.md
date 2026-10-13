@@ -401,7 +401,7 @@ localized units.
 Rename a conversation from its tab's context menu. Renaming the workspace's primary conversation changes the workspace name; additional conversations keep their own titles. Accepted renames update the local tab title immediately, without waiting for a directory event. Saved names remain visible when switching tabs, including when a conversation is not loaded or its provider history is unavailable.
 
 Each tab reads its title and chooses its rename target from the conversation's own workspace,
-including when conversations from multiple workspaces are hosted in the same tab container.
+including when conversations from multiple workspaces within one project share the tab container.
 Changing tabs or pane focus can change the tools' active workspace, but never a conversation's
 primary-workspace identity or saved name.
 
@@ -423,18 +423,51 @@ stored locally across restarts, project switches, and sidebar collapse or expans
 pinned conversation does not open it or change the order of unpinned conversations. Reordering is
 disabled while a host or label filter hides part of the pinned list.
 
+## Project focus and isolated panels
+
+On macOS, **Cmd-click a project in the workspace sidebar** to focus it. A normal click
+still expands or collapses the project; focusing does not change its collapse state.
+The sidebar stays global, while the center tabs, right panel, bottom terminal panel,
+selected tabs, and split sizes are saved separately for each project and host.
+
+Switching projects restores their previous panels without closing conversations, terminating
+terminals, or archiving workspaces. Unsent drafts and unsaved editors are retained.
+Files and terminals keep their owning checkout, including when two worktrees in the same
+project contain files with the same relative path. An empty project can be focused without
+creating a workspace; **New conversation** creates its first conversation draft.
+
+Existing mixed tab layouts are assigned automatically using the same ownership and checkout
+context as newly opened tabs. Conversations and terminals follow their actual workspace;
+files follow their recorded opener or focused checkout, with the original route workspace
+as the default when no opening context was saved. No manual workspace-selection page is shown.
+
+Migration waits for workspace, conversation, and terminal metadata when needed, and retries
+after hydration, directory updates, or reconnection. Pending records stay saved without
+blocking the workspace. Only references proven deleted by a complete catalog are removed;
+migration never creates, unarchives, restarts, or stops backend resources.
+
+When multiple old layouts merge into one project, tab state is retained; the first split tree
+is kept and incoming tabs join its matching panes. Entity tabs follow the current identity
+and deduplication rules. Migrated layouts are persisted and restored after restarting the client.
+
+
 ## Closing unused conversations
 
-Closing the last empty conversation tab returns to the project creation page. On supported hosts, the daemon also archives the unused workspace record so it does not remain in the sidebar under its branch name. This does not delete project files or the project itself.
+Closing the last empty conversation tab returns to the project page. On supported hosts, the daemon also archives the unused workspace record so it does not remain in the sidebar under its branch name. This does not delete project files or the project itself.
 
 Cleanup preserves workspaces with agent history (including archived agents), live or pending resources, a custom title, pins, labels, or worktree ownership. Older hosts must be updated before automatic cleanup is available. An existing empty sidebar entry can be reopened and its empty tab closed to retry cleanup; entries are never bulk-removed merely because they are named `main`.
 
-Opening a new conversation from the sidebar keeps the current header tabs visible. The draft still owns a newly created workspace for execution, while the existing workspace remains the tab host until navigation explicitly changes it.
+Delete an unsent **New workspace** draft from its sidebar hover button or right-click menu.
+Only that draft tab, its input, and attachments are removed; other conversations and project
+files are preserved. Removing the last content tab returns to the project page.
 
-Clicking a conversation notification reveals its tab in the current tab host on the same server,
-preserving the other tabs, their order, and split panes. An unopened conversation is added there
-without changing its owning workspace. Cold starts, notifications from another server, and
-draft-only workspaces navigate to the conversation's own workspace instead.
+Opening a new conversation from the sidebar preserves existing tabs within the same project.
+The draft retains its own workspace for execution. Opening a conversation in another project
+switches to that project's layout instead of adding it to the current project's tabs.
+
+Conversation notifications follow the same rule: reveal or add the conversation in its owning
+project, preserving that project's other tabs, order, and split panes. Notification navigation
+does not change the conversation's owning workspace.
 
 ## File drag and drop
 
@@ -450,6 +483,11 @@ draft-only workspaces navigate to the conversation's own workspace instead.
 Click an image attachment or generated image to open a full-window preview. If Desktop asks what
 to do when its window closes, that choice dialog stays above the preview; canceling returns to the
 open image.
+
+Right-click a workspace file tab and choose **Reveal in Files** to open the right-side Files
+panel, expand its parent directories, select the file, and scroll it into view. Hidden files
+are made visible when needed. This uses the file's owning workspace on local or remote hosts;
+files outside that workspace cannot be revealed in its tree.
 
 ## Text editor shortcuts
 

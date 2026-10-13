@@ -512,6 +512,10 @@ export const ja: TranslationResources = {
     },
   },
   workspace: {
+    projectEmpty: {
+      description: "まだ会話がありません",
+      newConversation: "新しい会話",
+    },
     route: {
       loading: "ワークスペースを読み込み中",
       connecting: "接続中",
@@ -688,6 +692,8 @@ export const ja: TranslationResources = {
         copyAgentId: "エージェントIDをコピー",
         copyTerminalId: "ターミナルIDをコピー",
         copyFilePath: "ファイルパスをコピー",
+        revealInFiles: "ファイルツリーで表示",
+        revealOutsideWorkspace: "このワークスペース外のファイルです",
         rename: "名前を変更",
         closeAbove: "上のタブを閉じる",
         closeBelow: "下のタブを閉じる",
@@ -1335,6 +1341,7 @@ export const ja: TranslationResources = {
   },
   newWorkspace: {
     title: "新しいワークスペース",
+    deleteDraft: "新しいワークスペースを削除",
     create: "作成",
     fields: {
       project: "プロジェクト",

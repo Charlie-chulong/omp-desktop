@@ -15,11 +15,27 @@ import {
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import type { WorkspaceLayout } from "@/stores/workspace-layout-store";
-import { useSessionStore, type Agent } from "@/stores/session-store";
+import { useSessionStore, type Agent, type WorkspaceDescriptor } from "@/stores/session-store";
 import type { SubagentRow } from "@/subagents";
-import { buildWorkspaceTabPersistenceKey, type WorkspaceTabTarget } from "@/workspace-tabs/model";
+import { buildProjectLayoutKey, type WorkspaceTabTarget } from "@/workspace-tabs/model";
 import type { WorkspaceTab } from "@/workspace-tabs/model";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
+
+vi.hoisted(() => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      addEventListener: () => {},
+      addListener: () => {},
+      dispatchEvent: () => false,
+      matches: false,
+      media: "",
+      onchange: null,
+      removeEventListener: () => {},
+      removeListener: () => {},
+    }),
+  });
+});
 
 const layoutMode = vi.hoisted(() => ({ isCompact: false }));
 const toastError = vi.hoisted(() => vi.fn());
@@ -153,6 +169,26 @@ const SERVER_ID = "agent-tracks-server";
 const HOST_WORKSPACE_ID = "workspace-a";
 const OTHER_WORKSPACE_ID = "workspace-b";
 const PARENT_AGENT_ID = "parent-agent";
+const PROJECT_HOST = "project-host";
+const PROJECT_OTHER = "project-other";
+
+function makeWorkspace(id: string, projectId: string): WorkspaceDescriptor {
+  return {
+    id,
+    projectId,
+    projectDisplayName: projectId,
+    projectRootPath: "/repo",
+    workspaceDirectory: "/repo",
+    projectKind: "git",
+    workspaceKind: "local_checkout",
+    name: id,
+    status: "done",
+    statusEnteredAt: null,
+    archivingAt: null,
+    diffStat: null,
+    scripts: [],
+  };
+}
 const SUBAGENT_ID = "provider-child";
 const IDLE_ARCHIVE_STATUS = { kind: "idle" } as const;
 const providerRow: SubagentRow = {
@@ -275,16 +311,34 @@ function renderAgentTracks(
   row: SubagentRow,
   processes: BackgroundProcess[] = [],
 ): TracksFixture {
-  const hostWorkspaceKey = buildWorkspaceTabPersistenceKey({
+  const hostWorkspaceKey = buildProjectLayoutKey({ serverId: SERVER_ID, projectId: PROJECT_HOST })!;
+  const otherWorkspaceKey = buildProjectLayoutKey({
     serverId: SERVER_ID,
-    workspaceId: HOST_WORKSPACE_ID,
+    projectId: PROJECT_OTHER,
   })!;
-  const otherWorkspaceKey = buildWorkspaceTabPersistenceKey({
-    serverId: SERVER_ID,
-    workspaceId: OTHER_WORKSPACE_ID,
-  })!;
+  const storeState = useSessionStore.getState();
+  if (!storeState.sessions[SERVER_ID]) {
+    storeState.initializeSession(SERVER_ID, null as unknown as DaemonClient);
+  }
+  useSessionStore.setState((state) => ({
+    sessions: {
+      ...state.sessions,
+      [SERVER_ID]: {
+        ...state.sessions[SERVER_ID]!,
+        hasHydratedWorkspaces: true,
+        workspaces: new Map([
+          [HOST_WORKSPACE_ID, makeWorkspace(HOST_WORKSPACE_ID, PROJECT_HOST)],
+          [OTHER_WORKSPACE_ID, makeWorkspace(OTHER_WORKSPACE_ID, PROJECT_OTHER)],
+        ]),
+      },
+    },
+  }));
   const store = useWorkspaceLayoutStore.getState();
-  const parentTarget: WorkspaceTabTarget = { kind: "agent", agentId: PARENT_AGENT_ID };
+  const parentTarget: WorkspaceTabTarget = {
+    kind: "agent",
+    agentId: PARENT_AGENT_ID,
+    workspaceId: HOST_WORKSPACE_ID,
+  };
   const parentTabId = store.openTab({
     workspaceKey: hostWorkspaceKey,
     target: parentTarget,
@@ -292,7 +346,7 @@ function renderAgentTracks(
   })!;
   store.openTab({
     workspaceKey: otherWorkspaceKey,
-    target: { kind: "agent", agentId: "unrelated-agent" },
+    target: { kind: "agent", agentId: "unrelated-agent", workspaceId: OTHER_WORKSPACE_ID },
     intent: "new",
   });
   const hostTabsBefore = store.getWorkspaceTabs(hostWorkspaceKey);
@@ -367,7 +421,7 @@ afterEach(() => {
 describe("AgentTracks provider 子代理路由", () => {
   it.each([
     {
-      scenario: "桌面模式下元数据属于 B 时仍在宿主 A 打开",
+      scenario: "另一项目的 provider 子代理导航至所属项目",
       isCompact: false,
       agentWorkspaceId: OTHER_WORKSPACE_ID,
     },
@@ -377,7 +431,7 @@ describe("AgentTracks provider 子代理路由", () => {
       agentWorkspaceId: HOST_WORKSPACE_ID,
     },
     {
-      scenario: "compact 模式下元数据属于 B 时仍在宿主 A 打开",
+      scenario: "compact 模式下另一项目 provider 子代理仍导航至所属项目",
       isCompact: true,
       agentWorkspaceId: OTHER_WORKSPACE_ID,
     },
@@ -387,11 +441,20 @@ describe("AgentTracks provider 子代理路由", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "打开 provider 子代理" }));
 
-    expectChildInHost(fixture, {
-      kind: "provider_subagent",
-      parentAgentId: PARENT_AGENT_ID,
-      subagentId: SUBAGENT_ID,
-    });
+    if (agentWorkspaceId === OTHER_WORKSPACE_ID) {
+      expect(navigateToAgent).toHaveBeenCalledWith({
+        serverId: SERVER_ID,
+        agentId: PARENT_AGENT_ID,
+      });
+      expect(useWorkspaceLayoutStore.getState().layoutByWorkspace).toBe(fixture.layoutsBefore);
+    } else {
+      expectChildInHost(fixture, {
+        kind: "provider_subagent",
+        parentAgentId: PARENT_AGENT_ID,
+        subagentId: SUBAGENT_ID,
+        workspaceId: HOST_WORKSPACE_ID,
+      });
+    }
   });
 });
 
@@ -411,19 +474,20 @@ describe("AgentTracks Git diff 路由", () => {
       (tab) => tab.tabId === sidePanel?.focusedTabId,
     );
     expect(sidePanel?.hidden).not.toBe(true);
-    expect(focusedTab?.target).toEqual({ kind: "working_diff" });
+    expect(focusedTab?.target).toEqual({ kind: "working_diff", workspaceId: HOST_WORKSPACE_ID });
     expect(state.layoutByWorkspace[fixture.otherWorkspaceKey]).toBe(otherLayoutBefore);
   });
 });
 
 describe("AgentTracks Paseo 子会话路由", () => {
-  it("桌面模式下父子同属 B 时在宿主 A 打开子会话", () => {
+  it("navigates to the owning project instead of opening another project's child in the host", () => {
     const row = seedPaseoChild(OTHER_WORKSPACE_ID);
     const fixture = renderAgentTracks(OTHER_WORKSPACE_ID, row);
 
     fireEvent.click(screen.getByRole("button", { name: "打开 Paseo 子会话" }));
 
-    expectChildInHost(fixture, { kind: "agent", agentId: row.id });
+    expect(navigateToAgent).toHaveBeenCalledWith({ serverId: SERVER_ID, agentId: row.id });
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace).toBe(fixture.layoutsBefore);
   });
 
   it.each([
@@ -468,7 +532,7 @@ describe("background process output routing", () => {
       exitCode: 0,
       terminalId: null,
     };
-    const fixture = renderAgentTracks(OTHER_WORKSPACE_ID, providerRow, [
+    const fixture = renderAgentTracks(HOST_WORKSPACE_ID, providerRow, [
       process,
       { ...process, id: "active-build", name: "Active build", status: "running" },
     ]);
@@ -482,6 +546,7 @@ describe("background process output routing", () => {
       kind: "background_process",
       agentId: PARENT_AGENT_ID,
       processId: process.id,
+      workspaceId: HOST_WORKSPACE_ID,
     });
     const layout = store.layoutByWorkspace[fixture.hostWorkspaceKey];
     const chatPane = findPaneContainingTab(layout.root, fixture.parentTabId);

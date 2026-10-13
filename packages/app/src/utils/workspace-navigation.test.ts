@@ -35,6 +35,7 @@ function createFakeLayout() {
     pinAgent: (key: string, agentId: string) => {
       pinnedAgents.push({ key, agentId });
     },
+    getProjectLayoutKey: () => "server-1:project:project-a",
   };
 }
 
@@ -52,7 +53,10 @@ describe("prepareWorkspaceTab", () => {
     );
 
     expect(layout.openedTabs).toEqual([
-      { key: "server-1:/repo/worktree", target: { kind: "agent", agentId: AGENT_ID } },
+      {
+        key: "server-1:project:project-a",
+        target: { kind: "agent", agentId: AGENT_ID, workspaceId: WORKSPACE_ID },
+      },
     ]);
     expect(layout.pinnedAgents).toEqual([]);
   });

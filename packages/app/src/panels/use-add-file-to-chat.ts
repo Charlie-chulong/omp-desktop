@@ -4,11 +4,11 @@ import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 import { resolveFocusedChatTarget } from "@/composer/focused-chat-target";
 import { useDraftStore } from "@/stores/draft-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 
 export function useAddFileToChat(input: { serverId: string; workspaceId?: string | null }) {
   const workspaceKey = input.workspaceId
-    ? buildWorkspaceTabPersistenceKey({ serverId: input.serverId, workspaceId: input.workspaceId })
+    ? resolveProjectLayoutKey({ serverId: input.serverId, workspaceId: input.workspaceId })
     : null;
   const layout = useWorkspaceLayoutStore((state) =>
     workspaceKey ? state.layoutByWorkspace[workspaceKey] : undefined,

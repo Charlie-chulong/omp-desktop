@@ -9,6 +9,7 @@ import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useDraftStore } from "@/stores/draft-store";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { buildProjectLayoutKey } from "@/workspace-tabs/model";
 import {
   archiveEmptyWorkspace,
   archiveWorkspaceOptimistically,
@@ -204,13 +205,16 @@ describe("archiveEmptyWorkspace", () => {
     expect(isWorkspaceArchivePending(target())).toBe(true);
   });
 
-  it("releases an unused draft workspace on leave but preserves unsent text and attachments", async () => {
-    const workspaceKey = `${SERVER_ID}:workspace-1`;
+  it("preserves another draft's unsent text and attachments during unused-workspace cleanup", async () => {
+    const workspaceKey = buildProjectLayoutKey({
+      serverId: SERVER_ID,
+      projectId: workspace().projectId,
+    })!;
     const draftId = "leave-draft";
     const draftKey = buildDraftStoreKey({ serverId: SERVER_ID, agentId: "", draftId });
     useWorkspaceLayoutStore.getState().openTab({
       workspaceKey,
-      target: { kind: "draft", draftId },
+      target: { kind: "draft", draftId, workspaceId: "workspace-1" },
       intent: "reveal",
     });
     const client = createClient(async () => archivePayload({ workspaceId: "workspace-1" }));

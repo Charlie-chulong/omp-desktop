@@ -4,6 +4,15 @@ import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tab
 export function normalizeWorkspaceTabTarget(
   value: WorkspaceTabTarget | null | undefined,
 ): WorkspaceTabTarget | null {
+  const target = normalizeUnboundWorkspaceTabTarget(value);
+  const workspaceId =
+    typeof value?.workspaceId === "string" ? trimNonEmpty(value.workspaceId) : null;
+  return target && workspaceId ? { ...target, workspaceId } : target;
+}
+
+function normalizeUnboundWorkspaceTabTarget(
+  value: WorkspaceTabTarget | null | undefined,
+): WorkspaceTabTarget | null {
   if (!value || typeof value !== "object" || typeof value.kind !== "string") {
     return null;
   }
@@ -111,7 +120,7 @@ export function workspaceTabTargetsEqual(
   left: WorkspaceTabTarget,
   right: WorkspaceTabTarget,
 ): boolean {
-  if (left.kind !== right.kind) {
+  if (left.kind !== right.kind || left.workspaceId !== right.workspaceId) {
     return false;
   }
   if (left.kind === "draft" && right.kind === "draft") {
@@ -214,6 +223,20 @@ function recordsShallowEqual(
 }
 
 export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): string {
+  const identity = buildUnboundWorkspaceTabId(target);
+  // Resource identities are scoped to their owning checkout, not just their path.
+  if (
+    !target.workspaceId ||
+    !["file", "files", "pull_request", "working_diff", "plugin", "commit_diff"].includes(
+      target.kind,
+    )
+  ) {
+    return identity;
+  }
+  return `workspace_${target.workspaceId.length}_${target.workspaceId}_${identity}`;
+}
+
+function buildUnboundWorkspaceTabId(target: WorkspaceTabTarget): string {
   if (target.kind === "new_tab") {
     throw new Error("New tabs do not have deterministic target identities");
   }

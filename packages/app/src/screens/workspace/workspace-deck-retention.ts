@@ -18,6 +18,7 @@ interface ReconcileRetainedWorkspaceSelectionsInput {
   now: number;
   maxMountedWorkspaces?: number;
   inactiveTtlMs?: number;
+  protectedSelectionKeys?: ReadonlySet<string>;
 }
 
 interface GetNextWorkspaceDeckExpirationDelayInput {
@@ -25,6 +26,7 @@ interface GetNextWorkspaceDeckExpirationDelayInput {
   activeSelection: ActiveWorkspaceSelection | null;
   now: number;
   inactiveTtlMs?: number;
+  protectedSelectionKeys?: ReadonlySet<string>;
 }
 
 interface WorkspaceDeckEntryMountInput {
@@ -72,6 +74,7 @@ export function reconcileRetainedWorkspaceSelections({
   now,
   maxMountedWorkspaces = WORKSPACE_DECK_MAX_MOUNTED_WORKSPACES,
   inactiveTtlMs = WORKSPACE_DECK_INACTIVE_TTL_MS,
+  protectedSelectionKeys,
 }: ReconcileRetainedWorkspaceSelectionsInput): RetainedWorkspaceSelection[] {
   const maxSelections = activeSelection
     ? Math.max(1, maxMountedWorkspaces)
@@ -80,10 +83,10 @@ export function reconcileRetainedWorkspaceSelections({
   const seenSelectionKeys = new Set<string>();
 
   function appendEntry(entry: RetainedWorkspaceSelection): void {
-    if (nextEntries.length >= maxSelections) {
+    const selectionKey = getWorkspaceSelectionKey(entry.selection);
+    if (nextEntries.length >= maxSelections && !protectedSelectionKeys?.has(selectionKey)) {
       return;
     }
-    const selectionKey = getWorkspaceSelectionKey(entry.selection);
     if (seenSelectionKeys.has(selectionKey)) {
       return;
     }
@@ -100,7 +103,10 @@ export function reconcileRetainedWorkspaceSelections({
       continue;
     }
     const inactiveSince = entry.inactiveSince ?? now;
-    if (now - inactiveSince >= inactiveTtlMs) {
+    if (
+      now - inactiveSince >= inactiveTtlMs &&
+      !protectedSelectionKeys?.has(getWorkspaceSelectionKey(entry.selection))
+    ) {
       continue;
     }
     appendEntry({ selection: entry.selection, inactiveSince });
@@ -117,12 +123,14 @@ export function getNextWorkspaceDeckExpirationDelay({
   activeSelection,
   now,
   inactiveTtlMs = WORKSPACE_DECK_INACTIVE_TTL_MS,
+  protectedSelectionKeys,
 }: GetNextWorkspaceDeckExpirationDelayInput): number | null {
   let nextExpirationDelay: number | null = null;
 
   for (const entry of entries) {
     if (
       areWorkspaceSelectionsEqual(entry.selection, activeSelection) ||
+      protectedSelectionKeys?.has(getWorkspaceSelectionKey(entry.selection)) ||
       entry.inactiveSince === null
     ) {
       continue;

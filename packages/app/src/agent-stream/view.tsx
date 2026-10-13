@@ -17,7 +17,7 @@ import { MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
 import { useMutation } from "@tanstack/react-query";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Check, ChevronDown, X } from "lucide-react-native";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { openSidePanelView } from "@/workspace-tabs/side-panel";
 import {
   AssistantMessage,
@@ -499,12 +499,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
 
         openSidePanelView({
           isCompact: isMobile,
-          workspaceKey: buildWorkspaceTabPersistenceKey({
+          workspaceKey: resolveProjectLayoutKey({
             serverId: resolvedServerId,
             workspaceId: context.workspaceId ?? "",
           }),
           checkout: {
             serverId: resolvedServerId,
+            workspaceId: context.workspaceId ?? undefined,
             cwd: context.cwd,
             isGit: context.projectPlacement?.checkout?.isGit ?? true,
           },

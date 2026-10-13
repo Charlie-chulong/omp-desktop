@@ -34,7 +34,7 @@ import {
   findPaneById,
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { clearCommandCenterFocusRestoreElement } from "@/utils/command-center-focus-restore";
 import { getShortcutOs } from "@/utils/shortcut-platform";
 import { getCommandCenterIcon } from "./icon";
@@ -93,7 +93,7 @@ export function useWorkspaceCommandCenterActions(): void {
   const serverId = selection?.serverId ?? null;
   const workspaceId = selection?.workspaceId ?? null;
   const workspaceKey =
-    serverId && workspaceId ? buildWorkspaceTabPersistenceKey({ serverId, workspaceId }) : null;
+    serverId && workspaceId ? resolveProjectLayoutKey({ serverId, workspaceId }) : null;
   const layout = useWorkspaceLayoutStore((state) =>
     workspaceKey ? (state.layoutByWorkspace[workspaceKey] ?? null) : null,
   );

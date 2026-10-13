@@ -250,6 +250,10 @@ export interface WorkspaceTabReconcileState {
 export interface WorkspaceTabSnapshot {
   agentsHydrated: boolean;
   terminalsHydrated: boolean;
+  /** Ownership of the agent snapshot; omitted by legacy workspace-only callers. */
+  workspaceId?: string;
+  /** Terminals may be queried for a different checkout than the active agent. */
+  terminalWorkspaceId?: string;
   activeAgentIds: Iterable<string>;
   autoOpenAgentIds: Iterable<string>;
   knownAgentIds: Iterable<string>;
@@ -1838,6 +1842,7 @@ export function convertDraftToAgentInLayout(
   const target: WorkspaceTabTarget = {
     kind: "agent",
     agentId: input.agentId,
+    ...(currentTab.target.workspaceId ? { workspaceId: currentTab.target.workspaceId } : {}),
   };
   const canonicalTabId = buildDeterministicWorkspaceTabId(target);
   const existingCanonicalTab =
@@ -2295,7 +2300,12 @@ function collapseStaleEntityTabs(input: {
   const { snapshot, visibleAgentIds, knownTerminalIds } = input;
   let nextLayout = input.layout;
   for (const tab of collectAllTabs(nextLayout.root)) {
-    if (isAgentTab(tab) && snapshot.agentsHydrated && !visibleAgentIds.has(tab.target.agentId)) {
+    if (
+      isAgentTab(tab) &&
+      snapshot.agentsHydrated &&
+      (!snapshot.workspaceId || tab.target.workspaceId === snapshot.workspaceId) &&
+      !visibleAgentIds.has(tab.target.agentId)
+    ) {
       nextLayout =
         closeTabInLayout({
           layout: nextLayout,
@@ -2305,6 +2315,8 @@ function collapseStaleEntityTabs(input: {
     if (
       isTerminalTab(tab) &&
       snapshot.terminalsHydrated &&
+      (!(snapshot.terminalWorkspaceId ?? snapshot.workspaceId) ||
+        tab.target.workspaceId === (snapshot.terminalWorkspaceId ?? snapshot.workspaceId)) &&
       !knownTerminalIds.has(tab.target.terminalId)
     ) {
       nextLayout =
@@ -2325,6 +2337,8 @@ function addMissingEntityTabs(input: {
   hasActivePendingTerminalCreate: boolean;
   hasActivePendingDraftCreate: boolean;
   sidePanelPaneId: string | null;
+  workspaceId?: string;
+  terminalWorkspaceId?: string;
 }): WorkspaceLayout {
   const {
     autoOpenAgentIds,
@@ -2333,6 +2347,8 @@ function addMissingEntityTabs(input: {
     hasActivePendingTerminalCreate,
     hasActivePendingDraftCreate,
     sidePanelPaneId,
+    workspaceId,
+    terminalWorkspaceId,
   } = input;
   let nextLayout = input.layout;
   const currentEntityTabs = collectAllTabs(nextLayout.root);
@@ -2353,7 +2369,7 @@ function addMissingEntityTabs(input: {
     }
     nextLayout = openEntityTabWithoutFocusing({
       layout: nextLayout,
-      target: { kind: "agent", agentId },
+      target: { kind: "agent", agentId, ...(workspaceId ? { workspaceId } : {}) },
       sidePanelPaneId,
     });
     currentAgentIds.add(agentId);
@@ -2367,7 +2383,13 @@ function addMissingEntityTabs(input: {
       }
       nextLayout = openEntityTabWithoutFocusing({
         layout: nextLayout,
-        target: { kind: "terminal", terminalId },
+        target: {
+          kind: "terminal",
+          terminalId,
+          ...((terminalWorkspaceId ?? workspaceId)
+            ? { workspaceId: terminalWorkspaceId ?? workspaceId }
+            : {}),
+        },
         sidePanelPaneId,
       });
       currentTerminalIds.add(terminalId);
@@ -2398,7 +2420,11 @@ function seedDraftForEmptyWorkspace(input: {
   const draftId = generateDraftId();
   return createTabInLayout({
     layout: input.layout,
-    target: { kind: "draft", draftId },
+    target: {
+      kind: "draft",
+      draftId,
+      ...(input.snapshot.workspaceId ? { workspaceId: input.snapshot.workspaceId } : {}),
+    },
     now: Date.now(),
     placement: FOCUSED_PANE_PLACEMENT,
     sidePanelPaneId: input.sidePanelPaneId,
@@ -2492,6 +2518,8 @@ export function reconcileWorkspaceTabs(
     hasActivePendingTerminalCreate: snapshot.hasActivePendingTerminalCreate ?? false,
     hasActivePendingDraftCreate: snapshot.hasActivePendingDraftCreate ?? false,
     sidePanelPaneId: state.sidePanelPaneId,
+    workspaceId: snapshot.workspaceId,
+    terminalWorkspaceId: snapshot.terminalWorkspaceId,
   });
 
   nextLayout = seedDraftForEmptyWorkspace({

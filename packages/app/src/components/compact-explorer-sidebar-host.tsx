@@ -10,6 +10,7 @@ import { CompactExplorerSidebar } from "@/components/compact-explorer-sidebar";
 import { useOpenFileExplorerGesture } from "@/mobile-panels/gestures";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { selectIsCompactFileExplorerOpen, usePanelStore } from "@/stores/panel-store";
+import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { useWorkspaceCheckoutStatus } from "@/screens/workspace/use-workspace-checkout-status";
@@ -52,6 +53,9 @@ function useActiveCompactExplorerSidebarModel(
   const routeSelection = useActiveWorkspaceSelection();
   const selection = useSidebarActiveWorkspaceSelection();
   const workspace = useWorkspace(selection?.serverId ?? null, selection?.workspaceId ?? null);
+  const workspaces = useSessionStore(
+    (state) => state.sessions[routeSelection?.serverId ?? ""]?.workspaces,
+  );
   const isExplorerOpen = usePanelStore(selectIsCompactFileExplorerOpen);
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
   const client = useHostRuntimeClient(selection?.serverId ?? "");
@@ -72,9 +76,10 @@ function useActiveCompactExplorerSidebarModel(
         routeSelection,
         selection,
         workspace,
+        workspaces,
         isGit: checkoutQuery.data?.isGit ?? false,
       }),
-    [checkoutQuery.data?.isGit, isExplorerOpen, routeSelection, selection, workspace],
+    [checkoutQuery.data?.isGit, isExplorerOpen, routeSelection, selection, workspace, workspaces],
   );
 
   useEffect(() => {
@@ -108,9 +113,18 @@ export function CompactExplorerSidebarHost({ children, enabled }: CompactExplore
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
   const openWorkspaceTabInFocusedPane = useCallback(
-    (workspaceKey: string, target: WorkspaceTabTarget) =>
-      openTab({ workspaceKey, target, intent: "reveal" }),
-    [openTab],
+    (workspaceKey: string, target: WorkspaceTabTarget) => {
+      if (!model) return null;
+      return openTab({
+        workspaceKey,
+        target:
+          target.workspaceId || target.kind === "setup"
+            ? target
+            : { ...target, workspaceId: model.workspaceId },
+        intent: "reveal",
+      });
+    },
+    [openTab, model?.workspaceId],
   );
   const focusWorkspaceTab = useWorkspaceLayoutStore((state) => state.focusTab);
 
@@ -119,6 +133,7 @@ export function CompactExplorerSidebarHost({ children, enabled }: CompactExplore
       return;
     }
     openCompactFileExplorer({
+      workspaceId: model.workspaceId,
       serverId: model.serverId,
       cwd: model.workspaceRoot,
       isGit: model.isGit,

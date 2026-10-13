@@ -104,6 +104,51 @@ it("opens the new workspace draft in an existing tab host", async () => {
   });
 });
 
+it("never hosts a newly created draft in another project's layout", async () => {
+  state.workspaces.set(rootWorkspace.id, { ...rootWorkspace, projectId: "other-project" });
+  await openProjectWorkspaceDraft({
+    ...project,
+    draftId: "other-project-draft",
+    tabHost: { serverId: "host", workspaceId: rootWorkspace.id },
+  });
+  expect(state.navigateToWorkspace).toHaveBeenCalledWith({
+    serverId: "host",
+    workspaceId: "new-workspace-1",
+    target: {
+      kind: "draft",
+      draftId: "other-project-draft",
+      workspaceId: "new-workspace-1",
+    },
+  });
+});
+
+it("rechecks a tab host after async creation instead of using a stale checkout", async () => {
+  state.workspaces.set(rootWorkspace.id, rootWorkspace);
+  const creation = Promise.withResolvers<{ workspace: Record<string, unknown>; error: null }>();
+  state.createWorkspace.mockReturnValue(creation.promise);
+  const pending = openProjectWorkspaceDraft({
+    ...project,
+    draftId: "pending-draft",
+    tabHost: { serverId: "host", workspaceId: rootWorkspace.id },
+  });
+  state.workspaces.set(rootWorkspace.id, { ...rootWorkspace, archivingAt: "2026-10-10T00:00:00Z" });
+  creation.resolve({
+    workspace: { ...rootWorkspace, id: "new-workspace-1" },
+    error: null,
+  });
+  await pending;
+  expect(state.navigateToWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      serverId: "host",
+      workspaceId: "new-workspace-1",
+      target: expect.objectContaining({
+        draftId: "pending-draft",
+        workspaceId: "new-workspace-1",
+      }),
+    }),
+  );
+});
+
 it("preserves a fork's setup and maps its cwd into the new workspace", async () => {
   state.workspaces.set(rootWorkspace.id, rootWorkspace);
   await openProjectWorkspaceDraft({

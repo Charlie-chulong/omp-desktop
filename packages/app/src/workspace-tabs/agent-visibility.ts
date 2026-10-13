@@ -78,6 +78,8 @@ export function deriveWorkspaceAgentVisibility(input: {
 }
 
 export function buildWorkspaceTabSnapshot(input: {
+  workspaceId?: string;
+  terminalWorkspaceId?: string;
   agentVisibility: WorkspaceAgentVisibility;
   agentsHydrated: boolean;
   terminalsHydrated: boolean;
@@ -87,6 +89,8 @@ export function buildWorkspaceTabSnapshot(input: {
   hasActivePendingDraftCreate: boolean;
 }): WorkspaceTabSnapshot {
   return {
+    workspaceId: input.workspaceId,
+    terminalWorkspaceId: input.terminalWorkspaceId,
     agentsHydrated: input.agentsHydrated,
     terminalsHydrated: input.terminalsHydrated,
     activeAgentIds: input.agentVisibility.activeAgentIds,

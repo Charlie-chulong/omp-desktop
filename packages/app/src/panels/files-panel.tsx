@@ -47,6 +47,7 @@ function FilesPanel() {
       serverId={serverId}
       workspaceId={workspaceId}
       workspaceRoot={workspaceRoot}
+      revealRequests
       onOpenFile={onOpenFile}
       onAddToChat={canAddToChat ? addFile : undefined}
       onAddDirectoryToChat={canAddToChat ? addDirectory : undefined}

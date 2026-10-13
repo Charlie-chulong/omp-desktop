@@ -187,55 +187,72 @@ const WorkspaceDraftTabSetupStorageSchema = z.strictObject({
   featureValues: z.record(z.string(), z.union([z.boolean(), z.string(), z.null()])),
 });
 const WorkspaceTabTargetStorageSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("new_tab") }),
+  z.strictObject({ kind: z.literal("new_tab"), workspaceId: z.string().optional() }),
   z.strictObject({
     kind: z.literal("draft"),
     draftId: z.string(),
     workspaceId: z.string().optional(),
-    setup: WorkspaceDraftTabSetupStorageSchema.optional(),
   }),
-  z.strictObject({ kind: z.literal("agent"), agentId: z.string() }),
+  z.strictObject({
+    kind: z.literal("agent"),
+    agentId: z.string(),
+    workspaceId: z.string().optional(),
+  }),
   z.strictObject({
     kind: z.literal("provider_subagent"),
     parentAgentId: z.string(),
     subagentId: z.string(),
+    workspaceId: z.string().optional(),
   }),
-  z.strictObject({ kind: z.literal("terminal"), terminalId: z.string() }),
+  z.strictObject({
+    kind: z.literal("terminal"),
+    terminalId: z.string(),
+    workspaceId: z.string().optional(),
+  }),
   z.strictObject({
     kind: z.literal("background_process"),
     agentId: z.string(),
     processId: z.string(),
+    workspaceId: z.string().optional(),
   }),
-  z.strictObject({ kind: z.literal("files") }),
-  z.strictObject({ kind: z.literal("pull_request") }),
+  z.strictObject({ kind: z.literal("files"), workspaceId: z.string().optional() }),
+  z.strictObject({ kind: z.literal("pull_request"), workspaceId: z.string().optional() }),
   z.strictObject({
     kind: z.literal("file"),
     path: z.string(),
     lineStart: z.number().int().positive().optional(),
     lineEnd: z.number().int().positive().optional(),
+    workspaceId: z.string().optional(),
   }),
   z.strictObject({
     kind: z.literal("local_file"),
     previewId: z.string(),
     name: z.string(),
+    workspaceId: z.string().optional(),
   }),
   z.strictObject({
     kind: z.literal("working_diff"),
     focusPath: z.string().optional(),
     focusRequestId: z.number().optional(),
+    workspaceId: z.string().optional(),
     // COMPAT(workingDiffTarget): accepted from pre-canonical tab ids; normalization removes them.
     mode: z.enum(["uncommitted", "base"]).optional(),
     baseRef: z.string().nullable().optional(),
     ignoreWhitespace: z.boolean().optional(),
   }),
   z.strictObject({ kind: z.literal("setup"), workspaceId: z.string() }),
-  z.strictObject({ kind: z.literal("commit_diff"), sha: z.string() }),
+  z.strictObject({
+    kind: z.literal("commit_diff"),
+    sha: z.string(),
+    workspaceId: z.string().optional(),
+  }),
   z.discriminatedUnion("context", [
     z.strictObject({
       kind: z.literal("plugin"),
       pluginId: z.string(),
       panelId: z.string(),
       context: z.literal("workspace"),
+      workspaceId: z.string().optional(),
     }),
     z.strictObject({
       kind: z.literal("plugin"),
@@ -243,6 +260,7 @@ const WorkspaceTabTargetStorageSchema = z.discriminatedUnion("kind", [
       panelId: z.string(),
       context: z.literal("agent"),
       agentId: z.string(),
+      workspaceId: z.string().optional(),
     }),
   ]),
 ]);
@@ -293,10 +311,10 @@ const WorkspaceLayoutPersistedStateSchema = z.strictObject({
 
 type WorkspaceLayoutPersistedState = z.infer<typeof WorkspaceLayoutPersistedStateSchema>;
 /**
- * Old layouts may embed browser tabs. Drop those before strict storage validation;
- * Zustand's version migration runs after validation, even for version 2 blobs.
+ * Normalize older layouts before strict storage validation. Browser tabs are
+ * obsolete; manual-recovery markers must not freeze automatic ownership lookup.
  */
-function removeLegacyBrowserTabsFromPersistedLayout(raw: string | null): string | null {
+function normalizePersistedWorkspaceLayouts(raw: string | null): string | null {
   if (raw === null) return null;
   let envelope: unknown;
   try {
@@ -309,7 +327,8 @@ function removeLegacyBrowserTabsFromPersistedLayout(raw: string | null): string 
   const layouts = asRecord(state?.layoutByWorkspace);
   if (!record || !state || !layouts) return raw;
 
-  let changed = false;
+  const { unresolvedProjectTabIdsByWorkspace: _legacyRecovery, ...normalizedState } = state;
+  let changed = "unresolvedProjectTabIdsByWorkspace" in state;
   const nextLayouts: Record<string, unknown> = {};
   for (const [workspaceKey, value] of Object.entries(layouts)) {
     const layout = asRecord(value);
@@ -342,8 +361,22 @@ function removeLegacyBrowserTabsFromPersistedLayout(raw: string | null): string 
     };
   }
   return changed
-    ? JSON.stringify({ ...record, state: { ...state, layoutByWorkspace: nextLayouts } })
+    ? JSON.stringify({ ...record, state: { ...normalizedState, layoutByWorkspace: nextLayouts } })
     : raw;
+}
+
+function retainLegacyOpenerContext(
+  workspaceKey: string,
+  original: WorkspaceLayout,
+  normalized: WorkspaceLayout,
+): WorkspaceLayout {
+  if (workspaceKey.includes(":project:") || !original.parentTabIdByTabId) return normalized;
+  // An opener can already be in a project layout while its child awaits metadata.
+  const retainedIds = new Set(collectAllTabs(normalized.root).map((tab) => tab.tabId));
+  const parents = Object.fromEntries(
+    Object.entries(original.parentTabIdByTabId).filter(([child]) => retainedIds.has(child)),
+  );
+  return Object.keys(parents).length ? { ...normalized, parentTabIdByTabId: parents } : normalized;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -390,7 +423,7 @@ function removeLegacyBrowserTabsFromNode(value: unknown, removedTabIds: Set<stri
 
 const workspaceLayoutPersistBackingStorage = {
   getItem: async (name: string) =>
-    removeLegacyBrowserTabsFromPersistedLayout(await AsyncStorage.getItem(name)),
+    normalizePersistedWorkspaceLayouts(await AsyncStorage.getItem(name)),
   setItem: (name: string, value: string) => AsyncStorage.setItem(name, value),
   removeItem: (name: string) => AsyncStorage.removeItem(name),
 };
@@ -1018,6 +1051,23 @@ function ensurePersistedSidePanelPane(input: {
   return { layout: hiddenLayout ?? split.layout, paneId: split.paneId };
 }
 
+/** Canonical placement for tabs imported into a shared project from legacy layouts. */
+export function normalizeProjectLayoutZones(
+  layout: WorkspaceLayout,
+  registeredSidePanelPaneId?: string | null,
+): WorkspaceLayout {
+  const sidePanel = ensurePersistedSidePanelPane({
+    layout,
+    registeredPaneId: registeredSidePanelPaneId,
+    ids: defaultWorkspaceLayoutIds,
+  });
+  return enforceWorkspaceTabZones({
+    layout: sidePanel?.layout ?? layout,
+    sidePanelPaneId: sidePanel?.paneId ?? null,
+    ids: defaultWorkspaceLayoutIds,
+  });
+}
+
 function getOpenTabPlacement(
   state: WorkspaceLayoutStore,
   workspaceKey: string,
@@ -1168,6 +1218,15 @@ export function createWorkspaceLayoutStore(
           const normalizedWorkspaceKey = trimNonEmpty(input.workspaceKey);
           const normalizedTarget = normalizeWorkspaceTabTarget(input.target);
           if (!normalizedWorkspaceKey || !normalizedTarget) {
+            return null;
+          }
+          if (
+            normalizedWorkspaceKey.includes(":project:") &&
+            normalizedTarget.kind !== "new_tab" &&
+            normalizedTarget.kind !== "local_file" &&
+            !normalizedTarget.workspaceId
+          ) {
+            // An unbound resource may refer to a different checkout in this project.
             return null;
           }
           const placement = getOpenTabPlacement(
@@ -1428,6 +1487,20 @@ export function createWorkspaceLayoutStore(
           );
           if (!prepared) return null;
           const sourcePane = findPaneContainingTab(prepared.layout.root, normalizedTabId);
+          if (normalizedWorkspaceKey.includes(":project:")) {
+            const previous = collectAllTabs(prepared.layout.root).find(
+              (tab) => tab.tabId === normalizedTabId,
+            );
+            if (
+              normalizedTarget.kind !== "new_tab" &&
+              normalizedTarget.kind !== "local_file" &&
+              (!normalizedTarget.workspaceId ||
+                (previous?.target.workspaceId &&
+                  previous.target.workspaceId !== normalizedTarget.workspaceId))
+            ) {
+              return null;
+            }
+          }
           const sourceZone = getPaneWorkspaceTabZone({
             layout: prepared.layout,
             paneId: sourcePane?.id,
@@ -2100,7 +2173,8 @@ export function createWorkspaceLayoutStore(
         },
         purgeWorkspace: (workspaceKey) => {
           const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
-          if (!normalizedWorkspaceKey) {
+          // A project tree can contain tabs owned by many workspaces.
+          if (!normalizedWorkspaceKey || normalizedWorkspaceKey.includes(":project:")) {
             return;
           }
 
@@ -2155,9 +2229,9 @@ export function createWorkspaceLayoutStore(
           for (const key in state.layoutByWorkspace) {
             // Local File handles and commit targets are session-only; do not restore
             // tabs whose content or referenced revision may no longer be available.
-            layoutByWorkspace[key] = stripEphemeralTabsFromLayout(
-              normalizeLayout(state.layoutByWorkspace[key]),
-            );
+            const original = state.layoutByWorkspace[key];
+            const normalized = stripEphemeralTabsFromLayout(normalizeLayout(original));
+            layoutByWorkspace[key] = retainLegacyOpenerContext(key, original, normalized);
           }
           return {
             layoutByWorkspace,
@@ -2191,7 +2265,11 @@ export function createWorkspaceLayoutStore(
               sidePanelPaneId: nextSidePanelPaneId,
               ids,
             });
-            layoutByWorkspace[workspaceKey] = nextLayout;
+            layoutByWorkspace[workspaceKey] = retainLegacyOpenerContext(
+              workspaceKey,
+              persistedLayout,
+              nextLayout,
+            );
             if (sidePanel) {
               sidePanelPaneIdByWorkspace[workspaceKey] = sidePanel.paneId;
             }

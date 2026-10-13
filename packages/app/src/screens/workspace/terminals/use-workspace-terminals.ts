@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import type { DaemonClient } from "@omp-desktop/client/internal/daemon-client";
 import type { TerminalProfile } from "@omp-desktop/protocol/messages";
 import { resolveTerminalProfileLaunch } from "@omp-desktop/protocol/terminal-profiles";
@@ -31,9 +31,16 @@ export type TerminalTabDestination =
       position: "left" | "right" | "top" | "bottom";
     };
 
-interface PendingTerminalCreateInput {
+interface TerminalCreateInput {
   destination: TerminalTabDestination;
   profile?: TerminalProfile;
+}
+
+interface PendingTerminalCreateInput extends TerminalCreateInput {
+  workspaceId: string;
+  workspaceDirectory: string | null;
+  queryKey: QueryKey;
+  onCreated: UseWorkspaceTerminalsInput["onTerminalCreated"];
 }
 
 interface UseWorkspaceTerminalsInput {
@@ -46,7 +53,11 @@ interface UseWorkspaceTerminalsInput {
   workspaceScripts: WorkspaceDescriptor["scripts"];
   hasHydratedWorkspaces: boolean;
   isMissingWorkspaceDirectory: boolean;
-  onTerminalCreated: (input: { terminalId: string; destination: TerminalTabDestination }) => void;
+  onTerminalCreated: (input: {
+    terminalId: string;
+    workspaceId: string;
+    destination: TerminalTabDestination;
+  }) => void;
   onScriptTerminalSelected: (terminalId: string) => void;
   onWorkspacePathUnavailable: () => void;
   onTerminalCreateQueued: () => void;
@@ -139,7 +150,10 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
 
   const createMutation = useMutation({
     mutationFn: async (_input: PendingTerminalCreateInput) => {
-      if (!client || !workspaceDirectory) {
+      const directory =
+        _input.workspaceDirectory ??
+        (input.normalizedWorkspaceId === _input.workspaceId ? workspaceDirectory : null);
+      if (!client || !directory) {
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
       const profile = _input.profile ? resolveTerminalProfileLaunch(_input.profile, "") : undefined;
@@ -150,13 +164,13 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
             loginShell: getDesktopHost()?.loginShell,
           });
       const payload = profile
-        ? await client.createTerminal(workspaceDirectory, profile.name, undefined, {
+        ? await client.createTerminal(directory, profile.name, undefined, {
             command: profile.command,
             args: profile.args,
-            workspaceId: normalizedWorkspaceId || undefined,
+            workspaceId: _input.workspaceId || undefined,
           })
-        : await client.createTerminal(workspaceDirectory, undefined, undefined, {
-            workspaceId: normalizedWorkspaceId || undefined,
+        : await client.createTerminal(directory, undefined, undefined, {
+            workspaceId: _input.workspaceId || undefined,
             ...(defaultShell ? { command: defaultShell } : {}),
           });
       // The daemon reports a failed spawn (e.g. a profile command that isn't
@@ -170,19 +184,20 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     onSuccess: (payload, createInput) => {
       const createdTerminal = payload.terminal;
       if (createdTerminal) {
-        queryClient.setQueryData<ListTerminalsPayload>(queryKey, (current) =>
+        queryClient.setQueryData<ListTerminalsPayload>(createInput.queryKey, (current) =>
           upsertCreatedTerminalPayload({
             current,
             terminal: createdTerminal,
-            workspaceDirectory,
+            workspaceDirectory: createInput.workspaceDirectory,
           }),
         );
       }
 
-      void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: createInput.queryKey });
       if (createdTerminal) {
-        onTerminalCreated({
+        createInput.onCreated({
           terminalId: createdTerminal.id,
+          workspaceId: createInput.workspaceId,
           destination: createInput.destination,
         });
       }
@@ -209,14 +224,22 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
       return;
     }
 
-    if (canCreateNow && !createMutation.isPending) {
-      const pendingInput = pendingCreateInput;
+    if (
+      canCreateNow &&
+      pendingCreateInput.workspaceId === normalizedWorkspaceId &&
+      !createMutation.isPending
+    ) {
+      const pendingInput = { ...pendingCreateInput, workspaceDirectory, queryKey };
       setPendingCreateInput(null);
       createMutation.mutate(pendingInput);
       return;
     }
 
-    if (hasHydratedWorkspaces && isMissingWorkspaceDirectory) {
+    if (
+      pendingCreateInput.workspaceId === normalizedWorkspaceId &&
+      hasHydratedWorkspaces &&
+      isMissingWorkspaceDirectory
+    ) {
       setPendingCreateInput(null);
       onWorkspacePathUnavailable();
     }
@@ -226,17 +249,27 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     hasHydratedWorkspaces,
     isMissingWorkspaceDirectory,
     onWorkspacePathUnavailable,
+    normalizedWorkspaceId,
+    workspaceDirectory,
+    queryKey,
     pendingCreateInput,
   ]);
 
   const createTerminal = useCallback(
-    (createInput: PendingTerminalCreateInput) => {
+    (createInput: TerminalCreateInput) => {
       if (createMutation.isPending || pendingCreateInput) {
         return;
       }
+      const pendingInput: PendingTerminalCreateInput = {
+        ...createInput,
+        workspaceId: normalizedWorkspaceId,
+        workspaceDirectory,
+        queryKey,
+        onCreated: onTerminalCreated,
+      };
 
       if (canCreateNow) {
-        createMutation.mutate(createInput);
+        createMutation.mutate(pendingInput);
         return;
       }
 
@@ -245,7 +278,7 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
         return;
       }
 
-      setPendingCreateInput(createInput);
+      setPendingCreateInput(pendingInput);
       onTerminalCreateQueued();
     },
     [
@@ -256,6 +289,10 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
       onTerminalCreateQueued,
       onWorkspacePathUnavailable,
       pendingCreateInput,
+      normalizedWorkspaceId,
+      workspaceDirectory,
+      queryKey,
+      onTerminalCreated,
     ],
   );
 

@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { isWeb } from "@/constants/platform";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
-import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
+import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import {
   collectAllTabs,
   FOCUSED_PANE_PLACEMENT,
@@ -100,7 +100,7 @@ function WebExternalFileDropPreview() {
       const targets = createLocalFilePreviews(items);
       const workspace = parseHostWorkspaceRouteFromPathname(routeRef.current);
       const workspaceKey = workspace
-        ? buildWorkspaceTabPersistenceKey(workspace)
+        ? resolveProjectLayoutKey(workspace)
         : LOCAL_FILE_PREVIEW_WORKSPACE_KEY;
       if (!workspaceKey) return;
       ensurePanelsRegistered();
@@ -109,7 +109,7 @@ function WebExternalFileDropPreview() {
       for (const target of targets) {
         const tabId = store.openTab({
           workspaceKey,
-          target,
+          target: workspace ? { ...target, workspaceId: workspace.workspaceId } : target,
           intent: "new",
           placement: FOCUSED_PANE_PLACEMENT,
         });
