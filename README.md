@@ -477,14 +477,18 @@ Closing the last empty conversation tab returns to the project page. On supporte
 Cleanup preserves workspaces with agent history (including archived agents), live or pending resources, a custom title, pins, labels, or worktree ownership. Older hosts must be updated before automatic cleanup is available. An existing empty sidebar entry can be reopened and its empty tab closed to retry cleanup; entries are never bulk-removed merely because they are named `main`.
 
 Delete an unsent **New workspace** draft from its sidebar hover button or right-click menu.
-Only that draft tab, its input, and attachments are removed; other conversations and project
-files are preserved. Removing the last content tab returns to the project page.
+Only that draft's input and attachments are cleared; other conversations and project files
+are preserved. Removing the last content tab returns to the project page.
 
-Deleting a draft from the sidebar also retires its workspace record once no other tab
-hosts it. Each sidebar draft owns a distinct workspace, so sibling drafts never keep a
-deleted one alive, and no leftover entry reappears under the checkout name (for example
-`main`). Draft tabs whose workspace record no longer exists are pruned when the project
-layout loads. The daemon re-verifies the workspace is empty before archiving.
+Deleting a draft from the sidebar also retires its workspace record once no other content
+tab hosts it. **Files**, **Changes**, and **Pull request** companion tools do not keep an
+empty conversation alive; their tabs close only after the daemon confirms the archive.
+Other open file editors and drafts are preserved. Each sidebar draft owns a distinct
+workspace, so sibling drafts never keep a deleted one alive or leave a checkout-named row.
+If the deleted workspace hosts the current route, navigation follows the surviving focused
+conversation instead of leaving it on an unavailable workspace. Draft tabs whose workspace
+record no longer exists are pruned when the project layout loads. The daemon re-verifies
+the workspace is empty before archiving.
 
 Opening a new conversation from the sidebar preserves existing tabs within the same project.
 The draft retains its own workspace for execution. Opening a conversation in another project

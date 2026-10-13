@@ -8,8 +8,8 @@ import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-stor
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useDraftStore } from "@/stores/draft-store";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
-import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
-import { buildProjectLayoutKey } from "@/workspace-tabs/model";
+import { useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
+import { buildProjectLayoutKey, type WorkspaceTabTarget } from "@/workspace-tabs/model";
 import {
   archiveEmptyWorkspace,
   archiveWorkspaceOptimistically,
@@ -205,8 +205,8 @@ describe("archiveEmptyWorkspace", () => {
     expect(isWorkspaceArchivePending(target())).toBe(true);
   });
 
-  it("closes draft tabs owned by the archived workspace, keeping other drafts", async () => {
-    useWorkspaceLayoutStore.setState({ layoutByWorkspace: {} });
+  it("retires a workspace's drafts and companion tools after archive confirmation, keeping sibling tabs", async () => {
+    useWorkspaceLayoutStore.setState(useWorkspaceLayoutStore.getInitialState(), true);
     const workspaceKey = buildProjectLayoutKey({
       serverId: SERVER_ID,
       projectId: workspace().projectId,
@@ -218,30 +218,49 @@ describe("archiveEmptyWorkspace", () => {
         workspace({ id: "workspace-2", workspaceDirectory: "/repo/project/workspace-2" }),
       ]);
     const layouts = useWorkspaceLayoutStore.getState();
-    layouts.openTab({
-      workspaceKey,
-      target: { kind: "draft", draftId: "stale-draft", workspaceId: "workspace-1" },
-      intent: "new",
-    });
-    layouts.openTab({
-      workspaceKey,
-      target: { kind: "draft", draftId: "kept-draft", workspaceId: "workspace-2" },
-      intent: "new",
-    });
-    const client = createClient(async () => archivePayload({ workspaceId: "workspace-1" }));
+    const removedTargets = [
+      { kind: "draft", draftId: "stale-draft", workspaceId: "workspace-1" },
+      { kind: "files", workspaceId: "workspace-1" },
+      { kind: "working_diff", workspaceId: "workspace-1" },
+      { kind: "pull_request", workspaceId: "workspace-1" },
+    ] satisfies WorkspaceTabTarget[];
+    const keptTargets = [
+      { kind: "draft", draftId: "kept-draft", workspaceId: "workspace-2" },
+      { kind: "files", workspaceId: "workspace-2" },
+      { kind: "working_diff", workspaceId: "workspace-2" },
+      { kind: "pull_request", workspaceId: "workspace-2" },
+      { kind: "file", path: "src/unsaved.ts", workspaceId: "workspace-2" },
+      { kind: "working_diff", focusPath: "src/app.ts", workspaceId: "workspace-2" },
+    ] satisfies WorkspaceTabTarget[];
+    for (const tabTarget of [...removedTargets, ...keptTargets]) {
+      layouts.openTab({ workspaceKey, target: tabTarget, intent: "new" });
+    }
+    const releaseArchive = deferred<ArchiveWorkspacePayload>();
+    const client = createClient(async () => releaseArchive.promise);
 
-    await archiveEmptyWorkspace({
+    const archive = archiveEmptyWorkspace({
       client,
       workspace: target(),
       hasPendingTerminalCreate: false,
     });
 
-    const tabs = collectAllTabs(
-      useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey]!.root,
-    )
+    const pendingTargets = useWorkspaceLayoutStore
+      .getState()
+      .getWorkspaceTabs(workspaceKey)
       .filter((tab) => tab.target.kind !== "new_tab")
       .map((tab) => tab.target);
-    expect(tabs).toEqual([{ kind: "draft", draftId: "kept-draft", workspaceId: "workspace-2" }]);
+    expect(pendingTargets).toEqual(expect.arrayContaining([...removedTargets, ...keptTargets]));
+    expect(storedWorkspace("workspace-1")).toBeDefined();
+    releaseArchive.resolve(archivePayload({ workspaceId: "workspace-1" }));
+    await archive;
+
+    expect(
+      useWorkspaceLayoutStore
+        .getState()
+        .getWorkspaceTabs(workspaceKey)
+        .filter((tab) => tab.target.kind !== "new_tab")
+        .map((tab) => tab.target),
+    ).toEqual(pendingTargets.filter((tabTarget) => tabTarget.workspaceId === "workspace-2"));
     expect(storedWorkspace("workspace-1")).toBeUndefined();
     expect(storedWorkspace("workspace-2")).toBeDefined();
   });
@@ -288,6 +307,23 @@ describe("archiveEmptyWorkspace", () => {
   });
 
   it("retains a workspace when the server finds history or other protected resources", async () => {
+    useWorkspaceLayoutStore.setState(useWorkspaceLayoutStore.getInitialState(), true);
+    const workspaceKey = buildProjectLayoutKey({
+      serverId: SERVER_ID,
+      projectId: workspace().projectId,
+    })!;
+    const layouts = useWorkspaceLayoutStore.getState();
+    layouts.openTab({
+      workspaceKey,
+      target: { kind: "files", workspaceId: "workspace-1" },
+      intent: "new",
+    });
+    layouts.openTab({
+      workspaceKey,
+      target: { kind: "working_diff", workspaceId: "workspace-1" },
+      intent: "new",
+    });
+    const tabs = layouts.getWorkspaceTabs(workspaceKey);
     await archiveEmptyWorkspace({
       client: createClient(async () => ({
         ...archivePayload({ workspaceId: "workspace-1" }),
@@ -297,9 +333,9 @@ describe("archiveEmptyWorkspace", () => {
       workspace: target(),
       hasPendingTerminalCreate: false,
     });
-
     expect(storedWorkspace("workspace-1")).toEqual(workspace());
     expect(isWorkspaceArchivePending(target())).toBe(false);
+    expect(useWorkspaceLayoutStore.getState().getWorkspaceTabs(workspaceKey)).toEqual(tabs);
   });
 
   it("does not treat a response without archive confirmation as success", async () => {
