@@ -5,10 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MermaidFenceHost } from "./host.web";
 import { parseMermaidRuntimeMessage } from "./runtime/messages";
 
+vi.mock("expo-clipboard", () => ({}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/constants/layout", () => ({ useIsCompactFormFactor: () => false }));
 
 const mounted: Array<{ root: Root; container: HTMLDivElement }> = [];
+const inheritedStyles = {};
+const textStyle = { backgroundColor: "#fff", padding: 8 };
 
 afterEach(async () => {
   for (const entry of mounted.splice(0)) {
@@ -51,8 +54,8 @@ describe("Mermaid diagram viewer", () => {
         <MermaidFenceHost
           code={"flowchart LR\nA[Request] --> B[Response]"}
           phase="complete"
-          inheritedStyles={{}}
-          textStyle={{ backgroundColor: "#fff", padding: 8 }}
+          inheritedStyles={inheritedStyles}
+          textStyle={textStyle}
         />,
       );
     });
