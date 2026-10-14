@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   BackgroundProcess,
   BackgroundProcessOutput,
@@ -168,6 +168,7 @@ import {
 } from "./claude-account-quota.js";
 import { consumeCodexResetCredit } from "./codex-reset-credits.js";
 import { consumeClaudeLimitReset } from "./claude-limit-resets.js";
+import { ClaudeQuotaState, claudeQuotaAccountKey } from "./claude-quota-state.js";
 import { OmpClaudeLimitResetConsumeRequestMessageSchema } from "@omp-desktop/protocol/messages";
 import { createProxyFetch } from "../../../../services/quota-fetcher/proxy-fetch.js";
 
@@ -657,6 +658,7 @@ interface OmpAgentSessionOptions {
   oauthAccounts?: readonly StoredOmpOAuthAccount[];
   automaticCredentialId?: number;
   automaticCredentialResolver?: (state: OmpSessionState) => Promise<number | undefined>;
+  observeClaudeCompletion?: (message: OmpAgentMessage, state: OmpSessionState) => void;
   automaticCredentialScheduler?: OmpAutomaticCredentialScheduler;
   runtimeSession: OmpRuntimeSession;
   config: AgentSessionConfig;
@@ -1802,6 +1804,9 @@ export class OmpAgentSession implements AgentSession {
   }> = [];
   private planContextResetPending: boolean;
   private readonly backgroundDaemons?: OmpBackgroundDaemons;
+  private readonly observeClaudeCompletion?: OmpAgentSessionOptions["observeClaudeCompletion"];
+  private streamedClaudeCompletionKey: string | null = null;
+  private streamedClaudeCompletionMessage: OmpAgentMessage | null = null;
 
   constructor(options: OmpAgentSessionOptions) {
     this.runtimeSession = options.runtimeSession;
@@ -1811,6 +1816,7 @@ export class OmpAgentSession implements AgentSession {
     this.oauthAccounts = [...(options.oauthAccounts ?? [])];
     this.automaticCredentialId = options.automaticCredentialId;
     this.automaticCredentialResolver = options.automaticCredentialResolver;
+    this.observeClaudeCompletion = options.observeClaudeCompletion;
     this.automaticCredentialScheduler =
       options.automaticCredentialScheduler ?? createOmpAutomaticCredentialScheduler();
     this.state = options.initialState;
@@ -3637,6 +3643,7 @@ export class OmpAgentSession implements AgentSession {
       case "agent_start":
         this.cancelHttpErrorContinuation();
         this.activeTurnStarted = true;
+        this.streamedClaudeCompletionKey = null;
         this.clearNoTurnBuffers();
         this.emit({
           type: "thread_started",
@@ -3731,6 +3738,9 @@ export class OmpAgentSession implements AgentSession {
           (message): message is Extract<OmpAgentMessage, { role: "assistant" }> =>
             message.role === "assistant",
         );
+        this.observeClaudeTerminalMessage(terminalAssistant);
+        this.streamedClaudeCompletionKey = null;
+        this.streamedClaudeCompletionMessage = null;
         const selectedWorkflowMode = normalizeOmpWorkflowSelection(this.features[0]?.value);
         if (
           selectedWorkflowMode === "enhanced" &&
@@ -3919,11 +3929,42 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
+  private claudeCompletionKey(message: OmpAgentMessage): string | null {
+    if (!message.responseId && typeof message.timestamp !== "number") return null;
+    return createHash("sha256")
+      .update(
+        JSON.stringify([
+          message.provider,
+          message.model,
+          message.responseId,
+          message.timestamp,
+          message.stopReason,
+          message.errorStatus,
+          message.errorMessage,
+        ]),
+      )
+      .digest("hex");
+  }
+  private observeClaudeMessage(message: OmpAgentMessage): void {
+    if (!this.observeClaudeCompletion || message.provider !== "anthropic") return;
+    this.observeClaudeCompletion(message, this.state);
+    this.streamedClaudeCompletionKey = this.claudeCompletionKey(message);
+    this.streamedClaudeCompletionMessage = message;
+  }
+
+  private observeClaudeTerminalMessage(message: OmpAgentMessage | undefined): void {
+    if (!message || message === this.streamedClaudeCompletionMessage) return;
+    const key = this.claudeCompletionKey(message);
+    if (key !== null && key === this.streamedClaudeCompletionKey) return;
+    this.observeClaudeMessage(message);
+  }
+
   private handleMessageEnd(
     event: Extract<OmpAgentSessionEvent, { type: "message_end" }>,
     turnId: string | undefined,
   ): void {
     if (event.message.role === "assistant") {
+      this.observeClaudeMessage(event.message);
       this.activeAssistantMessageId = null;
       if (turnId) {
         this.activeTurnTerminalAssistantMessage = event.message;
@@ -4223,6 +4264,7 @@ export class OmpAgentClient implements AgentClient {
   private readonly quotaFetch: typeof fetch;
   private readonly quotaNow: () => number;
   private readonly runtime: OmpRuntime;
+  private readonly claudeQuotaState: ClaudeQuotaState;
   private readonly oauthAccountsOverride?: readonly StoredOmpOAuthAccount[];
   private readonly sessionCredentialReader?: (
     providerId: string,
@@ -4263,6 +4305,7 @@ export class OmpAgentClient implements AgentClient {
         getProxyUrl: () => runtimeSettings?.env?.PI_PROXY,
       });
     this.quotaNow = options.quotaNow ?? Date.now;
+    this.claudeQuotaState = new ClaudeQuotaState(this.quotaNow);
     this.runtime =
       options.runtime ??
       createRuntime(options.logger, runtimeSettings, runtimeProviderParams.disabledBuiltInTools);
@@ -4295,6 +4338,58 @@ export class OmpAgentClient implements AgentClient {
       this.logger.debug({ err: error }, "OMP OAuth account lookup failed");
       return [];
     }
+  }
+
+  private createClaudeCompletionObserver(launchEnv?: Record<string, string>) {
+    const databasePath = resolveOmpDiagnosticPaths({
+      ...process.env,
+      ...this.runtimeSettings?.env,
+      ...launchEnv,
+    }).agentDb;
+    const managementDatabasePath = resolveOmpDiagnosticPaths({
+      ...process.env,
+      ...this.runtimeSettings?.env,
+    }).agentDb;
+    // Different launch credential databases must not share management evidence.
+    if (databasePath !== managementDatabasePath) return undefined;
+    let initialKeys: Set<string>;
+    try {
+      initialKeys = new Set(
+        readStoredOmpOAuthAccountCredentials(databasePath, "anthropic").map((account) =>
+          claudeQuotaAccountKey(databasePath, account),
+        ),
+      );
+    } catch {
+      this.logger.debug("OMP Claude quota credential lookup failed");
+      return undefined;
+    }
+    if (initialKeys.size === 0) return undefined;
+    return (message: OmpAgentMessage, state: OmpSessionState): void => {
+      if (message.role !== "assistant" || message.provider !== "anthropic") return;
+      try {
+        // Older native runtimes publish their actual automatic selection in the
+        // sticky cache before exposing activeCredential. Never use the configured
+        // automatic option or account order as a substitute for this evidence.
+        const active = state.activeCredential;
+        if (active && active.provider !== "anthropic") return;
+        const credentialId =
+          active?.credentialId ??
+          readStoredOmpSessionCredentialId(databasePath, "anthropic", state.sessionId);
+        if (!credentialId) return;
+        const accounts = readStoredOmpOAuthAccountCredentials(databasePath, "anthropic");
+        this.claudeQuotaState.retainAccounts(
+          new Set(accounts.map((account) => claudeQuotaAccountKey(databasePath, account))),
+        );
+        const account = accounts.find((candidate) => candidate.credentialId === credentialId);
+        if (!account) return;
+        const key = claudeQuotaAccountKey(databasePath, account);
+        if (!initialKeys.has(key)) return;
+        this.claudeQuotaState.observeCompletion(key, message);
+      } catch {
+        // Optional quota observation must never interfere with completing a turn.
+        this.logger.debug("OMP Claude quota credential lookup failed");
+      }
+    };
   }
   private readAutomaticCredentialId(
     config: AgentSessionConfig,
@@ -4426,6 +4521,7 @@ export class OmpAgentClient implements AgentClient {
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     const launchMode = this.resolveLaunchMode(config.modeId);
+    const launchEnv = launchContext?.env;
     const runtimeSession = await this.startConversationRuntimeSession({
       cwd: config.cwd,
       protocolMode: "rpc-ui",
@@ -4439,23 +4535,21 @@ export class OmpAgentClient implements AgentClient {
         config.daemonAppendSystemPrompt,
         getOmpPlatformSystemPrompt(),
       ),
-      env: launchContext?.env,
+      env: launchEnv,
       getImageGenerationConfig: launchContext?.getImageGenerationConfig,
     });
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const initialState = await runtimeSession.getState();
-      const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
+      const oauthAccounts = this.readOAuthAccounts(launchEnv);
       const automaticCredentialId = await this.resolveAutomaticCredentialId(
         config,
         initialState,
         oauthAccounts,
-        launchContext?.env,
+        launchEnv,
       );
       const automaticCredentialResolver = (state: OmpSessionState) =>
-        Promise.resolve(
-          this.readAutomaticCredentialId(config, state, oauthAccounts, launchContext?.env),
-        );
+        Promise.resolve(this.readAutomaticCredentialId(config, state, oauthAccounts, launchEnv));
       return await this.createInitializedSession(
         runtimeSession,
         config,
@@ -4463,6 +4557,7 @@ export class OmpAgentClient implements AgentClient {
           initialState,
           automaticCredentialId,
           automaticCredentialResolver,
+          observeClaudeCompletion: this.createClaudeCompletionObserver(launchEnv),
           currentModeId: launchMode.modeId,
           logger: this.logger,
           subagentCardScheduler: this.subagentCardScheduler,
@@ -4473,7 +4568,7 @@ export class OmpAgentClient implements AgentClient {
           paseoTools: launchContext?.paseoTools,
           backgroundDaemons: new OmpBackgroundDaemons({
             cwd: config.cwd,
-            env: { ...process.env, ...this.runtimeSettings?.env, ...launchContext?.env },
+            env: { ...process.env, ...this.runtimeSettings?.env, ...launchEnv },
             command:
               this.runtimeSettings?.command?.mode === "replace"
                 ? this.runtimeSettings.command.argv
@@ -4489,7 +4584,7 @@ export class OmpAgentClient implements AgentClient {
               resolveOmpDiagnosticPaths({
                 ...process.env,
                 ...this.runtimeSettings?.env,
-                ...launchContext?.env,
+                ...launchEnv,
               }).agentDb,
             ),
             "blobs",
@@ -4525,6 +4620,7 @@ export class OmpAgentClient implements AgentClient {
     const resumeConfig = buildResumeConfig(persistenceMetadata, overrides, this.provider);
 
     const launchMode = this.resolveLaunchMode(resumeConfig.modeId);
+    const launchEnv = launchContext?.env;
     const runtimeSession = await this.startConversationRuntimeSession(
       buildResumeStartInput({
         resumeConfig,
@@ -4536,21 +4632,16 @@ export class OmpAgentClient implements AgentClient {
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
       const initialState = await runtimeSession.getState();
-      const oauthAccounts = this.readOAuthAccounts(launchContext?.env);
+      const oauthAccounts = this.readOAuthAccounts(launchEnv);
       const automaticCredentialResolver = (state: OmpSessionState) =>
         Promise.resolve(
-          this.readAutomaticCredentialId(
-            resumeConfig.config,
-            state,
-            oauthAccounts,
-            launchContext?.env,
-          ),
+          this.readAutomaticCredentialId(resumeConfig.config, state, oauthAccounts, launchEnv),
         );
       const automaticCredentialId = await this.resolveAutomaticCredentialId(
         resumeConfig.config,
         initialState,
         oauthAccounts,
-        launchContext?.env,
+        launchEnv,
       );
       return await this.createInitializedSession(
         runtimeSession,
@@ -4559,6 +4650,7 @@ export class OmpAgentClient implements AgentClient {
           initialState,
           automaticCredentialId,
           automaticCredentialResolver,
+          observeClaudeCompletion: this.createClaudeCompletionObserver(launchEnv),
           currentModeId: launchMode.modeId,
           logger: this.logger,
           subagentCardScheduler: this.subagentCardScheduler,
@@ -4569,7 +4661,7 @@ export class OmpAgentClient implements AgentClient {
           paseoTools: launchContext?.paseoTools,
           backgroundDaemons: new OmpBackgroundDaemons({
             cwd: resumeConfig.config.cwd,
-            env: { ...process.env, ...this.runtimeSettings?.env, ...launchContext?.env },
+            env: { ...process.env, ...this.runtimeSettings?.env, ...launchEnv },
             command:
               this.runtimeSettings?.command?.mode === "replace"
                 ? this.runtimeSettings.command.argv
@@ -4585,7 +4677,7 @@ export class OmpAgentClient implements AgentClient {
               resolveOmpDiagnosticPaths({
                 ...process.env,
                 ...this.runtimeSettings?.env,
-                ...launchContext?.env,
+                ...launchEnv,
               }).agentDb,
             ),
             "blobs",
@@ -4837,8 +4929,23 @@ export class OmpAgentClient implements AgentClient {
         providerModels.set(model.provider, providerModelList);
       }
       const quotaByCredentialId = new Map<number, OmpProviderAccountQuota>();
+      const databasePath = resolveOmpDiagnosticPaths({
+        ...process.env,
+        ...this.runtimeSettings?.env,
+      }).agentDb;
+      this.claudeQuotaState.retainAccounts(
+        new Set(
+          [...storedAccountCredentialsById.values()]
+            .filter((account) => account.provider === "anthropic")
+            .map((account) => claudeQuotaAccountKey(databasePath, account)),
+        ),
+      );
       await Promise.all(
         [...storedAccountCredentialsById.values()].map(async (account) => {
+          const claudeRead =
+            account.provider === "anthropic"
+              ? this.claudeQuotaState.beginRead(claudeQuotaAccountKey(databasePath, account))
+              : undefined;
           const fetchQuota =
             account.provider === "anthropic" ? fetchClaudeAccountQuota : fetchCodexAccountQuota;
           const quota = await fetchQuota({
@@ -4846,7 +4953,10 @@ export class OmpAgentClient implements AgentClient {
             fetch: this.quotaFetch,
             now: this.quotaNow,
           });
-          quotaByCredentialId.set(account.credentialId, quota);
+          quotaByCredentialId.set(
+            account.credentialId,
+            claudeRead ? this.claudeQuotaState.completeRead(claudeRead, quota) : quota,
+          );
         }),
       );
       // eslint-disable-next-line oxc/no-map-spread

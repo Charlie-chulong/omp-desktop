@@ -1,5 +1,8 @@
 import type { TFunction } from "i18next";
-import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
+import type {
+  OmpProviderAccountQuota,
+  OmpProviderManagement,
+} from "@omp-desktop/protocol/messages";
 import { formatOmpAccountSelectionLabel } from "@/components/omp-provider-accounts";
 import {
   resolveOmpRemainingQuotaPct,
@@ -50,9 +53,12 @@ function quotaWindow(input: {
   label: string;
   usedPct: number | null | undefined;
   resetsAt: string | null | undefined;
+  alwaysShow?: boolean;
+  limitReached?: boolean;
 }): ProviderUsageWindow | null {
   const remainingPct = resolveOmpRemainingQuotaPct(input.usedPct);
-  if (remainingPct === null && input.resetsAt == null) return null;
+  if (remainingPct === null && input.resetsAt == null && !input.alwaysShow && !input.limitReached)
+    return null;
   return {
     id: input.id,
     label: input.label,
@@ -60,6 +66,7 @@ function quotaWindow(input: {
     remainingPct,
     resetsAt: input.resetsAt,
     percentageDisplay: "remaining",
+    limitReached: input.limitReached,
   };
 }
 
@@ -85,12 +92,63 @@ function unavailableAccountUsage(input: {
   };
 }
 
+function accountWindows(
+  quota: OmpProviderAccountQuota | undefined,
+  copy: OmpAccountUsageCopy,
+): ProviderUsageWindow[] {
+  const prefix = copy.providerId === "openai-codex" ? "codex" : "anthropic";
+  const windows = [
+    shouldShowOmpFiveHourQuota(quota, copy.providerId)
+      ? quotaWindow({
+          id: `${prefix}_five_hour`,
+          label: copy.fiveHour,
+          usedPct: quota?.fiveHourUsedPct,
+          resetsAt: quota?.fiveHourResetsAt,
+          alwaysShow: copy.providerId === "anthropic",
+          limitReached: copy.providerId === "anthropic" && quota?.fiveHourLimitReached === true,
+        })
+      : null,
+    quotaWindow({
+      id: `${prefix}_weekly`,
+      label: copy.weekly,
+      usedPct: quota?.weeklyUsedPct,
+      resetsAt: quota?.weeklyResetsAt,
+    }),
+    ...(quota?.modelWindows ?? []).map((window) => {
+      const remainingPct = resolveOmpRemainingQuotaPct(window.usedPct);
+      return {
+        id: `${copy.providerId}_weekly_${window.model}`,
+        label: copy.modelWeekly(window.model),
+        usedPct: remainingPct === null ? null : window.usedPct,
+        remainingPct,
+        resetsAt: window.resetsAt,
+        percentageDisplay: "remaining" as const,
+      };
+    }),
+  ];
+  return windows.filter((window): window is ProviderUsageWindow => window !== null);
+}
+
+function accountQuotaObservation(
+  source: OmpAccountUsageSource,
+  copy: OmpAccountUsageCopy,
+  quota: OmpProviderAccountQuota | undefined,
+): OmpProviderAccountQuota | undefined {
+  if (copy.providerId !== "anthropic") return undefined;
+  return {
+    ...quota,
+    status: source.error ? "error" : (quota?.status ?? "unavailable"),
+    queryError: source.error ? undefined : quota?.queryError,
+    error: source.error ?? quota?.error,
+  };
+}
+
 export function buildOmpAccountProviderUsage(
   source: OmpAccountUsageSource,
   copy: OmpAccountUsageCopy,
 ): ProviderUsage[] {
   const providerName = copy.providerName;
-  if (source.error) {
+  if (source.error && source.accounts.length === 0) {
     return [
       unavailableAccountUsage({
         providerId: copy.providerId,
@@ -122,46 +180,20 @@ export function buildOmpAccountProviderUsage(
       identityKey: account.identityKey,
       fallback: copy.accountFallback(account.accountNumber ?? index + 1),
     });
-    const windows = [
-      shouldShowOmpFiveHourQuota(quota)
-        ? quotaWindow({
-            id: copy.providerId === "openai-codex" ? "codex_five_hour" : "anthropic_five_hour",
-            label: copy.fiveHour,
-            usedPct: quota?.fiveHourUsedPct,
-            resetsAt: quota?.fiveHourResetsAt,
-          })
-        : null,
-      quotaWindow({
-        id: copy.providerId === "openai-codex" ? "codex_weekly" : "anthropic_weekly",
-        label: copy.weekly,
-        usedPct: quota?.weeklyUsedPct,
-        resetsAt: quota?.weeklyResetsAt,
-      }),
-      ...(quota?.modelWindows ?? []).map((window) => ({
-        id: `${copy.providerId}_weekly_${window.model}`,
-        label: copy.modelWeekly(window.model),
-        usedPct:
-          typeof window.usedPct === "number" && Number.isFinite(window.usedPct)
-            ? window.usedPct
-            : null,
-        remainingPct: resolveOmpRemainingQuotaPct(window.usedPct),
-        resetsAt: window.resetsAt,
-        percentageDisplay: "remaining" as const,
-      })),
-    ].filter((window): window is ProviderUsageWindow => window !== null);
 
     return {
       providerId: `${copy.providerId}:${account.credentialId}`,
       displayName: `${providerName} · ${accountLabel}`,
-      status: quota?.status ?? "unavailable",
+      status: source.error ? "error" : (quota?.status ?? "unavailable"),
       planLabel: quota?.planLabel ?? null,
       sourceLabel: providerName,
       fetchedAt: quota?.fetchedAt ?? source.updatedAt,
-      windows,
+      windows: accountWindows(quota, copy),
       balances: [],
       details: [],
       extraUsage: quota?.extraUsage,
-      error: quota?.error ?? null,
+      accountQuota: accountQuotaObservation(source, copy, quota),
+      error: source.error ?? quota?.error ?? null,
     };
   });
 }

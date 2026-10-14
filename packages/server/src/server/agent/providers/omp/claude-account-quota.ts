@@ -91,6 +91,7 @@ function failure(
   status: "unavailable" | "error",
   error: string,
   now: () => number,
+  queryError: OmpProviderAccountQuota["queryError"] = { kind: "invalid_response" },
 ): OmpProviderAccountQuota {
   return {
     status,
@@ -101,6 +102,7 @@ function failure(
     weeklyResetsAt: null,
     fetchedAt: new Date(now()).toISOString(),
     error,
+    queryError,
     limitResets: unavailableClaudeLimitResets(status, error),
   };
 }
@@ -147,6 +149,7 @@ export async function fetchClaudeAccountQuota(
       error instanceof ClaudeOAuthRequestError ? error.status : "error",
       error instanceof ClaudeOAuthRequestError ? error.message : "Claude usage request failed",
       now,
+      error instanceof ClaudeOAuthRequestError ? error.queryError : { kind: "network" },
     );
   }
   if (quota.status !== "available") return quota;

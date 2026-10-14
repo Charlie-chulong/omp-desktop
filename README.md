@@ -237,16 +237,38 @@ availability or interrupt inference.
 
 ## Claude official-account usage
 
-Claude accounts signed in through OMP's built-in `anthropic` provider now have individual
-usage entries in **Host Settings → Model providers → Signed-in providers**, the host's
-**Usage** page, the sidebar account selector, and the active model's context tooltip.
-Desktop preserves account names, notes, ordering, and selected-credential isolation.
+Claude accounts signed in through OMP's built-in `anthropic` provider have individual
+usage entries in **Host Settings → Model providers → Signed-in providers** and the host's
+**Usage** page. Tap **Claude usage** in the conversation composer on mobile or desktop,
+including before the conversation has context-token data. Reopening the sheet or pressing
+**Refresh** requests fresh server usage.
+
+When a session reports a selected credential, its usage stays isolated to that account.
+When no session account is reported, the sheet explains this and lists signed-in accounts
+separately with their own labels and quotas; it never guesses the active account or
+combines their percentages. Account names, notes, and ordering remain unchanged.
 
 Five-hour and overall weekly percentages show **remaining quota**. Model-specific weekly
 windows appear only when Anthropic actually returns them; unknown window names retain
 their reported identifier rather than being guessed as Opus or Sonnet. Reset dates include
 a timezone, and compact countdowns refresh server usage at the deadline instead of
 locally assuming that quota has reset. Missing percentages and dates remain unknown.
+
+Claude's five-hour row remains visible when usage is unavailable or only a reached flag
+is known. Missing percentages are shown as unknown, without a fabricated progress bar.
+Authentication, network, timeout, invalid-response, and HTTP query failures are distinct.
+An OAuth usage-query retry deadline is not a quota-window reset.
+
+The daemon retains model-request restrictions for the actual enabled OAuth account across
+sessions and failed usage reads. A generic model 429 remains an unknown-window restriction;
+five-hour attribution requires explicit native window evidence or a fresh exhausted
+five-hour observation for the same account. Older in-flight reads cannot clear newer
+model restrictions. A deadline triggers a server recheck, not a local declaration of
+recovery. Fresh corresponding quota data can confirm known-window recovery; an
+unknown-window model throttle requires a successful model response for that account.
+Desktop never sends a model request or redeems a reset automatically to test recovery.
+These observations are daemon-local memory, not billing records; restarting the daemon
+requires fresh server evidence.
 
 The account and Usage views also show read-only **extra usage** status, reported spending,
 and the monthly spending cap when available. The OAuth endpoint reports these amounts

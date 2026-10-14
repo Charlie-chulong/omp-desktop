@@ -1,9 +1,10 @@
+import type { TFunction } from "i18next";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useOmpQuotaClock } from "@/hooks/use-omp-account-quota";
-import { formatOmpQuotaResetTime } from "@/components/omp-provider-quota";
+import { formatOmpQuotaCountdown, formatOmpQuotaResetTime } from "@/components/omp-provider-quota";
 import {
   clampPct,
   formatPct,
@@ -39,6 +40,17 @@ function fillToneStyle(tone: ProviderUsageTone) {
   }
 }
 
+function formatWindowValue(
+  reached: boolean,
+  percentage: number | null,
+  showRemaining: boolean,
+  t: TFunction,
+): string {
+  if (reached) return t("providerUsage.limitReached");
+  if (percentage !== null) return formatPct(percentage);
+  return showRemaining ? t("providerUsage.usageUnknown") : "—";
+}
+
 export function ProviderUsageWindowBar({
   window,
   showReset = true,
@@ -47,7 +59,7 @@ export function ProviderUsageWindowBar({
   showReset?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  useOmpQuotaClock(showReset && Boolean(window.resetsAt));
+  const now = useOmpQuotaClock(showReset && Boolean(window.resetsAt));
   const usedPct = resolveUsedPct(window);
   const remainingPct = resolveRemainingPct(window);
   const showRemaining = window.percentageDisplay === "remaining";
@@ -66,7 +78,10 @@ export function ProviderUsageWindowBar({
   if (isAtRisk) {
     trailing = formatRunsOutLabel(window.runsOutAt, t);
   } else if (showReset) {
-    trailing = formatResetLabel(window.resetsAt, t);
+    trailing =
+      showRemaining && formatOmpQuotaCountdown(window.resetsAt, now) === ""
+        ? t("providerUsage.awaitingVerification")
+        : formatResetLabel(window.resetsAt, t);
   }
   const resetTime =
     showReset && showRemaining ? formatOmpQuotaResetTime(window.resetsAt, i18n.language) : null;
@@ -78,15 +93,17 @@ export function ProviderUsageWindowBar({
           {formatProviderUsageLabel(window.id, window.label, t)}
         </Text>
         <Text style={styles.value}>
-          {displayedPct != null ? formatPct(displayedPct) : "—"}
+          {formatWindowValue(window.limitReached === true, displayedPct, showRemaining, t)}
           {trailing ? (
             <Text style={isAtRisk ? styles.atRisk : styles.reset}>{` · ${trailing}`}</Text>
           ) : null}
         </Text>
       </View>
-      <View style={styles.track}>
-        <View style={fillStyle} />
-      </View>
+      {displayedPct != null ? (
+        <View style={styles.track}>
+          <View style={fillStyle} />
+        </View>
+      ) : null}
       {resetTime ? (
         <Text style={styles.label}>
           {t("settings.providers.omp.multiAccount.quotaResetsAt", { time: resetTime })}

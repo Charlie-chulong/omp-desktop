@@ -28,15 +28,19 @@ export function shouldShowOmpFiveHourQuota(
     | {
         planLabel?: string | null;
         fiveHourUsedPct?: number | null;
+        fiveHourLimitReached?: boolean | null;
         fiveHourResetsAt?: string | null;
       }
     | null
     | undefined,
+  providerId?: string | null,
 ): boolean {
   return (
-    quota != null &&
-    ((typeof quota.fiveHourUsedPct === "number" && Number.isFinite(quota.fiveHourUsedPct)) ||
-      (typeof quota.fiveHourResetsAt === "string" && quota.fiveHourResetsAt.length > 0))
+    providerId === "anthropic" ||
+    (quota != null &&
+      (quota.fiveHourLimitReached === true ||
+        (typeof quota.fiveHourUsedPct === "number" && Number.isFinite(quota.fiveHourUsedPct)) ||
+        (typeof quota.fiveHourResetsAt === "string" && quota.fiveHourResetsAt.length > 0)))
   );
 }
 

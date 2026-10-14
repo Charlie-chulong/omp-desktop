@@ -105,6 +105,7 @@ import {
   resolveOmpRemainingQuotaPct,
   shouldShowOmpFiveHourQuota,
 } from "./omp-provider-quota";
+import { OmpClaudeQuotaNotices } from "./omp-claude-quota-notices";
 import {
   groupOmpDiscoveredModels,
   resolveProviderDiscoveredModels,
@@ -329,10 +330,14 @@ function OmpAccountQuotaWindow({
           remaining: Math.round(remainingPct),
         })
       : null;
-  const statusText =
-    status !== "available"
-      ? t("settings.providers.omp.multiAccount.quotaUnavailable")
-      : (remainingText ?? t("settings.providers.omp.multiAccount.quotaUnknown"));
+  const statusText = reached
+    ? t("providerUsage.limitReached")
+    : (remainingText ??
+      t(
+        status !== "available"
+          ? "settings.providers.omp.multiAccount.quotaUnavailable"
+          : "settings.providers.omp.multiAccount.quotaUnknown",
+      ));
   const resetTime = formatOmpQuotaResetTime(resetsAt, i18n.language);
   const accessibilityValue = useMemo(
     () => ({ min: 0, max: 100, now: Math.round(remainingPct ?? 0) }),
@@ -374,15 +379,18 @@ function OmpAccountQuotaWindow({
 function OmpAccountQuotaSummary({
   credentialId,
   quota,
+  providerId,
 }: {
   credentialId: number;
   quota?: OmpProviderAccount["quota"];
+  providerId: string;
 }) {
   const { t } = useTranslation();
   const serverId = useContext(OmpQuotaServerContext);
   const resetTimes = [
     quota?.weeklyResetsAt,
     quota?.fiveHourResetsAt,
+    quota?.modelRateLimit?.resetsAt,
     ...(quota?.modelWindows ?? []).map((window) => window.resetsAt),
   ];
   const now = useOmpQuotaClock(resetTimes.some(Boolean));
@@ -395,7 +403,7 @@ function OmpAccountQuotaSummary({
         resetsAt={quota?.weeklyResetsAt}
         status={quota?.status}
       />
-      {shouldShowOmpFiveHourQuota(quota) ? (
+      {shouldShowOmpFiveHourQuota(quota, providerId) ? (
         <OmpAccountQuotaWindow
           label={t("settings.providers.omp.multiAccount.quotaFiveHour")}
           usedPct={quota?.fiveHourUsedPct}
@@ -414,6 +422,7 @@ function OmpAccountQuotaSummary({
         />
       ))}
       {quota?.extraUsage ? <OmpExtraUsageDetails extraUsage={quota.extraUsage} /> : null}
+      {providerId === "anthropic" ? <OmpClaudeQuotaNotices quota={quota} /> : null}
     </View>
   );
 }
@@ -430,16 +439,17 @@ function OmpProviderAccountQuotaDetails({
   if (providerId !== "openai-codex" && providerId !== "anthropic") return null;
   return (
     <>
-      <OmpAccountQuotaSummary credentialId={account.credentialId} quota={account.quota} />
+      <OmpAccountQuotaSummary
+        credentialId={account.credentialId}
+        quota={account.quota}
+        providerId={providerId}
+      />
       {providerId === "openai-codex" ? (
         <OmpCodexQuotaDetails account={account} accountLabel={accountLabel} />
       ) : (
         <>
           {account.quota?.planLabel ? (
             <Text style={sheetStyles.mutedText}>{account.quota.planLabel}</Text>
-          ) : null}
-          {account.quota?.error ? (
-            <Text style={sheetStyles.mutedText}>{account.quota.error}</Text>
           ) : null}
           <OmpClaudeLimitResetDetails account={account} accountLabel={accountLabel} />
         </>
