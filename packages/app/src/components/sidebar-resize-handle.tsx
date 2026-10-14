@@ -16,7 +16,7 @@ interface SidebarResizeHandleProps {
   testID: string;
 }
 
-const HIGHLIGHT_DELAY_MS = 100;
+const HIGHLIGHT_DELAY_MS = 150;
 
 const webResizeCursorStyle = isWeb
   ? ({
@@ -132,10 +132,9 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     top: 0,
     bottom: 0,
-    left: 5,
-    width: 1,
-    backgroundColor: theme.colors.foreground,
-    opacity: 0.25,
+    left: 4,
+    width: 3,
+    backgroundColor: theme.colors.accent,
   },
   touchLayer: {
     position: "absolute",

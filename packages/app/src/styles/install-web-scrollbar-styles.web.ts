@@ -1,4 +1,6 @@
 import {
+  WEB_SCROLLBAR_ACTIVE_OPACITY,
+  WEB_SCROLLBAR_HOVER_OPACITY,
   WEB_SCROLLBAR_SIZE_PX,
   webScrollbarColor,
   webScrollbarThumbColor,
@@ -15,7 +17,7 @@ export function installWebScrollbarStyles(): () => void {
   style.id = STYLE_ID;
   style.textContent = `
 * {
-  scrollbar-color: ${webScrollbarColor("var(--colors-foreground-extra-muted)")};
+  scrollbar-color: ${webScrollbarColor("var(--colors-foreground)")};
   scrollbar-width: ${WEB_SCROLLBAR_WIDTH};
 }
 
@@ -35,15 +37,15 @@ export function installWebScrollbarStyles(): () => void {
 }
 
 *::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: ${webScrollbarThumbColor("var(--colors-foreground-extra-muted)")};
-  background-clip: content-box;
+  background: ${webScrollbarThumbColor("var(--colors-foreground)")};
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: ${webScrollbarThumbColor("var(--colors-foreground-muted)", 1)};
-  background-clip: content-box;
+  background: ${webScrollbarThumbColor("var(--colors-foreground)", WEB_SCROLLBAR_HOVER_OPACITY)};
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: ${webScrollbarThumbColor("var(--colors-foreground)", WEB_SCROLLBAR_ACTIVE_OPACITY)};
 }
 
 [data-overlay-scrollbar="true"]::-webkit-scrollbar {

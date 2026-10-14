@@ -168,7 +168,7 @@ export function SidebarStatusWorkspaceList({
         <NestableScrollContainer
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
           testID="sidebar-status-list-scroll"
         >
           {content}
@@ -177,7 +177,7 @@ export function SidebarStatusWorkspaceList({
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
           testID="sidebar-status-list-scroll"
         >
           {content}

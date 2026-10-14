@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View, type PressableStateCallbackType, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import { WEB_SCROLLBAR_RESTING_OPACITY, WEB_SCROLLBAR_SIZE_PX } from "@/styles/web-scrollbar";
+import {
+  WEB_SCROLLBAR_ACTIVE_OPACITY,
+  WEB_SCROLLBAR_HOVER_OPACITY,
+  WEB_SCROLLBAR_RESTING_OPACITY,
+  WEB_SCROLLBAR_SIZE_PX,
+} from "@/styles/web-scrollbar";
 import { inlineUnistylesStyle } from "@/styles/unistyles-inline-style";
 import { computeOverlayScrollbarGeometry, scrollOffsetFromThumbDrag } from "./geometry";
 
-const THUMB_WIDTH = WEB_SCROLLBAR_SIZE_PX - 4;
+const THUMB_WIDTH = WEB_SCROLLBAR_SIZE_PX;
 const GRAB_WIDTH = 12;
 
 export interface OverlayScrollbarMetrics {
@@ -111,9 +116,16 @@ export function OverlayScrollbar({
         {...({ onPointerDown: startDrag } as object)}
         testID="workspace-overlay-scrollbar-grab"
       >
-        {({ hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => (
+        {({
+          hovered = false,
+          pressed = false,
+        }: PressableStateCallbackType & { hovered?: boolean }) => (
           <View
-            style={[styles.thumb, hovered || isDragging ? styles.thumbHovered : null]}
+            style={[
+              styles.thumb,
+              hovered ? styles.thumbHovered : null,
+              pressed || isDragging ? styles.thumbActive : null,
+            ]}
             pointerEvents="none"
             testID="workspace-overlay-scrollbar-thumb"
           />
@@ -145,12 +157,13 @@ const styles = StyleSheet.create((theme) => ({
   thumb: {
     width: THUMB_WIDTH,
     height: "100%",
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.foregroundExtraMuted,
+    backgroundColor: theme.colors.foreground,
     opacity: WEB_SCROLLBAR_RESTING_OPACITY,
   },
   thumbHovered: {
-    backgroundColor: theme.colors.foregroundMuted,
-    opacity: 1,
+    opacity: WEB_SCROLLBAR_HOVER_OPACITY,
+  },
+  thumbActive: {
+    opacity: WEB_SCROLLBAR_ACTIVE_OPACITY,
   },
 }));
