@@ -54,7 +54,8 @@ The feature is off by default and is only available in the Electron app.
   breathing/sway. Idle actions play for two seconds and rest for six seconds;
   waiting, completed, and blocked states also have quiet pauses. Working and carried
   loops continue. Only the working face keeps its wistful expression; other faces
-  are relaxed or happy. System reduced-motion preferences keep the pose static.
+  are relaxed or happy. Blinks use short, tapered eyelids.
+  System reduced-motion preferences keep the pose static.
 - Right-click the pet to hide it or reset its position. Minimizing OMP does not hide
   the pet; quitting still follows the existing desktop/daemon settings.
 
