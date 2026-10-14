@@ -2,6 +2,7 @@ import { app, BrowserWindow, clipboard, ipcMain, Menu } from "electron";
 import log from "electron-log/main";
 import { isAllowedExternalUrl, openExternalUrl } from "./opener.js";
 import { getDesktopContextMenuLabels, setDesktopContextMenuLabels } from "./context-menu-labels.js";
+import { getMainWindows, selectMainWindow } from "../window/main-windows.js";
 
 interface TerminalContextMenuInput {
   kind: "terminal";
@@ -91,7 +92,10 @@ function withBrowserWindow(
   callback: (win: BrowserWindow) => void,
 ): (_item: Electron.MenuItem, baseWin: Electron.BaseWindow | undefined) => void {
   return (_item, baseWin) => {
-    const win = baseWin instanceof BrowserWindow ? baseWin : BrowserWindow.getFocusedWindow();
+    const win =
+      baseWin instanceof BrowserWindow && getMainWindows().includes(baseWin)
+        ? baseWin
+        : selectMainWindow();
     if (win) callback(win);
   };
 }

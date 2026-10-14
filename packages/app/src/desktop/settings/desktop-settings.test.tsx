@@ -1,0 +1,139 @@
+// @vitest-environment jsdom
+import React, { type PropsWithChildren } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DesktopSettings, DesktopSettingsPatch } from "./desktop-settings";
+
+const service = vi.hoisted(() => ({
+  desktop: true,
+  current: {} as DesktopSettings,
+  listener: null as ((payload: unknown) => void) | null,
+  resolvePatch: null as ((settings: DesktopSettings) => void) | null,
+  rejectPatch: null as ((error: Error) => void) | null,
+  invoke: vi.fn(),
+  report: vi.fn(),
+  unsubscribe: vi.fn(),
+  on: vi.fn(),
+}));
+vi.mock("@/constants/platform", () => ({ getIsElectron: () => service.desktop }));
+vi.mock("@/desktop/host", () => ({
+  getDesktopHost: () => (service.desktop ? { events: { on: service.on } } : null),
+}));
+vi.mock("@/desktop/electron/invoke", () => ({ invokeDesktopCommand: service.invoke }));
+vi.mock("@/desktop/hooks/desktop-ipc-error", () => ({
+  useDesktopIpcErrorReporter: () => service.report,
+  useDesktopIpcQueryErrorToast: () => {},
+}));
+import { DEFAULT_DESKTOP_SETTINGS, useDesktopSettings } from "./desktop-settings";
+
+let queryClient: QueryClient;
+function Wrapper({ children }: PropsWithChildren) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  service.desktop = true;
+  service.current = {
+    ...DEFAULT_DESKTOP_SETTINGS,
+    pet: {
+      enabled: true,
+      selectedId: "custom-round-cat",
+      size: "large",
+      position: { x: 14, y: 23 },
+    },
+  };
+  service.listener = null;
+  service.resolvePatch = null;
+  service.rejectPatch = null;
+  service.on.mockImplementation((_event: string, callback: (payload: unknown) => void) => {
+    service.listener = callback;
+    return service.unsubscribe;
+  });
+  service.invoke.mockImplementation((command: string, patch?: DesktopSettingsPatch) => {
+    if (command === "get_desktop_settings") return Promise.resolve(service.current);
+    if (command === "patch_desktop_settings") {
+      const { promise, resolve, reject } = Promise.withResolvers<DesktopSettings>();
+      service.current = { ...service.current, pet: { ...service.current.pet, ...patch?.pet } };
+      service.resolvePatch = resolve;
+      service.rejectPatch = reject;
+      return promise;
+    }
+    throw new Error(`Unexpected command ${command}`);
+  });
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+});
+afterEach(() => {
+  cleanup();
+  queryClient.clear();
+});
+
+describe("native desktop pet settings", () => {
+  it("loads persisted custom selection and patches size without dropping position or existing settings", async () => {
+    const { result } = renderHook(useDesktopSettings, { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.settings.pet.selectedId).toBe("custom-round-cat");
+    let saving: Promise<void> | undefined;
+    act(() => {
+      saving = result.current.updateSettings({ pet: { size: "small" } });
+    });
+    await waitFor(() => expect(service.resolvePatch).not.toBeNull());
+    await act(async () => {
+      service.resolvePatch?.(service.current);
+      await saving;
+    });
+    expect(result.current.settings.pet).toEqual({
+      enabled: true,
+      selectedId: "custom-round-cat",
+      size: "small",
+      position: { x: 14, y: 23 },
+    });
+    expect(result.current.settings.notifications).toEqual(DEFAULT_DESKTOP_SETTINGS.notifications);
+    expect(result.current.settings.daemon).toEqual(DEFAULT_DESKTOP_SETTINGS.daemon);
+  });
+
+  it("reflects right-click Hide and drag events and unsubscribes on unmount", async () => {
+    const { result, unmount } = renderHook(useDesktopSettings, { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const native = {
+      ...service.current,
+      pet: { ...service.current.pet, enabled: false, position: { x: -200, y: 450 } },
+    };
+    act(() => {
+      service.listener?.({ payload: native });
+    });
+    await waitFor(() => expect(result.current.settings.pet.enabled).toBe(false));
+    expect(result.current.settings.pet.position).toEqual({ x: -200, y: 450 });
+    unmount();
+    expect(service.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it.each(["success", "failure"] as const)(
+    "keeps newer native Hide/drag state over a late patch %s",
+    async (outcome) => {
+      const { result } = renderHook(useDesktopSettings, { wrapper: Wrapper });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      let saving: Promise<void> | undefined;
+      act(() => {
+        saving = result.current.updateSettings({ pet: { size: "small" } }).catch(() => {});
+      });
+      await waitFor(() => expect(service.resolvePatch).not.toBeNull());
+      const olderPatch = service.current;
+      const native = {
+        ...olderPatch,
+        pet: { ...olderPatch.pet, enabled: false, position: { x: 400, y: 500 } },
+      };
+      act(() => {
+        service.listener?.({ payload: native });
+      });
+      await act(async () => {
+        if (outcome === "success") service.resolvePatch?.(olderPatch);
+        else service.rejectPatch?.(new Error("Unable to persist"));
+        await saving;
+      });
+      await waitFor(() => expect(result.current.settings.pet).toEqual(native.pet));
+      if (outcome === "failure") expect(service.report).toHaveBeenCalledOnce();
+    },
+  );
+});

@@ -28,6 +28,7 @@ let nextSessionId = 0;
 const sessions = new Map<string, Session>();
 
 function emitTransportEvent(payload: TransportEventPayload): void {
+  // Transport is an intentional process-wide broadcast, not main-window selection.
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send("paseo:event:local-daemon-transport-event", payload);
   }

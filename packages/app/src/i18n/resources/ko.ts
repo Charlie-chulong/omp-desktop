@@ -1383,6 +1383,7 @@ export const ko: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "OMP Desktop 종료 중...",
       detail: "로컬 데몬을 중지하는 중입니다.",

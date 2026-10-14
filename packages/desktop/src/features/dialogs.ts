@@ -1,4 +1,5 @@
-import { dialog, ipcMain, BrowserWindow } from "electron";
+import { dialog, ipcMain } from "electron";
+import { selectMainWindow } from "../window/main-windows.js";
 
 interface AskOptions {
   title?: string;
@@ -29,8 +30,8 @@ function resolveDialogType(kind: AskOptions["kind"]): "warning" | "error" | "que
 
 export function registerDialogHandlers(): void {
   ipcMain.handle("paseo:dialog:ask", async (event, message: string, options?: AskOptions) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const result = await dialog.showMessageBox(win ?? BrowserWindow.getFocusedWindow()!, {
+    const win = selectMainWindow(event.sender);
+    const result = await dialog.showMessageBox(win!, {
       type: resolveDialogType(options?.kind),
       title: options?.title ?? "Confirm",
       message,
@@ -44,8 +45,8 @@ export function registerDialogHandlers(): void {
   ipcMain.handle(
     "paseo:dialog:askWithCheckbox",
     async (event, message: string, options: AskWithCheckboxOptions) => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      const result = await dialog.showMessageBox(win ?? BrowserWindow.getFocusedWindow()!, {
+      const win = selectMainWindow(event.sender);
+      const result = await dialog.showMessageBox(win!, {
         type: resolveDialogType(options.kind),
         title: options.title ?? "Confirm",
         message,
@@ -63,14 +64,14 @@ export function registerDialogHandlers(): void {
   );
 
   ipcMain.handle("paseo:dialog:open", async (event, options?: OpenOptions) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
+    const win = selectMainWindow(event.sender);
     const properties: Electron.OpenDialogOptions["properties"] = [];
     if (options?.directory) properties.push("openDirectory");
     if (options?.createDirectory) properties.push("createDirectory");
     if (options?.multiple) properties.push("multiSelections");
     if (!options?.directory) properties.push("openFile");
 
-    const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+    const result = await dialog.showOpenDialog(win!, {
       title: options?.title,
       defaultPath: options?.defaultPath,
       properties,
