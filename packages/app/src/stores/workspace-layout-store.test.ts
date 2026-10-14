@@ -1051,6 +1051,128 @@ describe("workspace-layout-store actions", () => {
     });
   });
 
+  it("hides and restores the terminal pane without losing its tabs, selection, or split sizes", () => {
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    store.openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    });
+    useWorkspaceLayoutIds("terminal-pane", "terminal-group");
+    const firstTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-1" },
+      intent: "reveal",
+    })!;
+    const secondTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-2" },
+      intent: "reveal",
+    })!;
+    store.resizeSplit(workspaceKey, "group_terminal-group", [0.7, 0.3]);
+    const before = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const paneId = findPaneContainingTab(before.root, secondTabId)!.id;
+    const tabsBefore = collectAllTabs(before.root);
+    const sizesBefore = workspaceLayoutStore.getState().splitSizesByWorkspace[workspaceKey];
+
+    store.hidePane(workspaceKey, paneId);
+
+    let layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findBottomTerminalPaneId({ layout, tabs: collectAllTabs(layout.root) })).toBe(paneId);
+    expect(findPaneById(layout.root, paneId)).toMatchObject({
+      hidden: true,
+      tabIds: [firstTabId, secondTabId],
+      focusedTabId: secondTabId,
+    });
+    expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual(["main"]);
+    expect(layout.focusedPaneId).toBe("main");
+    expect(collectAllTabs(layout.root)).toEqual(tabsBefore);
+
+    store.focusPane(workspaceKey, paneId);
+
+    layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneById(layout.root, paneId)?.hidden).not.toBe(true);
+    expect(findPaneById(layout.root, paneId)?.focusedTabId).toBe(secondTabId);
+    expect(layout.focusedPaneId).toBe(paneId);
+    expect(collectAllTabs(layout.root)).toEqual(tabsBefore);
+    expect(workspaceLayoutStore.getState().splitSizesByWorkspace[workspaceKey]).toEqual(
+      sizesBefore,
+    );
+  });
+
+  it("keeps reconciled terminals in the hidden pane until a terminal is explicitly revealed", () => {
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    store.openTab({
+      workspaceKey,
+      target: { kind: "agent", agentId: "agent-1" },
+      intent: "reveal",
+    });
+    const firstTabId = store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-1" },
+      intent: "reveal",
+    })!;
+    const before = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const paneId = findPaneContainingTab(before.root, firstTabId)!.id;
+    store.hidePane(workspaceKey, paneId);
+
+    store.reconcileTabs(workspaceKey, {
+      agentsHydrated: true,
+      terminalsHydrated: true,
+      activeAgentIds: ["agent-1"],
+      autoOpenAgentIds: [],
+      knownAgentIds: ["agent-1"],
+      knownTerminalIds: ["terminal-1", "terminal-2"],
+      standaloneTerminalIds: ["terminal-1", "terminal-2"],
+    });
+
+    let layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneById(layout.root, paneId)).toMatchObject({
+      hidden: true,
+      tabIds: [firstTabId, "terminal_terminal-2"],
+    });
+    expect(findBottomTerminalPaneId({ layout, tabs: collectAllTabs(layout.root) })).toBe(paneId);
+    expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual(["main"]);
+    expect(layout.focusedPaneId).toBe("main");
+
+    store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-2" },
+      intent: "reveal",
+    });
+
+    layout = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneById(layout.root, paneId)?.hidden).not.toBe(true);
+    expect(findPaneById(layout.root, paneId)?.tabIds).toEqual([firstTabId, "terminal_terminal-2"]);
+    expect(findPaneById(layout.root, paneId)?.focusedTabId).toBe("terminal_terminal-2");
+    expect(layout.focusedPaneId).toBe(paneId);
+  });
+
+  it("restores a persisted hidden terminal pane without reopening or duplicating it", async () => {
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    store.openTab({
+      workspaceKey,
+      target: { kind: "terminal", terminalId: "terminal-1" },
+      intent: "reveal",
+    });
+    const before = workspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+    const paneId = findBottomTerminalPaneId({ layout: before, tabs: collectAllTabs(before.root) })!;
+    store.hidePane(workspaceKey, paneId);
+    const tabsBefore = contentTabs(store.getWorkspaceTabs(workspaceKey));
+    const restored = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+
+    await restored.persist.rehydrate();
+
+    const layout = restored.getState().layoutByWorkspace[workspaceKey];
+    expect(findPaneById(layout.root, paneId)?.hidden).toBe(true);
+    expect(findBottomTerminalPaneId({ layout, tabs: collectAllTabs(layout.root) })).toBe(paneId);
+    expect(contentTabs(restored.getState().getWorkspaceTabs(workspaceKey))).toEqual(tabsBefore);
+    expect(collectAllPanes(layout.root).map((pane) => pane.id)).toEqual(["main"]);
+  });
+
   it("moves a New tab's selected tool to the side panel without changing identity", () => {
     const workspaceKey = createWorkspaceKey();
     const store = workspaceLayoutStore.getState();

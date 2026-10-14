@@ -738,12 +738,16 @@ export const fr: TranslationResources = {
         closePane: "Fermer le volet",
         exitFocusMode: "Quitter le mode concentration",
         splitRight: "Volet divisé à droite",
-        splitDown: "Diviser le volet vers le bas",
         changes: "Modifications",
         files: "Fichiers",
         pullRequest: "Demande de fusion",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+      },
+      terminalPanel: {
+        show: "Afficher le panneau du terminal",
+        hide: "Masquer le panneau du terminal",
+        toggle: "Afficher/masquer le panneau du terminal",
       },
       sidePanel: {
         open: "Ouvrir le panneau latéral",

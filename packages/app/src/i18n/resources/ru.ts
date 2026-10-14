@@ -747,12 +747,16 @@ export const ru: TranslationResources = {
         closePane: "Закрыть панель",
         exitFocusMode: "Выйти из режима фокусировки",
         splitRight: "Разделить панель справа",
-        splitDown: "Разделить панель снизу",
         changes: "Изменения",
         files: "Файлы",
         pullRequest: "PR",
         terminalProfilesMenu: "Профили терминала",
         editTerminalProfiles: "Изменить профили",
+      },
+      terminalPanel: {
+        show: "Показать панель терминала",
+        hide: "Скрыть панель терминала",
+        toggle: "Переключить панель терминала",
       },
       sidePanel: {
         open: "Открыть боковую панель",

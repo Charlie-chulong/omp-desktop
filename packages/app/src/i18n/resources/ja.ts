@@ -738,12 +738,16 @@ export const ja: TranslationResources = {
         closePane: "ペインを閉じる",
         exitFocusMode: "フォーカスモードを終了",
         splitRight: "右にペインを分割",
-        splitDown: "下にペインを分割",
         changes: "変更",
         files: "ファイル",
         pullRequest: "プルリクエスト",
         terminalProfilesMenu: "ターミナルプロファイル",
         editTerminalProfiles: "プロファイルを編集",
+      },
+      terminalPanel: {
+        show: "ターミナルパネルを表示",
+        hide: "ターミナルパネルを非表示",
+        toggle: "ターミナルパネルを切り替え",
       },
       sidePanel: {
         open: "サイドパネルを開く",

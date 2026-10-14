@@ -701,7 +701,7 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     help: {
       id: "workspace-pane-split-down",
       section: "tabs-panes",
-      label: "Split pane down",
+      label: "Toggle terminal panel",
     },
   },
   {

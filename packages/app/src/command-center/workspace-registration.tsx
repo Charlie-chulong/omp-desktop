@@ -123,7 +123,7 @@ export function useWorkspaceCommandCenterActions(): void {
           newAgent: t("workspace.tabs.actions.newAgent"),
           newTerminal: t("workspace.tabs.actions.newTerminal"),
           splitRight: t("workspace.tabs.actions.splitRight"),
-          splitDown: t("workspace.tabs.actions.splitDown"),
+          splitDown: t("workspace.tabs.terminalPanel.toggle"),
           changes: t("workspace.tabs.actions.changes"),
           files: t("workspace.tabs.actions.files"),
           pullRequest: t("workspace.tabs.actions.pullRequest"),

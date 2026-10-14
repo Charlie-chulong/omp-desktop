@@ -151,6 +151,8 @@ interface WorkspaceLayoutStore {
     },
   ) => string | null;
   moveTabToPane: (workspaceKey: string, tabId: string, toPaneId: string) => void;
+  /** Hides a pane without closing its tabs or their backend resources. */
+  hidePane: (workspaceKey: string, paneId: string) => void;
   /**
    * Dismisses the pane along with whatever it still holds. The side panel hides so
    * the user can bring it back; every other pane is removed. Callers own tab teardown
@@ -1846,6 +1848,32 @@ export function createWorkspaceLayoutStore(
               tabId: normalizedTabId,
               toPaneId: normalizedToPaneId,
               preserveEmptyPaneId: sidePanelPaneId,
+            });
+            if (!nextLayout) {
+              return state;
+            }
+
+            return {
+              ...withoutFocusRestoration(state, normalizedWorkspaceKey),
+              layoutByWorkspace: {
+                ...state.layoutByWorkspace,
+                [normalizedWorkspaceKey]: nextLayout,
+              },
+            };
+          });
+        },
+        hidePane: (workspaceKey, paneId) => {
+          const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
+          const normalizedPaneId = trimNonEmpty(paneId);
+          if (!normalizedWorkspaceKey || !normalizedPaneId) {
+            return;
+          }
+
+          set((state) => {
+            const nextLayout = setPaneHiddenInLayout({
+              layout: getWorkspaceLayout(state.layoutByWorkspace, normalizedWorkspaceKey),
+              paneId: normalizedPaneId,
+              hidden: true,
             });
             if (!nextLayout) {
               return state;

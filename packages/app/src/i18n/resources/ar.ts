@@ -733,12 +733,16 @@ export const ar: TranslationResources = {
         closePane: "إغلاق الجزء",
         exitFocusMode: "إنهاء وضع التركيز",
         splitRight: "تقسيم الجزء الأيمن",
-        splitDown: "تقسيم الجزء لأسفل",
         changes: "التغييرات",
         files: "الملفات",
         pullRequest: "طلب السحب",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+      },
+      terminalPanel: {
+        show: "إظهار لوحة المحطة الطرفية",
+        hide: "إخفاء لوحة المحطة الطرفية",
+        toggle: "تبديل لوحة المحطة الطرفية",
       },
       sidePanel: {
         open: "افتح اللوحة الجانبية",
