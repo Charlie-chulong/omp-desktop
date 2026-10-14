@@ -645,6 +645,20 @@ export const ptBR: TranslationResources = {
         noMatches: "Nenhum resultado encontrado",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "Nenhuma conversa ainda",
+      },
+      empty: {
+        title: "Este workspace ainda não tem conversa",
+        description:
+          "Inicie uma nova conversa aqui ou revise as alterações de código que ele já tem.",
+      },
+      actions: {
+        newConversation: "Nova conversa",
+        viewChanges: "Ver alterações",
+      },
+    },
     setup: {
       descriptor: {
         label: "Configuração",

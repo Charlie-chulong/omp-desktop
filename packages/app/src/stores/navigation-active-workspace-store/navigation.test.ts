@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection";
-import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
+import type { WorkspaceTab, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { parseHostWorkspaceRouteFromPathname } from "@/utils/host-routes";
 import {
   navigateToLastWorkspace,
@@ -613,55 +613,109 @@ describe("workspace navigation", () => {
 });
 
 describe("sidebar navigation to an empty workspace", () => {
-  it("seeds and focuses a draft tab when the project layout only has sibling content", async () => {
-    const workspaces = new Map<string, WorkspaceDescriptor>(
-      (
-        [
-          ["workspace-host", { id: "workspace-host", projectId: "project-a" }],
-          ["workspace-empty", { id: "workspace-empty", projectId: "project-a" }],
-        ] as const
-      ).map(([id, workspace]) => [id, workspace as WorkspaceDescriptor]),
-    );
-    const { deps, openedTabs, navigations } = createSidebarFakeDeps({
-      getSessionWorkspaces: () => workspaces,
-      listProjectTabs: () => [
-        { kind: "agent", agentId: "sibling-agent", workspaceId: "workspace-host" },
-      ],
-    });
+  const projectWorkspaces = new Map<string, WorkspaceDescriptor>(
+    (
+      [
+        ["workspace-host", { id: "workspace-host", projectId: "project-a" }],
+        ["workspace-empty", { id: "workspace-empty", projectId: "project-a" }],
+      ] as const
+    ).map(([id, workspace]) => [id, workspace as WorkspaceDescriptor]),
+  );
+  const siblingTab: WorkspaceTab = {
+    tabId: "agent_sibling-agent",
+    target: { kind: "agent", agentId: "sibling-agent", workspaceId: "workspace-host" },
+    createdAt: 1,
+  };
+  const overviewTarget: WorkspaceTabTarget = {
+    kind: "workspace_overview",
+    workspaceId: "workspace-empty",
+  };
 
+  async function openEmptyWorkspace(
+    tabs: readonly WorkspaceTab[],
+    draftsInUse: readonly string[] = [],
+  ) {
+    const replacements: Array<{ workspaceKey: string; tabId: string; target: WorkspaceTabTarget }> =
+      [];
+    const fake = createSidebarFakeDeps({
+      getSessionWorkspaces: () => projectWorkspaces,
+      projectTabs: {
+        list: () => tabs,
+        isDraftInUse: ({ draftId }) => draftsInUse.includes(draftId),
+        replace: (replacement) => {
+          replacements.push(replacement);
+        },
+      },
+    });
     const route = await navigateToSidebarWorkspace(
       {
         serverId: "server-1",
         workspaceId: "workspace-empty",
         tabHost: { serverId: "server-1", workspaceId: "workspace-host" },
       },
-      deps,
+      fake.deps,
     );
+    return { ...fake, route, replacements };
+  }
 
-    const draftOpens = openedTabs.filter((tab) => tab.target.kind === "draft");
-    expect(draftOpens.length).toBeGreaterThan(0);
-    expect(new Set(draftOpens.map((tab) => JSON.stringify(tab.target))).size).toBe(1);
-    expect(draftOpens[0]!.target).toMatchObject({ kind: "draft", workspaceId: "workspace-empty" });
-    expect(draftOpens[0]!.workspaceKey).toBe("server-1:project:project-a");
+  it("opens the workspace overview instead of seeding a new-conversation draft", async () => {
+    const { openedTabs, navigations, route, replacements } = await openEmptyWorkspace([
+      siblingTab,
+      {
+        tabId: "terminal_own-terminal",
+        target: { kind: "terminal", terminalId: "own-terminal", workspaceId: "workspace-empty" },
+        createdAt: 2,
+      },
+    ]);
+
+    expect(openedTabs.length).toBeGreaterThan(0);
+    for (const opened of openedTabs) {
+      expect(opened).toEqual({
+        workspaceKey: "server-1:project:project-a",
+        target: overviewTarget,
+      });
+    }
+    expect(replacements).toEqual([]);
     expect(navigations).toEqual([route]);
   });
 
-  it("keeps the existing tab when the workspace already owns one", async () => {
-    const { deps, openedTabs } = createSidebarFakeDeps({
-      listProjectTabs: () => [
-        { kind: "terminal", terminalId: "own-terminal", workspaceId: "workspace-empty" },
-      ],
-    });
-
-    await navigateToSidebarWorkspace(
+  it("turns an untouched draft into the overview so the workspace never shows both", async () => {
+    const { openedTabs, replacements } = await openEmptyWorkspace([
+      siblingTab,
       {
-        serverId: "server-1",
-        workspaceId: "workspace-empty",
-        tabHost: { serverId: "server-1", workspaceId: "workspace-host" },
+        tabId: "draft-untouched",
+        target: { kind: "draft", draftId: "draft-untouched", workspaceId: "workspace-empty" },
+        createdAt: 2,
       },
-      deps,
+    ]);
+
+    expect(replacements).toEqual([
+      {
+        workspaceKey: "server-1:project:project-a",
+        tabId: "draft-untouched",
+        target: overviewTarget,
+      },
+    ]);
+    expect(openedTabs.some((tab) => tab.target.kind === "draft")).toBe(false);
+  });
+
+  it("keeps focusing a draft that already holds input", async () => {
+    const { openedTabs, replacements } = await openEmptyWorkspace(
+      [
+        siblingTab,
+        {
+          tabId: "draft-started",
+          target: { kind: "draft", draftId: "draft-started", workspaceId: "workspace-empty" },
+          createdAt: 2,
+        },
+      ],
+      ["draft-started"],
     );
 
-    expect(openedTabs.filter((tab) => tab.target.kind === "draft")).toHaveLength(0);
+    expect(replacements).toEqual([]);
+    expect(openedTabs.length).toBeGreaterThan(0);
+    for (const opened of openedTabs) {
+      expect(opened.target).toMatchObject({ kind: "draft", draftId: "draft-started" });
+    }
   });
 });

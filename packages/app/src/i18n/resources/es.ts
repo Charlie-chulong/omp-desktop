@@ -646,6 +646,20 @@ export const es: TranslationResources = {
         noMatches: "No se encontraron resultados",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "Aún no hay conversación",
+      },
+      empty: {
+        title: "Este Workspace aún no tiene conversación",
+        description:
+          "Inicia una nueva conversación aquí o revisa los cambios de código que ya contiene.",
+      },
+      actions: {
+        newConversation: "Nueva conversación",
+        viewChanges: "Ver cambios",
+      },
+    },
     setup: {
       descriptor: {
         label: "Configuración",

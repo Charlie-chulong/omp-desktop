@@ -641,6 +641,19 @@ export const ar: TranslationResources = {
         noMatches: "لم يتم العثور على نتائج",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "لا توجد محادثة بعد",
+      },
+      empty: {
+        title: "لا توجد محادثة في هذا Workspace بعد",
+        description: "ابدأ محادثة جديدة هنا، أو راجع تغييرات الشيفرة الموجودة فيه.",
+      },
+      actions: {
+        newConversation: "محادثة جديدة",
+        viewChanges: "عرض التغييرات",
+      },
+    },
     setup: {
       descriptor: {
         label: "يثبت",

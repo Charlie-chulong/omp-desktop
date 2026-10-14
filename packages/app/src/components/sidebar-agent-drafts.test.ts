@@ -92,6 +92,7 @@ describe("sidebar agent drafts", () => {
     const grouped = groupSidebarAgentDrafts({
       projects,
       workspaceLayouts: { "server-1:project:project-target": hostLayout },
+      workspaceEntriesByKey: new Map([[targetWorkspace.workspaceKey, { title: null }]]),
       activeRouteSelection: {
         serverId: targetWorkspace.serverId,
         workspaceId: targetWorkspace.workspaceId,
@@ -120,6 +121,7 @@ describe("sidebar agent drafts", () => {
     const grouped = groupSidebarAgentDrafts({
       projects: [projects[0]!, { ...projects[1]!, workspaces: [targetWorkspace, otherCheckout] }],
       workspaceLayouts: { "server-1:project:project-target": hostLayout },
+      workspaceEntriesByKey: new Map(),
       activeRouteSelection: { serverId: "server-1", workspaceId: otherCheckout.workspaceId },
     });
 
@@ -140,6 +142,7 @@ describe("sidebar agent drafts", () => {
     const grouped = groupSidebarAgentDrafts({
       projects,
       workspaceLayouts: { "server-1:project:project-host": hostLayout },
+      workspaceEntriesByKey: new Map(),
       activeRouteSelection: {
         serverId: hostWorkspace.serverId,
         workspaceId: hostWorkspace.workspaceId,
@@ -147,5 +150,21 @@ describe("sidebar agent drafts", () => {
     });
     expect(grouped.get("project-target")).toBeUndefined();
     expect(grouped.get("project-host")).toBeUndefined();
+  });
+
+  it("keeps a titled workspace on its own row instead of a new-conversation stand-in", () => {
+    const grouped = groupSidebarAgentDrafts({
+      projects,
+      workspaceLayouts: { "server-1:project:project-target": hostLayout },
+      workspaceEntriesByKey: new Map([
+        [targetWorkspace.workspaceKey, { title: "YBA 动态 MCP 控制台" }],
+      ]),
+      activeRouteSelection: {
+        serverId: targetWorkspace.serverId,
+        workspaceId: targetWorkspace.workspaceId,
+      },
+    });
+
+    expect(grouped.get("project-target")).toBeUndefined();
   });
 });

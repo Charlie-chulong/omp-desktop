@@ -9,7 +9,7 @@ import type { WorkspaceTab } from "./model";
 import {
   migrateLegacyProjectLayouts,
   resolveProjectLayoutKeyFromWorkspaces,
-  pruneDraftTabsOwnedByMissingWorkspaces,
+  prunePlaceholderTabsOwnedByMissingWorkspaces,
 } from "./project-scope";
 
 function layout(...tabs: WorkspaceTab[]): WorkspaceLayout {
@@ -570,7 +570,26 @@ describe("project layout migration", () => {
   });
 });
 
-describe("dead-owner draft pruning", () => {
+describe("dead-owner placeholder pruning", () => {
+  it("drops overview tabs whose workspace is gone", () => {
+    const layouts = {
+      "host:project:one": layout(
+        tab("dead-overview", { kind: "workspace_overview", workspaceId: "removed" }),
+        tab("live-overview", { kind: "workspace_overview", workspaceId: "second" }),
+      ),
+    };
+
+    const pruned = prunePlaceholderTabsOwnedByMissingWorkspaces({
+      serverId: "host",
+      layouts,
+      workspaces,
+    });
+
+    expect(collectAllTabs(pruned["host:project:one"]!.root).map((entry) => entry.tabId)).toEqual([
+      "live-overview",
+    ]);
+  });
+
   it("drops drafts whose workspace is gone and keeps every other tab", () => {
     const layouts = {
       "host:project:one": layout(
@@ -583,7 +602,7 @@ describe("dead-owner draft pruning", () => {
       ),
     };
 
-    const pruned = pruneDraftTabsOwnedByMissingWorkspaces({
+    const pruned = prunePlaceholderTabsOwnedByMissingWorkspaces({
       serverId: "host",
       layouts,
       workspaces,
@@ -604,9 +623,9 @@ describe("dead-owner draft pruning", () => {
       ),
     };
 
-    expect(pruneDraftTabsOwnedByMissingWorkspaces({ serverId: "host", layouts, workspaces })).toBe(
-      layouts,
-    );
+    expect(
+      prunePlaceholderTabsOwnedByMissingWorkspaces({ serverId: "host", layouts, workspaces }),
+    ).toBe(layouts);
   });
 
   it("keeps drafts owned by workspaces hidden behind an in-flight local archive", () => {
@@ -617,7 +636,7 @@ describe("dead-owner draft pruning", () => {
     };
 
     expect(
-      pruneDraftTabsOwnedByMissingWorkspaces({
+      prunePlaceholderTabsOwnedByMissingWorkspaces({
         serverId: "host",
         layouts,
         workspaces,

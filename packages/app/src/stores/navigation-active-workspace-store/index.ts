@@ -42,6 +42,7 @@ import {
   resolveWorkspaceToolSelection,
   type WorkspaceToolSelection,
 } from "@/workspace-tabs/tool-workspace-selection";
+import { isDraftTabInUse } from "@/workspace/draft-tab-usage";
 
 export type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection";
 export type { NavigateToWorkspaceInput } from "./navigation";
@@ -156,11 +157,17 @@ export async function navigateToSidebarWorkspace(
         archivedAt: agent.archivedAt,
       }));
     },
-    listProjectTabs: ({ serverId, workspaceId }) => {
-      const projectKey = resolveProjectLayoutKey({ serverId, workspaceId });
-      if (!projectKey) return null;
-      const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[projectKey];
-      return layout ? collectAllTabs(layout.root).map((tab) => tab.target) : null;
+    projectTabs: {
+      list: ({ serverId, workspaceId }) => {
+        const projectKey = resolveProjectLayoutKey({ serverId, workspaceId });
+        if (!projectKey) return null;
+        const layout = useWorkspaceLayoutStore.getState().layoutByWorkspace[projectKey];
+        return layout ? collectAllTabs(layout.root) : null;
+      },
+      isDraftInUse: isDraftTabInUse,
+      replace: ({ workspaceKey, tabId, target }) => {
+        useWorkspaceLayoutStore.getState().replaceTab(workspaceKey, tabId, target);
+      },
     },
   };
   return navigateToSidebarWorkspacePure(input, deps);

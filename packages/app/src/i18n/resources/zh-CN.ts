@@ -666,6 +666,19 @@ export const zhCN: TranslationResources = {
         noMatches: "未找到结果",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "暂无对话",
+      },
+      empty: {
+        title: "此工作区暂无对话",
+        description: "可以在这里开始新对话，或查看它已有的代码改动。",
+      },
+      actions: {
+        newConversation: "新建对话",
+        viewChanges: "查看改动",
+      },
+    },
     setup: {
       descriptor: {
         label: "Setup",

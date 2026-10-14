@@ -505,6 +505,7 @@ function getFallbackTabLabel(
     newTab: string;
     newAgent: string;
     setup: string;
+    workspace: string;
     terminal: string;
     agent: string;
     changes: string;
@@ -520,6 +521,9 @@ function getFallbackTabLabel(
   }
   if (tab.target.kind === "setup") {
     return labels.setup;
+  }
+  if (tab.target.kind === "workspace_overview") {
+    return labels.workspace;
   }
   if (tab.target.kind === "terminal" || tab.target.kind === "background_process") {
     return labels.terminal;
@@ -1023,6 +1027,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       newTab: t("workspace.tabs.actions.newTab"),
       newAgent: t("workspace.tabs.fallback.newAgent"),
       setup: t("workspace.tabs.fallback.setup"),
+      workspace: t("workspace.tabs.fallback.workspace"),
       terminal: t("workspace.tabs.fallback.terminal"),
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
@@ -1628,7 +1633,7 @@ const styles = StyleSheet.create((theme) => ({
   tabLabel: {
     flexShrink: 1,
     minWidth: 0,
-    color: theme.colors.foregroundExtraMuted,
+    color: theme.colors.foregroundTabInactive,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
     lineHeight: 20,

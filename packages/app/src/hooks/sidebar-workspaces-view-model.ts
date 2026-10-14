@@ -153,7 +153,7 @@ function projectNameForWorkspace(workspace: WorkspaceDescriptor): string {
   );
 }
 
-function normalizeCurrentBranch(currentBranch: string | null | undefined): string | null {
+export function normalizeCurrentBranch(currentBranch: string | null | undefined): string | null {
   if (!currentBranch) {
     return null;
   }

@@ -2265,6 +2265,9 @@ describe("create_agent MCP tool", () => {
     });
 
     expect(response.structuredContent.workspaceId).toBe("ws-project-source");
+    expect(response.structuredContent.guidance).toContain(
+      'create_agent with workspaceId "ws-project-source"',
+    );
     expect(receivedInputs).toEqual([
       expect.objectContaining({
         cwd: REPO_CWD,

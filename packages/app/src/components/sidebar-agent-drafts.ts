@@ -4,7 +4,10 @@ import {
   findPaneById,
   type WorkspaceLayout,
 } from "@/stores/workspace-layout-store";
-import type { SidebarProjectEntry } from "@/hooks/use-sidebar-workspaces-list";
+import type {
+  SidebarProjectEntry,
+  SidebarWorkspaceEntry,
+} from "@/hooks/use-sidebar-workspaces-list";
 import { buildProjectLayoutKey, buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 
 export interface SidebarAgentDraft {
@@ -19,6 +22,7 @@ export interface SidebarAgentDraft {
 export function groupSidebarAgentDrafts(input: {
   projects: readonly SidebarProjectEntry[];
   workspaceLayouts: Readonly<Record<string, WorkspaceLayout>>;
+  workspaceEntriesByKey: ReadonlyMap<string, Pick<SidebarWorkspaceEntry, "title">>;
   activeRouteSelection: ActiveWorkspaceSelection | null;
 }): ReadonlyMap<string, SidebarAgentDraft[]> {
   const projectLayoutKeyByWorkspaceKey = new Map<string, string>();
@@ -61,6 +65,11 @@ export function groupSidebarAgentDrafts(input: {
       if (!workspaceId) continue;
       const workspaceKey = buildWorkspaceTabPersistenceKey({ serverId, workspaceId });
       if (!workspaceKey || projectLayoutKeyByWorkspaceKey.get(workspaceKey) !== layoutKey) {
+        continue;
+      }
+      // A draft row replaces its workspace row; a titled workspace (e.g. one created by an
+      // agent tool) must keep its own row, with the draft only serving as its composer.
+      if (input.workspaceEntriesByKey.get(workspaceKey)?.title?.trim()) {
         continue;
       }
       const tabHostWorkspaceId =

@@ -2466,9 +2466,10 @@ function ProjectModeList({
       groupSidebarAgentDrafts({
         projects,
         workspaceLayouts,
+        workspaceEntriesByKey,
         activeRouteSelection: activeRouteWorkspaceSelection,
       }),
-    [activeRouteWorkspaceSelection, projects, workspaceLayouts],
+    [activeRouteWorkspaceSelection, projects, workspaceEntriesByKey, workspaceLayouts],
   );
 
   const getProjectOrder = useSidebarOrderStore((state) => state.getProjectOrder);

@@ -1313,7 +1313,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create workspace",
       description:
-        "Create a workspace using an existing local checkout or a new Paseo-managed worktree.",
+        "Create a workspace using an existing local checkout or a new Paseo-managed worktree. " +
+        "It starts without a conversation: to run work in it, call create_agent with the returned " +
+        "workspaceId. Built-in task subagents stay in your current workspace, so their work never " +
+        "appears under the new one.",
       inputSchema: {
         isolation: z.enum(["local", "worktree"]),
         path: z
@@ -1353,7 +1356,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           .optional()
           .describe("Forge for checkout-pr mode. Defaults to the source checkout."),
       },
-      outputSchema: WorkspaceAutomationSummarySchema.shape,
+      outputSchema: { ...WorkspaceAutomationSummarySchema.shape, guidance: z.string() },
     },
     async ({
       isolation,
@@ -1427,7 +1430,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
 
       return {
         content: [],
-        structuredContent: ensureValidJson(toWorkspaceAutomationSummary(workspace)),
+        structuredContent: ensureValidJson({
+          ...toWorkspaceAutomationSummary(workspace),
+          guidance:
+            `Workspace ${workspace.workspaceId} has no conversation yet. To run work in it, call ` +
+            `create_agent with workspaceId "${workspace.workspaceId}"; that agent works in this ` +
+            "workspace and appears as its conversation. Built-in task subagents stay in your " +
+            "current workspace and leave this one empty.",
+        }),
       };
     },
   );
@@ -1502,7 +1512,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create agent",
       description:
-        "Create an OMP agent. Agent-scoped creation defaults to a caller-owned subagent in the caller's workspace. Independent roots require a workspace with no unarchived root; call create_workspace first for another conversation. Top-level creation without workspaceId creates a new local workspace. Requires omp/model and an initial prompt. Call list_models before choosing a model.",
+        "Create an OMP agent. Agent-scoped creation defaults to a caller-owned subagent in the caller's workspace; pass a workspaceId from create_workspace to run it in that workspace as its conversation. Independent roots require a workspace with no unarchived root; call create_workspace first for another conversation. Top-level creation without workspaceId creates a new local workspace. Requires omp/model and an initial prompt. Call list_models before choosing a model.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),

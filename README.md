@@ -545,9 +545,14 @@ Opening a new conversation from the sidebar preserves existing tabs within the s
 The draft retains its own workspace for execution. Opening a conversation in another project
 switches to that project's layout instead of adding it to the current project's tabs.
 
-Opening an empty conversation from the sidebar always focuses its own tab: when the
-project's shared layout is showing a sibling conversation, the click seeds a fresh
-draft for that workspace instead of leaving the sibling visible.
+Opening a workspace that has no conversation from the sidebar focuses its own overview tab
+instead of leaving a sibling conversation visible. The overview shows the workspace name,
+branch, and change summary, with **New conversation** and **View changes** actions; on
+desktop split layouts, a workspace with changes also opens **Changes** in the side panel once
+per overview tab. A draft in that workspace that already holds text or attachments is focused
+instead, and an untouched draft is turned into the overview, so repeated clicks never stack
+tabs. A titled empty workspace (for example one an agent created with `create_workspace`)
+keeps its titled sidebar row; only untitled drafts appear as **New workspace** entries.
 
 Archiving a conversation does not create another draft or relabel surviving sidebar entries.
 If a different conversation is focused in the same project, it stays focused and navigation
@@ -629,6 +634,12 @@ Each workspace can have only one unarchived independent root conversation. To st
 independent conversation, call `create_workspace` first, then call `create_agent` with
 `detached: true` and the new `workspaceId`. Normal child agents remain in their parent's
 workspace.
+
+A new workspace starts without a conversation. `create_workspace` tells the calling agent to
+run work in it through `create_agent` with the returned `workspaceId`, so that work appears as
+the workspace's own conversation. Built-in task subagents keep the caller's workspace: files
+they edit inside another worktree show up as its changes, but the conversation stays under the
+caller.
 
 For workspaces created by older versions with multiple active roots, selecting the workspace
 restores every root as a tab and focuses the one needing attention. The workspace menu lists

@@ -645,6 +645,19 @@ export const ja: TranslationResources = {
         noMatches: "結果が見つかりません",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "会話はまだありません",
+      },
+      empty: {
+        title: "このワークスペースにはまだ会話がありません",
+        description: "ここで新しい会話を始めるか、既存のコード変更を確認できます。",
+      },
+      actions: {
+        newConversation: "新しい会話",
+        viewChanges: "変更を表示",
+      },
+    },
     setup: {
       descriptor: {
         label: "セットアップ",
