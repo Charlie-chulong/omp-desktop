@@ -47,6 +47,7 @@ The feature is off by default and is only available in the Electron app.
 - Click the kitten to pet it: a happy pose, soft squash/rebound, and floating hearts.
   Dragging does not trigger petting. Click the status bubble to restore OMP and
   open the task that needs attention, or open the app when there is no pending task.
+- The status bubble stays close to the kitten's upper left and follows its size.
 - Connected hosts supply real task state. Permissions take priority over errors,
   unread completions, and running work. No task or animation triggers a model call.
 - Iris has six registered 24-frame, 12-fps action sequences with continuous local
