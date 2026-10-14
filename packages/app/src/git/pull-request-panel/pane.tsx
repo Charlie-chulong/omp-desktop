@@ -867,7 +867,11 @@ function SingleActivityCard({
       {collapsed ? null : (
         <>
           <View style={styles.cardBody}>
-            <MarkdownRenderer text={activity.body} compact onLinkPress={handleMarkdownLinkPress} />
+            <MarkdownRenderer
+              text={activity.body}
+              variant="compact"
+              onLinkPress={handleMarkdownLinkPress}
+            />
           </View>
           {attachEnabled && canAddPullRequestActivityToChat(activity) ? (
             <View style={styles.cardFooter}>
@@ -977,7 +981,11 @@ function ReviewCard({
         <>
           {hasBody ? (
             <View style={styles.cardBody}>
-              <MarkdownRenderer text={review.body} compact onLinkPress={handleMarkdownLinkPress} />
+              <MarkdownRenderer
+                text={review.body}
+                variant="compact"
+                onLinkPress={handleMarkdownLinkPress}
+              />
             </View>
           ) : null}
           {attachEnabled && canAddPullRequestActivityToChat(review) ? (
@@ -1170,7 +1178,11 @@ function ThreadComment({
       </View>
       {comment.body.trim() !== "" ? (
         <View style={styles.threadCommentBody}>
-          <MarkdownRenderer text={comment.body} compact onLinkPress={handleMarkdownLinkPress} />
+          <MarkdownRenderer
+            text={comment.body}
+            variant="compact"
+            onLinkPress={handleMarkdownLinkPress}
+          />
         </View>
       ) : null}
     </View>

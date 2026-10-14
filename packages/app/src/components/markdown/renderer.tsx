@@ -22,7 +22,11 @@ import { MarkdownParagraphView, MarkdownTextSpan } from "@/components/markdown-t
 import { MarkdownTableCellText } from "@/components/markdown-text-selection";
 import { getMarkdownListMarker, getMarkdownListSpacing } from "@/utils/markdown-list";
 import { markdownNodeContainsType } from "@/utils/markdown-ast";
-import { createCompactMarkdownStyles, createMarkdownStyles } from "@/styles/markdown-styles";
+import {
+  createCompactMarkdownStyles,
+  createDocumentMarkdownStyles,
+  createMarkdownStyles,
+} from "@/styles/markdown-styles";
 import type { Theme } from "@/styles/theme";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { isNative } from "@/constants/platform";
@@ -39,12 +43,13 @@ import { colorMarkdownLinkChildren } from "./link-children";
 import { MarkdownLinkText } from "./link-text";
 import { markdownMathPlugin } from "./math/plugin";
 import { createMarkdownMathRules } from "./math/rules";
+import { markdownTableCellStyle } from "./table-cell-style";
 
 export type MarkdownStyles = Record<string, TextStyle & ViewStyle & { [key: string]: unknown }>;
 
 interface MarkdownWithStableRendererProps {
   children: ReactNode;
-  style: ReturnType<typeof createMarkdownStyles> | ReturnType<typeof createCompactMarkdownStyles>;
+  style: MarkdownStyles;
   rules?: RenderRules;
   markdownit?: ReturnType<typeof MarkdownIt>;
   onLinkPress?: (url: string) => boolean;
@@ -55,13 +60,16 @@ interface MarkdownWithStableRendererProps {
 const MarkdownWithStableRenderer = Markdown as ComponentType<MarkdownWithStableRendererProps>;
 const ThemedMarkdown = withUnistyles(MarkdownWithStableRenderer);
 
-function markdownStyleMapping(theme: Theme): Partial<MarkdownWithStableRendererProps> {
-  return { style: createMarkdownStyles(theme) };
-}
+type MarkdownVariant = "conversation" | "compact" | "document";
 
-function compactMarkdownStyleMapping(theme: Theme): Partial<MarkdownWithStableRendererProps> {
-  return { style: createCompactMarkdownStyles(theme) };
-}
+const MARKDOWN_STYLE_MAPPINGS: Record<
+  MarkdownVariant,
+  (theme: Theme) => Partial<MarkdownWithStableRendererProps>
+> = {
+  conversation: (theme) => ({ style: createMarkdownStyles(theme) }),
+  compact: (theme) => ({ style: createCompactMarkdownStyles(theme) }),
+  document: (theme) => ({ style: createDocumentMarkdownStyles(theme) }),
+};
 
 const defaultMarkdownParser = MarkdownIt({ typographer: true, linkify: true }).use(
   markdownMathPlugin,
@@ -70,7 +78,7 @@ const EMPTY_TEXT_STYLE: TextStyle = {};
 const MARKDOWN_LIST_ITEM_CONTENT_FLEX: ViewStyle = { flex: 1, flexShrink: 1, minWidth: 0 };
 export interface MarkdownRendererProps {
   text: string;
-  compact?: boolean;
+  variant?: MarkdownVariant;
   rules?: RenderRules;
   markdownit?: ReturnType<typeof MarkdownIt>;
   onLinkPress?: (url: string) => boolean;
@@ -81,7 +89,7 @@ export interface MarkdownRendererProps {
 
 export function MarkdownRenderer({
   text,
-  compact = false,
+  variant = "conversation",
   rules,
   markdownit = defaultMarkdownParser,
   onLinkPress,
@@ -96,7 +104,7 @@ export function MarkdownRenderer({
   );
   const rendererProps = useMemo(
     () => ({
-      compact,
+      variant,
       rules: markdownRules,
       markdownit,
       onLinkPress,
@@ -105,11 +113,11 @@ export function MarkdownRenderer({
     }),
     [
       allowedImageHandlers,
-      compact,
       markdownRules,
       markdownit,
       onLinkPress,
       topLevelMaxExceededItem,
+      variant,
     ],
   );
 
@@ -190,17 +198,16 @@ function MarkdownPart({
 
 function MarkdownFragment({
   text,
-  compact,
+  variant = "conversation",
   rules,
   markdownit,
   onLinkPress,
   allowedImageHandlers,
   topLevelMaxExceededItem,
 }: MarkdownRendererProps & { rules: RenderRules }) {
-  const uniProps = compact ? compactMarkdownStyleMapping : markdownStyleMapping;
   return (
     <ThemedMarkdown
-      uniProps={uniProps}
+      uniProps={MARKDOWN_STYLE_MAPPINGS[variant]}
       rules={rules}
       markdownit={markdownit}
       onLinkPress={onLinkPress}
@@ -698,14 +705,14 @@ export function createSharedMarkdownRules(): RenderRules {
         </View>
       );
     },
-    th: (node: ASTNode, children: ReactNode[], _parent: ASTNode[], styles: MarkdownStyles) => (
+    th: (node: ASTNode, children: ReactNode[], parent: ASTNode[], styles: MarkdownStyles) => (
       <MarkdownTableCellText key={node.key}>
-        <View style={styles._VIEW_SAFE_th}>{children}</View>
+        <View style={markdownTableCellStyle(styles._VIEW_SAFE_th, node, parent)}>{children}</View>
       </MarkdownTableCellText>
     ),
-    td: (node: ASTNode, children: ReactNode[], _parent: ASTNode[], styles: MarkdownStyles) => (
+    td: (node: ASTNode, children: ReactNode[], parent: ASTNode[], styles: MarkdownStyles) => (
       <MarkdownTableCellText key={node.key}>
-        <View style={styles._VIEW_SAFE_td}>{children}</View>
+        <View style={markdownTableCellStyle(styles._VIEW_SAFE_td, node, parent)}>{children}</View>
       </MarkdownTableCellText>
     ),
     paragraph: (
