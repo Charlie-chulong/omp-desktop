@@ -32,7 +32,7 @@ export function FileMarkdownPreview({ source }: { source: string }) {
             ))}
           </View>
         ) : null}
-        <MarkdownRenderer text={document.body} />
+        <MarkdownRenderer text={document.body} variant="document" />
       </View>
     </View>
   );

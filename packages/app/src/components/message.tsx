@@ -50,6 +50,7 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
+import { proseLineHeight } from "@/styles/markdown-styles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import Animated, {
   Easing,
@@ -350,7 +351,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing[4],
   },
   bubble: {
-    backgroundColor: theme.colors.surface3,
+    backgroundColor: theme.colors.surfaceUserMessage,
     borderRadius: theme.borderRadius["2xl"],
     borderTopRightRadius: theme.borderRadius.sm,
     paddingHorizontal: theme.spacing[4],
@@ -363,7 +364,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.content,
     ...(isWeb
       ? {
-          lineHeight: Math.round(theme.fontSize.content * 1.4),
+          lineHeight: proseLineHeight(theme.fontSize.content),
           overflowWrap: "anywhere" as const,
         }
       : {}),

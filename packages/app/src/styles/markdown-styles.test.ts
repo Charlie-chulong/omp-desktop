@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { createCompactMarkdownStyles, createMarkdownStyles } from "./markdown-styles";
+import {
+  createCompactMarkdownStyles,
+  createDocumentMarkdownStyles,
+  createMarkdownStyles,
+} from "./markdown-styles";
 import { darkTheme, lightTheme, ompBrandColors } from "./theme";
 
 describe("createMarkdownStyles", () => {
   it("uses the content size for conversation prose and list markers", () => {
     const styles = createMarkdownStyles(darkTheme);
-    const proseLineHeight = Math.round(darkTheme.fontSize.content * 1.4);
+    const proseLineHeight = Math.round((darkTheme.fontSize.content * 22) / 14);
 
+    expect(proseLineHeight).toBe(22);
     expect(styles.body).toMatchObject({
       fontSize: darkTheme.fontSize.content,
       lineHeight: proseLineHeight,
@@ -19,6 +24,14 @@ describe("createMarkdownStyles", () => {
       fontSize: darkTheme.fontSize.content,
       lineHeight: proseLineHeight,
     });
+  });
+
+  it("keeps compact list markers on the compact prose line", () => {
+    const compact = createCompactMarkdownStyles(darkTheme);
+
+    expect(compact.bullet_list_icon.lineHeight).toBe(compact.body.lineHeight);
+    expect(compact.ordered_list_icon.lineHeight).toBe(compact.body.lineHeight);
+    expect(compact.body.lineHeight).toBeLessThan(createMarkdownStyles(darkTheme).body.lineHeight);
   });
 
   it("uses the OMP cyan highlight for markdown links", () => {
@@ -132,6 +145,22 @@ describe("createMarkdownStyles", () => {
     expect(styles.heading1.lineHeight).toBeGreaterThan(styles.heading1.fontSize);
     expect(styles.heading2.lineHeight).toBeGreaterThan(styles.heading2.fontSize);
     expect(styles.heading3.lineHeight).toBeGreaterThan(styles.heading3.fontSize);
+  });
+
+  it("keeps reply headings close to the prose and leaves section rules to documents", () => {
+    const conversation = createMarkdownStyles(darkTheme);
+    const compact = createCompactMarkdownStyles(darkTheme);
+    const document = createDocumentMarkdownStyles(darkTheme);
+
+    expect(conversation.heading1.fontSize).toBeLessThan(document.heading1.fontSize);
+    expect(compact.heading1.fontSize).toBeLessThanOrEqual(conversation.heading1.fontSize);
+    expect(conversation.heading3.fontSize).toBe(darkTheme.fontSize.content);
+    expect(conversation.heading1).not.toHaveProperty("borderBottomWidth");
+    expect(document.heading1).toMatchObject({
+      borderBottomWidth: 1,
+      borderBottomColor: darkTheme.colors.border,
+    });
+    expect(document.heading2).toMatchObject({ borderBottomWidth: 1 });
   });
 
   it("keeps blockquotes quiet with a square left edge", () => {
