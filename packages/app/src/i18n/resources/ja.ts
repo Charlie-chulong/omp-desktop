@@ -1388,6 +1388,7 @@ export const ja: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "OMP Desktopを終了中...",
       detail: "ローカルデーモンを停止中。",

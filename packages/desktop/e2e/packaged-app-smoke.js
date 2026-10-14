@@ -840,6 +840,74 @@ async function stopCliDaemon({ appPath, env }) {
   });
 }
 
+async function smokePetCreationHelper({ page, appPath, env }) {
+  const before = await page.evaluate(() => window.paseoDesktop.invoke("desktop_daemon_status"));
+  const settingsBefore = await page.evaluate(() =>
+    window.paseoDesktop.invoke("get_desktop_settings"),
+  );
+  const workspace = await page.evaluate(() =>
+    window.paseoDesktop.invoke("prepare_desktop_pet_creation", {
+      description: "Packaged pet installer lifetime regression",
+    }),
+  );
+  const imagePath = path.join(workspace.cwd, "iris-reference.png");
+  const image = fs.readFileSync(imagePath);
+  const animation = { row: 0, frames: 1, fps: 1 };
+  fs.writeFileSync(
+    path.join(workspace.cwd, "pet.json"),
+    JSON.stringify({
+      version: 1,
+      name: "Packaged helper smoke",
+      spritesheet: "sprites.png",
+      frameWidth: image.readUInt32BE(16),
+      frameHeight: image.readUInt32BE(20),
+      animations: {
+        idle: animation,
+        running: animation,
+        needs_input: animation,
+        ready: animation,
+        blocked: animation,
+      },
+    }),
+  );
+  const helper = path.join(
+    workspace.cwd,
+    process.platform === "win32" ? "install-pet.cmd" : "install-pet.sh",
+  );
+  const script =
+    process.platform === "win32"
+      ? `call ${shellQuoteCliArg(helper)} ${shellQuoteCliArg(imagePath)}`
+      : `${shellQuote(helper)} ${shellQuote(imagePath)}`;
+  console.log("Packaged desktop smoke: installing a pet through the real generated helper");
+  await runShellCommand({ script, env, label: "Packaged pet creation helper" });
+  const after = await page.evaluate(() => window.paseoDesktop.invoke("desktop_daemon_status"));
+  if (
+    after.status !== "running" ||
+    after.pid !== before.pid ||
+    after.serverId !== before.serverId
+  ) {
+    throw new Error(
+      `Pet image conversion stopped or replaced the running daemon: ${JSON.stringify(after)}`,
+    );
+  }
+  const pets = await page.evaluate(() => window.paseoDesktop.invoke("list_desktop_pets"));
+  if (
+    !pets.some((pet) => pet.name === "Packaged helper smoke" && !pet.builtIn && pet.id !== "iris")
+  ) {
+    throw new Error("Pet helper exited without installing a usable custom pet");
+  }
+  const settingsAfter = await page.evaluate(() =>
+    window.paseoDesktop.invoke("get_desktop_settings"),
+  );
+  if (settingsAfter.pet.selectedId !== settingsBefore.pet.selectedId) {
+    throw new Error("Installing a custom pet changed the user's selected pet");
+  }
+  await smokeCliShim({ appPath, env });
+  console.log(
+    "Packaged desktop smoke: pet installed without stopping the daemon or changing selection",
+  );
+}
+
 async function smokePackagedDesktopApp({ appPath }) {
   const executablePath = getExecutablePath(appPath);
   assertExecutable(executablePath, "Packaged app executable");
@@ -920,9 +988,10 @@ async function smokePackagedDesktopApp({ appPath }) {
     await smokeCliShim({ appPath, env });
     await smokeBundledOmpRuntime({ appPath, env });
     await smokeCliTerminal({ appPath, env });
+    await smokePetCreationHelper({ page, appPath, env });
     await stopDaemonForCleanup();
     console.log(
-      `Packaged desktop smoke passed: real renderer and preload loaded; renderer-started desktop daemon pid ${status.pid}, listen ${status.listen}; CLI shim daemon status and terminal smoke succeeded`,
+      `Packaged desktop smoke passed: real renderer and preload loaded; renderer-started desktop daemon pid ${status.pid}, listen ${status.listen}; CLI shim daemon status, terminal and pet installer lifetime smoke succeeded`,
     );
   } catch (error) {
     await writeFailureArtifacts({ page, stdout, stderr, userData, daemonHome, error }).catch(

@@ -49,6 +49,7 @@ export interface UseAgentFormStateOptions {
   isCreateFlow?: boolean;
   isTargetDaemonReady?: boolean;
   onlineServerIds?: string[];
+  persistPreferences?: boolean;
 }
 
 export interface UseAgentFormStateResult {
@@ -209,20 +210,30 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
     isCreateFlow = true,
     isTargetDaemonReady: _isTargetDaemonReady = true,
     onlineServerIds = [],
+    persistPreferences = true,
   } = options;
 
   const { preferences, isLoading: isPreferencesLoading, updatePreferences } = useFormPreferences();
   const preferenceOverlayRef = useRef(new OptimisticFormPreferences(preferences));
+  const localPreferencesInitialized = useRef(false);
 
   useEffect(() => {
-    preferenceOverlayRef.current.reconcile(preferences);
-  }, [preferences]);
+    if (persistPreferences || !localPreferencesInitialized.current) {
+      preferenceOverlayRef.current.reconcile(preferences);
+      localPreferencesInitialized.current = !isPreferencesLoading;
+    }
+  }, [preferences, persistPreferences, isPreferencesLoading]);
 
   const updateCurrentPreferences = useCallback(
     async (
       updates: Partial<FormPreferences> | ((current: FormPreferences) => FormPreferences),
     ): Promise<FormPreferences> => {
       const pendingId = preferenceOverlayRef.current.begin(updates);
+      if (!persistPreferences) {
+        const local = preferenceOverlayRef.current.current();
+        preferenceOverlayRef.current.commit(pendingId, local);
+        return local;
+      }
       try {
         const persisted = await updatePreferences(updates);
         preferenceOverlayRef.current.commit(pendingId, persisted);
@@ -232,7 +243,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
         throw error;
       }
     },
-    [updatePreferences],
+    [updatePreferences, persistPreferences],
   );
 
   const daemons = useHosts();

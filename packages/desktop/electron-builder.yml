@@ -30,6 +30,7 @@ directories:
   output: release
 files:
   - dist/**/*
+  - assets/pets/**/*
   - "!**/*.map"
   - "!**/*.d.{ts,cts,mts}"
   - "!**/node_modules/zod/src/**"
@@ -58,6 +59,8 @@ extraResources:
     to: app-dist
   - from: remote-backend-dist
     to: remote-backend
+  - from: ../../skills/hatch-pet
+    to: pet-creation/hatch-pet
 mac:
   artifactName: "OMP-Desktop-${version}-${arch}.${ext}"
   category: public.app-category.developer-tools

@@ -36,6 +36,7 @@ interface AgentInputDraftComposerOptions {
   isVisible?: boolean;
   onlineServerIds?: string[];
   lockedWorkingDir?: string;
+  persistPreferences?: boolean;
 }
 
 interface UseAgentInputDraftInput {
@@ -68,12 +69,14 @@ export interface AgentInputDraft {
 
 export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDraft {
   const composerOptions = input.composer ?? null;
+  const persistPreferences = composerOptions?.persistPreferences;
   const formState = useAgentFormState({
     initialServerId: composerOptions?.initialServerId ?? null,
     initialValues: composerOptions?.initialValues,
     isVisible: composerOptions?.isVisible ?? false,
     isCreateFlow: true,
     onlineServerIds: composerOptions?.onlineServerIds ?? [],
+    persistPreferences,
   });
   const draftKey = useMemo(
     () =>
@@ -276,6 +279,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   } = useDraftAgentFeatures({
     serverId: formState.selectedServerId,
     provider: formState.selectedProvider,
+    persistPreferences,
     cwd: workingDir,
     modeId: formState.selectedMode,
     modelId: effectiveModelId,

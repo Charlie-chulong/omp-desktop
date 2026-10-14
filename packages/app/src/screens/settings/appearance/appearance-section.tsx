@@ -47,6 +47,7 @@ import type { ContributedThemeOption as PluginThemeOption } from "@/appearance/p
 import { settingsStyles } from "@/styles/settings";
 import { AppearancePreview } from "./appearance-preview";
 import { WallpaperSection } from "./wallpaper-section";
+import { DesktopPetSection } from "@/desktop/pets/section";
 
 // ---------------------------------------------------------------------------
 // Theme-reactive leaf icons (withUnistyles + uniProps color mapping — no
@@ -681,6 +682,7 @@ export function AppearanceSection() {
 
   return (
     <View>
+      <DesktopPetSection />
       <SettingsSection title={t("settings.appearance.theme.title")}>
         <View style={settingsStyles.card}>
           <ThemeRow
