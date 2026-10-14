@@ -83,6 +83,10 @@ function normalizeSimpleWorkspaceTabTarget(value: WorkspaceTabTarget): Workspace
       const workspaceId = trimNonEmpty(value.workspaceId);
       return workspaceId ? { kind: "setup", workspaceId } : null;
     }
+    case "workspace_overview": {
+      const workspaceId = trimNonEmpty(value.workspaceId);
+      return workspaceId ? { kind: "workspace_overview", workspaceId } : null;
+    }
     case "commit_diff": {
       const sha = trimNonEmpty(value.sha);
       return sha ? { kind: "commit_diff", sha } : null;
@@ -183,6 +187,9 @@ function tertiaryWorkspaceTabTargetsEqual(
   if (left.kind === "setup" && right.kind === "setup") {
     return left.workspaceId === right.workspaceId;
   }
+  if (left.kind === "workspace_overview" && right.kind === "workspace_overview") {
+    return left.workspaceId === right.workspaceId;
+  }
   if (left.kind === "commit_diff" && right.kind === "commit_diff") {
     return left.sha === right.sha;
   }
@@ -260,6 +267,9 @@ function buildUnboundWorkspaceTabId(target: WorkspaceTabTarget): string {
   }
   if (target.kind === "setup") {
     return `setup_${target.workspaceId}`;
+  }
+  if (target.kind === "workspace_overview") {
+    return `workspace_overview_${target.workspaceId}`;
   }
   if (target.kind === "commit_diff") {
     return `commit_diff_${target.sha}`;

@@ -644,6 +644,20 @@ export const fr: TranslationResources = {
         noMatches: "Aucun résultat",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "Aucune conversation pour le moment",
+      },
+      empty: {
+        title: "Ce Workspace n'a pas encore de conversation",
+        description:
+          "Démarrez une nouvelle conversation ici ou consultez les modifications de code qu'il contient déjà.",
+      },
+      actions: {
+        newConversation: "Nouvelle conversation",
+        viewChanges: "Voir les modifications",
+      },
+    },
     setup: {
       descriptor: {
         label: "Installation",

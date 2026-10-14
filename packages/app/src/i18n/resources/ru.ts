@@ -654,6 +654,20 @@ export const ru: TranslationResources = {
         noMatches: "Результаты не найдены",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "Диалогов пока нет",
+      },
+      empty: {
+        title: "В этом рабочем пространстве пока нет диалога",
+        description:
+          "Начните здесь новый диалог или просмотрите изменения кода, которые в нём уже есть.",
+      },
+      actions: {
+        newConversation: "Новый диалог",
+        viewChanges: "Показать изменения",
+      },
+    },
     setup: {
       descriptor: {
         label: "Настройка",

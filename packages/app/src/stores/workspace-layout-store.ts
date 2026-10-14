@@ -241,6 +241,7 @@ const WorkspaceTabTargetStorageSchema = z.discriminatedUnion("kind", [
     ignoreWhitespace: z.boolean().optional(),
   }),
   z.strictObject({ kind: z.literal("setup"), workspaceId: z.string() }),
+  z.strictObject({ kind: z.literal("workspace_overview"), workspaceId: z.string() }),
   z.strictObject({
     kind: z.literal("commit_diff"),
     sha: z.string(),
@@ -1434,7 +1435,9 @@ export function createWorkspaceLayoutStore(
               closingPane?.hidden !== true &&
               closingPane?.id !== sidePanelPaneId &&
               closingPane?.tabIds.length === 1 &&
-              (closingTab?.target.kind === "new_tab" || closingTab?.target.kind === "draft") &&
+              (closingTab?.target.kind === "new_tab" ||
+                closingTab?.target.kind === "draft" ||
+                closingTab?.target.kind === "workspace_overview") &&
               isLastContentPane
                 ? "workspace-empty"
                 : "closed";

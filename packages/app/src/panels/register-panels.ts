@@ -11,6 +11,7 @@ import { backgroundProcessPanelRegistration } from "@/panels/background-process-
 import { providerSubagentPanelRegistration } from "@/panels/provider-subagent-panel";
 import { pullRequestPanelRegistration } from "@/panels/pull-request-panel";
 import { newTabPanelRegistration } from "@/panels/new-tab-panel";
+import { workspaceOverviewPanelRegistration } from "@/panels/workspace-overview-panel";
 
 let panelsRegistered = false;
 
@@ -23,6 +24,7 @@ export function ensurePanelsRegistered(): void {
   registerPanel(agentPanelRegistration);
   registerPanel(providerSubagentPanelRegistration);
   registerPanel(setupPanelRegistration);
+  registerPanel(workspaceOverviewPanelRegistration);
   registerPanel(terminalPanelRegistration);
   registerPanel(backgroundProcessPanelRegistration);
   registerPanel(filePanelRegistration);

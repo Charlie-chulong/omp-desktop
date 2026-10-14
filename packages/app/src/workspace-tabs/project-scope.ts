@@ -537,7 +537,7 @@ export function ensureProjectLayoutsMigrated(
     ...ownership,
     agentWorkspaceIds,
   });
-  const prunedLayouts = pruneDraftTabsOwnedByMissingWorkspaces({
+  const prunedLayouts = prunePlaceholderTabsOwnedByMissingWorkspaces({
     serverId,
     layouts: result.layouts,
     workspaces: session.workspaces,
@@ -574,12 +574,12 @@ export function ensureProjectLayoutsMigrated(
 }
 
 /**
- * Draft tabs whose owning workspace record is gone (archived or removed) are dead
- * sidebar entries: nothing can submit them, yet they survive restarts because
+ * Draft and overview tabs whose owning workspace record is gone (archived or removed)
+ * are dead entries: nothing can submit or open them, yet they survive restarts because
  * per-workspace reconciliation never prunes another workspace's tabs. Drop them
  * once, when the project layout is finalized against the hydrated workspace list.
  */
-export function pruneDraftTabsOwnedByMissingWorkspaces(input: {
+export function prunePlaceholderTabsOwnedByMissingWorkspaces(input: {
   serverId: string;
   layouts: Record<string, WorkspaceLayout>;
   workspaces: ReadonlyMap<string, Pick<WorkspaceDescriptor, "id" | "projectId">>;
@@ -596,7 +596,7 @@ export function pruneDraftTabsOwnedByMissingWorkspaces(input: {
     const deadTabIds = collectAllTabs(layout.root)
       .filter(
         (tab) =>
-          tab.target.kind === "draft" &&
+          (tab.target.kind === "draft" || tab.target.kind === "workspace_overview") &&
           tab.target.workspaceId !== undefined &&
           !ownsWorkspace(tab.target.workspaceId),
       )

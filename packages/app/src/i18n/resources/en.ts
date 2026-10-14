@@ -666,6 +666,19 @@ export const en = {
         noMatches: "No results found",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "No conversation yet",
+      },
+      empty: {
+        title: "No conversation in this workspace yet",
+        description: "Start a new conversation here, or review the code changes it already has.",
+      },
+      actions: {
+        newConversation: "New conversation",
+        viewChanges: "View changes",
+      },
+    },
     setup: {
       descriptor: {
         label: "Setup",

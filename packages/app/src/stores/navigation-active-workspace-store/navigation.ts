@@ -13,10 +13,9 @@ import {
   resolveWorkspaceMapKeyByIdentity,
 } from "@/utils/workspace-identity";
 import type { ActiveWorkspaceSelection } from "@/stores/last-workspace-selection";
-import type { WorkspaceTabTarget } from "@/workspace-tabs/model";
+import type { WorkspaceTab, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { prepareWorkspaceTab, type PrepareWorkspaceTabDeps } from "@/utils/prepare-workspace-tab";
 import { resolveProjectLayoutKeyFromWorkspaces } from "@/workspace-tabs/project-scope";
-import { generateDraftId } from "@/stores/draft-keys";
 import type { ActiveProjectSelection } from "./project-selection";
 
 export interface RouteSelectionInput {
@@ -58,18 +57,21 @@ export interface WorkspaceHistoryAgent {
   archivedAt?: Date | string | null;
 }
 
+export interface SidebarProjectTabs {
+  list: (input: { serverId: string; workspaceId: string }) => readonly WorkspaceTab[] | null;
+  isDraftInUse: (input: { serverId: string; tabId: string; draftId: string }) => boolean;
+  replace: (input: { workspaceKey: string; tabId: string; target: WorkspaceTabTarget }) => void;
+}
+
 export interface NavigateToSidebarWorkspaceDeps extends NavigateToWorkspaceDeps {
   getSessionAgentsHydrated: (serverId: string) => boolean;
   fetchWorkspaceAgentHistory: (
     serverId: string,
     workspaceId: string,
   ) => Promise<readonly WorkspaceHistoryAgent[]>;
-  // Sidebar-only: reads the project layout's tab targets so an empty workspace
-  // can be given its own tab when the shared layout only has sibling content.
-  listProjectTabs?: (input: {
-    serverId: string;
-    workspaceId: string;
-  }) => readonly WorkspaceTabTarget[] | null;
+  // Sidebar-only: lets a workspace without a conversation claim its own tab in the
+  // shared project layout instead of leaving a sibling's tab on screen.
+  projectTabs?: SidebarProjectTabs;
 }
 
 export interface NavigateToLastWorkspaceDeps extends NavigateToWorkspaceDeps {
@@ -347,22 +349,40 @@ export async function navigateToSidebarWorkspace(
     // History is a best-effort fallback. The workspace itself must remain navigable.
   }
 
-  // An empty conversation still needs its own focused tab when opened from the
-  // sidebar. The project layout is shared, so without this the previously
-  // focused sibling tab keeps rendering and the click looks like a no-op.
+  // A workspace without a conversation still needs its own focused tab when opened from the
+  // sidebar: the project layout is shared, so otherwise the previously focused sibling tab keeps
+  // rendering and the click looks like a no-op. That tab is its overview unless a draft there
+  // already holds input. An untouched draft is replaced so the workspace never shows both.
   const projectKey = workspaces
     ? resolveProjectLayoutKeyFromWorkspaces({ serverId: input.serverId, workspaceId, workspaces })
     : null;
-  if (projectKey && deps.listProjectTabs) {
-    const projectTabs = deps.listProjectTabs({ serverId: input.serverId, workspaceId }) ?? [];
-    const ownsFocusedCandidate = projectTabs.some(
-      (target) => target.workspaceId?.trim() === workspaceId,
-    );
-    if (!ownsFocusedCandidate) {
-      const target: WorkspaceTabTarget = { kind: "draft", draftId: generateDraftId(), workspaceId };
-      deps.openTab({ workspaceKey: projectKey, target, intent: "reveal" });
-      return navigateToWorkspace({ ...input, target }, deps);
+  if (projectKey && deps.projectTabs) {
+    let startedDraft: WorkspaceTab | undefined;
+    let untouchedDraft: WorkspaceTab | undefined;
+    let hasOverview = false;
+    for (const tab of deps.projectTabs.list({ serverId: input.serverId, workspaceId }) ?? []) {
+      if (tab.target.workspaceId?.trim() !== workspaceId) continue;
+      if (tab.target.kind === "workspace_overview") {
+        hasOverview = true;
+      } else if (tab.target.kind === "draft") {
+        const inUse = deps.projectTabs.isDraftInUse({
+          serverId: input.serverId,
+          tabId: tab.tabId,
+          draftId: tab.target.draftId,
+        });
+        if (inUse) startedDraft ??= tab;
+        else untouchedDraft ??= tab;
+      }
     }
+    const target: WorkspaceTabTarget = startedDraft?.target ?? {
+      kind: "workspace_overview",
+      workspaceId,
+    };
+    if (!startedDraft && untouchedDraft && !hasOverview) {
+      deps.projectTabs.replace({ workspaceKey: projectKey, tabId: untouchedDraft.tabId, target });
+    }
+    deps.openTab({ workspaceKey: projectKey, target, intent: "reveal" });
+    return navigateToWorkspace({ ...input, target }, deps);
   }
 
   return navigateToWorkspace(input, deps);

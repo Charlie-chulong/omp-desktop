@@ -204,6 +204,45 @@ describe("workspace-layout-store helpers", () => {
     });
   });
 
+  it("restores a workspace overview tab alongside the rest of the saved layout", async () => {
+    const workspaceKey = createWorkspaceKey();
+    await AsyncStorage.setItem(
+      "workspace-layout-state",
+      JSON.stringify({
+        state: {
+          layoutByWorkspace: {
+            [workspaceKey]: {
+              root: createPane({
+                id: "main",
+                tabIds: ["agent_agent-1", "workspace_overview_workspace-empty"],
+                targetsByTabId: {
+                  "agent_agent-1": { kind: "agent", agentId: "agent-1" },
+                  "workspace_overview_workspace-empty": {
+                    kind: "workspace_overview",
+                    workspaceId: "workspace-empty",
+                  },
+                },
+              }),
+              focusedPaneId: "main",
+            },
+          },
+          splitSizesByWorkspace: {},
+          explorerPaneIdByWorkspace: {},
+        },
+        version: 2,
+      }),
+    );
+    const restored = createWorkspaceLayoutStore(createDeterministicWorkspaceLayoutIds());
+    await restored.persist.rehydrate();
+
+    expect(
+      contentTabs(restored.getState().getWorkspaceTabs(workspaceKey)).map((tab) => tab.target),
+    ).toEqual([
+      { kind: "agent", agentId: "agent-1" },
+      { kind: "workspace_overview", workspaceId: "workspace-empty" },
+    ]);
+  });
+
   it("keeps saved tabs and panel state when upgrading a manual-recovery layout blob", async () => {
     const workspaceKey = createWorkspaceKey();
     const saved = {
@@ -1121,6 +1160,18 @@ describe("workspace-layout-store actions", () => {
       }
     },
   );
+
+  it("leaves the workspace after closing its only overview tab", () => {
+    const workspaceKey = createWorkspaceKey();
+    const store = workspaceLayoutStore.getState();
+    const tabId = store.openTab({
+      workspaceKey,
+      target: { kind: "workspace_overview", workspaceId: WORKSPACE_ID },
+      intent: "reveal",
+    });
+
+    expect(store.closeTab(workspaceKey, tabId!)).toBe("workspace-empty");
+  });
 
   it("migrates legacy layouts to include the hidden registered explorer pane", async () => {
     const legacyLayout = createDefaultLayout();

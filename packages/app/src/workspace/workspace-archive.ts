@@ -6,11 +6,8 @@ import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-stor
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 import { i18n } from "@/i18n/i18next";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
-import { useDraftStore } from "@/stores/draft-store";
-import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { collectAllTabs, useWorkspaceLayoutStore } from "@/stores/workspace-layout-store";
 import {
-  buildDraftWorkspaceAttachmentScopeKey,
   buildWorkspaceAttachmentScopeKey,
   useWorkspaceAttachmentsStore,
 } from "@/attachments/workspace-attachments-store";
@@ -19,6 +16,7 @@ import {
   resolveProjectLayoutKey,
 } from "@/workspace-tabs/project-scope";
 import { isWorkspaceSidePanelToolTarget } from "@/workspace-tabs/side-panel-target";
+import { isDraftTabInUse } from "@/workspace/draft-tab-usage";
 
 export interface WorkspaceArchiveTarget {
   serverId: string;
@@ -143,22 +141,9 @@ export async function archiveEmptyWorkspace(input: {
       if (tab.target.kind === "agent") {
         return;
       }
-      if (tab.target.kind !== "draft") {
-        continue;
-      }
-      const pending = useCreateFlowStore.getState().pendingByDraftId[tab.target.draftId];
-      if (pending?.serverId === serverId) {
-        return;
-      }
-      const draft = useDraftStore
-        .getState()
-        .getDraftInput(
-          buildDraftStoreKey({ serverId, agentId: tab.tabId, draftId: tab.target.draftId }),
-        );
       if (
-        draft?.text.trim() ||
-        draft?.attachments.length ||
-        attachments[buildDraftWorkspaceAttachmentScopeKey(tab.target.draftId)]?.length
+        tab.target.kind === "draft" &&
+        isDraftTabInUse({ serverId, tabId: tab.tabId, draftId: tab.target.draftId })
       ) {
         return;
       }
@@ -197,8 +182,8 @@ export async function archiveEmptyWorkspace(input: {
   removeUnusedWorkspaceTabs({ serverId, workspaceId });
 }
 
-// Sweep drafts seeded while the archive was in flight and companion tools that
-// would otherwise retain references to the retired workspace.
+// Sweep drafts and overviews seeded while the archive was in flight, and companion
+// tools that would otherwise retain references to the retired workspace.
 function removeUnusedWorkspaceTabs(input: { serverId: string; workspaceId: string }): void {
   const { serverId, workspaceId } = input;
   useSessionStore.getState().removeWorkspace(serverId, workspaceId);
@@ -210,7 +195,9 @@ function removeUnusedWorkspaceTabs(input: { serverId: string; workspaceId: strin
     for (const tab of collectAllTabs(layout.root)) {
       if (
         tab.target.workspaceId === workspaceId &&
-        (tab.target.kind === "draft" || isWorkspaceSidePanelToolTarget(tab.target))
+        (tab.target.kind === "draft" ||
+          tab.target.kind === "workspace_overview" ||
+          isWorkspaceSidePanelToolTarget(tab.target))
       ) {
         useWorkspaceLayoutStore.getState().closeTab(workspaceKey, tab.tabId);
       }

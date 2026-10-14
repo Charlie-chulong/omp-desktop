@@ -642,6 +642,19 @@ export const ko: TranslationResources = {
         noMatches: "결과가 없습니다",
       },
     },
+    overview: {
+      descriptor: {
+        subtitle: "아직 대화 없음",
+      },
+      empty: {
+        title: "이 워크스페이스에는 아직 대화가 없습니다",
+        description: "여기에서 새 대화를 시작하거나 이미 있는 코드 변경 사항을 검토하세요.",
+      },
+      actions: {
+        newConversation: "새 대화",
+        viewChanges: "변경 사항 보기",
+      },
+    },
     setup: {
       descriptor: {
         label: "설정",

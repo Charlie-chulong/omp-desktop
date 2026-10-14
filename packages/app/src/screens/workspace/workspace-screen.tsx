@@ -267,6 +267,7 @@ function getFallbackTabOptionLabel(
     newTab: string;
     newAgent: string;
     setup: string;
+    workspace: string;
     terminal: string;
     agent: string;
     changes: string;
@@ -282,6 +283,9 @@ function getFallbackTabOptionLabel(
   }
   if (tab.target.kind === "setup") {
     return labels.setup;
+  }
+  if (tab.target.kind === "workspace_overview") {
+    return labels.workspace;
   }
   if (tab.target.kind === "terminal" || tab.target.kind === "background_process") {
     return labels.terminal;
@@ -314,6 +318,7 @@ function getFallbackTabOptionDescription(
     newTab: string;
     newAgent: string;
     workspaceSetup: string;
+    workspace: string;
     agent: string;
     terminal: string;
     changes: string;
@@ -329,6 +334,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "setup") {
     return labels.workspaceSetup;
+  }
+  if (tab.target.kind === "workspace_overview") {
+    return labels.workspace;
   }
   if (tab.target.kind === "agent") {
     return labels.agent;
@@ -564,6 +572,7 @@ function MobileWorkspaceTabOption({
       newTab: t("workspace.tabs.actions.newTab"),
       newAgent: t("workspace.tabs.fallback.newAgent"),
       setup: t("workspace.tabs.fallback.setup"),
+      workspace: t("workspace.tabs.fallback.workspace"),
       terminal: t("workspace.tabs.fallback.terminal"),
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
@@ -2280,6 +2289,7 @@ function WorkspaceScreenContent({
       newAgent: t("workspace.tabs.fallback.newAgent"),
       setup: t("workspace.tabs.fallback.setup"),
       workspaceSetup: t("workspace.tabs.fallback.workspaceSetup"),
+      workspace: t("workspace.tabs.fallback.workspace"),
       terminal: t("workspace.tabs.fallback.terminal"),
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
