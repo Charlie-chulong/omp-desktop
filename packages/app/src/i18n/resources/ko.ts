@@ -735,12 +735,16 @@ export const ko: TranslationResources = {
         closePane: "창 닫기",
         exitFocusMode: "집중 모드 종료",
         splitRight: "창을 오른쪽으로 분할",
-        splitDown: "창을 아래로 분할",
         changes: "변경 사항",
         files: "파일",
         pullRequest: "풀 리퀘스트",
         terminalProfilesMenu: "터미널 프로필",
         editTerminalProfiles: "프로필 편집",
+      },
+      terminalPanel: {
+        show: "터미널 패널 표시",
+        hide: "터미널 패널 숨기기",
+        toggle: "터미널 패널 전환",
       },
       sidePanel: {
         open: "사이드 패널 열기",

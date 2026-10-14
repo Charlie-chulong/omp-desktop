@@ -740,12 +740,16 @@ export const es: TranslationResources = {
         closePane: "Cerrar panel",
         exitFocusMode: "Salir del modo de concentración",
         splitRight: "Panel dividido a la derecha",
-        splitDown: "Dividir panel hacia abajo",
         changes: "Cambios",
         files: "Archivos",
         pullRequest: "Solicitud de extracción",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+      },
+      terminalPanel: {
+        show: "Mostrar panel de terminal",
+        hide: "Ocultar panel de terminal",
+        toggle: "Alternar panel de terminal",
       },
       sidePanel: {
         open: "Abrir panel lateral",

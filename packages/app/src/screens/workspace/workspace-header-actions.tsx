@@ -41,7 +41,7 @@ export function WorkspaceHeaderActions({
 }) {
   const { t } = useTranslation();
   const bottomLabel = t(
-    bottomPaneOpen ? "workspace.tabs.actions.closePane" : "workspace.tabs.actions.splitDown",
+    bottomPaneOpen ? "workspace.tabs.terminalPanel.hide" : "workspace.tabs.terminalPanel.show",
   );
   const bottomState = useMemo(
     () => ({ expanded: bottomPaneOpen, disabled }),
@@ -59,7 +59,7 @@ export function WorkspaceHeaderActions({
             testID="workspace-header-split-pane-down"
             onPress={onToggleBottomPane}
             tooltipLabel={bottomLabel}
-            tooltipKeys={bottomPaneOpen ? [] : bottomPaneKeys}
+            tooltipKeys={bottomPaneKeys}
             tooltipSide="left"
             style={styles.action}
             disabled={disabled}

@@ -507,6 +507,12 @@ composer, the rail and its toggle hide until that pane is wide enough again; its
 is restored when space returns. Resizing or maximizing the window therefore keeps message text
 and composer controls within each pane.
 
+The header's bottom-panel button and **Cmd+Shift+\\** on macOS show or hide the terminal
+panel. Hiding retains its tabs, selected terminal, and split sizes without stopping shell
+processes. Activating it again restores the same panel and sessions, including after a client
+reload; a terminal is created only when no bottom terminal panel exists. To terminate a
+terminal session, use the terminal tab's **Close** action instead.
+
 Hover a sidebar conversation to reveal **Delete**, **Archive**, and **Fork** shortcuts before
 the existing three-dot menu. Project and status groupings share these interactions. Delete
 still requires confirmation; Fork opens a new draft with the source conversation's history,

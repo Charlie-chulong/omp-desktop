@@ -758,12 +758,16 @@ export const zhCN: TranslationResources = {
         closePane: "关闭窗格",
         exitFocusMode: "退出专注模式",
         splitRight: "向右拆分窗格",
-        splitDown: "向下拆分窗格",
         changes: "更改",
         files: "文件",
         pullRequest: "拉取请求",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+      },
+      terminalPanel: {
+        show: "显示终端面板",
+        hide: "隐藏终端面板",
+        toggle: "切换终端面板",
       },
       sidePanel: {
         open: "打开侧边面板",

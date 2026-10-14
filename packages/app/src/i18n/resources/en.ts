@@ -758,12 +758,16 @@ export const en = {
         closePane: "Close pane",
         exitFocusMode: "Exit focus mode",
         splitRight: "Split pane right",
-        splitDown: "Split pane down",
         changes: "Changes",
         files: "Files",
         pullRequest: "Pull request",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles",
+      },
+      terminalPanel: {
+        show: "Show terminal panel",
+        hide: "Hide terminal panel",
+        toggle: "Toggle terminal panel",
       },
       sidePanel: {
         open: "Open side panel",

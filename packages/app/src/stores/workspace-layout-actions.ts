@@ -1106,6 +1106,7 @@ export function collectAllPanes(root: SplitNode): SplitPane[] {
   return internalRoot.group.children.flatMap((child) => collectAllPanes(child));
 }
 
+/** Finds the retained bottom terminal pane, including when it is hidden. */
 export function findBottomTerminalPaneId(input: {
   layout: WorkspaceLayout | null;
   tabs: WorkspaceTab[];
@@ -1117,11 +1118,10 @@ export function findBottomTerminalPaneId(input: {
   const tabsById = new Map(input.tabs.map((tab) => [tab.tabId, tab]));
   const findTerminalPane = (node: SplitNode): string | null => {
     if (node.kind === "pane") {
-      return !node.pane.hidden &&
-        node.pane.tabIds.some((tabId) => {
-          const kind = tabsById.get(tabId)?.target.kind;
-          return kind === "terminal" || kind === "background_process";
-        })
+      return node.pane.tabIds.some((tabId) => {
+        const kind = tabsById.get(tabId)?.target.kind;
+        return kind === "terminal" || kind === "background_process";
+      })
         ? node.pane.id
         : null;
     }
@@ -1321,9 +1321,7 @@ function resolvePlacementPane(input: {
     return focusedPane as SplitPaneInternal;
   }
 
-  // `collectAllPanes` skips hidden panes, so the chain falls back to the side panel
-  // pane itself only when it is the sole visible pane. The side panel is the only
-  // pane anything ever hides, so today that means "the side panel is the only pane".
+  // Only visible content panes can receive a new tab.
   const panes = collectAllPanes(input.layout.root);
   return (panes.find((pane) => pane.id === DEFAULT_PANE_ID && pane.id !== focusedPane.id) ??
     panes.find((pane) => pane.id !== focusedPane.id) ??

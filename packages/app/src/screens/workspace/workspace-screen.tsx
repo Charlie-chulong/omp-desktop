@@ -1744,6 +1744,7 @@ function WorkspaceScreenContent({
   const reconcileWorkspaceTabs = useWorkspaceLayoutStore((state) => state.reconcileTabs);
   const splitWorkspacePane = useWorkspaceLayoutStore((state) => state.splitPane);
   const moveWorkspaceTabToPane = useWorkspaceLayoutStore((state) => state.moveTabToPane);
+  const hideWorkspacePane = useWorkspaceLayoutStore((state) => state.hidePane);
   const closeWorkspacePane = useWorkspaceLayoutStore((state) => state.closePane);
   const handleToggleSidePanel = useCallback(() => {
     toggleSidePanel({
@@ -2887,14 +2888,24 @@ function WorkspaceScreenContent({
       workspaceLayout,
     ],
   );
-  const headerBottomPaneId = useMemo(
-    () => findBottomTerminalPaneId({ layout: workspaceLayout, tabs: uiTabs }),
-    [uiTabs, workspaceLayout],
-  );
-  const isHeaderBottomPaneOpen = headerBottomPaneId !== null;
+  const headerBottomPane = useMemo(() => {
+    if (!workspaceLayout) {
+      return null;
+    }
+    const paneId = findBottomTerminalPaneId({ layout: workspaceLayout, tabs: uiTabs });
+    return findPaneById(workspaceLayout.root, paneId);
+  }, [uiTabs, workspaceLayout]);
+  const isHeaderBottomPaneOpen = headerBottomPane !== null && headerBottomPane.hidden !== true;
   const handleToggleTerminalBelowFocusedPane = useStableEvent(() => {
-    if (headerBottomPaneId) {
-      void handleClosePane(headerBottomPaneId);
+    if (!persistenceKey) {
+      return;
+    }
+    if (headerBottomPane) {
+      if (headerBottomPane.hidden === true) {
+        focusWorkspacePane(persistenceKey, headerBottomPane.id);
+      } else {
+        hideWorkspacePane(persistenceKey, headerBottomPane.id);
+      }
       return;
     }
     createTerminal({ destination: { kind: "open" } });

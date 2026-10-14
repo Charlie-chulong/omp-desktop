@@ -366,7 +366,7 @@ function buildPaneContributions(source: WorkspaceCommandCenterSource): CommandCe
       id: "pane:split-down",
       rank: 51,
       title: source.labels.splitDown,
-      keywords: ["split", "pane", "horizontal"],
+      keywords: ["terminal", "panel", "toggle", "show", "hide"],
       icon: source.icons.splitDown,
       shortcutKeys: source.shortcuts.splitDown,
       action: { id: "workspace.pane.split.down", scope: "workspace" },

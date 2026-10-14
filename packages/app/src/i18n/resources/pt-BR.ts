@@ -738,12 +738,16 @@ export const ptBR: TranslationResources = {
         closePane: "Fechar painel",
         exitFocusMode: "Sair do modo de foco",
         splitRight: "Dividir painel à direita",
-        splitDown: "Dividir painel abaixo",
         changes: "Alterações",
         files: "Arquivos",
         pullRequest: "Pull request",
         terminalProfilesMenu: "Perfis de terminal",
         editTerminalProfiles: "Editar perfis",
+      },
+      terminalPanel: {
+        show: "Mostrar painel do terminal",
+        hide: "Ocultar painel do terminal",
+        toggle: "Alternar painel do terminal",
       },
       sidePanel: {
         open: "Abrir painel lateral",
