@@ -608,7 +608,7 @@ export function AgentList({
         contentContainerStyle={styles.listContent}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
         ListFooterComponent={listFooterComponent}
         refreshControl={refreshControl}

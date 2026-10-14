@@ -2,7 +2,7 @@
 
 An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). It runs a private daemon on your machine and talks to `omp --mode rpc-ui` through OMP's native JSONL RPC protocol. Web clients can control a remote daemon through a self-hosted, end-to-end encrypted relay.
 
-Current source version: **0.4.2**.
+Current source version: **0.5.0**.
 
 ## Requirements
 
@@ -29,6 +29,8 @@ Workspace tabs sit directly below the title bar without a second workspace heade
 Native window buttons retain their reserved space. Tabs sit edge-to-edge with
 square corners and thin separators; the active tab shares the content background,
 with its close button visible on selection or hover.
+Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
+workspace splitters also use the same divider and accent highlight while resizing.
 
 Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
