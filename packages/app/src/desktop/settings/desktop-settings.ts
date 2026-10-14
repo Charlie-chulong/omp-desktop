@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getIsElectron } from "@/constants/platform";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
@@ -9,6 +9,9 @@ import {
 import type { ReleaseChannel } from "@/hooks/use-settings";
 import { i18n } from "@/i18n/i18next";
 import type { DesktopBrowserTargetId } from "@/desktop/host";
+import { getDesktopHost } from "@/desktop/host";
+import type { DesktopPetSettings } from "@/desktop/pets/types";
+import { listenToDesktopEvent } from "@/desktop/electron/events";
 
 const DESKTOP_SETTINGS_QUERY_KEY = ["desktop-settings"] as const;
 
@@ -24,6 +27,7 @@ export interface DesktopSettings {
     manageBuiltInDaemon: boolean;
     keepRunningAfterQuit: boolean;
   };
+  pet: DesktopPetSettings;
 }
 
 export interface DesktopSettingsPatch {
@@ -31,6 +35,7 @@ export interface DesktopSettingsPatch {
   browser?: Partial<DesktopSettings["browser"]>;
   notifications?: Partial<DesktopSettings["notifications"]>;
   daemon?: Partial<DesktopSettings["daemon"]>;
+  pet?: Partial<DesktopPetSettings>;
 }
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
@@ -45,6 +50,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
     manageBuiltInDaemon: true,
     keepRunningAfterQuit: false,
   },
+  pet: { enabled: false, size: "medium", selectedId: "iris", position: null },
 };
 
 export function useDesktopSettings(): {
@@ -56,6 +62,33 @@ export function useDesktopSettings(): {
 } {
   const queryClient = useQueryClient();
   const reportError = useDesktopIpcErrorReporter();
+  const nativeSettingsRevision = useRef(0);
+  useEffect(() => {
+    if (!getDesktopHost()?.events?.on) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listenToDesktopEvent<unknown>("desktop-settings-changed", (raw) => {
+      nativeSettingsRevision.current += 1;
+      void queryClient.cancelQueries({ queryKey: DESKTOP_SETTINGS_QUERY_KEY });
+      queryClient.setQueryData(DESKTOP_SETTINGS_QUERY_KEY, parseDesktopSettings(raw));
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+        return undefined;
+      })
+      .catch((error: unknown) => {
+        reportError({
+          error,
+          message: i18n.t("desktop.settings.loadFailed"),
+          logLabel: "[DesktopSettings] Failed to subscribe to settings",
+        });
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [queryClient, reportError]);
   const {
     data,
     isPending,
@@ -80,21 +113,29 @@ export function useDesktopSettings(): {
     DesktopSettingsMutationContext
   >({
     mutationFn: updatePersistedDesktopSettings,
-    onMutate: (updates) => {
+    onMutate: async (updates) => {
+      await queryClient.cancelQueries({ queryKey: DESKTOP_SETTINGS_QUERY_KEY });
       const previous =
         queryClient.getQueryData<DesktopSettings>(DESKTOP_SETTINGS_QUERY_KEY) ??
         DEFAULT_DESKTOP_SETTINGS;
-      queryClient.setQueryData<DesktopSettings>(
+      const revision = nativeSettingsRevision.current;
+      const optimistic = queryClient.setQueryData<DesktopSettings>(
         DESKTOP_SETTINGS_QUERY_KEY,
         mergeDesktopSettings(previous, updates),
       );
-      return { previous };
+      return { previous, optimistic, revision };
     },
-    onSuccess: (persisted) => {
-      queryClient.setQueryData<DesktopSettings>(DESKTOP_SETTINGS_QUERY_KEY, persisted);
+    onSuccess: (persisted, _updates, context) => {
+      if (!context || context.revision === nativeSettingsRevision.current) {
+        queryClient.setQueryData<DesktopSettings>(DESKTOP_SETTINGS_QUERY_KEY, persisted);
+      }
     },
     onError: (saveError, _updates, context) => {
-      if (context) {
+      if (
+        context &&
+        context.revision === nativeSettingsRevision.current &&
+        queryClient.getQueryData(DESKTOP_SETTINGS_QUERY_KEY) === context.optimistic
+      ) {
         queryClient.setQueryData<DesktopSettings>(DESKTOP_SETTINGS_QUERY_KEY, context.previous);
       }
       reportError({
@@ -127,6 +168,8 @@ export function useDesktopSettings(): {
 
 interface DesktopSettingsMutationContext {
   previous: DesktopSettings;
+  optimistic: DesktopSettings | undefined;
+  revision: number;
 }
 
 export async function loadDesktopSettings(): Promise<DesktopSettings> {
@@ -155,6 +198,24 @@ export async function migrateLegacyDesktopSettings(input: {
     return;
   }
   await invokeDesktopCommand("migrate_legacy_desktop_settings", input);
+}
+function parsePetSettings(raw: unknown): DesktopPetSettings {
+  const pet = isRecord(raw) ? raw : {};
+  const position = isRecord(pet.position) ? pet.position : null;
+  return {
+    enabled: typeof pet.enabled === "boolean" ? pet.enabled : false,
+    size: pet.size === "small" || pet.size === "large" ? pet.size : "medium",
+    selectedId:
+      typeof pet.selectedId === "string" && pet.selectedId.trim() ? pet.selectedId : "iris",
+    position:
+      position &&
+      typeof position.x === "number" &&
+      Number.isFinite(position.x) &&
+      typeof position.y === "number" &&
+      Number.isFinite(position.y)
+        ? { x: position.x, y: position.y }
+        : null,
+  };
 }
 
 function parseDesktopSettings(raw: unknown): DesktopSettings {
@@ -186,6 +247,7 @@ function parseDesktopSettings(raw: unknown): DesktopSettings {
           ? daemon.keepRunningAfterQuit
           : DEFAULT_DESKTOP_SETTINGS.daemon.keepRunningAfterQuit,
     },
+    pet: parsePetSettings(record.pet),
   };
 }
 
@@ -207,6 +269,7 @@ function mergeDesktopSettings(
       ...current.daemon,
       ...updates.daemon,
     },
+    pet: { ...current.pet, ...updates.pet },
   };
 }
 
@@ -216,6 +279,7 @@ function normalizePatch(updates: DesktopSettingsPatch): Record<string, unknown> 
     ...(updates.browser ? { browser: updates.browser } : {}),
     ...(updates.notifications ? { notifications: updates.notifications } : {}),
     ...(updates.daemon ? { daemon: updates.daemon } : {}),
+    ...(updates.pet ? { pet: updates.pet } : {}),
   };
 }
 

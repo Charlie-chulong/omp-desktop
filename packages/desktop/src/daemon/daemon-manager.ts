@@ -1,7 +1,7 @@
 import { type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { app, BrowserWindow, ipcMain, powerMonitor } from "electron";
+import { app, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
 import { resolvePaseoHome, spawnProcess } from "@omp-desktop/server";
 import {
@@ -56,6 +56,8 @@ import {
 } from "../integrations/legacy-skill-selection.js";
 import { tailFile } from "../diagnostics/tail-file.js";
 import { wallpaperMediaRegistry } from "../wallpaper/media-registry.js";
+import { getMainWindows } from "../window/main-windows.js";
+import { getPetLibrary } from "../pets/library.js";
 const DAEMON_LOG_FILENAME = "daemon.log";
 const STARTUP_POLL_INTERVAL_MS = 200;
 const STARTUP_POLL_MAX_ATTEMPTS = 150;
@@ -555,6 +557,17 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
       settingsStore: getDesktopSettingsStore(),
       launchAtLoginController,
     }),
+    list_desktop_pets: () => getPetLibrary().list(),
+    import_desktop_pet: (args) => {
+      if (typeof args?.directory !== "string")
+        throw new TypeError("import_desktop_pet requires a package directory.");
+      return getPetLibrary().importDirectory(args.directory);
+    },
+    prepare_desktop_pet_creation: (args) => {
+      if (args?.description !== undefined && typeof args.description !== "string")
+        throw new TypeError("Pet creation description must be text.");
+      return getPetLibrary().prepareCreation(args?.description);
+    },
     desktop_get_runtime_info: () => ({
       appVersion: resolveDesktopAppVersion(),
       runningUnderARM64Translation: isRunningUnderARM64Translation(),
@@ -625,6 +638,14 @@ export function registerDaemonManager(): void {
   let attachmentGarbageCollectionTail: Promise<void> = Promise.resolve();
 
   ipcMain.handle("paseo:invoke", async (event, command: string, args?: Record<string, unknown>) => {
+    if (
+      (command === "list_desktop_pets" ||
+        command === "import_desktop_pet" ||
+        command === "prepare_desktop_pet_creation") &&
+      !getMainWindows().some((window) => window.webContents === event.sender)
+    ) {
+      throw new Error("Pet library commands require a registered main app window.");
+    }
     if (command === "garbage_collect_attachment_files") {
       const ownerId = event.sender.id;
       const ownerSession = event.sender.session;
@@ -632,7 +653,7 @@ export function registerDaemonManager(): void {
         ? args.referencedIds.filter((value): value is string => typeof value === "string")
         : [];
       const collect = attachmentGarbageCollectionTail.then(async () => {
-        const activeOwnerIds = BrowserWindow.getAllWindows()
+        const activeOwnerIds = getMainWindows()
           .map((window) => window.webContents)
           .filter((contents) => !contents.isDestroyed() && contents.session === ownerSession)
           .map((contents) => contents.id);

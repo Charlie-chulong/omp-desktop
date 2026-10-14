@@ -1,6 +1,7 @@
 import { BrowserWindow, clipboard, ipcMain, Menu, shell } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTerminalContextMenuTemplate, setupApplicationMenu } from "./menu.js";
+import { registerMainWindow } from "../window/main-windows.js";
 
 vi.mock("electron", () => ({
   app: { name: "OMP Desktop", on: vi.fn() },
@@ -28,11 +29,19 @@ describe("window reload shortcuts", () => {
     const firstReload = vi.fn();
     const forceFirstReload = vi.fn();
     Object.assign(first, {
-      webContents: { reload: firstReload, reloadIgnoringCache: forceFirstReload },
+      webContents: {
+        reload: firstReload,
+        reloadIgnoringCache: forceFirstReload,
+        isDestroyed: () => false,
+      },
+      once: vi.fn(),
+      isDestroyed: () => false,
+      isVisible: () => true,
     });
     Object.assign(second, {
       webContents: { reload: vi.fn(), reloadIgnoringCache: vi.fn() },
     });
+    registerMainWindow(first);
 
     reload?.click?.(null as never, first, null as never);
     forceReload?.click?.(null as never, first, null as never);

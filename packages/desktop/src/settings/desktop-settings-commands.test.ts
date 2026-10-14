@@ -19,6 +19,7 @@ function createStoreMock(): DesktopSettingsStore {
         keepRunningAfterQuit: true,
       },
     })),
+    subscribe: vi.fn(() => () => undefined),
   };
 }
 

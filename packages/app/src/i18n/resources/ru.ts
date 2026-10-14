@@ -1402,6 +1402,7 @@ export const ru: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "Завершение работы OMP Desktop...",
       detail: "Остановка локального демона.",

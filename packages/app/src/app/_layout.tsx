@@ -83,6 +83,7 @@ import { getDesktopHost } from "@/desktop/host";
 import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
 import { DesktopUpdateProvider } from "@/desktop/updates/desktop-update-provider";
+import { DesktopPetActivitySync } from "@/desktop/pets/activity-sync";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
 import { useFaviconStatus } from "@/hooks/use-favicon-status";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
@@ -910,6 +911,7 @@ function RuntimeProviders({ children }: { children: ReactNode }) {
   return (
     <HostRuntimeBootstrapProvider>
       <PushNotificationRouter />
+      <DesktopPetActivitySync />
       <SidebarCalloutProvider>
         <DesktopUpdateProvider>
           <ProvidersWrapper>{children}</ProvidersWrapper>

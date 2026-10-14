@@ -1410,6 +1410,7 @@ export const fr: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "QuitterOMP Desktop...",
       detail: "Arrêt du démon local.",

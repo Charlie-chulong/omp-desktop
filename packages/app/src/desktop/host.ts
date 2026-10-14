@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { getElectronHost } from "@/desktop/electron/host";
+import type { DesktopPetActivity } from "@/desktop/pets/types";
 
 export type DesktopNotificationPermission = "granted" | "denied" | "default";
 
@@ -257,12 +258,17 @@ export interface DesktopInvokeBridge {
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
+export interface DesktopPetBridge {
+  publishActivity?: (activity: DesktopPetActivity) => Promise<void>;
+}
+
 export interface DesktopHostBridge {
   platform?: string;
   loginShell?: string;
   invoke?: DesktopInvokeBridge["invoke"];
   getPendingOpenProject?: () => Promise<string | null>;
   agentNavigation?: DesktopAgentNavigationBridge;
+  pet?: DesktopPetBridge;
   events?: DesktopEventsBridge;
   remoteSsh?: DesktopRemoteSshBridge;
   window?: DesktopWindowModuleBridge;
