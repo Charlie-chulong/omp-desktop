@@ -58,8 +58,11 @@ import {
   type EditingTextInputProps,
 } from "@/components/ui/text-input";
 
+// The placeholder sits at Cursor's quaternary text tone. The dark palettes' surface4 already lands
+// there; the light one is a step too faint on the near-white composer.
 const ComposerTextInput = withUnistyles(EditingTextInput, (theme) => ({
-  placeholderTextColor: theme.colors.surface4,
+  placeholderTextColor:
+    theme.colorScheme === "light" ? theme.colors.foregroundExtraMuted : theme.colors.surface4,
 }));
 import { resolveSendTooltipLabel, resolveSubmitAccessibilityLabel } from "./labels";
 import {
@@ -1337,10 +1340,11 @@ const styles = StyleSheet.create((theme: Theme) => ({
   inputWrapper: {
     flexDirection: "column",
     gap: theme.spacing[3],
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.popover,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
-    borderRadius: theme.borderRadius["2xl"],
+    borderRadius: theme.borderRadius.xl,
+    ...theme.shadow.sm,
     paddingVertical: {
       xs: theme.spacing[2],
       md: theme.spacing[4],

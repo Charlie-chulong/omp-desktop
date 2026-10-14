@@ -62,7 +62,7 @@ import {
   type ToggleSidebarWorkspacePin,
 } from "@/hooks/use-sidebar-workspace-pin";
 import { useHostFeatureMap } from "@/runtime/host-features";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { SIDEBAR_LIST_INSET, useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIcons } from "@/projects/icons";
 import {
   buildHostProjectRoute,
@@ -2719,7 +2719,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: theme.spacing[2],
+    paddingHorizontal: SIDEBAR_LIST_INSET,
     // Optical inset aligns section glyphs with the schedules icon across the divider.
     paddingTop: 2,
     paddingBottom: theme.spacing[4],
@@ -2741,8 +2741,8 @@ const styles = StyleSheet.create((theme) => ({
   agentDraftRow: {
     minHeight: buttonControlHeight.xs,
     paddingVertical: theme.spacing[1],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    marginHorizontal: -SIDEBAR_LIST_INSET,
+    paddingHorizontal: theme.spacing[2] + SIDEBAR_LIST_INSET,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
@@ -2784,8 +2784,8 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
     minHeight: 32,
     paddingVertical: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    marginHorizontal: -SIDEBAR_LIST_INSET,
+    paddingHorizontal: theme.spacing[2] + SIDEBAR_LIST_INSET,
     marginBottom: 0,
     flexDirection: "row",
     alignItems: "center",
@@ -2900,15 +2900,15 @@ const styles = StyleSheet.create((theme) => ({
   projectShortcutBadgeOverlay: {
     position: "absolute",
     top: theme.spacing[2] + 1,
-    right: theme.spacing[2],
+    right: theme.spacing[2] + SIDEBAR_LIST_INSET,
   },
   workspaceRow: {
     minHeight: buttonControlHeight.xs,
     marginBottom: 0,
+    marginHorizontal: -SIDEBAR_LIST_INSET,
     paddingVertical: theme.spacing[1],
-    paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    paddingLeft: theme.spacing[2] + SIDEBAR_LIST_INSET,
+    paddingRight: theme.spacing[2] + SIDEBAR_LIST_INSET,
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "center",

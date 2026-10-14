@@ -209,7 +209,7 @@ function buildThemeKey(theme: ITheme): string {
 export function createTerminalCellStyleResolver(theme: ITheme): TerminalCellStyleResolver {
   const palette = build256Palette(theme);
   const foregroundColor = theme.foreground ?? DEFAULT_TERMINAL_THEME.foreground ?? "#fafafa";
-  const backgroundColor = theme.background ?? DEFAULT_TERMINAL_THEME.background ?? "#181B1A";
+  const backgroundColor = theme.background ?? DEFAULT_TERMINAL_THEME.background ?? "#181818";
   const cursorColor = theme.cursor ?? foregroundColor;
   const styleCache = new Map<string, TextStyle>();
 

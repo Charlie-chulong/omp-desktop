@@ -56,6 +56,8 @@ const TILE_ACCENTS = {
 
 type TileAccent = keyof typeof TILE_ACCENTS;
 
+const LIGHT_TILE_HOVER_SHADOW = "0 12px 32px rgba(20, 20, 20, 0.08)";
+
 const webBrandMarkStyle =
   Platform.OS === "web"
     ? inlineUnistylesStyle({
@@ -307,6 +309,9 @@ export function OpenProjectScreen() {
     updateSettings,
   } = useAppSettings();
   const homeAnimationsEnabled = !areSettingsLoading && storedHomeAnimationsEnabled;
+  // The poster, its scanlines and the brand glows are drawn for a dark canvas. Light schemes keep
+  // Cursor Light's flat canvas and an ink mark instead.
+  const isLight = theme.colorScheme === "light";
 
   const isCompactLayout = useIsCompactFormFactor();
 
@@ -362,7 +367,7 @@ export function OpenProjectScreen() {
 
   const backgroundStyle = useMemo(
     () =>
-      Platform.OS === "web"
+      Platform.OS === "web" && !isLight
         ? inlineUnistylesStyle({
             backgroundColor: theme.colors.surface0,
             backgroundImage: [
@@ -372,22 +377,26 @@ export function OpenProjectScreen() {
             backgroundSize: "auto, 2px 2px",
           })
         : null,
-    [theme.colors.surface0],
+    [isLight, theme.colors.surface0],
   );
 
   return (
     <View style={[styles.container, backgroundStyle]}>
-      <OmpDotCloud animationsEnabled={homeAnimationsEnabled} />
+      {isLight ? null : <OmpDotCloud animationsEnabled={homeAnimationsEnabled} />}
       <MenuHeader borderless />
       <View style={styles.content}>
         <TitlebarDragRegion />
         <View style={styles.brand}>
-          <View style={[styles.brandMark, webBrandMarkStyle]}>
-            <OmpIcon size={58} gradientColors={OMP_BRAND_GRADIENT} />
+          <View style={[styles.brandMark, isLight ? styles.brandMarkLight : webBrandMarkStyle]}>
+            <OmpIcon
+              size={58}
+              color={theme.colors.foreground}
+              gradientColors={isLight ? undefined : OMP_BRAND_GRADIENT}
+            />
           </View>
           <View style={styles.brandCaption}>
             <Text style={styles.brandName}>OMP</Text>
-            <View style={styles.brandCaptionRule} />
+            <View style={[styles.brandCaptionRule, isLight && styles.brandCaptionRuleLight]} />
             <Text style={styles.brandMeta}>DESKTOP</Text>
           </View>
         </View>
@@ -474,28 +483,34 @@ function HomeTile({
   const handleHoverIn = useCallback(() => setHovered(true), []);
   const handleHoverOut = useCallback(() => setHovered(false), []);
   const accentStyle = TILE_ACCENTS[accent];
+  // Light tiles trade the neon accent for ink: the icon rests muted and darkens with the arrow.
+  const isLight = theme.colorScheme === "light";
+  const hoverColor = isLight ? theme.colors.foreground : accentStyle.color;
+  const restingIconColor = isLight ? theme.colors.foregroundMuted : accentStyle.color;
+  const hoverShadow = isLight ? LIGHT_TILE_HOVER_SHADOW : `0 18px 54px ${accentStyle.glow}`;
 
   const webTileStyle = useMemo(
     () =>
       Platform.OS === "web"
         ? inlineUnistylesStyle({
-            boxShadow: hovered ? `0 18px 54px ${accentStyle.glow}` : "0 0 0 transparent",
+            boxShadow: hovered ? hoverShadow : "0 0 0 transparent",
             transition: animationsEnabled
               ? "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease"
               : "none",
           })
         : null,
-    [accentStyle.glow, animationsEnabled, hovered],
+    [animationsEnabled, hoverShadow, hovered],
   );
 
   const pressableStyle = useCallback(
     ({ pressed }: { pressed: boolean }) => [
       styles.tile,
       hovered && animationsEnabled && styles.tileHovered,
+      isLight && styles.tileLight,
       pressed && styles.tilePressed,
       webTileStyle,
     ],
-    [animationsEnabled, hovered, webTileStyle],
+    [animationsEnabled, hovered, isLight, webTileStyle],
   );
 
   return (
@@ -507,22 +522,21 @@ function HomeTile({
       testID={testID}
       style={pressableStyle}
     >
-      <View
-        style={[
-          styles.tileSignal,
-          { backgroundColor: accentStyle.color, width: hovered && animationsEnabled ? 76 : 32 },
-        ]}
-      />
+      {isLight ? null : (
+        <View
+          style={[
+            styles.tileSignal,
+            { backgroundColor: accentStyle.color, width: hovered && animationsEnabled ? 76 : 32 },
+          ]}
+        />
+      )}
       <View style={styles.tileHeader}>
-        <View style={[styles.iconFrame, { borderColor: accentStyle.color }]}>
-          <Icon size={22} color={accentStyle.color} />
+        <View style={[styles.iconFrame, !isLight && { borderColor: accentStyle.color }]}>
+          <Icon size={22} color={hovered ? hoverColor : restingIconColor} />
         </View>
         <View style={styles.tileMeta}>
           <Text style={styles.tileIndex}>{index}</Text>
-          <ArrowRight
-            size={16}
-            color={hovered ? accentStyle.color : theme.colors.foregroundExtraMuted}
-          />
+          <ArrowRight size={16} color={hovered ? hoverColor : theme.colors.foregroundExtraMuted} />
         </View>
       </View>
       <View style={styles.tileText}>
@@ -579,6 +593,13 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomColor: OMP_CYAN,
     borderRadius: theme.borderRadius.lg,
   },
+  // Light schemes trade the neon edges and glow for the canvas outline and Cursor's widget shadow.
+  brandMarkLight: {
+    backgroundColor: theme.colors.surface0,
+    borderTopColor: theme.colors.border,
+    borderBottomColor: theme.colors.border,
+    ...theme.shadow.sm,
+  },
   brandCaption: {
     flexDirection: "row",
     alignItems: "center",
@@ -595,6 +616,9 @@ const styles = StyleSheet.create((theme) => ({
     width: 20,
     height: 1,
     backgroundColor: OMP_MAGENTA,
+  },
+  brandCaptionRuleLight: {
+    backgroundColor: theme.colors.foregroundExtraMuted,
   },
   brandMeta: {
     color: theme.colors.foregroundExtraMuted,
@@ -635,6 +659,10 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.borderAccent,
     transform: [{ translateY: -3 }],
   },
+  // Light tiles stay on the canvas, hovered or not; the lift reads through the outline and shadow.
+  tileLight: {
+    backgroundColor: theme.colors.surface0,
+  },
   tilePressed: {
     opacity: 0.82,
     transform: [{ translateY: 0 }],
@@ -657,6 +685,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     backgroundColor: theme.colors.surface0,
     borderWidth: 1,
+    borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.base,
   },
   tileMeta: {

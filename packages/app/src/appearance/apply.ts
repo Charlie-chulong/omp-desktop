@@ -68,6 +68,7 @@ function applyWallpaperSurfaces<TColors extends Theme["colors"]>(
     surface3: setCssColorAlpha(colors.surface3, surfaceAlpha),
     surface4: setCssColorAlpha(colors.surface4, surfaceAlpha),
     surfaceSidebar: setCssColorAlpha(colors.surfaceSidebar, surfaceAlpha),
+    surfaceUserMessage: setCssColorAlpha(colors.surfaceUserMessage, surfaceAlpha),
     popover: setCssColorAlpha(colors.popover, surfaceAlpha),
     secondary: setCssColorAlpha(colors.secondary, surfaceAlpha),
     muted: setCssColorAlpha(colors.muted, surfaceAlpha),

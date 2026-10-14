@@ -291,7 +291,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     gap: theme.spacing[1],
   },
   detailCard: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.popover,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
     borderRadius: theme.borderRadius.lg,
@@ -315,7 +315,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     marginTop: theme.spacing[1],
   },
   container: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: theme.colors.popover,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.borderAccent,
     borderRadius: theme.borderRadius.lg,

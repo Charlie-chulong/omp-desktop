@@ -8,6 +8,7 @@ import type { HighlightStyle } from "./types.js";
 // themes (Dracula, Nord) apply their single palette regardless. The code frame
 // — gutter, line numbers, background — follows the app theme, not the palette.
 export type SyntaxThemeId =
+  | "cursor"
   | "github"
   | "catppuccin"
   | "dracula"
@@ -18,6 +19,7 @@ export type SyntaxThemeId =
   | "solarized";
 
 export const SYNTAX_THEME_IDS: readonly SyntaxThemeId[] = [
+  "cursor",
   "github",
   "catppuccin",
   "dracula",
@@ -34,6 +36,7 @@ export interface SyntaxThemeOption {
 }
 
 export const SYNTAX_THEME_OPTIONS: readonly SyntaxThemeOption[] = [
+  { id: "cursor", label: "Cursor" },
   { id: "github", label: "GitHub" },
   { id: "catppuccin", label: "Catppuccin" },
   { id: "dracula", label: "Dracula" },
@@ -87,6 +90,55 @@ function expandRolePalette(r: RolePalette): SyntaxColors {
     link: r.string,
   };
 }
+
+// --- Cursor (Cursor Light / Cursor Dark) ---------------------------------
+// Full maps rather than a RolePalette: Cursor colours variables apart from punctuation and
+// properties apart from attributes. Comment and escape colours are translucent in Cursor's
+// themes; these are flattened onto each theme's editor background (#FCFCFC / #181818).
+const cursorLightColors: SyntaxColors = {
+  keyword: "#a30034",
+  comment: "#717171",
+  string: "#7565cc",
+  number: "#92156a",
+  literal: "#005293",
+  function: "#cd4500",
+  definition: "#cd4500",
+  class: "#005293",
+  type: "#005293",
+  tag: "#007041",
+  attribute: "#481b9c",
+  property: "#005293",
+  variable: "#005293",
+  operator: "#141414",
+  punctuation: "#141414",
+  regexp: "#0064b0",
+  escape: "#505050",
+  meta: "#717171",
+  heading: "#005293",
+  link: "#005293",
+};
+const cursorDarkColors: SyntaxColors = {
+  keyword: "#82d2ce",
+  comment: "#9a9a9a",
+  string: "#e394dc",
+  number: "#ebc88d",
+  literal: "#82d2ce",
+  function: "#efb080",
+  definition: "#efb080",
+  class: "#87c3ff",
+  type: "#efb080",
+  tag: "#87c3ff",
+  attribute: "#aaa0fa",
+  property: "#aaa0fa",
+  variable: "#87c3ff",
+  operator: "#d6d6dd",
+  punctuation: "#d6d6dd",
+  regexp: "#d6d6dd",
+  escape: "#d6d6dd",
+  meta: "#9a9a9a",
+  heading: "#88c0d0",
+  link: "#82d2ce",
+};
 
 // --- Catppuccin (Latte light / Mocha dark) -------------------------------
 const catppuccinLatte: RolePalette = {
@@ -270,6 +322,8 @@ export function resolveSyntaxColors(
 ): SyntaxColors {
   const dark = colorScheme === "dark";
   switch (id) {
+    case "cursor":
+      return dark ? cursorDarkColors : cursorLightColors;
     case "github":
       return dark ? darkHighlightColors : lightHighlightColors;
     case "catppuccin":

@@ -16,6 +16,7 @@ import {
   type SidebarWorkspaceTrailing,
 } from "@/components/sidebar/workspace-trailing";
 import { useAppSettings } from "@/hooks/use-settings";
+import { SIDEBAR_LIST_INSET } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { getStatusDotColor } from "@/utils/status-dot-color";
@@ -304,7 +305,7 @@ export const sidebarWorkspaceRowStyles = StyleSheet.create((theme) => ({
   // backgrounds have to keep spanning the group's full width. Indenting the container instead
   // pulls the highlight in with the content and the row stops lining up with its header.
   rowIndented: {
-    paddingLeft: theme.spacing[2] + theme.spacing[2],
+    paddingLeft: theme.spacing[2] + theme.spacing[2] + SIDEBAR_LIST_INSET,
   },
   rowRight: {
     flexDirection: "row",

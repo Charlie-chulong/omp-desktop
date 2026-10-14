@@ -14,7 +14,7 @@ describe("Typography scale", () => {
   it("names 13px as the default interface and code tier", () => {
     expect(FONT_SIZE).toEqual({
       code: 13,
-      content: 15,
+      content: 14,
       sm: 12,
       base: 13,
       lg: 16,
@@ -94,16 +94,30 @@ describe("Sidebar interaction surfaces", () => {
   );
 });
 
+describe("Inactive tab labels", () => {
+  it("sit at the muted tone in light and the extra-muted tone in dark", () => {
+    expect(lightTheme.colors.foregroundTabInactive).toBe(lightTheme.colors.foregroundMuted);
+    expect(darkTheme.colors.foregroundTabInactive).toBe(darkTheme.colors.foregroundExtraMuted);
+  });
+});
+
+describe("Sent-message bubbles", () => {
+  it("sit a surface step lighter in light than in dark", () => {
+    expect(lightTheme.colors.surfaceUserMessage).toBe(lightTheme.colors.surface2);
+    expect(darkTheme.colors.surfaceUserMessage).toBe(darkTheme.colors.surface3);
+  });
+});
+
 describe("Built-in light theme", () => {
   it("preserves its authored aliases and terminal contrast through the semantic builder", () => {
     expect(lightTheme.colors).toMatchObject({
-      primary: "#18181b",
-      primaryForeground: "#fafafa",
-      destructiveForeground: "#ffffff",
+      primary: "#141414",
+      primaryForeground: "#fcfcfc",
+      destructiveForeground: "#fcfcfc",
       successForeground: "#ffffff",
       terminal: {
-        black: "#1a1a1e",
-        brightBlack: "#3f3f46",
+        black: "#141414",
+        brightBlack: "#505050",
       },
     });
   });

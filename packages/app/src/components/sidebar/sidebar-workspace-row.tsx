@@ -21,7 +21,7 @@ import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspac
 import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-archive-redirect";
 import { requireWorkspaceDirectory } from "@/utils/workspace-directory";
 import { isNative as platformIsNative } from "@/constants/platform";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { SIDEBAR_LIST_INSET, useIsCompactFormFactor } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import {
@@ -533,10 +533,10 @@ const styles = StyleSheet.create((theme) => ({
   workspaceRow: {
     minHeight: buttonControlHeight.xs,
     marginBottom: 0,
+    marginHorizontal: -SIDEBAR_LIST_INSET,
     paddingVertical: theme.spacing[1],
-    paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    paddingLeft: theme.spacing[2] + SIDEBAR_LIST_INSET,
+    paddingRight: theme.spacing[2] + SIDEBAR_LIST_INSET,
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "center",

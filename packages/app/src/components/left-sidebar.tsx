@@ -2000,7 +2000,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing[2],
-    // Rendered inside the scroll's listContent (paddingHorizontal spacing[2]). The title
+    // Rendered inside the scroll's listContent (paddingHorizontal SIDEBAR_LIST_INSET). The title
     // lands at spacing[2] left to align with project icons. Settings2's painted path stops
     // inside its 14px SVG, so 4px aligns the ink rather than the SVG box to the row rail.
     paddingLeft: theme.spacing[2],
@@ -2055,7 +2055,7 @@ const styles = StyleSheet.create((theme) => ({
   desktopSidebarBorder: {
     borderRightWidth: 1,
     borderRightColor: theme.colors.border,
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: theme.colors.surfaceSidebar,
   },
   sidebarFooter: {
     paddingHorizontal: theme.spacing[2],
