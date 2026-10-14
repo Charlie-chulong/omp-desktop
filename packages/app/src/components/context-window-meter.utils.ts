@@ -7,3 +7,8 @@ export function formatTokenCount(value: number): string {
   }
   return Math.round(value).toString();
 }
+
+export function formatSessionCost(value: number): string | null {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return `$${value.toFixed(value < 0.01 ? 4 : 2)}`;
+}

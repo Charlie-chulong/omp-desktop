@@ -182,6 +182,7 @@ export function useOmpProviderAccountQuota(
   const resetTimes = accounts.flatMap((account) => [
     account.quota?.weeklyResetsAt,
     account.quota?.fiveHourResetsAt,
+    account.quota?.modelRateLimit?.resetsAt,
     ...(account.quota?.modelWindows ?? []).map((window) => window.resetsAt),
   ]);
   const now = useOmpQuotaClock(active && resetTimes.some(Boolean));

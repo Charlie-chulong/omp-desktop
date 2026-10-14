@@ -11,6 +11,7 @@ import { formatAgo, formatProviderUsageLabel } from "./format";
 import type { ProviderUsage } from "./types";
 import { ProviderUsageWindowBar } from "./window-bar";
 import { OmpExtraUsageDetails } from "./extra-usage";
+import { OmpClaudeQuotaNotices } from "@/components/omp-claude-quota-notices";
 
 interface ProviderUsageIconProps {
   iconKey: string;
@@ -90,7 +91,8 @@ export function ProviderUsageCard({
         ) : null}
       </View>
 
-      {usage.error ? (
+      {usage.accountQuota ? <OmpClaudeQuotaNotices quota={usage.accountQuota} /> : null}
+      {!usage.accountQuota && usage.error ? (
         <Text style={styles.error} numberOfLines={3}>
           {usage.error}
         </Text>

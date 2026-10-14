@@ -64,6 +64,12 @@ describe("OMP provider quota windows", () => {
     expect(shouldShowOmpFiveHourQuota({ fiveHourUsedPct: Number.NaN })).toBe(false);
     expect(shouldShowOmpFiveHourQuota({ fiveHourUsedPct: null, fiveHourResetsAt: "" })).toBe(false);
   });
+
+  test("keeps the Claude row for an unknown or reached-only window without changing Codex", () => {
+    expect(shouldShowOmpFiveHourQuota({}, "anthropic")).toBe(true);
+    expect(shouldShowOmpFiveHourQuota({ fiveHourLimitReached: true }, "anthropic")).toBe(true);
+    expect(shouldShowOmpFiveHourQuota({}, "openai-codex")).toBe(false);
+  });
 });
 
 describe("OMP quota countdown boundaries", () => {

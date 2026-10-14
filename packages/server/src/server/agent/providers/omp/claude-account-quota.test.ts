@@ -134,14 +134,46 @@ describe("fetchClaudeAccountQuota", () => {
     async (status) => {
       const fetchApi = vi.fn(async () => new Response("private-token backend-details", { status }));
       const quota = await fetchClaudeAccountQuota(quotaOptions(fetchApi));
+      let kind = "http";
+      if (status === 401 || status === 403) kind = "authentication";
+      else if (status === 429) kind = "rate_limited";
       expect(quota.status).toBe(status === 401 || status === 403 ? "unavailable" : "error");
-      expect(quota.error).toBe(
-        status === 401 || status === 403
-          ? "Claude account authentication expired"
-          : "Claude usage request failed",
-      );
       expect(fetchApi).toHaveBeenCalledTimes(1);
+      expect(quota.queryError).toMatchObject({
+        kind,
+        httpStatus: status,
+      });
       expect(JSON.stringify(quota)).not.toContain("private-token");
+    },
+  );
+
+  it.each([
+    { headers: new Headers({ "Retry-After": "39" }), retryAt: "2026-10-11T00:00:39.000Z" },
+    {
+      headers: new Headers({ "Retry-After": "Sun, 11 Oct 2026 01:00:00 GMT" }),
+      retryAt: "2026-10-11T01:00:00.000Z",
+    },
+    {
+      headers: new Headers({ "retry-after-ms": "1200", "Retry-After": "39" }),
+      retryAt: "2026-10-11T00:00:01.200Z",
+    },
+    { headers: new Headers({ "Retry-After": "private-token" }), retryAt: null },
+    { headers: new Headers({ "Retry-After": "-1" }), retryAt: null },
+  ])(
+    "keeps endpoint retry metadata separate from unknown quota resets: $retryAt",
+    async ({ headers, retryAt }) => {
+      const result = await fetchClaudeAccountQuota(
+        quotaOptions(async () => new Response("private-token", { status: 429, headers })),
+      );
+      expect(result).toMatchObject({
+        status: "error",
+        queryError: { kind: "rate_limited", httpStatus: 429, retryAt },
+        fiveHourUsedPct: null,
+        fiveHourLimitReached: null,
+        fiveHourResetsAt: null,
+      });
+      expect(result).not.toHaveProperty("modelRateLimit");
+      expect(JSON.stringify(result)).not.toContain("private-token");
     },
   );
 
@@ -158,27 +190,27 @@ describe("fetchClaudeAccountQuota", () => {
   it.each([
     {
       fetchApi: async () => new Response("private-token"),
-      error: "Claude usage response was not valid JSON",
+      kind: "invalid_response",
     },
     {
       fetchApi: async () => jsonResponse({ error: { message: "private-token" } }),
-      error: "Claude usage response did not include quota windows",
+      kind: "invalid_response",
     },
     {
       fetchApi: async () => {
         throw new Error("private-token");
       },
-      error: "Claude usage request failed",
+      kind: "network",
     },
     {
       fetchApi: async () => {
         throw new DOMException("private-token", "AbortError");
       },
-      error: "Claude usage request timed out",
+      kind: "timeout",
     },
-  ])("reports sanitized parse/network boundaries: $error", async ({ fetchApi, error }) => {
+  ])("reports sanitized $kind boundaries", async ({ fetchApi, kind }) => {
     const quota = await fetchClaudeAccountQuota(quotaOptions(fetchApi));
-    expect(quota).toMatchObject({ status: "error", error });
+    expect(quota).toMatchObject({ status: "error", queryError: { kind } });
     expect(JSON.stringify(quota)).not.toContain("private-token");
   });
 
@@ -286,6 +318,7 @@ describe("fetchClaudeAccountQuota", () => {
       expect(await pending).toMatchObject({
         status: "error",
         error: "Claude usage request timed out",
+        queryError: { kind: "timeout" },
       });
       expect(fetchApi).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(0);

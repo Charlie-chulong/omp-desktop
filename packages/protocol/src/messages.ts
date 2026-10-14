@@ -6482,6 +6482,27 @@ export const OmpProviderAccountQuotaSchema = z.object({
     .optional(),
   fetchedAt: z.string().nullable().optional(),
   error: z.string().nullable().optional(),
+  queryError: z
+    .object({
+      kind: z.enum([
+        "rate_limited",
+        "authentication",
+        "network",
+        "timeout",
+        "http",
+        "invalid_response",
+      ]),
+      httpStatus: z.number().int().min(100).max(599).optional(),
+      retryAt: z.string().nullable().optional(),
+    })
+    .optional(),
+  modelRateLimit: z
+    .object({
+      scope: z.enum(["five_hour", "seven_day", "unknown"]),
+      resetsAt: z.string().nullable(),
+      observedAt: z.string(),
+    })
+    .optional(),
   resetCredits: OmpCodexResetCreditsSchema.optional(),
   limitResets: OmpClaudeLimitResetsSchema.optional(),
   subscription: OmpCodexSubscriptionSchema.optional(),
