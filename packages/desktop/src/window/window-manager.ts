@@ -118,13 +118,13 @@ export function resolveSystemWindowTheme(): WindowTheme {
 }
 
 export function getWindowBackgroundColor(theme: WindowTheme): string {
-  return theme === "dark" ? "#181B1A" : "#ffffff";
+  return theme === "dark" ? "#181818" : "#fcfcfc";
 }
 export function getTitleBarOverlayOptions(theme: WindowTheme): Electron.TitleBarOverlayOptions {
   if (theme === "dark") {
-    return { color: "#181B1A", symbolColor: "#e4e4e7", height: 29 };
+    return { color: "#141414", symbolColor: "#e4e4e7", height: 29 };
   }
-  return { color: "#ffffff", symbolColor: "#09090b", height: 29 };
+  return { color: "#f3f3f3", symbolColor: "#141414", height: 29 };
 }
 
 export function createWindowControlsOverlayState(theme: WindowTheme): WindowControlsOverlayState {

@@ -603,7 +603,7 @@ describe("appearance settings", () => {
     expect(result.uiBaseFontSize).toBe(DEFAULT_UI_BASE_FONT_SIZE);
     expect(result.contentFontSize).toBe(DEFAULT_UI_BASE_FONT_SIZE);
     expect(result.codeFontSize).toBe(DEFAULT_CODE_FONT_SIZE);
-    expect(result.syntaxTheme).toBe("one");
+    expect(result.syntaxTheme).toBe("cursor");
     expect(result.toolCallDetailLevel).toBe("detailed");
   });
 
@@ -655,9 +655,9 @@ describe("appearance settings", () => {
     expect(defaultUiBaseFontSize(false)).toBe(13);
   });
 
-  it("uses a 15px content default on mobile and web", () => {
+  it("uses a 14px content default on web and keeps 15px on mobile", () => {
     expect(defaultContentFontSize(true)).toBe(15);
-    expect(defaultContentFontSize(false)).toBe(15);
+    expect(defaultContentFontSize(false)).toBe(14);
     expect(DEFAULT_CONTENT_FONT_SIZE).toBe(defaultContentFontSize(false));
   });
 
@@ -837,7 +837,7 @@ describe("appearance settings", () => {
       }),
     });
 
-    expect((await loadAppSettingsFromStorage(deps)).syntaxTheme).toBe("one");
+    expect((await loadAppSettingsFromStorage(deps)).syntaxTheme).toBe("cursor");
   });
 
   it("drops an unknown syntax theme id back to the default", async () => {
@@ -847,7 +847,7 @@ describe("appearance settings", () => {
       }),
     });
 
-    expect((await loadAppSettingsFromStorage(deps)).syntaxTheme).toBe("one");
+    expect((await loadAppSettingsFromStorage(deps)).syntaxTheme).toBe("cursor");
   });
 });
 

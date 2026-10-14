@@ -45,14 +45,21 @@ export function editorBaseExtensions(onSave: () => void) {
 }
 
 export function editorTheme(theme: EditorVisualTheme) {
-  const searchPanelBackground = `color-mix(in srgb, ${theme.background} 88%, ${theme.foreground})`;
-  const searchFieldBackground = `color-mix(in srgb, ${theme.background} 96%, ${theme.foreground})`;
-  const searchHoverBackground = `color-mix(in srgb, ${theme.background} 84%, ${theme.foreground})`;
-  const searchActiveBackground = `color-mix(in srgb, ${theme.background} 76%, ${theme.foreground})`;
-  const searchShadow =
-    theme.colorScheme === "dark"
-      ? "0 10px 30px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.28)"
-      : "0 10px 30px rgba(0, 0, 0, 0.13), 0 2px 8px rgba(0, 0, 0, 0.08)";
+  const isDark = theme.colorScheme === "dark";
+  // Light follows Cursor Light's find widget: a chrome-grey panel holding canvas-white fields,
+  // with hover and pressed fills at 8% and 14% ink.
+  const searchTones = isDark
+    ? { panel: 88, field: 96, hover: 84, active: 76 }
+    : { panel: 96, field: 100, hover: 92, active: 86 };
+  const searchTone = (percent: number) =>
+    `color-mix(in srgb, ${theme.background} ${percent}%, ${theme.foreground})`;
+  const searchPanelBackground = searchTone(searchTones.panel);
+  const searchFieldBackground = searchTone(searchTones.field);
+  const searchHoverBackground = searchTone(searchTones.hover);
+  const searchActiveBackground = searchTone(searchTones.active);
+  const searchShadow = isDark
+    ? "0 10px 30px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.28)"
+    : "0 0 8px 2px rgba(20, 20, 20, 0.14)";
 
   return [
     EditorView.theme(
@@ -238,16 +245,14 @@ export function editorTheme(theme: EditorVisualTheme) {
           display: "none",
         },
         ".cm-searchMatch": {
-          backgroundColor:
-            theme.colorScheme === "dark" ? "rgba(250, 204, 21, 0.28)" : "rgba(234, 179, 8, 0.24)",
-          outline: "1px solid rgba(234, 179, 8, 0.35)",
+          backgroundColor: isDark ? "rgba(250, 204, 21, 0.28)" : "rgba(59, 126, 132, 0.14)",
+          outline: isDark ? "1px solid rgba(234, 179, 8, 0.35)" : "none",
         },
         ".cm-searchMatch-selected": {
-          backgroundColor:
-            theme.colorScheme === "dark" ? "rgba(250, 204, 21, 0.5)" : "rgba(234, 179, 8, 0.4)",
+          backgroundColor: isDark ? "rgba(250, 204, 21, 0.5)" : "rgba(59, 126, 132, 0.24)",
         },
       },
-      { dark: theme.colorScheme === "dark" },
+      { dark: isDark },
     ),
     syntaxHighlighting(createCodeMirrorHighlightStyle(theme.syntax)),
   ];

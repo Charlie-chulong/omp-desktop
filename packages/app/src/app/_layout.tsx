@@ -600,6 +600,7 @@ function DesktopWindowTitlebar({
   return (
     <View style={layoutStyles.windowTitlebar} testID="desktop-window-titlebar">
       <ScreenHeader
+        chrome
         left={
           sidebarControlsEnabled ? <WindowSidebarMenuToggle testID="window-sidebar-toggle" /> : null
         }
@@ -696,19 +697,19 @@ function ProvidersWrapper({ children }: { children: ReactNode }) {
 function DesktopWindowControlsSync() {
   const { isLoading } = useAppSettings();
   const { theme } = useUnistyles();
-  const surface0 = theme.colors.surface0;
+  const titlebarSurface = theme.colors.surfaceSidebar;
   const foreground = theme.colors.foreground;
 
   useEffect(() => {
     if (isLoading || isNative) return;
     void updateDesktopWindowControls({
-      backgroundColor: setCssColorAlpha(surface0, 1),
+      backgroundColor: setCssColorAlpha(titlebarSurface, 1),
       foregroundColor: foreground,
       trafficLightOffsetY: -5,
     }).catch((error) => {
       console.warn("[DesktopWindow] Failed to update window controls overlay", error);
     });
-  }, [isLoading, surface0, foreground]);
+  }, [isLoading, titlebarSurface, foreground]);
 
   return null;
 }
@@ -1024,7 +1025,7 @@ const layoutStyles = StyleSheet.create((theme) => ({
     maxWidth: "100%",
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
-    fontWeight: "600",
+    fontWeight: theme.fontWeight.normal,
   },
   devBuildBadge: {
     maxWidth: "100%",

@@ -2,7 +2,11 @@ import { useCallback, useMemo } from "react";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { LucideIcon } from "lucide-react-native";
-import { HEADER_INNER_HEIGHT, HEADER_INNER_HEIGHT_MOBILE } from "@/constants/layout";
+import {
+  HEADER_INNER_HEIGHT,
+  HEADER_INNER_HEIGHT_MOBILE,
+  SIDEBAR_LIST_INSET,
+} from "@/constants/layout";
 import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -114,14 +118,12 @@ const styles = StyleSheet.create((theme) => ({
       xs: HEADER_INNER_HEIGHT_MOBILE,
       md: HEADER_INNER_HEIGHT,
     },
-    paddingHorizontal: theme.spacing[2],
     justifyContent: "center",
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     userSelect: "none",
   },
   containerCompact: {
-    paddingHorizontal: theme.spacing[2],
     justifyContent: "center",
     userSelect: "none",
   },
@@ -129,12 +131,12 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    // Match the sidebar workspace-row shape (height, padding, radius) so the
-    // compact header entries sit tight against the workspace list below.
+    // Match the sidebar workspace-row shape (height, padding, square full-width fill) so the
+    // compact header entries sit tight against the workspace list below. The list's inset lives
+    // in the padding here, which keeps the icon on the same rail as the rows under it.
     minHeight: 36,
     paddingVertical: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
+    paddingHorizontal: theme.spacing[3] + SIDEBAR_LIST_INSET,
   },
   // Compact header entries (New workspace / History) sit tighter than the
   // workspace-row shape the base button mirrors.
@@ -143,7 +145,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing[1.5],
     // Match the project rows' inner padding so the icons align on one vertical
     // edge with the workspace list below (base button uses a wider spacing[3]).
-    paddingHorizontal: theme.spacing[2],
+    paddingHorizontal: theme.spacing[2] + SIDEBAR_LIST_INSET,
   },
   buttonHovered: {
     backgroundColor: theme.colors.surfaceSidebarHover,

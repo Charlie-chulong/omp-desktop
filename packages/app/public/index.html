@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="robots" content="noindex,nofollow" />
-    <meta name="theme-color" content="#181B1A" />
+    <meta name="theme-color" content="#181818" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="OMP Desktop" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -27,16 +27,21 @@
         overflow: hidden;
         overscroll-behavior: none;
       }
-      /* These styles smooth text rendering in the app shell. */
+      /* Keep text on the platform's subpixel smoothing, as Cursor does; grayscale
+         antialiasing renders it noticeably thinner on macOS. */
       body {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
+        -webkit-font-smoothing: subpixel-antialiased;
+        -moz-osx-font-smoothing: auto;
       }
       /* Prevent white flash before React mounts */
+      html,
+      body {
+        background-color: #fcfcfc;
+      }
       @media (prefers-color-scheme: dark) {
         html,
         body {
-          background-color: #181b1a;
+          background-color: #181818;
         }
       }
       /* These styles make the root element full-height */
@@ -102,7 +107,7 @@
         outline: none;
       }
       *:focus-visible {
-        outline: 2px solid #00dbe4;
+        outline: 2px solid var(--colors-accent, #00dbe4);
         outline-offset: 2px;
       }
     </style>

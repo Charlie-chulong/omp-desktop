@@ -120,8 +120,8 @@ export const ompBrandColors = {
 // A diff *stat* — the "+12 −3" footnote next to a title — is not this. It is a status
 // signal, so it uses statusSuccess/statusDanger below rather than a tier of its own.
 const lightDiffColors = {
-  diffAddition: "#15803d", // green-700 — readable on white without screaming
-  diffDeletion: "#b91c1c", // red-700
+  diffAddition: "#00854c", // Cursor Light's green — readable on the near-white canvas
+  diffDeletion: "#ce405b", // Cursor Light's red
 };
 
 const darkDiffColors = {
@@ -177,9 +177,9 @@ const darkStatusColors = {
 // Lightness is set by hue separation, not by distance from the surface. A dark dot on a light
 // surface has plenty of contrast but the four hues collapse into each other at 6pt — dark green,
 // dark red, dark amber and dark blue all read as "dark blob", and the point of the dot is telling
-// them apart at a glance. So the light band runs as bright as the contrast floor allows: L=0.62
+// them apart at a glance. So the light band runs as bright as the contrast floor allows: L=0.58
 // is the last step where all four clear 3:1 against the sidebar's surface2 (success is the
-// binding one at 3.10, and drops under 3 by L=0.64), which is WCAG's non-text minimum for a
+// binding one at 3.10, and drops under 3 at L=0.59), which is WCAG's non-text minimum for a
 // control that carries state.
 //
 // All four move together. A dot matching its siblings in lightness and chroma says only which
@@ -194,11 +194,11 @@ const darkStatusColors = {
 // identity-colors' blue at 256.6 so a blue host badge and a working dot on the same row do not
 // read as related.
 const lightStatusDotColors = {
-  // L=0.62, chroma 90% of gamut max
-  statusDotSuccess: "#299f51",
-  statusDotDanger: "#f12e2f",
-  statusDotWarning: "#b37824",
-  statusDotRunning: "#268ae0",
+  // L=0.58, chroma 90% of gamut max
+  statusDotSuccess: "#259149",
+  statusDotDanger: "#dc2a2a",
+  statusDotWarning: "#a46d20",
+  statusDotRunning: "#227dcd",
 };
 
 const darkStatusDotColors = {
@@ -230,21 +230,22 @@ export interface LightThemeConfig {
   ring: string;
 }
 
+// Cursor Light's ANSI set: dark, ink-like hues that hold up on a near-white canvas.
 const lightTerminalAnsi = {
-  red: "#dc2626",
-  green: "#16a34a",
-  yellow: "#ca8a04",
-  blue: "#2563eb",
-  magenta: "#9333ea",
-  cyan: "#0891b2",
-  white: "#ffffff",
-  brightRed: "#ef4444",
-  brightGreen: "#22c55e",
-  brightYellow: "#f59e0b",
-  brightBlue: "#3b82f6",
-  brightMagenta: "#a855f7",
-  brightCyan: "#06b6d4",
-  brightWhite: "#fafafa",
+  red: "#be1744",
+  green: "#007041",
+  yellow: "#8b5700",
+  blue: "#0064b0",
+  magenta: "#92156a",
+  cyan: "#176c74",
+  white: "#fcfcfc",
+  brightRed: "#ce405b",
+  brightGreen: "#00854c",
+  brightYellow: "#a46700",
+  brightBlue: "#2778c1",
+  brightMagenta: "#b54e90",
+  brightCyan: "#3b7e84",
+  brightWhite: "#ffffff",
 } as const;
 
 export function buildLightSemanticColors(tint: LightThemeConfig) {
@@ -259,10 +260,14 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
     surfaceSidebarHover: tint.surface1,
     surfaceSidebarSelected: tint.surface2,
     surfaceWorkspace: tint.surface0,
+    // surface3 reads as a solid block on the light canvas, so sent-message bubbles sit a step lighter.
+    surfaceUserMessage: tint.surface2,
 
     foreground: tint.foreground,
     foregroundMuted: tint.foregroundMuted,
     foregroundExtraMuted: tint.foregroundExtraMuted,
+    // Cursor Light dims inactive tabs far less than Cursor Dark does (74% against 36% ink).
+    foregroundTabInactive: tint.foregroundMuted,
 
     border: tint.border,
     borderAccent: tint.borderAccent,
@@ -298,7 +303,7 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
       foreground: tint.foreground,
       cursor: tint.foreground,
       cursorAccent: tint.surface0,
-      selectionBackground: "rgba(0, 0, 0, 0.15)",
+      selectionBackground: "rgba(20, 20, 20, 0.14)",
       selectionForeground: tint.foreground,
       black: tint.terminalBlack,
       ...lightTerminalAnsi,
@@ -307,25 +312,30 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
   };
 }
 
+// Cursor Light's neutral greys. Cursor paints selection as #141414 at 8% alpha, borders at 8-12%
+// and secondary text at 60%/36%; these are those layers flattened onto the chrome (#F3F3F3) and
+// canvas (#FCFCFC), so status badges can knock out of an opaque row colour. Cursor hovers at the
+// selection's 8% too; surface1 stays a step lighter so a hovered row never reads as selected.
+// The light status dots are tuned to clear 3:1 against surface2: regenerate them if it moves.
 const lightSemanticColors = buildLightSemanticColors({
-  surface0: "#ffffff",
-  surface1: "#fafafa",
-  surface2: "#f4f4f5",
-  surface3: "#e4e4e7",
-  surface4: "#d4d4d8",
-  surfaceDiffEmpty: "#f6f6f6",
-  surfaceSidebar: "#f4f4f5",
-  foreground: "#1a1a1e",
-  foregroundMuted: "#71717a",
-  foregroundExtraMuted: "#a1a1aa",
-  border: "#e4e4e7",
-  borderAccent: "#ececf1",
-  primary: "#18181b",
-  primaryForeground: "#fafafa",
-  destructive: "#b04138",
-  terminalBlack: "#1a1a1e",
-  terminalBrightBlack: "#3f3f46",
-  ring: "#18181b",
+  surface0: "#fcfcfc",
+  surface1: "#eaeaea",
+  surface2: "#e2e2e2",
+  surface3: "#d4d4d4",
+  surface4: "#c6c6c6",
+  surfaceDiffEmpty: "#f3f3f3",
+  surfaceSidebar: "#f3f3f3",
+  foreground: "#141414",
+  foregroundMuted: "#6b6b6b",
+  foregroundExtraMuted: "#a3a3a3",
+  border: "#e0e0e0",
+  borderAccent: "#d8d8d8",
+  primary: "#141414",
+  primaryForeground: "#fcfcfc",
+  destructive: "#be1744",
+  terminalBlack: "#141414",
+  terminalBrightBlack: "#505050",
+  ring: "#141414",
 });
 
 // ---------------------------------------------------------------------------
@@ -382,10 +392,12 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
     surfaceSidebarHover: tint.surface1,
     surfaceSidebarSelected: tint.surface2,
     surfaceWorkspace: tint.surface1,
+    surfaceUserMessage: tint.surface3,
 
     foreground,
     foregroundMuted: tint.foregroundMuted,
     foregroundExtraMuted: tint.foregroundExtraMuted,
+    foregroundTabInactive: tint.foregroundExtraMuted,
 
     border: tint.border,
     borderAccent: tint.borderAccent,
@@ -401,7 +413,8 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 
     // Legacy aliases (for gradual migration)
     background: tint.surface0,
-    popover: tint.surface2,
+    // Floating surfaces highlight their rows with surface2, so they cannot sit on it.
+    popover: tint.surface1,
     popoverForeground: foreground,
     primary: foreground,
     primaryForeground: tint.surface0,
@@ -435,22 +448,25 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
 // Dark tint definitions
 // ---------------------------------------------------------------------------
 
-// Paseo — subtle teal-green tint (default)
+// Default — Cursor Dark's neutral greys. Cursor paints hover, selection and borders as #F0F0F0 at
+// 7%, 12% and 7% alpha; these are those layers flattened onto the chrome (#141414) and canvas
+// (#181818), so status badges can knock out of an opaque row colour.
 const paseoDarkColors = buildDarkSemanticColors({
-  surface0: "#181B1A",
-  surface1: "#1E2120",
-  surface2: "#272A29",
-  surface3: "#434645",
-  surface4: "#595B5B",
-  surfaceDiffEmpty: "#252827",
-  surfaceSidebar: "#141716",
-  foregroundMuted: "#A1A5A4",
-  foregroundExtraMuted: "#717574",
-  border: "#252B2A",
-  borderAccent: "#2F3534",
-  destructive: "#c64f43", // warm red, hue ~7 — reads as red (not pink) against the green tint
-  terminalBlack: "#141716",
-  terminalBrightBlack: "#434645",
+  surface0: "#181818",
+  surface1: "#232323",
+  surface2: "#2e2e2e",
+  surface3: "#454545",
+  surface4: "#5a5a5a",
+  surfaceDiffEmpty: "#282828",
+  surfaceSidebar: "#141414",
+  foreground: "#f0f0f0",
+  foregroundMuted: "#afafaf",
+  foregroundExtraMuted: "#707070",
+  border: "#282828",
+  borderAccent: "#383838",
+  destructive: "#c64f43", // warm red, hue ~7 — reads as red rather than pink on neutral grey
+  terminalBlack: "#141414",
+  terminalBrightBlack: "#454545",
 });
 
 // Zinc — neutral gray, no tint
@@ -464,8 +480,8 @@ const zincDarkColors = buildDarkSemanticColors({
   surfaceSidebar: "#131316",
   foregroundMuted: "#a1a1aa",
   foregroundExtraMuted: "#71717a",
-  border: "#27272a",
-  borderAccent: "#303036",
+  border: "#2d2d30",
+  borderAccent: "#38383e",
   destructive: "#c44a4a", // neutral red, hue 0 — clearly red without screaming
   terminalBlack: "#131316",
   terminalBrightBlack: "#3f3f46",
@@ -482,8 +498,8 @@ const midnightDarkColors = buildDarkSemanticColors({
   surfaceSidebar: "#121420",
   foregroundMuted: "#9a9db0",
   foregroundExtraMuted: "#6b6e82",
-  border: "#242636",
-  borderAccent: "#2e3040",
+  border: "#2a2c3c",
+  borderAccent: "#353748",
   destructive: "#c44a52", // red with a hint of cool lean against the blue tint
   terminalBlack: "#121420",
   terminalBrightBlack: "#3c3e4c",
@@ -500,8 +516,8 @@ const claudeDarkColors = buildDarkSemanticColors({
   surfaceSidebar: "#1a1918",
   foregroundMuted: "#ada9a5",
   foregroundExtraMuted: "#78746f",
-  border: "#2c2a27",
-  borderAccent: "#36332f",
+  border: "#353330",
+  borderAccent: "#423e3a",
   destructive: "#cf513e", // warm orange-red that matches the warm surface family
   terminalBlack: "#1a1918",
   terminalBrightBlack: "#4a4745",
@@ -518,8 +534,8 @@ const ghosttyDarkColors = buildDarkSemanticColors({
   surfaceSidebar: "#21252d",
   foregroundMuted: "#c8ccd8",
   foregroundExtraMuted: "#a0a4b2",
-  border: "#353a47",
-  borderAccent: "#3f4454",
+  border: "#3d424f",
+  borderAccent: "#494e5e",
   destructive: "#c44a55", // red with slight cool lean against the slate-blue surfaces
   terminalBlack: "#21252d",
   terminalBrightBlack: "#4a4f5e",
@@ -544,7 +560,7 @@ export const SPACING = {
 
 export const FONT_SIZE = {
   code: 13,
-  content: 15,
+  content: 14,
   sm: 12,
   base: 13,
   lg: 16,
@@ -595,19 +611,19 @@ export const OPACITY = {
   100: 1,
 } as const;
 
-// Platform default font stacks — copied verbatim from constants/theme.ts `Fonts`
-// (sans -> ui, mono -> mono). These seed the dynamic `fontFamily` theme token and
-// are the fallback an empty user-supplied family resolves to at apply time.
+// Platform default font stacks. These seed the dynamic `fontFamily` theme token and are the
+// fallback an empty user-supplied family resolves to at apply time. Web follows Cursor's
+// defaults: the system UI face, and Menlo ahead of any installed SF Mono for code.
 export const DEFAULT_UI_FONT_STACK: string = Platform.select({
   ios: "system-ui",
   default: "normal",
-  web: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  web: "-apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
 });
 
 export const DEFAULT_MONO_FONT_STACK: string = Platform.select({
   ios: "ui-monospace",
   default: "monospace",
-  web: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  web: "Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 });
 
 // `fontSize`, `fontFamily`, and `lineHeight` are deliberately widened to plain
@@ -638,26 +654,48 @@ const commonTheme: CommonTheme = {
   opacity: OPACITY,
 };
 
+interface Elevation {
+  boxShadow?: string;
+  shadowColor?: string;
+  shadowOffset?: { width: number; height: number };
+  shadowRadius?: number;
+  elevation?: number;
+}
+
+// The RN shadow props collapse to a single box-shadow layer on web, so web gets the layered
+// CSS shadow directly and native keeps the one layer it can render.
+function shadowStyle(boxShadow: string, native: Elevation): Elevation {
+  return Platform.OS === "web" ? { boxShadow } : native;
+}
+
+// Dark surfaces separate with a hairline of black around the edge plus a faint top highlight;
+// blur alone disappears against a near-black canvas.
 const darkShadow = {
-  sm: {
+  sm: shadowStyle("0 1px 2px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.18)", {
     shadowColor: "rgba(0, 0, 0, 0.25)",
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 4,
     elevation: 2,
-  },
-  md: {
-    shadowColor: "rgba(0, 0, 0, 0.20)",
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  lg: {
-    shadowColor: "rgba(0, 0, 0, 0.40)",
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 24,
-    elevation: 8,
-  },
-} as const;
+  }),
+  md: shadowStyle(
+    "0 0 0 1px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.28), 0 16px 36px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+    {
+      shadowColor: "rgba(0, 0, 0, 0.20)",
+      shadowOffset: { width: 0, height: 4 },
+      shadowRadius: 8,
+      elevation: 8,
+    },
+  ),
+  lg: shadowStyle(
+    "0 0 0 1px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.36), 0 32px 72px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+    {
+      shadowColor: "rgba(0, 0, 0, 0.40)",
+      shadowOffset: { width: 0, height: 12 },
+      shadowRadius: 24,
+      elevation: 8,
+    },
+  ),
+};
 
 export function buildDarkTheme(semanticColors: ReturnType<typeof buildDarkSemanticColors>) {
   return {
@@ -698,26 +736,28 @@ const pureBlackDarkColors = buildDarkSemanticColors({
 
 export const darkPureBlackTheme = buildDarkTheme(pureBlackDarkColors);
 
+// Light surfaces lift with Cursor's widget shadow (#141414 at 14%): a short, soft halo. Long
+// offset blurs read as a grey smudge on a near-white canvas.
 const lightShadow = {
-  sm: {
+  sm: shadowStyle("0 0 8px 2px rgba(20, 20, 20, 0.06)", {
     shadowColor: "rgba(0, 0, 0, 0.02)",
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
-  },
-  md: {
+  }),
+  md: shadowStyle("0 2px 8px rgba(20, 20, 20, 0.14)", {
     shadowColor: "rgba(0, 0, 0, 0.04)",
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 16,
     elevation: 4,
-  },
-  lg: {
+  }),
+  lg: shadowStyle("0 0 8px 2px rgba(20, 20, 20, 0.14), 0 16px 40px rgba(20, 20, 20, 0.08)", {
     shadowColor: "rgba(0, 0, 0, 0.08)",
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 24,
     elevation: 8,
-  },
-} as const;
+  }),
+};
 
 export function buildLightTheme(semanticColors: ReturnType<typeof buildLightSemanticColors>) {
   return {
@@ -743,14 +783,14 @@ export const THEME_OPTIONS = [
     group: "primary",
     unistylesName: "light",
     theme: lightTheme,
-    swatch: "#ffffff",
+    swatch: "#fcfcfc",
   },
   {
     name: "dark",
     group: "primary",
     unistylesName: "dark",
     theme: darkTheme,
-    swatch: "#2D8B62",
+    swatch: "#181818",
   },
   { name: "auto", group: "primary" },
   {

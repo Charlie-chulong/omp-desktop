@@ -64,6 +64,16 @@ describe("resolveSyntaxColors", () => {
     }
   });
 
+  it("cursor follows the app's light/dark axis with Cursor's own palettes", () => {
+    const light = resolveSyntaxColors("cursor", "light");
+    const dark = resolveSyntaxColors("cursor", "dark");
+
+    expect(light.keyword).toBe("#a30034");
+    expect(light.function).toBe("#cd4500");
+    expect(dark.keyword).toBe("#82d2ce");
+    expect(dark.string).toBe("#e394dc");
+  });
+
   it("nord uses a dark text palette in light mode", () => {
     const light = resolveSyntaxColors("nord", "light");
     const dark = resolveSyntaxColors("nord", "dark");

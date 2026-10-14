@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { SIDEBAR_LIST_INSET } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import { sidebarWorkspaceRowStyles } from "@/components/sidebar/sidebar-workspace-row-content";
 import type { Theme } from "@/styles/theme";
@@ -18,9 +19,9 @@ const ThemedChevronUp = withUnistyles(ChevronUp);
 
 /**
  * The row that ends a truncated group. It is a workspace row that happens to say "Show more", so
- * it takes the workspace row's geometry — height, padding, radius, and both fills — rather than a
- * set of its own. Sitting under a column of rows, anything it does differently reads as a mistake
- * rather than as a distinction.
+ * it takes the workspace row's geometry — height, padding, full-width shape, and both fills —
+ * rather than a set of its own. Sitting under a column of rows, anything it does differently reads
+ * as a mistake rather than as a distinction.
  *
  * `indented` because the two groupings disagree: status rows sit on their header's label rail and
  * project rows sit flush, so the caller says which list this row is ending. The indent itself is
@@ -88,10 +89,10 @@ const styles = StyleSheet.create((theme) => ({
   row: {
     minHeight: 36,
     marginBottom: theme.spacing[0.5],
+    marginHorizontal: -SIDEBAR_LIST_INSET,
     paddingVertical: theme.spacing[2],
-    paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[3],
-    borderRadius: theme.borderRadius.lg,
+    paddingLeft: theme.spacing[2] + SIDEBAR_LIST_INSET,
+    paddingRight: theme.spacing[3] + SIDEBAR_LIST_INSET,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],

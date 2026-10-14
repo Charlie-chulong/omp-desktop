@@ -20,7 +20,7 @@ import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels"
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constants/platform";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { SIDEBAR_LIST_INSET, useIsCompactFormFactor } from "@/constants/layout";
 import { StyleSheet } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
@@ -1099,7 +1099,7 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: theme.spacing[2],
+    paddingHorizontal: SIDEBAR_LIST_INSET,
     // Keep status mode's section boundary identical to project mode.
     paddingTop: 2,
     paddingBottom: theme.spacing[4],
@@ -1111,8 +1111,8 @@ const styles = StyleSheet.create((theme) => ({
   statusGroupRow: {
     minHeight: 32,
     paddingVertical: theme.spacing[1.5],
-    paddingHorizontal: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    marginHorizontal: -SIDEBAR_LIST_INSET,
+    paddingHorizontal: theme.spacing[2] + SIDEBAR_LIST_INSET,
     marginBottom: theme.spacing[1],
     flexDirection: "row",
     alignItems: "center",
@@ -1161,10 +1161,10 @@ const styles = StyleSheet.create((theme) => ({
   workspaceRow: {
     minHeight: buttonControlHeight.xs,
     marginBottom: 0,
+    marginHorizontal: -SIDEBAR_LIST_INSET,
     paddingVertical: theme.spacing[1],
-    paddingLeft: theme.spacing[2],
-    paddingRight: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
+    paddingLeft: theme.spacing[2] + SIDEBAR_LIST_INSET,
+    paddingRight: theme.spacing[2] + SIDEBAR_LIST_INSET,
     flexDirection: "column",
     alignItems: "stretch",
     justifyContent: "flex-start",

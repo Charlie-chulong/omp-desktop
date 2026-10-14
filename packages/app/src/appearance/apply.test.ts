@@ -201,9 +201,10 @@ describe("applyAppearance", () => {
     applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.6 }));
 
     const { colors } = runCapturedUpdater();
-    expect(colors.surface0).toBe("rgba(24, 27, 26, 0)");
-    expect(colors.background).toBe("rgba(24, 27, 26, 0)");
-    expect(colors.surface2).toBe("rgba(39, 42, 41, 0.85)");
+    expect(colors.surface0).toBe("rgba(24, 24, 24, 0)");
+    expect(colors.background).toBe("rgba(24, 24, 24, 0)");
+    expect(colors.surface2).toBe("rgba(46, 46, 46, 0.85)");
+    expect(colors.surfaceUserMessage).toBe("rgba(69, 69, 69, 0.85)");
   });
 
   it("keeps remounted tab canvases transparent across repeated wallpaper applies", () => {
@@ -211,8 +212,8 @@ describe("applyAppearance", () => {
     applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.4 }));
 
     const reapplied = runCapturedUpdater(ALL_THEME_KEYS.length);
-    expect(reapplied.colors.surface0).toBe("rgba(24, 27, 26, 0)");
-    expect(reapplied.colors.surface1).toBe("rgba(30, 33, 32, 0.85)");
+    expect(reapplied.colors.surface0).toBe("rgba(24, 24, 24, 0)");
+    expect(reapplied.colors.surface1).toBe("rgba(35, 35, 35, 0.85)");
   });
 
   it("restores authored surfaces when wallpaper is disabled", () => {

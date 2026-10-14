@@ -93,9 +93,9 @@ export interface AppSettings {
   uiFontFamily: string; // "" = platform default UI stack
   monoFontFamily: string; // "" = platform default mono stack
   uiBaseFontSize: number; // clamped px, default 13
-  contentFontSize: number; // clamped px, default 15
+  contentFontSize: number; // clamped px, default 14 (15 on native)
   codeFontSize: number; // clamped px, default 13
-  syntaxTheme: SyntaxThemeId; // default "one"
+  syntaxTheme: SyntaxThemeId; // default "cursor"
   workspaceTitleSource: WorkspaceTitleSource;
   sidebarWorkspaceTrailing: SidebarWorkspaceTrailing;
   sidebarRowItems: SidebarRowItems;
@@ -193,7 +193,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   uiBaseFontSize: DEFAULT_UI_BASE_FONT_SIZE,
   contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
-  syntaxTheme: "one",
+  syntaxTheme: "cursor",
   workspaceTitleSource: "title",
   sidebarWorkspaceTrailing: "diff",
   sidebarRowItems: DEFAULT_SIDEBAR_ROW_ITEMS,

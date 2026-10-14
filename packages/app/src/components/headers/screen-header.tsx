@@ -21,6 +21,8 @@ interface ScreenHeaderProps {
   leftStyle?: StyleProp<ViewStyle>;
   rightStyle?: StyleProp<ViewStyle>;
   borderless?: boolean;
+  /** Paint the window-chrome surface (shared with the sidebar and tab strip) instead of the canvas. */
+  chrome?: boolean;
   onRowLayout?: (event: LayoutChangeEvent) => void;
 }
 
@@ -34,6 +36,7 @@ export function ScreenHeader({
   leftStyle,
   rightStyle,
   borderless,
+  chrome,
   onRowLayout,
 }: ScreenHeaderProps) {
   const { theme } = useUnistyles();
@@ -51,9 +54,10 @@ export function ScreenHeader({
   const leftCombinedStyle = useMemo(() => [styles.left, leftStyle], [leftStyle]);
   const rightCombinedStyle = useMemo(() => [styles.right, rightStyle], [rightStyle]);
   const titlebarWindowDragSurface = useTitlebarWindowDragSurface();
+  const headerStyle = useMemo(() => [styles.header, chrome && styles.headerChrome], [chrome]);
 
   return (
-    <View style={styles.header}>
+    <View style={headerStyle}>
       <View style={innerStyle}>
         <WindowChromeSafeArea
           placement="inline"
@@ -74,6 +78,9 @@ export function ScreenHeader({
 const styles = StyleSheet.create((theme) => ({
   header: {
     backgroundColor: theme.colors.surface0,
+  },
+  headerChrome: {
+    backgroundColor: theme.colors.surfaceSidebar,
   },
   inner: {},
   row: {
