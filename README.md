@@ -622,6 +622,18 @@ and is unavailable for remote-host files and web clients.
 Desktop editor targets expose only their ID, label, and kind. Editor detection and opening
 do not depend on bundled editor icon images.
 
+## Git diff modes
+
+The **Changes** panel has an always-visible **Diff mode** selector below the branch picker:
+
+- **Uncommitted** (default): shows pending working-tree and staged changes. A clean checkout
+  shows **No uncommitted changes**, even if the branch has committed or unpushed changes.
+- **Compared with `<baseRef>`**: shows differences against the displayed comparison branch,
+  such as `origin/main`. Committing does not clear differences against that branch.
+
+You can switch modes whether the file list is empty or populated. Forge account setup
+messages do not block local diff viewing or mode switching.
+
 ## Assistant message links
 
 HTTP(S) links open externally. Text/source links open in the workspace file panel. On the local desktop host, links to existing images, documents, archives, and directories inside the workspace open with the operating system; executable files are shown in the file manager rather than launched. Web conversation headings support native `#heading` navigation.

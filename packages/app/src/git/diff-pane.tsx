@@ -68,6 +68,7 @@ import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Button } from "@/components/ui/button";
+import { SelectField, type SelectFieldOption } from "@/components/ui/select-field";
 import {
   PaneContentToolbar,
   paneContentToolbarIconButtonStyle,
@@ -289,11 +290,13 @@ function resolveChangesTabOpen(host: "explorer" | "panel", changesTabOpen: boole
 
 interface ChangesToolbarProps {
   branchName: string | null;
+  baseRefLabel: string;
   allFilesCollapsed: boolean;
   canUseSplitLayout: boolean;
   changesTabOpen: boolean;
   cwd: string;
   desktopTreeVisible: boolean;
+  diffMode: "uncommitted" | "base";
   treeToggleAvailable: boolean;
   gitActions: GitActions;
   hasFiles: boolean;
@@ -309,6 +312,8 @@ interface ChangesToolbarProps {
   onRefresh: () => void;
   onCollapseAll: () => void;
   onExpandAll: () => void;
+  onSelectUncommitted: () => void;
+  onSelectBase: () => void;
   onToggleChangesTab: () => void;
   onToggleDesktopTree: () => void;
   onToggleHideWhitespace: () => void;
@@ -316,13 +321,15 @@ interface ChangesToolbarProps {
   onToggleWrapLines: () => void;
 }
 
-// One row: the branch picker leads, while one combined menu owns Git actions
-// and diff options. The tree toggle stays directly accessible on desktop.
+// Keep the comparison mode visible outside the Git actions menu, including when
+// the selected comparison has no files.
 function ChangesToolbar(props: ChangesToolbarProps) {
   const {
     branchName,
+    baseRefLabel,
     cwd,
     desktopTreeVisible,
+    diffMode,
     treeToggleAvailable,
     gitActions,
     hasFiles,
@@ -331,32 +338,79 @@ function ChangesToolbar(props: ChangesToolbarProps) {
     serverId,
     workspaceId,
     onToggleDesktopTree,
+    onSelectUncommitted,
+    onSelectBase,
   } = props;
+  const { t } = useTranslation();
+  const modeLabel = t("workspace.git.diff.diffMode");
+  const diffModes = useMemo<SelectFieldOption<"uncommitted" | "base">[]>(
+    () => [
+      {
+        id: "uncommitted",
+        value: "uncommitted",
+        label: t("workspace.git.diff.uncommitted"),
+        testID: "changes-select-uncommitted",
+      },
+      {
+        id: "base",
+        value: "base",
+        label: t("panels.diff.baseSubtitle", { baseRef: baseRefLabel }),
+        testID: "changes-select-base",
+      },
+    ],
+    [baseRefLabel, t],
+  );
+  const handleSelectMode = useCallback(
+    (mode: "uncommitted" | "base") => {
+      if (mode === "uncommitted") onSelectUncommitted();
+      else onSelectBase();
+    },
+    [onSelectBase, onSelectUncommitted],
+  );
   return (
-    <PaneContentToolbar style={styles.changesToolbar} testID="changes-header">
-      <View style={styles.changesToolbarIdentity}>
-        <BranchSwitcher
-          currentBranchName={branchName}
-          serverId={serverId}
-          workspaceId={workspaceId ?? cwd}
-          workspaceDirectory={cwd}
-          isGitCheckout
-          testID="changes-branch-switcher"
-        />
-      </View>
-      <View style={styles.changesToolbarControls}>
-        {!isMobile && host === "panel" && treeToggleAvailable && hasFiles ? (
-          <TreeRailToggle
-            visible={desktopTreeVisible}
-            testID="changes-toggle-tree"
-            onToggle={onToggleDesktopTree}
+    <>
+      <PaneContentToolbar style={styles.changesToolbar} testID="changes-header">
+        <View style={styles.changesToolbarIdentity}>
+          <BranchSwitcher
+            currentBranchName={branchName}
+            serverId={serverId}
+            workspaceId={workspaceId ?? cwd}
+            workspaceDirectory={cwd}
+            isGitCheckout
+            testID="changes-branch-switcher"
           />
-        ) : null}
-        <GitActionsSplitButton gitActions={gitActions} menuOnly>
-          <ChangesOptionsMenuItems {...props} />
-        </GitActionsSplitButton>
+        </View>
+        <View style={styles.changesToolbarControls}>
+          {!isMobile && host === "panel" && treeToggleAvailable && hasFiles ? (
+            <TreeRailToggle
+              visible={desktopTreeVisible}
+              testID="changes-toggle-tree"
+              onToggle={onToggleDesktopTree}
+            />
+          ) : null}
+          <GitActionsSplitButton gitActions={gitActions} menuOnly>
+            <ChangesOptionsMenuItems {...props} />
+          </GitActionsSplitButton>
+        </View>
+      </PaneContentToolbar>
+      <View style={styles.diffModeRow} testID="changes-diff-mode">
+        <Text style={styles.diffModeLabel}>{modeLabel}</Text>
+        <View style={styles.diffModeControl}>
+          <SelectField
+            field={false}
+            size={isMobile ? "md" : "sm"}
+            label={modeLabel}
+            value={diffMode}
+            selectedDisplay={diffModes[diffMode === "uncommitted" ? 0 : 1]}
+            options={diffModes}
+            onChange={handleSelectMode}
+            placeholder={modeLabel}
+            emptyText={t("workspace.git.diff.emptyUncommitted")}
+            triggerTestID="changes-diff-mode-trigger"
+          />
+        </View>
       </View>
-    </PaneContentToolbar>
+    </>
   );
 }
 
@@ -1534,12 +1588,10 @@ function ChangesTreeRail({
 function useDiffTabNavigation({
   serverId,
   workspaceId,
-  cwd,
   layoutWorkspaceKey,
 }: {
   serverId: string;
   workspaceId?: string | null;
-  cwd: string;
   layoutWorkspaceKey?: string | null;
 }) {
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
@@ -1993,7 +2045,7 @@ export function ChangesSurface({
     toggleChanges: handleToggleChangesTab,
     openCommit: handleCommitPress,
     onChangesFilePress: workspaceOnChangesFilePress,
-  } = useDiffTabNavigation({ serverId, workspaceId, cwd, layoutWorkspaceKey });
+  } = useDiffTabNavigation({ serverId, workspaceId, layoutWorkspaceKey });
   const changesTabOpen = resolveChangesTabOpen(host, workspaceChangesTabOpen);
   const onChangesFilePress =
     host === "explorer" ? (onOpenDiff ?? workspaceOnChangesFilePress) : undefined;
@@ -2536,11 +2588,13 @@ export function ChangesSurface({
         {isGit ? (
           <ChangesToolbar
             branchName={currentBranchName}
+            baseRefLabel={baseRef ?? baseRefLabel}
             allFilesCollapsed={allFilesCollapsed}
             canUseSplitLayout={canUseSplitLayout}
             changesTabOpen={changesTabOpen}
             cwd={cwd}
             desktopTreeVisible={desktopTreeVisible}
+            diffMode={diffMode}
             treeToggleAvailable={panelView === "diff"}
             gitActions={gitActions}
             hasFiles={hasChanges}
@@ -2556,6 +2610,8 @@ export function ChangesSurface({
             onCollapseAll={handleCollapseAllFiles}
             onExpandAll={handleExpandAllFiles}
             onRefresh={handleRefresh}
+            onSelectUncommitted={handleSelectUncommitted}
+            onSelectBase={handleSelectBase}
             onToggleChangesTab={handleToggleChangesTab}
             onToggleDesktopTree={handleToggleDesktopTree}
             onToggleHideWhitespace={handleToggleHideWhitespace}
@@ -2660,6 +2716,21 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "flex-end",
     gap: theme.spacing[1],
     flexShrink: 0,
+  },
+  diffModeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingBottom: theme.spacing[2],
+  },
+  diffModeLabel: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+  diffModeControl: {
+    flex: 1,
+    minWidth: 0,
   },
   forgeSetupCallout: {
     marginHorizontal: theme.spacing[3],
