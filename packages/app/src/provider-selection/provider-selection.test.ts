@@ -15,6 +15,7 @@ import {
   resolveSelectedModelLabel,
   resolveSubmissionReadiness,
 } from "./provider-selection";
+import type { ProviderSelectorProvider } from "./provider-selection";
 
 describe("combined model selector data", () => {
   const codexModel: AgentModelDefinition = {
@@ -35,7 +36,7 @@ describe("combined model selector data", () => {
       label: overrides.label ?? overrides.provider,
       description: overrides.description ?? `${overrides.provider} provider`,
       defaultModeId: overrides.defaultModeId ?? "default",
-      modes: overrides.modes ?? [],
+      modes: overrides.modes ?? [{ id: "default", label: "Default" }],
       models: overrides.models ?? [codexModel],
     };
   }
@@ -119,6 +120,15 @@ describe("combined model selector data", () => {
         },
       },
     ]);
+  });
+
+  it("excludes import-only providers that list no modes, except OMP", () => {
+    expect(
+      buildSelectableProviderSelectorProviders([
+        snapshotEntry({ provider: "omp", label: "OMP", modes: [] }),
+        snapshotEntry({ provider: "pi", label: "Pi", modes: [] }),
+      ]).map((provider) => provider.id),
+    ).toEqual(["omp"]);
   });
 
   it("excludes disabled providers from selector data", () => {
@@ -468,7 +478,7 @@ describe("combined model selector data", () => {
   });
 });
 
-function getAllModelLabels(providers: ReturnType<typeof buildSelectableProviderSelectorProviders>) {
+function getAllModelLabels(providers: ProviderSelectorProvider[]) {
   return providers.flatMap((provider) =>
     provider.modelSelection.kind === "models"
       ? provider.modelSelection.rows.map((row) => row.modelLabel)
