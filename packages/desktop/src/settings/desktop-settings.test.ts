@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +27,71 @@ describe("desktop-settings", () => {
       }),
     );
     directories.clear();
+  });
+
+  it("serializes concurrent pet and unrelated patches without losing either change", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+    await Promise.all([
+      store.patch({ pet: { enabled: true, selectedId: "custom-cat" } }),
+      store.patch({ pet: { position: { x: -1240, y: 420 }, size: "large" } }),
+      store.patch({ notifications: { playSound: false } }),
+    ]);
+    const restarted = await createDesktopSettingsStore({ userDataPath }).get();
+    expect(restarted.pet).toEqual({
+      enabled: true,
+      selectedId: "custom-cat",
+      size: "large",
+      position: { x: -1240, y: 420 },
+    });
+    expect(restarted.notifications.playSound).toBe(false);
+  });
+
+  it("notifies only committed writes and leaves cached preferences unchanged after failure", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+    await store.get();
+    const notifications: DesktopSettings[] = [];
+    const unsubscribe = store.subscribe((settings) => notifications.push(settings));
+    const file = settingsFilePath(userDataPath);
+    await rename(file, `${file}.saved`);
+    await mkdir(file);
+    await expect(store.patch({ pet: { enabled: true } })).rejects.toThrow();
+    expect(notifications).toEqual([]);
+    expect((await store.get()).pet.enabled).toBe(false);
+    await rm(file, { recursive: true });
+    await rename(`${file}.saved`, file);
+    const committed = await store.patch({ pet: { enabled: true } });
+    expect(notifications).toEqual([committed]);
+    expect(JSON.parse(await readFile(file, "utf8")).settings.pet.enabled).toBe(true);
+    unsubscribe();
+    await store.patch({ pet: { enabled: false } });
+    expect(notifications).toHaveLength(1);
+    expect(await readdir(userDataPath)).toEqual(["desktop-settings.json"]);
+  });
+
+  it("rejects invalid pet fields and isolates returned objects from persisted state", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+    await store.patch({ pet: { selectedId: "custom", position: { x: -100, y: 50 } } });
+    const settings = await store.patch({
+      pet: { enabled: "yes", size: "huge", selectedId: "", position: { x: Infinity, y: 0 } },
+    });
+    expect(settings.pet).toEqual({
+      enabled: false,
+      size: "medium",
+      selectedId: "custom",
+      position: { x: -100, y: 50 },
+    });
+    settings.pet.position!.x = 999;
+    settings.pet.selectedId = "mutated";
+    expect((await store.get()).pet.selectedId).toBe("custom");
+    expect((await store.get()).pet.position!.x).toBe(-100);
+    await store.patch({ pet: { position: null } });
+    expect((await createDesktopSettingsStore({ userDataPath }).get()).pet.position).toBeNull();
   });
 
   it("persists default settings for new users", async () => {

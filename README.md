@@ -34,6 +34,43 @@ Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
 These tips follow the interface language in all nine supported locales.
 
+## Desktop pet
+
+Enable **Settings → Appearance → Desktop pet → Show desktop pet** to display Iris,
+the built-in pink fluffy kitten, in a separate transparent, always-on-top window.
+The feature is off by default and is only available in the Electron app.
+
+- Drag the kitten to move it; size, selection, visibility, and position are saved
+  locally. Transparent space lets mouse input pass through to other applications.
+- Click the kitten to pet it: a happy pose, soft squash/rebound, and floating hearts.
+  Dragging does not trigger petting. Click the status bubble to restore OMP and
+  open the task that needs attention, or open the app when there is no pending task.
+- Connected hosts supply real task state. Permissions take priority over errors,
+  unread completions, and running work. No task or animation triggers a model call.
+- Iris has six registered 24-frame, 12-fps action sequences with continuous local
+  breathing/sway. Idle actions play for two seconds and rest for six seconds;
+  waiting, completed, and blocked states also have quiet pauses. Working and carried
+  loops continue. Only the working face keeps its wistful expression; other faces
+  are relaxed or happy. System reduced-motion preferences keep the pose static.
+- Right-click the pet to hide it or reset its position. Minimizing OMP does not hide
+  the pet; quitting still follows the existing desktop/daemon settings.
+
+**Create with OMP** opens an independent local authoring workspace and a normal OMP
+conversation using the selected model, thinking level, and approval mode.
+Authoring model, mode, thinking, and feature selections are local to this flow;
+they do not change the defaults for ordinary conversations.
+Describe the pet in settings or attach references in the conversation. The bundled
+`hatch-pet` skill uses the configured image-generation tool, produces a coherent
+transparent animation atlas and `pet.json`, and runs the generated install helper.
+On Windows the helper uses the bundled Electron runtime, not a global Node install.
+The headless converter does not run GUI quit cleanup or stop an existing daemon.
+Image creation uses the user's configured image model; ordinary pet animation does not.
+
+After a successful install, click **Refresh** and select the new pet. **Import folder**
+also accepts completed packages. Imported packages contain only a validated manifest
+and transparent PNG data; they do not execute scripts or HTML. Images are limited to
+20 MiB and 4096 × 4096 pixels. Built-in Iris and existing custom packages are not replaced.
+
 ## Choosing OMP subagent models
 
 In **Host Settings → OMP subagents**, enable **Override built-in subagent models** and

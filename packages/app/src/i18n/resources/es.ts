@@ -1413,6 +1413,7 @@ export const es: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "Saliendo deOMP Desktop...",
       detail: "Deteniendo el demonio local.",

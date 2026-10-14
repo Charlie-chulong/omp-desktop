@@ -1374,6 +1374,7 @@ export const ar: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "جارٍ إنهاء OMP Desktop...",
       detail: "إيقاف البرنامج الخفي المحلي.",

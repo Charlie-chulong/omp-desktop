@@ -1402,6 +1402,7 @@ export const ptBR: TranslationResources = {
     },
   },
   desktop: {
+    pets: en.desktop.pets,
     quitting: {
       title: "Saindo do OMP Desktop...",
       detail: "Parando o daemon local.",

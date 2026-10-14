@@ -30,6 +30,7 @@ export function useDraftAgentFeatures(input: {
   modelId: string | null | undefined;
   thinkingOptionId: string | null | undefined;
   initialFeatureValues?: Record<string, unknown>;
+  persistPreferences?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const { serverId, provider, cwd, modeId, modelId, thinkingOptionId, initialFeatureValues } =
@@ -141,7 +142,11 @@ export function useDraftAgentFeatures(input: {
 
         return { ...current, [featureId]: value };
       });
-      if (!provider || !shouldPersistAgentFeatureValue(featureId)) {
+      if (
+        input.persistPreferences === false ||
+        !provider ||
+        !shouldPersistAgentFeatureValue(featureId)
+      ) {
         return;
       }
       void updatePreferences((current) =>
@@ -158,7 +163,7 @@ export function useDraftAgentFeatures(input: {
         console.warn("[useDraftAgentFeatures] persist feature preference failed", error);
       });
     },
-    [provider, updatePreferences],
+    [provider, updatePreferences, input.persistPreferences],
   );
 
   const applyProfileFeatureValues = useCallback((values: Record<string, unknown>) => {

@@ -80,14 +80,21 @@ import {
 } from "@omp-desktop/protocol/agent-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 import { installAppUpdateOnQuit as installDownloadedAppUpdateOnQuit } from "./features/auto-updater.js";
+import { getMainWindows, registerMainWindow, selectMainWindow } from "./window/main-windows.js";
+import { DesktopPetController } from "./pets/controller.js";
+import { PET_HTML } from "./pets/html.js";
+import { getPetLibrary } from "./pets/library.js";
+import { tryRunPetCreationCli } from "./pets/creation-cli.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "omp-desktop";
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "OMP Desktop";
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
+const isPetCreationCli = process.argv.includes("--desktop-pet-install");
 const agentNavigationInbox = new AgentNavigationInbox();
 const closeChoiceRequests = new CloseChoiceRequestBroker();
+let petController: DesktopPetController | null = null;
 
 // A second-instance launch can arrive before the packaged protocol handler,
 // IPC handlers, and first window exist. Wait for full bootstrap, not just
@@ -382,13 +389,19 @@ async function createWindow(
       webviewTag: false,
     },
   });
+  registerMainWindow(mainWindow);
   backgroundModeController.registerWindow(mainWindow);
 
   const webContentsId = mainWindow.webContents.id;
+  mainWindow.webContents.once("destroyed", () => petController?.clearActivity(webContentsId));
+  mainWindow.webContents.on("render-process-gone", () =>
+    petController?.clearActivity(webContentsId),
+  );
   pendingOpenProjectStore.set(webContentsId, options.pendingOpenProjectPath);
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
     if (isMainFrame && !isSameDocument) {
       agentNavigationInbox.windowLoading(webContentsId);
+      petController?.clearActivity(webContentsId);
     }
   });
   mainWindow.on("closed", () => {
@@ -497,7 +510,7 @@ const backgroundModeController = new BackgroundModeController({
       bounds: backgroundTray.getBounds(),
     });
   },
-  getWindows: () => BrowserWindow.getAllWindows(),
+  getWindows: getMainWindows,
   createWindow: () => createWindow({ restoreWindowState: true }),
   quitApp: () => app.quit(),
   onError: (error) => log.error("[background mode] operation failed", error),
@@ -512,9 +525,7 @@ onDesktopContextMenuLabelsChange(updateBackgroundTrayContextMenu);
 let agentNavigationWindowCreation: Promise<BrowserWindow> | null = null;
 
 function focusExistingWindow(): BrowserWindow | null {
-  const windows = BrowserWindow.getAllWindows();
-  const mainWindow =
-    BrowserWindow.getFocusedWindow() ?? windows.find((window) => window.isVisible()) ?? windows[0];
+  const mainWindow = selectMainWindow();
   if (!mainWindow || mainWindow.isDestroyed()) {
     return null;
   }
@@ -659,6 +670,13 @@ async function bootstrap(): Promise<void> {
   protocol.handle(APP_SCHEME, async (request) => {
     const { pathname, search, hash } = new URL(request.url);
     const decodedPath = decodeURIComponent(pathname);
+    if (decodedPath === "/desktop-pet") {
+      return new Response(PET_HTML, {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+    const petResource = await getPetLibrary().handleResource(decodedPath);
+    if (petResource) return petResource;
 
     // Local wallpaper paths never cross into renderer-controlled URLs. The
     // renderer receives an opaque capability after the main process validates
@@ -753,6 +771,14 @@ async function bootstrap(): Promise<void> {
   registerOpenerHandlers();
   registerEditorTargetHandlers();
   registerRemoteSshHandlers();
+  petController = new DesktopPetController({
+    openApp: async () => {
+      if (!focusExistingWindow()) await createWindow({ restoreWindowState: true });
+    },
+    openTask: (task) =>
+      focusExistingWindowOnAgent({ serverId: task.serverId, agentId: task.agentId }),
+  });
+  await petController.initialize();
 
   // In-app "Open in new window": opens a window that lands on the given project
   // via the same open-project flow as a CLI launch (no move, no ownership).
@@ -788,7 +814,7 @@ async function bootstrap(): Promise<void> {
   }
 
   app.on("activate", async () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (getMainWindows().length === 0) {
       await createWindow({ restoreWindowState: true });
       return;
     }
@@ -796,62 +822,70 @@ async function bootstrap(): Promise<void> {
   });
 }
 
-void runDesktopStartup({
-  hasPendingGuiLaunchRequest: Boolean(pendingOpenProjectPath || pendingAgentNavigation),
-  runCliPassthroughIfRequested,
-  inheritLoginShellEnv,
-  bootstrapGui: bootstrap,
-}).catch((error) => {
+void (async () => {
+  if (await tryRunPetCreationCli()) return;
+  await runDesktopStartup({
+    hasPendingGuiLaunchRequest: Boolean(pendingOpenProjectPath || pendingAgentNavigation),
+    runCliPassthroughIfRequested,
+    inheritLoginShellEnv,
+    bootstrapGui: bootstrap,
+  });
+})().catch((error) => {
   const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exit(1);
 });
 
 function showDaemonShutdownDialog(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
+  for (const win of getMainWindows()) {
     win.webContents.send("paseo:event:quitting", {});
   }
 }
 
-const quitLifecycle = createQuitLifecycle({
-  app,
-  closeTransportSessions: closeAllTransportSessions,
-  stopDesktopManagedDaemonIfNeeded: () =>
-    stopDesktopManagedDaemonOnQuitIfNeeded({
-      settingsStore: getDesktopSettingsStore(),
-      isDesktopManagedDaemonRunning: isDesktopManagedDaemonRunningSync,
-      stopDaemon: () => stopDesktopDaemonViaCli("quit"),
-      showShutdownFeedback: showDaemonShutdownDialog,
-    }),
-  installAppUpdateOnQuit: async (signal) => {
-    const { releaseChannel } = await getDesktopSettingsStore().get();
-    return await installDownloadedAppUpdateOnQuit({
-      currentVersion: app.getVersion(),
-      releaseChannel,
-      signal,
-    });
-  },
-  createUpdateDeadlineSignal: () => AbortSignal.timeout(UPDATE_QUIT_DEADLINE_MS),
-  onStopError: (error) => {
-    log.error("[desktop daemon] failed to stop managed daemon on quit", error);
-  },
-  onUpdateError: (error) => {
-    log.error("[auto-updater] failed to validate downloaded update on quit", error);
-  },
-});
+// The headless pet installer owns neither the GUI nor its managed daemon.
+if (!isPetCreationCli) {
+  const quitLifecycle = createQuitLifecycle({
+    app,
+    closeTransportSessions: closeAllTransportSessions,
+    stopDesktopManagedDaemonIfNeeded: () =>
+      stopDesktopManagedDaemonOnQuitIfNeeded({
+        settingsStore: getDesktopSettingsStore(),
+        isDesktopManagedDaemonRunning: isDesktopManagedDaemonRunningSync,
+        stopDaemon: () => stopDesktopDaemonViaCli("quit"),
+        showShutdownFeedback: showDaemonShutdownDialog,
+      }),
+    installAppUpdateOnQuit: async (signal) => {
+      const { releaseChannel } = await getDesktopSettingsStore().get();
+      return await installDownloadedAppUpdateOnQuit({
+        currentVersion: app.getVersion(),
+        releaseChannel,
+        signal,
+      });
+    },
+    createUpdateDeadlineSignal: () => AbortSignal.timeout(UPDATE_QUIT_DEADLINE_MS),
+    onStopError: (error) => {
+      log.error("[desktop daemon] failed to stop managed daemon on quit", error);
+    },
+    onUpdateError: (error) => {
+      log.error("[auto-updater] failed to validate downloaded update on quit", error);
+    },
+  });
 
-electronAutoUpdater.on("before-quit-for-update", () => {
-  quitLifecycle.handleBeforeQuitForUpdate();
-});
+  electronAutoUpdater.on("before-quit-for-update", () => {
+    quitLifecycle.handleBeforeQuitForUpdate();
+  });
 
-app.on("before-quit", (event) => {
-  backgroundModeController.markAppQuitting();
-  quitLifecycle.handleBeforeQuit(event);
-});
-registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
+  app.on("before-quit", (event) => {
+    backgroundModeController.markAppQuitting();
+    petController?.dispose();
+    quitLifecycle.handleBeforeQuit(event);
+  });
+  registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
+}
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  // The install CLI exits only after conversion and the atomic import finish.
+  if (!isPetCreationCli && process.platform !== "darwin") {
     app.quit();
   }
 });

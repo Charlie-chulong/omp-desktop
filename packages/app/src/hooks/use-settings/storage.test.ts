@@ -393,6 +393,7 @@ describe("loadSettingsFromStorage", () => {
         browser: { target: "system" },
         notifications: { playSound: true },
         daemon: { manageBuiltInDaemon: false, keepRunningAfterQuit: true },
+        pet: { enabled: false, size: "medium", selectedId: "iris", position: null },
       },
     });
     const deps = makeDeps({

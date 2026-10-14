@@ -63,6 +63,7 @@ vi.mock("../settings/desktop-settings-electron.js", () => ({
     patch: vi.fn(),
     migrateLegacyRendererSettings: vi.fn(),
   }),
+  launchAtLoginController: { get: vi.fn(), set: vi.fn() },
 }));
 
 vi.mock("./runtime-paths.js", () => ({
