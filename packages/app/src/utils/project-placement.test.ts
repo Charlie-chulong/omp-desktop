@@ -11,12 +11,14 @@ describe("project-placement", () => {
     expect(placement.checkout.isGit).toBe(false);
   });
 
-  it("normalizes paseo worktree paths into the parent repo key", () => {
-    const placement = deriveProjectPlacementFromCwd("/Users/test/repo/.paseo/worktrees/feature-x");
+  it("normalizes OMP Desktop worktree paths into the parent repo key", () => {
+    const placement = deriveProjectPlacementFromCwd(
+      "/Users/test/repo/.omp-desktop/worktrees/feature-x",
+    );
 
     expect(placement.projectKey).toBe("/Users/test/repo");
     expect(placement.projectName).toBe("repo");
-    expect(placement.checkout.cwd).toBe("/Users/test/repo/.paseo/worktrees/feature-x");
+    expect(placement.checkout.cwd).toBe("/Users/test/repo/.omp-desktop/worktrees/feature-x");
   });
 
   it("prefers an existing placement when present", () => {

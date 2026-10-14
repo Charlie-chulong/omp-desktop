@@ -41,7 +41,7 @@ describe("localized agent control labels", () => {
   it("localizes thinking, permission mode, and workflow labels in Chinese", async () => {
     await i18n.changeLanguage("zh-CN");
     try {
-      expect(formatThinkingOptionLabel({ id: "medium", label: "Medium" })).toBe("中等");
+      expect(formatThinkingOptionLabel({ id: "medium", label: "Medium" })).toBe("中");
       expect(formatAgentModeLabel({ id: "full", label: "Full access" })).toBe("完全访问");
       expect(formatAgentFeatureLabel({ id: "workflow_mode", label: "Workflow" })).toBe("工作流");
       expect(formatAgentFeatureLabel({ id: "fast_mode", label: "Fast mode" })).toBe("快速");

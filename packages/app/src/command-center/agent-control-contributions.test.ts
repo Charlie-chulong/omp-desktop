@@ -257,8 +257,8 @@ describe("Command Center agent-control contributions", () => {
         selected: selected(contribution),
       })),
     ).toEqual([
-      { id: "modes:default", path: ["Mode", "Always ask"], selected: true },
-      { id: "modes:acceptEdits", path: ["Mode", "Accept file edits"], selected: false },
+      { id: "modes:default", path: ["Mode", "Default"], selected: true },
+      { id: "modes:acceptEdits", path: ["Mode", "Accept edits"], selected: false },
     ]);
     contributions[1].run();
     expect(selections).toEqual(["acceptEdits"]);
