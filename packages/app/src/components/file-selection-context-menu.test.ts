@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { formatFileSelectionReference, getFileSelectionRange } from "./file-selection-context-menu";
+
+vi.mock("expo-clipboard", () => ({}));
 
 describe("file selection references", () => {
   it("formats absolute and workspace-relative line references", () => {
