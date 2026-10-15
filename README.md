@@ -678,7 +678,8 @@ do not depend on bundled editor icon images.
 
 ## Git diff modes
 
-The **Changes** panel has an always-visible **Diff mode** selector below the branch picker:
+Open the **Changes** panel's Git actions menu and choose **Diff mode**. Its submenu
+shows the current comparison with a checkmark:
 
 - **Uncommitted** (default): shows pending working-tree and staged changes. A clean checkout
   shows **No uncommitted changes**, even if the branch has committed or unpushed changes.
@@ -687,6 +688,10 @@ The **Changes** panel has an always-visible **Diff mode** selector below the bra
 
 You can switch modes whether the file list is empty or populated. Forge account setup
 messages do not block local diff viewing or mode switching.
+
+Git operation names, comparison labels, and action feedback follow
+**Settings → General → Language** in every supported language. **Archive workspace**
+and **Open Changes tab** are not part of this menu.
 
 ## Assistant message links
 

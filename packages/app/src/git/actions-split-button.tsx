@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  type MenuPageDefinition,
 } from "@/components/ui/dropdown-menu";
 import { Shortcut } from "@/components/ui/shortcut";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -24,6 +25,7 @@ interface GitActionsSplitButtonProps {
   hideLabels?: boolean;
   menuOnly?: boolean;
   children?: ReactNode;
+  menuPages?: readonly MenuPageDefinition[];
 }
 
 interface GitActionMenuItemProps {
@@ -81,6 +83,7 @@ export function GitActionsSplitButton({
   hideLabels,
   menuOnly = false,
   children,
+  menuPages,
 }: GitActionsSplitButtonProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -132,11 +135,12 @@ export function GitActionsSplitButton({
   );
 
   const menuOnlyActions = useMemo(
-    () => [
-      ...(gitActions.primary ? [gitActions.primary] : []),
-      ...gitActions.secondary.filter((action) => action.id !== gitActions.primary?.id),
-      ...gitActions.menu,
-    ],
+    () =>
+      [
+        ...(gitActions.primary ? [gitActions.primary] : []),
+        ...gitActions.secondary.filter((action) => action.id !== gitActions.primary?.id),
+        ...gitActions.menu,
+      ].filter((action) => action.id !== "archive-workspace"),
     [gitActions.menu, gitActions.primary, gitActions.secondary],
   );
 
@@ -156,7 +160,12 @@ export function GitActionsSplitButton({
           <GitBranch size={16} color={theme.colors.foregroundMuted} />
           <ChevronDown size={12} color={theme.colors.foregroundMuted} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" width={240} testID="changes-primary-cta-menu">
+        <DropdownMenuContent
+          align="end"
+          width={240}
+          pages={menuPages}
+          testID="changes-primary-cta-menu"
+        >
           {menuOnlyActions.map((action, index) => (
             <GitActionMenuItem
               key={action.id}

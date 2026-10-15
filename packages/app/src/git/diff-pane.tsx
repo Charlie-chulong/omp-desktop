@@ -20,9 +20,9 @@ import {
   ChevronDown,
   ChevronLeft,
   Columns2,
+  GitCompareArrows,
   ListChevronsDownUp,
   ListChevronsUpDown,
-  Maximize2,
   Minus,
   Pilcrow,
   RotateCw,
@@ -46,7 +46,12 @@ import { DiffFolderRow } from "@/git/diff-folder-row";
 import { useCheckoutPrStatusQuery } from "@/git/use-pr-status-query";
 import { CommitsSection } from "@/git/commits-section/commits-section";
 import { useAppSettings } from "@/hooks/use-settings";
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSubTrigger,
+  type MenuPageDefinition,
+} from "@/components/ui/dropdown-menu";
 import * as Clipboard from "expo-clipboard";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
@@ -68,7 +73,6 @@ import { useSessionStore } from "@/stores/session-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Button } from "@/components/ui/button";
-import { SelectField, type SelectFieldOption } from "@/components/ui/select-field";
 import {
   PaneContentToolbar,
   paneContentToolbarIconButtonStyle,
@@ -204,17 +208,20 @@ const foregroundMutedIconColorMapping = (theme: Theme) => ({
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedAlignJustify = withUnistyles(AlignJustify);
 const ThemedColumns2 = withUnistyles(Columns2);
+const ThemedGitCompareArrows = withUnistyles(GitCompareArrows);
 const ThemedPilcrow = withUnistyles(Pilcrow);
 const ThemedWrapText = withUnistyles(WrapText);
 const ThemedListChevronsDownUp = withUnistyles(ListChevronsDownUp);
 const ThemedListChevronsUpDown = withUnistyles(ListChevronsUpDown);
-const ThemedMaximize2 = withUnistyles(Maximize2);
 const noopStateChange = () => {};
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronLeft = withUnistyles(ChevronLeft);
 const ThemedMinus = withUnistyles(Minus);
 const ThemedPlus = withUnistyles(Plus);
 const ThemedUndo2 = withUnistyles(Undo2);
+const DIFF_OPTIONS_MODE_ICON = (
+  <ThemedGitCompareArrows size={14} uniProps={foregroundMutedIconColorMapping} />
+);
 const DIFF_OPTIONS_WHITESPACE_ICON = (
   <ThemedPilcrow size={14} uniProps={foregroundMutedIconColorMapping} />
 );
@@ -229,9 +236,6 @@ const DIFF_OPTIONS_COLLAPSE_ICON = (
 );
 const DIFF_OPTIONS_EXPAND_ICON = (
   <ThemedListChevronsUpDown size={14} uniProps={foregroundMutedIconColorMapping} />
-);
-const DIFF_OPTIONS_CHANGES_TAB_ICON = (
-  <ThemedMaximize2 size={14} uniProps={foregroundMutedIconColorMapping} />
 );
 
 interface DiffLayoutToggleProps {
@@ -284,16 +288,11 @@ export function DiffLayoutToggle({
   );
 }
 
-function resolveChangesTabOpen(host: "explorer" | "panel", changesTabOpen: boolean): boolean {
-  return host === "explorer" ? changesTabOpen : false;
-}
-
 interface ChangesToolbarProps {
   branchName: string | null;
   baseRefLabel: string;
   allFilesCollapsed: boolean;
   canUseSplitLayout: boolean;
-  changesTabOpen: boolean;
   cwd: string;
   desktopTreeVisible: boolean;
   diffMode: "uncommitted" | "base";
@@ -314,15 +313,12 @@ interface ChangesToolbarProps {
   onExpandAll: () => void;
   onSelectUncommitted: () => void;
   onSelectBase: () => void;
-  onToggleChangesTab: () => void;
   onToggleDesktopTree: () => void;
   onToggleHideWhitespace: () => void;
   onToggleLayout: () => void;
   onToggleWrapLines: () => void;
 }
 
-// Keep the comparison mode visible outside the Git actions menu, including when
-// the selected comparison has no files.
 function ChangesToolbar(props: ChangesToolbarProps) {
   const {
     branchName,
@@ -343,74 +339,60 @@ function ChangesToolbar(props: ChangesToolbarProps) {
   } = props;
   const { t } = useTranslation();
   const modeLabel = t("workspace.git.diff.diffMode");
-  const diffModes = useMemo<SelectFieldOption<"uncommitted" | "base">[]>(
+  const uncommittedLabel = t("workspace.git.diff.uncommitted");
+  const baseModeLabel = t("panels.diff.baseSubtitle", { baseRef: baseRefLabel });
+  const menuPages = useMemo<MenuPageDefinition[]>(
     () => [
       {
-        id: "uncommitted",
-        value: "uncommitted",
-        label: t("workspace.git.diff.uncommitted"),
-        testID: "changes-select-uncommitted",
-      },
-      {
-        id: "base",
-        value: "base",
-        label: t("panels.diff.baseSubtitle", { baseRef: baseRefLabel }),
-        testID: "changes-select-base",
+        id: "diff-mode",
+        title: modeLabel,
+        content: (
+          <>
+            <DropdownMenuItem
+              selected={diffMode === "uncommitted"}
+              testID="changes-select-uncommitted"
+              onSelect={onSelectUncommitted}
+            >
+              {uncommittedLabel}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              selected={diffMode === "base"}
+              testID="changes-select-base"
+              onSelect={onSelectBase}
+            >
+              {baseModeLabel}
+            </DropdownMenuItem>
+          </>
+        ),
       },
     ],
-    [baseRefLabel, t],
-  );
-  const handleSelectMode = useCallback(
-    (mode: "uncommitted" | "base") => {
-      if (mode === "uncommitted") onSelectUncommitted();
-      else onSelectBase();
-    },
-    [onSelectBase, onSelectUncommitted],
+    [baseModeLabel, diffMode, modeLabel, onSelectBase, onSelectUncommitted, uncommittedLabel],
   );
   return (
-    <>
-      <PaneContentToolbar style={styles.changesToolbar} testID="changes-header">
-        <View style={styles.changesToolbarIdentity}>
-          <BranchSwitcher
-            currentBranchName={branchName}
-            serverId={serverId}
-            workspaceId={workspaceId ?? cwd}
-            workspaceDirectory={cwd}
-            isGitCheckout
-            testID="changes-branch-switcher"
-          />
-        </View>
-        <View style={styles.changesToolbarControls}>
-          {!isMobile && host === "panel" && treeToggleAvailable && hasFiles ? (
-            <TreeRailToggle
-              visible={desktopTreeVisible}
-              testID="changes-toggle-tree"
-              onToggle={onToggleDesktopTree}
-            />
-          ) : null}
-          <GitActionsSplitButton gitActions={gitActions} menuOnly>
-            <ChangesOptionsMenuItems {...props} />
-          </GitActionsSplitButton>
-        </View>
-      </PaneContentToolbar>
-      <View style={styles.diffModeRow} testID="changes-diff-mode">
-        <Text style={styles.diffModeLabel}>{modeLabel}</Text>
-        <View style={styles.diffModeControl}>
-          <SelectField
-            field={false}
-            size={isMobile ? "md" : "sm"}
-            label={modeLabel}
-            value={diffMode}
-            selectedDisplay={diffModes[diffMode === "uncommitted" ? 0 : 1]}
-            options={diffModes}
-            onChange={handleSelectMode}
-            placeholder={modeLabel}
-            emptyText={t("workspace.git.diff.emptyUncommitted")}
-            triggerTestID="changes-diff-mode-trigger"
-          />
-        </View>
+    <PaneContentToolbar style={styles.changesToolbar} testID="changes-header">
+      <View style={styles.changesToolbarIdentity}>
+        <BranchSwitcher
+          currentBranchName={branchName}
+          serverId={serverId}
+          workspaceId={workspaceId ?? cwd}
+          workspaceDirectory={cwd}
+          isGitCheckout
+          testID="changes-branch-switcher"
+        />
       </View>
-    </>
+      <View style={styles.changesToolbarControls}>
+        {!isMobile && host === "panel" && treeToggleAvailable && hasFiles ? (
+          <TreeRailToggle
+            visible={desktopTreeVisible}
+            testID="changes-toggle-tree"
+            onToggle={onToggleDesktopTree}
+          />
+        ) : null}
+        <GitActionsSplitButton gitActions={gitActions} menuOnly menuPages={menuPages}>
+          <ChangesOptionsMenuItems {...props} />
+        </GitActionsSplitButton>
+      </View>
+    </PaneContentToolbar>
   );
 }
 
@@ -418,11 +400,10 @@ type ChangesOptionsMenuItemsProps = Pick<
   ChangesToolbarProps,
   | "allFilesCollapsed"
   | "canUseSplitLayout"
-  | "changesTabOpen"
+  | "baseRefLabel"
+  | "diffMode"
   | "hasFiles"
   | "hideWhitespace"
-  | "host"
-  | "isMobile"
   | "isRefreshing"
   | "layout"
   | "refreshSupported"
@@ -430,7 +411,6 @@ type ChangesOptionsMenuItemsProps = Pick<
   | "onCollapseAll"
   | "onExpandAll"
   | "onRefresh"
-  | "onToggleChangesTab"
   | "onToggleHideWhitespace"
   | "onToggleLayout"
   | "onToggleWrapLines"
@@ -439,11 +419,10 @@ type ChangesOptionsMenuItemsProps = Pick<
 function ChangesOptionsMenuItems({
   allFilesCollapsed,
   canUseSplitLayout,
-  changesTabOpen,
+  baseRefLabel,
+  diffMode,
   hasFiles,
   hideWhitespace,
-  host,
-  isMobile,
   isRefreshing,
   layout,
   refreshSupported,
@@ -451,7 +430,6 @@ function ChangesOptionsMenuItems({
   onCollapseAll,
   onExpandAll,
   onRefresh,
-  onToggleChangesTab,
   onToggleHideWhitespace,
   onToggleLayout,
   onToggleWrapLines,
@@ -459,9 +437,6 @@ function ChangesOptionsMenuItems({
   const { t } = useTranslation();
   const collapseLabel = t(
     allFilesCollapsed ? "workspace.git.diff.expandAllFiles" : "workspace.git.diff.collapseAllFiles",
-  );
-  const changesTabLabel = t(
-    changesTabOpen ? "workspace.git.diff.closeChangesTab" : "workspace.git.diff.openChangesTab",
   );
   const whitespaceLabel = hideWhitespace
     ? t("workspace.git.diff.showWhitespace")
@@ -481,11 +456,21 @@ function ChangesOptionsMenuItems({
       ),
     [isRefreshing],
   );
-  const showChangesTab = host === "explorer" && !isMobile;
-  const showLayout = canUseSplitLayout && !changesTabOpen;
 
   return (
     <>
+      <DropdownMenuSubTrigger
+        id="diff-mode"
+        leading={DIFF_OPTIONS_MODE_ICON}
+        value={
+          diffMode === "uncommitted"
+            ? t("workspace.git.diff.uncommitted")
+            : t("panels.diff.baseSubtitle", { baseRef: baseRefLabel })
+        }
+        testID="changes-diff-mode-trigger"
+      >
+        {t("workspace.git.diff.diffMode")}
+      </DropdownMenuSubTrigger>
       {hasFiles ? (
         <DropdownMenuItem
           leading={allFilesCollapsed ? DIFF_OPTIONS_EXPAND_ICON : DIFF_OPTIONS_COLLAPSE_ICON}
@@ -495,17 +480,8 @@ function ChangesOptionsMenuItems({
           {collapseLabel}
         </DropdownMenuItem>
       ) : null}
-      {showChangesTab ? (
-        <DropdownMenuItem
-          leading={DIFF_OPTIONS_CHANGES_TAB_ICON}
-          testID="changes-open-tab"
-          onSelect={onToggleChangesTab}
-        >
-          {changesTabLabel}
-        </DropdownMenuItem>
-      ) : null}
-      {hasFiles || showChangesTab ? <DropdownMenuSeparator /> : null}
-      {showLayout ? (
+      <DropdownMenuSeparator />
+      {canUseSplitLayout ? (
         <DropdownMenuItem
           leading={DIFF_OPTIONS_SPLIT_ICON}
           selected={layout === "split"}
@@ -1611,7 +1587,6 @@ function useDiffTabNavigation({
       (workspaceId ? resolveProjectLayoutKey({ serverId, workspaceId }) : null),
     [layoutWorkspaceKey, serverId, workspaceId],
   );
-  const changesTabOpen = false;
   const openChanges = useCallback(
     (path?: string) => {
       if (!persistenceKey) {
@@ -1628,12 +1603,6 @@ function useDiffTabNavigation({
     },
     [openWorkspaceTabInFocusedPane, persistenceKey],
   );
-  const toggleChanges = useCallback(() => {
-    if (!persistenceKey) {
-      return;
-    }
-    openChanges();
-  }, [openChanges, persistenceKey]);
   const openCommit = useCallback(
     (sha: string) => {
       if (persistenceKey) {
@@ -1647,9 +1616,6 @@ function useDiffTabNavigation({
     [openWorkspaceTabInFocusedPane, persistenceKey],
   );
   return {
-    changesTabOpen,
-    openChanges,
-    toggleChanges,
     openCommit,
     onChangesFilePress: openChanges,
   };
@@ -2040,13 +2006,8 @@ export function ChangesSurface({
   // route that owns the visible tab layout. Diff documents must use that host
   // layout or they are opened successfully into an invisible workspace.
   const layoutWorkspaceKey = useWorkspaceFocusKey();
-  const {
-    changesTabOpen: workspaceChangesTabOpen,
-    toggleChanges: handleToggleChangesTab,
-    openCommit: handleCommitPress,
-    onChangesFilePress: workspaceOnChangesFilePress,
-  } = useDiffTabNavigation({ serverId, workspaceId, layoutWorkspaceKey });
-  const changesTabOpen = resolveChangesTabOpen(host, workspaceChangesTabOpen);
+  const { openCommit: handleCommitPress, onChangesFilePress: workspaceOnChangesFilePress } =
+    useDiffTabNavigation({ serverId, workspaceId, layoutWorkspaceKey });
   const onChangesFilePress =
     host === "explorer" ? (onOpenDiff ?? workspaceOnChangesFilePress) : undefined;
   const refreshSupported = useSessionStore(
@@ -2163,7 +2124,7 @@ export function ChangesSurface({
     workspaceId: workspaceId ?? undefined,
     cwd,
     attachment: reviewAttachment,
-    enabled: !changesTabOpen,
+    enabled: true,
     ready: reviewReady,
   });
   const {
@@ -2591,7 +2552,6 @@ export function ChangesSurface({
             baseRefLabel={baseRef ?? baseRefLabel}
             allFilesCollapsed={allFilesCollapsed}
             canUseSplitLayout={canUseSplitLayout}
-            changesTabOpen={changesTabOpen}
             cwd={cwd}
             desktopTreeVisible={desktopTreeVisible}
             diffMode={diffMode}
@@ -2612,7 +2572,6 @@ export function ChangesSurface({
             onRefresh={handleRefresh}
             onSelectUncommitted={handleSelectUncommitted}
             onSelectBase={handleSelectBase}
-            onToggleChangesTab={handleToggleChangesTab}
             onToggleDesktopTree={handleToggleDesktopTree}
             onToggleHideWhitespace={handleToggleHideWhitespace}
             onToggleLayout={handleToggleLayout}
@@ -2716,21 +2675,6 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "flex-end",
     gap: theme.spacing[1],
     flexShrink: 0,
-  },
-  diffModeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    paddingBottom: theme.spacing[2],
-  },
-  diffModeLabel: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.foregroundMuted,
-  },
-  diffModeControl: {
-    flex: 1,
-    minWidth: 0,
   },
   forgeSetupCallout: {
     marginHorizontal: theme.spacing[3],
