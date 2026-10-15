@@ -184,6 +184,7 @@ describe("native companion controller", () => {
       ...DEFAULT_PET_ACTIVITY,
       connected: true,
       serverIds: ["local", "remote"],
+      revisions: { local: { generation: "g1", seq: 1 }, remote: { generation: "g1", seq: 1 } },
       tasks,
     });
     const window = mock.windows[0];
@@ -194,6 +195,7 @@ describe("native companion controller", () => {
       ...DEFAULT_PET_ACTIVITY,
       connected: true,
       serverIds: ["local", "remote"],
+      revisions: { local: { generation: "g1", seq: 2 }, remote: { generation: "g1", seq: 2 } },
       tasks: [],
     });
     mock.handlers.get("paseo:pet:open")!(overlayEvent);

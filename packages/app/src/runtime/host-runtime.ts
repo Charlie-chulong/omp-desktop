@@ -30,6 +30,7 @@ import {
   type ConnectionOffer,
 } from "@omp-desktop/protocol/connection-offer";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
+import { getDesktopHost } from "@/desktop/host";
 import { isWeb } from "@/constants/platform";
 import { connectToDaemon } from "@/utils/test-daemon-connection";
 import { getOrCreateClientId } from "@/utils/client-id";
@@ -1324,6 +1325,7 @@ interface AgentDirectoryRefreshInput {
   filter?: FetchAgentsOptions["filter"];
   subscribe?: FetchAgentsOptions["subscribe"];
   page?: FetchAgentsOptions["page"];
+  expectedGeneration?: string;
 }
 
 export class HostRuntimeStore {
@@ -2027,6 +2029,9 @@ export class HostRuntimeStore {
             markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
             markAgentReady: () => controller.markAgentDirectorySyncReady(),
             markAgentError: (error) => controller.markAgentDirectorySyncError(error),
+            ...(getDesktopHost()?.pet?.publishActivity
+              ? { onAgentDirectoryCommitted: () => this.emit(host.serverId) }
+              : {}),
           },
           this.replicaCache,
         ),
@@ -2268,6 +2273,10 @@ export class HostRuntimeStore {
 
   getSnapshot(serverId: string): HostRuntimeSnapshot | null {
     return this.controllers.get(serverId)?.getSnapshot() ?? null;
+  }
+
+  getAgentDirectoryPublication(serverId: string) {
+    return this.directorySyncByServer.get(serverId)?.getAgentPublication() ?? null;
   }
 
   getConnectionStatusSince(serverId: string): number | null {

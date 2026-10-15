@@ -1426,6 +1426,8 @@ export const en = {
   desktop: {
     pets: {
       title: "Desktop pet",
+      expand: "Expand pet settings",
+      collapse: "Collapse pet settings",
       enabled: "Show desktop pet",
       enabledHint: "A floating companion shows the status of your connected OMP tasks.",
       size: "Size",
@@ -2444,6 +2446,7 @@ export const en = {
       wallpaper: {
         title: "Wallpaper",
         enabled: "Enable wallpaper",
+        loadError: "Unable to load wallpaper. Check the selected file or URL.",
         source: {
           label: "Source",
           none: "Disabled",
@@ -2456,9 +2459,9 @@ export const en = {
           accessibilityLabel: "Wallpaper image or video URL",
         },
         opacity: {
-          label: "Opacity",
-          hint: "Transparency level of the wallpaper overlay",
-          accessibilityLabel: "Wallpaper opacity",
+          label: "Interface transparency",
+          hint: "Higher values reveal more wallpaper; 100% removes panel backgrounds.",
+          accessibilityLabel: "Interface transparency",
         },
         directory: {
           label: "Wallpaper directory",

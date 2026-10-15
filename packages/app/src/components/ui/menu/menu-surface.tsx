@@ -21,6 +21,7 @@ import {
   type ContextBridge,
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import { SPACING, type Theme } from "@/styles/theme";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { useMenuContext, MenuContextProvider } from "./menu-context";
 import { MenuPage } from "./menu-item";
 import { currentPageId, isSubPageOpen } from "./menu-navigation";
@@ -40,13 +41,13 @@ const ThemedBottomSheetModal = withUnistyles(IsolatedBottomSheetModal, (theme) =
     borderTopLeftRadius: theme.borderRadius.xl,
     borderTopRightRadius: theme.borderRadius.xl,
     borderWidth: 1,
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: setCssColorAlpha(theme.colors.surface0, 1),
     borderColor: theme.colors.border,
   },
   handleIndicatorStyle: {
     width: 36,
     height: 4,
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
 }));
 

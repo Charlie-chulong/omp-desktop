@@ -8,31 +8,44 @@ const PRIORITY: Record<PetTaskStatus, number> = {
   running: 3,
 };
 
+type PetActivityAgent = Pick<
+  AggregatedAgent,
+  | "id"
+  | "archivedAt"
+  | "pendingPermissionCount"
+  | "requiresAttention"
+  | "attentionReason"
+  | "status"
+  | "title"
+  | "lastActivityAt"
+  | "attentionTimestamp"
+> & { serverId?: string; pendingPermissions?: readonly unknown[] };
+
+function taskStatus(agent: PetActivityAgent): PetTaskStatus | null {
+  if (
+    (agent.pendingPermissionCount ?? agent.pendingPermissions?.length ?? 0) > 0 ||
+    (agent.requiresAttention && agent.attentionReason === "permission")
+  )
+    return "needs_input";
+  if (agent.requiresAttention && agent.attentionReason === "error") return "blocked";
+  if (agent.requiresAttention && agent.attentionReason === "finished") return "ready";
+  return agent.status === "running" ? "running" : null;
+}
+
 export function deriveDesktopPetTasks(
-  agents: readonly AggregatedAgent[],
+  agents: Iterable<PetActivityAgent>,
   connectedServerIds: ReadonlySet<string>,
   untitledLabel: string,
+  hostServerId?: string,
 ): DesktopPetTask[] {
   const tasks: DesktopPetTask[] = [];
   for (const agent of agents) {
-    if (agent.archivedAt || !connectedServerIds.has(agent.serverId)) continue;
-    let status: PetTaskStatus;
-    if (
-      (agent.pendingPermissionCount ?? 0) > 0 ||
-      (agent.requiresAttention && agent.attentionReason === "permission")
-    ) {
-      status = "needs_input";
-    } else if (agent.requiresAttention && agent.attentionReason === "error") {
-      status = "blocked";
-    } else if (agent.requiresAttention && agent.attentionReason === "finished") {
-      status = "ready";
-    } else if (agent.status === "running") {
-      status = "running";
-    } else {
-      continue;
-    }
+    const serverId = hostServerId ?? agent.serverId;
+    if (!serverId || agent.archivedAt || !connectedServerIds.has(serverId)) continue;
+    const status = taskStatus(agent);
+    if (!status) continue;
     tasks.push({
-      serverId: agent.serverId,
+      serverId,
       agentId: agent.id,
       title: agent.title?.trim() || untitledLabel,
       status,

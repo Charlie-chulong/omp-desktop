@@ -53,6 +53,7 @@ import {
 } from "./combobox-options";
 import type { ComboboxOptionModel } from "./combobox-options";
 import { isWeb } from "@/constants/platform";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import {
   IsolatedBottomSheetModal,
   useIsolatedBottomSheetVisibility,
@@ -168,7 +169,7 @@ function ComboboxSheetBackground({ style }: BottomSheetBackgroundProps) {
     () => [
       style,
       {
-        backgroundColor: theme.colors.surface0,
+        backgroundColor: setCssColorAlpha(theme.colors.surface0, 1),
         borderTopLeftRadius: theme.borderRadius["2xl"],
         borderTopRightRadius: theme.borderRadius["2xl"],
       },
@@ -1671,7 +1672,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingHorizontal: theme.spacing[3],
     gap: theme.spacing[2],
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: setCssColorAlpha(theme.colors.surface1, 1),
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
     ...(IS_WEB ? {} : { marginHorizontal: theme.spacing[1] }),
@@ -1698,19 +1699,19 @@ const styles = StyleSheet.create((theme) => ({
         }),
   },
   comboboxItemHovered: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: setCssColorAlpha(theme.colors.surface1, 1),
   },
   comboboxItemHoveredElevated: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   comboboxItemPressed: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: setCssColorAlpha(theme.colors.surface1, 1),
   },
   comboboxItemPressedElevated: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   comboboxItemActive: {
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: setCssColorAlpha(theme.colors.surface1, 1),
   },
   comboboxItemDisabled: {
     opacity: 0.55,

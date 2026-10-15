@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { DesktopPetActivity } from "./pets/types.js";
+import type { DesktopPetActivity, DesktopPetActivityResult } from "./pets/types.js";
 
 // This preload runs in Electron's sandbox and is tsc-compiled (not bundled), so it MUST
 // NOT emit any runtime module load other than "electron" — a require() of a local or
@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       } | null>,
   },
   pet: {
-    publishActivity: (activity: DesktopPetActivity) =>
+    publishActivity: (activity: DesktopPetActivity): Promise<DesktopPetActivityResult> =>
       ipcRenderer.invoke("paseo:pet:publishActivity", activity),
   },
   remoteSsh: {

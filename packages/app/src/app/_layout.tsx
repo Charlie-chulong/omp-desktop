@@ -90,7 +90,6 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { KeyboardShiftProvider } from "@/hooks/use-keyboard-shift-style";
 import { useCompactWebViewportZoomLock } from "@/hooks/use-compact-web-viewport-zoom-lock";
 import { WallpaperBackground } from "@/wallpaper/WallpaperBackground";
-import { setCssColorAlpha } from "@/wallpaper/color";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { useAppSettings } from "@/hooks/use-settings";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -597,13 +596,16 @@ function DesktopWindowTitlebar({
   sidebarControlsEnabled: boolean;
 }) {
   const { theme } = useUnistyles();
+  const sidebarToggle = useMemo(
+    () =>
+      sidebarControlsEnabled ? <WindowSidebarMenuToggle testID="window-sidebar-toggle" /> : null,
+    [sidebarControlsEnabled],
+  );
   return (
     <View style={layoutStyles.windowTitlebar} testID="desktop-window-titlebar">
       <ScreenHeader
         chrome
-        left={
-          sidebarControlsEnabled ? <WindowSidebarMenuToggle testID="window-sidebar-toggle" /> : null
-        }
+        left={sidebarToggle}
         right={
           <>
             <DesktopWindowTitlebarActionsHost />
@@ -697,19 +699,20 @@ function ProvidersWrapper({ children }: { children: ReactNode }) {
 function DesktopWindowControlsSync() {
   const { isLoading } = useAppSettings();
   const { theme } = useUnistyles();
-  const titlebarSurface = theme.colors.surfaceSidebar;
   const foreground = theme.colors.foreground;
 
   useEffect(() => {
     if (isLoading || isNative) return;
     void updateDesktopWindowControls({
-      backgroundColor: setCssColorAlpha(titlebarSurface, 1),
+      // The HTML titlebar paints the shared backdrop beneath native controls.
+      backgroundColor: "#00000000",
+      height: HEADER_INNER_HEIGHT,
       foregroundColor: foreground,
       trafficLightOffsetY: -5,
     }).catch((error) => {
       console.warn("[DesktopWindow] Failed to update window controls overlay", error);
     });
-  }, [isLoading, titlebarSurface, foreground]);
+  }, [isLoading, foreground]);
 
   return null;
 }

@@ -2317,6 +2317,8 @@ export const ptBR: TranslationResources = {
       wallpaper: {
         title: "Papel de parede",
         enabled: "Ativar papel de parede",
+        loadError:
+          "Não foi possível carregar o papel de parede. Verifique o arquivo ou URL selecionado.",
         source: {
           label: "Origem",
           none: "Desativado",
@@ -2329,9 +2331,9 @@ export const ptBR: TranslationResources = {
           accessibilityLabel: "URL da imagem de papel de parede",
         },
         opacity: {
-          label: "Opacidade",
-          hint: "Nível de transparência da sobreposição do papel de parede",
-          accessibilityLabel: "Opacidade do papel de parede",
+          label: "Transparência da interface",
+          hint: "Valores maiores revelam mais o papel de parede; 100% remove os fundos dos painéis.",
+          accessibilityLabel: "Transparência da interface",
         },
         directory: {
           label: "Diretório de papel de parede",

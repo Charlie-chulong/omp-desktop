@@ -2286,6 +2286,7 @@ export const ko: TranslationResources = {
       wallpaper: {
         title: "배경화면",
         enabled: "배경화면 활성화",
+        loadError: "배경화면을 불러올 수 없습니다. 선택한 파일 또는 URL을 확인하세요.",
         source: {
           label: "소스",
           none: "비활성",
@@ -2298,9 +2299,9 @@ export const ko: TranslationResources = {
           accessibilityLabel: "배경화면 이미지 URL",
         },
         opacity: {
-          label: "불투명도",
-          hint: "배경화면 오버레이의 투명도 수준",
-          accessibilityLabel: "배경화면 불투명도",
+          label: "인터페이스 투명도",
+          hint: "값을 높이면 배경화면이 더 선명해지며, 100%에서는 패널 배경색이 사라집니다.",
+          accessibilityLabel: "인터페이스 투명도",
         },
         directory: {
           label: "배경화면 디렉토리",
