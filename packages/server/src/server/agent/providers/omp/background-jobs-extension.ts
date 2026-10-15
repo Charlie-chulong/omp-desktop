@@ -45,7 +45,6 @@ function jobExitCode(job: AsyncJob): number | null {
 }
 
 function retainJob(state: JobBridgeState, row: AsyncJob): void {
-  if (row.type !== "bash") return;
   const job = state.manager.getJob(row.id) ?? row;
   const previous = state.retained.get(job.id);
   state.retained.set(job.id, {
@@ -62,7 +61,7 @@ function retainJob(state: JobBridgeState, row: AsyncJob): void {
     exitCode: jobExitCode(job),
     terminalId: null,
   });
-  const text = job.errorText ?? job.resultText;
+  const text = job.errorText ?? job.resultText ?? job.progressText;
   if (text !== undefined) state.rememberOutput(job.id, text);
 }
 
@@ -86,7 +85,7 @@ function refreshRetainedJobs(state: JobBridgeState): void {
     row.status = jobStatus(job);
     row.endedAt ??= Date.now();
     row.exitCode = jobExitCode(job);
-    const text = job.errorText ?? job.resultText;
+    const text = job.errorText ?? job.resultText ?? job.progressText;
     if (text !== undefined) state.rememberOutput(id, text);
   }
 }
@@ -137,9 +136,8 @@ export default function desktopBackgroundJobs(pi: ExtensionApi): void {
       return [...retained.values()];
     };
     const originalRegister = manager.register;
-    // Native background bash deliberately stops its foreground tool updates.
-    // Observe its existing progress callback; do not acknowledge, consume,
-    // cancel or await a job, and preserve the native callback's exact result.
+    // Retain final results promptly without replacing native progress callbacks.
+    // Live output comes from the manager, including jobs backgrounded after registration.
     const observeRegister: AsyncJobManager["register"] = function (
       this: AsyncJobManager,
       type,
@@ -147,32 +145,17 @@ export default function desktopBackgroundJobs(pi: ExtensionApi): void {
       run,
       options,
     ) {
-      if (type !== "bash") return originalRegister.call(this, type, label, run, options);
-      let id: string | undefined;
-      let owned = false;
-      let pendingText: string | undefined;
-      const result = originalRegister.call(this, type, label, run, {
-        ...options,
-        onProgress: (text, details) => {
-          if (id && owned) rememberOutput(id, text);
-          else if (!id) pendingText = text;
-          return options?.onProgress?.(text, details);
-        },
-      });
-      id = result;
+      const id = originalRegister.call(this, type, label, run, options);
       // Establish ownership from OMP's session-scoped snapshot, not the
       // process-global manager (which also contains child agents' jobs).
       list();
-      owned = retained.has(id);
-      if (owned && pendingText !== undefined) rememberOutput(id, pendingText);
-      if (owned) {
+      if (retained.has(id)) {
         const refresh = () => {
           if (!disposed) list();
-          return undefined;
         };
         void manager.getJob(id)?.promise.then(refresh, refresh);
       }
-      return result;
+      return id;
     };
     manager.register = observeRegister;
     const stopJobs = async (ids: string[]): Promise<number> => {

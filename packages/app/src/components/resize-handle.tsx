@@ -226,7 +226,7 @@ const styles = StyleSheet.create((_theme) => ({
   highlightHorizontal: {
     top: 0,
     bottom: 0,
-    width: 3,
+    width: 2,
     left: -1,
   },
   highlightVertical: {
