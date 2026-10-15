@@ -717,7 +717,7 @@ Collapsed activity groups show their item count in a compact, theme-aware pill w
 
 ## Background processes
 
-Background work started by the current Agent, including Bash commands and `eval` cells, appears beside the workspace branch above the composer. While work is active, the indicator shows the active count; opening it lists live and recently completed jobs. Select a job to open its read-only terminal output in a bottom pane, or use **Stop** to cancel that job. Closing the output pane does not stop the work.
+Background work started by the current Agent, including Bash commands and `eval` cells, appears beside the workspace branch above the composer. While work is active, the indicator shows the active count; opening it lists live and recently completed jobs. Select a job to open its read-only terminal output in a bottom pane, or use **Stop** to cancel that job. Stop uses a neutral, borderless square icon with subtle pressed feedback. Closing the output pane does not stop the work.
 
 All native background job types use the same list, live output, and stop controls. Jobs that move from foreground to background become visible when OMP exposes them in the current Agent's background snapshot; foreground jobs and other Agents' native jobs are not included. Stopping the current Agent response cancels that Agent's running background work and suppresses its late completion events; reconnecting restores retained job state and output.
 

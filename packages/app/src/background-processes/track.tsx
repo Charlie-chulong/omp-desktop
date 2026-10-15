@@ -28,9 +28,6 @@ const ThemedTerminal = withUnistyles(Terminal);
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
 });
-const destructiveColorMapping = (theme: Theme) => ({
-  color: theme.colors.destructive,
-});
 const runningColorMapping = (theme: Theme) => ({ color: theme.colors.statusDotRunning });
 const successColorMapping = (theme: Theme) => ({ color: theme.colors.statusSuccess });
 const warningColorMapping = (theme: Theme) => ({ color: theme.colors.statusWarning });
@@ -150,10 +147,10 @@ function BackgroundProcessRow({
               accessibilityState={stopAccessibilityState}
               disabled={stopping}
               onPress={handleStop}
-              style={styles.stopButton}
+              style={({ pressed }) => [styles.stopButton, pressed && styles.stopButtonPressed]}
               testID={`background-process-stop-${process.id}`}
             >
-              <ThemedSquare size={14} uniProps={destructiveColorMapping} />
+              <ThemedSquare size={14} uniProps={foregroundMutedColorMapping} />
             </Pressable>
           ) : null}
         </View>
@@ -251,10 +248,8 @@ const styles = StyleSheet.create((theme) => ({
     height: 28,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.destructive,
   },
+  stopButtonPressed: { opacity: 0.6 },
   name: { color: theme.colors.foreground, fontSize: 12 },
   detail: { color: theme.colors.foregroundMuted, fontSize: 11 },
   group: { color: theme.colors.foregroundMuted, fontSize: 11, fontWeight: "600" },
