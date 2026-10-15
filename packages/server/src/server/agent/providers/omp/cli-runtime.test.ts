@@ -558,6 +558,24 @@ describe("OMP CLI runtime", () => {
     await expect(session.prompt("hello")).resolves.toEqual({ requestId: "req_1" });
   });
 
+  test("sends prompts with steer streaming behavior so a busy session admits them", async () => {
+    const child = createOmpChild();
+    const commands: Record<string, unknown>[] = [];
+    replyToCommands(child, (command) => {
+      commands.push(command);
+      return undefined;
+    });
+    const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
+
+    await session.prompt("hello");
+
+    expect(commands.map(withoutRequestId)).toContainEqual({
+      type: "prompt",
+      message: "hello",
+      streamingBehavior: "steer",
+    });
+  });
+
   test("negotiates RPC protocol v2 when OMP advertises it", async () => {
     const child = createOmpChild({ supportedProtocolVersions: [1, 2] });
     const commands: Record<string, unknown>[] = [];
