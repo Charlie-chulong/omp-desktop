@@ -242,9 +242,8 @@ export class FakeOmpSession implements OmpRuntimeSession {
     message: string,
     images?: Array<{ type: "image"; data: string; mimeType: string }>,
   ): Promise<OmpPromptAck> {
-    if (this.state.isStreaming || this.state.isCompacting) {
-      throw new Error("Agent is already processing");
-    }
+    // The CLI runtime always sends streamingBehavior "steer": a busy OMP session admits
+    // the prompt into its live run instead of throwing AgentBusyError.
     this.prompts.push({ message, imageCount: images?.length ?? 0 });
     this.promptWaiters.shift()?.();
     const heldPrompt = this.nextHeldPrompt;

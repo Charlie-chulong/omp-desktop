@@ -2378,6 +2378,31 @@ describe("OMP agent client and session", () => {
     );
   });
 
+  test("admits a new prompt while a queued continuation keeps OMP streaming after abort", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    await omp.interruptActiveTurn("stop me");
+    const runtime = omp.runtime();
+    // OMP's post-abort drain resumed the run on a queued message; the session is still busy.
+    runtime.state = { ...runtime.state, isStreaming: true };
+
+    await omp.requireStartTurn("user follow-up");
+    await waitForImmediate();
+    expect(omp.failedTurnCount()).toBe(0);
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toContain("user follow-up");
+
+    runtime.acceptPrompt("user follow-up", "omp-user-follow-up");
+    runtime.beginTurn();
+    runtime.streamAssistantText("handled follow-up");
+    runtime.state = { ...runtime.state, isStreaming: false };
+    runtime.finishTurn({ role: "assistant", content: [{ type: "text", text: "handled follow-up" }] });
+    await vi.waitFor(() => expect(omp.completedTurnCount()).toBe(1));
+    expect(omp.failedTurnCount()).toBe(0);
+    expect(omp.timeline()).toContainEqual(
+      expect.objectContaining({ type: "assistant_message", text: "handled follow-up" }),
+    );
+  });
+
   test("interrupt does not claim native subagents stopped; native cancellation acknowledges exactly one", async () => {
     const omp = new OmpHarness();
     await omp.start();

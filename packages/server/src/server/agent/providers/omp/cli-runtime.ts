@@ -469,6 +469,9 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
       type: "prompt",
       message,
       ...(images?.length ? { images } : {}),
+      // OMP rejects a bare prompt while it is still streaming (for example a queued
+      // message drained after abort). Steering admits it into that live run instead.
+      streamingBehavior: "steer",
     });
     const ack = OmpPromptAckSchema.parse(await promise) ?? {};
     return { requestId, ...ack };
