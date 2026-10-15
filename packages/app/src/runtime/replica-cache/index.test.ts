@@ -312,7 +312,10 @@ describe("ReplicaCache", () => {
     });
   });
 
-  it("restores the selected model id from a wire timeline notice", async () => {
+  it.each([
+    { type: "system_notice", notice: "model_changed", modelId: "openai/gpt-6" },
+    { type: "system_notice", notice: "thinking_changed", thinkingOptionId: "high" },
+  ])("restores the selected setting from a $notice wire timeline notice", async (item) => {
     const storage = new MemoryStorage();
     const writer = new ReplicaCache(storage);
     writer.setHosts([SERVER_ID]);
@@ -326,7 +329,7 @@ describe("ReplicaCache", () => {
         event: {
           type: "timeline",
           provider: "codex",
-          item: { type: "system_notice", notice: "model_changed", modelId: "openai/gpt-6" },
+          item,
         },
       },
     });
@@ -335,21 +338,20 @@ describe("ReplicaCache", () => {
       parsed.payload.event,
       new Date(parsed.payload.timestamp),
     )[0];
-    expect(notice).toMatchObject({
-      kind: "system_notice",
-      notice: "model_changed",
-      modelId: "openai/gpt-6",
-    });
-    if (!notice) throw new Error("Expected model change notice");
+    if (!notice) throw new Error("Expected setting change notice");
     const storedNotice = { ...notice, timelineCursor: { epoch: "epoch-1", seq: 13 } };
-    useSessionStore.getState().setAgentStreamTail(
-      SERVER_ID,
-      new Map([["agent-1", [message("message-1", "Cached"), storedNotice]]]),
-    );
-    useSessionStore.getState().setAgentTimelineCursor(
-      SERVER_ID,
-      new Map([["agent-1", { epoch: "epoch-1", startSeq: 1, endSeq: 13 }]]),
-    );
+    useSessionStore
+      .getState()
+      .setAgentStreamTail(
+        SERVER_ID,
+        new Map([["agent-1", [message("message-1", "Cached"), storedNotice]]]),
+      );
+    useSessionStore
+      .getState()
+      .setAgentTimelineCursor(
+        SERVER_ID,
+        new Map([["agent-1", { epoch: "epoch-1", startSeq: 1, endSeq: 13 }]]),
+      );
     await writer.flush();
     useSessionStore.getState().clearSession(SERVER_ID);
 

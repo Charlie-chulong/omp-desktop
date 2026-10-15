@@ -611,6 +611,10 @@ export class OmpHarness {
     await this.requireSession().setModel(`${provider}/${modelId}`);
   }
 
+  async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
+    await this.requireSession().setThinkingOption(thinkingOptionId);
+  }
+
   features() {
     return this.requireSession().features;
   }

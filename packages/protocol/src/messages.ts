@@ -825,6 +825,11 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     modelId: z.string(),
   }),
   z.object({
+    type: z.literal("system_notice"),
+    notice: z.literal("thinking_changed"),
+    thinkingOptionId: z.string(),
+  }),
+  z.object({
     type: z.literal("extension_notification"),
     message: z.string(),
     level: z.enum(["info", "warning", "error"]),

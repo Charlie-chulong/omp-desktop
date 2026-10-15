@@ -459,6 +459,8 @@ export const fr: TranslationResources = {
       fastModeEnabled: "Mode rapide activé",
       fastModeDisabled: "Mode rapide désactivé",
       modelChanged: "Modèle changé pour {{model}}",
+      thinkingChanged:
+        "Niveau de réflexion : {{thinking}} · Prend effet à la prochaine requête au modèle",
     },
     question: {
       submit: "Soumettre",

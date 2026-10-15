@@ -450,6 +450,17 @@ built-in models, including their reasoning options. The first fixed launch remov
 Codex cache rows whose original endpoint and protocol cannot be proven; provider credentials,
 other provider caches, and conversation settings are unchanged.
 
+## Thinking-level changes
+
+Changing the thinking level in an existing conversation updates OMP without restarting the
+session. After a successful change, Desktop adds a conversation notice using the same inline
+style as Fast mode, showing the localized level and when it takes effect.
+
+The new level applies from the next model request, including later requests after a tool call
+in the same turn. It does not alter a generation already in progress. Failed changes and
+reselecting the current level do not add notices. Notices retain their selected level in
+conversation history and after reloading the client.
+
 ## Claude fast mode
 
 The model settings **Fast** switch also supports direct Anthropic Claude Opus 4.8, Opus 5,

@@ -460,6 +460,8 @@ export const es: TranslationResources = {
       fastModeEnabled: "Modo rápido activado",
       fastModeDisabled: "Modo rápido desactivado",
       modelChanged: "Se cambió a {{model}}",
+      thinkingChanged:
+        "Nivel de razonamiento: {{thinking}} · Se aplica desde la próxima solicitud al modelo",
     },
     question: {
       submit: "Entregar",
