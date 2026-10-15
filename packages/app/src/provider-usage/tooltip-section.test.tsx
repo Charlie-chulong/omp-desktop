@@ -2,10 +2,14 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createInstance } from "i18next";
 import { I18nextProvider } from "react-i18next";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { en } from "@/i18n/resources/en";
 import { ProviderUsageTooltipSection } from "./tooltip-section";
-import type { ProviderUsage } from "./types";
+import type { ProviderUsage, ProviderUsageView } from "./types";
+import { buildOmpAccountProviderUsage } from "./omp-account";
+import { formatOmpQuotaResetTime } from "@/components/omp-provider-quota";
+
+afterEach(() => vi.restoreAllMocks());
 
 function usage(providerId: string, displayName: string, usedPct: number): ProviderUsage {
   return {
@@ -14,6 +18,14 @@ function usage(providerId: string, displayName: string, usedPct: number): Provid
     status: "available",
     planLabel: null,
     windows: [{ id: "codex_weekly", label: "Weekly", usedPct, percentageDisplay: "remaining" }],
+  };
+}
+
+function readyUsageView(providers: ProviderUsage[]): ProviderUsageView {
+  return {
+    kind: "ready",
+    payload: { fetchedAt: "2026-10-08T00:00:00.000Z", providers },
+    isRefreshing: false,
   };
 }
 
@@ -28,24 +40,23 @@ async function renderUsage(activeProviderId: string, providers: ProviderUsage[])
     <I18nextProvider i18n={i18n}>
       <ProviderUsageTooltipSection
         activeProviderId={activeProviderId}
-        view={{
-          kind: "ready",
-          payload: { fetchedAt: "2026-10-08T00:00:00.000Z", providers },
-          isRefreshing: false,
-        }}
+        view={readyUsageView(providers)}
       />
     </I18nextProvider>,
   );
 }
 
-const accounts = [
+const codexAccounts = [
   usage("openai-codex:11", "Codex · Work", 42),
   usage("openai-codex:22", "Codex · Personal", 85),
 ];
 
 describe("provider usage tooltip account selection", () => {
   test("shows labelled Codex accounts with their own remaining quotas for the namespace", async () => {
-    const html = await renderUsage("openai-codex", [...accounts, usage("my-glm", "GLM Plan", 20)]);
+    const html = await renderUsage("openai-codex", [
+      ...codexAccounts,
+      usage("my-glm", "GLM Plan", 20),
+    ]);
     expect(html).toContain("Codex · Work");
     expect(html).toContain("58%");
     expect(html).toContain("Codex · Personal");
@@ -54,7 +65,7 @@ describe("provider usage tooltip account selection", () => {
   });
 
   test("a credential-specific request never includes another account", async () => {
-    const html = await renderUsage("openai-codex:22", accounts);
+    const html = await renderUsage("openai-codex:22", codexAccounts);
     expect(html).toContain("Codex · Personal");
     expect(html).toContain("15%");
     expect(html).not.toContain("Codex · Work");
@@ -62,9 +73,86 @@ describe("provider usage tooltip account selection", () => {
   });
 
   test("a configured provider matches only its own namespace", async () => {
-    const html = await renderUsage("my-glm", [...accounts, usage("my-glm", "GLM Plan", 20)]);
+    const html = await renderUsage("my-glm", [...codexAccounts, usage("my-glm", "GLM Plan", 20)]);
     expect(html).toContain("GLM Plan");
     expect(html).not.toContain("Codex ·");
-    expect(await renderUsage("unknown", accounts)).toBe("");
+    expect(await renderUsage("unknown", codexAccounts)).toBe("");
+  });
+
+  test("renders failed Claude reads with a trusted reached-only window and distinct retry times", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-01-01T11:00:00Z"));
+    const accounts = [
+      {
+        credentialId: 71,
+        quota: {
+          status: "error" as const,
+          fiveHourUsedPct: null,
+          fiveHourLimitReached: true,
+          fiveHourResetsAt: "2026-01-01T10:00:00.000Z",
+          queryError: {
+            kind: "rate_limited" as const,
+            httpStatus: 429,
+            retryAt: "2026-01-01T08:00:39.000Z",
+          },
+        },
+      },
+    ];
+    const providers = buildOmpAccountProviderUsage(
+      {
+        provider: { id: "anthropic", name: "Claude", available: true, authenticated: true },
+        accounts,
+        error: null,
+        updatedAt: "2026-01-01T08:00:00.000Z",
+      },
+      {
+        providerId: "anthropic",
+        providerName: "Claude",
+        fiveHour: "5-hour limit",
+        weekly: "Weekly",
+        modelWeekly: (model) => model,
+        accountFallback: (number) => `Account ${number}`,
+      },
+    );
+    const html = await renderUsage("anthropic", providers);
+    expect(html).toContain("5-hour");
+    expect(html).toContain("Limit reached");
+    expect(html).toContain("Usage query rate-limited");
+    expect(html).toContain("not a quota reset");
+    expect(html).toContain(formatOmpQuotaResetTime(accounts[0]?.quota.queryError.retryAt, "en"));
+    expect(html).toContain(formatOmpQuotaResetTime(accounts[0]?.quota.fiveHourResetsAt, "en"));
+    expect(html).toContain("Awaiting server verification");
+    expect(html).not.toContain('role="progressbar"');
+    expect(html).not.toContain("100%");
+  });
+
+  test("keeps an unknown model 429 separate from the unknown five-hour row", async () => {
+    const html = await renderUsage("anthropic", [
+      {
+        providerId: "anthropic:72",
+        displayName: "Claude · Account 2",
+        status: "error",
+        planLabel: null,
+        windows: [
+          {
+            id: "anthropic_five_hour",
+            label: "5-hour limit",
+            usedPct: null,
+            remainingPct: null,
+            percentageDisplay: "remaining",
+          },
+        ],
+        accountQuota: {
+          status: "error",
+          queryError: { kind: "authentication" },
+          modelRateLimit: { scope: "unknown", resetsAt: null, observedAt: "2026-01-01T08:00:00Z" },
+        },
+      },
+    ]);
+    expect(html).toContain("Usage query authentication failed");
+    expect(html).toContain("Model requests rate-limited (window unknown)");
+    expect(html).toContain("Usage temporarily unavailable");
+    expect(html).not.toContain("Limit reached");
+    expect(html).not.toContain("100%");
+    expect(html).not.toContain("0%");
   });
 });

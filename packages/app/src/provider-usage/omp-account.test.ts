@@ -307,10 +307,72 @@ describe("buildOmpAccountProviderUsage", () => {
     ]);
     expect(usage[0]?.extraUsage).toEqual(accounts[0]?.quota?.extraUsage);
     expect(usage[1]?.windows).toEqual([
+      expect.objectContaining({ id: "anthropic_five_hour", usedPct: null, remainingPct: null }),
       expect.objectContaining({ id: "anthropic_weekly", remainingPct: 20 }),
     ]);
     expect(usage[1]?.extraUsage).toEqual(accounts[1]?.quota?.extraUsage);
     expect(usage[2]?.extraUsage).toBeUndefined();
+  });
+
+  test("preserves per-account Claude restrictions through query failures without inventing usage", () => {
+    const accounts: NonNullable<OmpLoginProvider["accounts"]> = [
+      {
+        credentialId: 71,
+        quota: {
+          status: "error",
+          fiveHourLimitReached: true,
+          fiveHourUsedPct: null,
+          fiveHourResetsAt: "2026-10-15T10:00:00.000Z",
+          queryError: {
+            kind: "rate_limited",
+            httpStatus: 429,
+            retryAt: "2026-10-15T08:00:39.000Z",
+          },
+        },
+      },
+      {
+        credentialId: 72,
+        quota: {
+          status: "error",
+          fiveHourUsedPct: null,
+          modelRateLimit: {
+            scope: "unknown",
+            resetsAt: "2026-10-15T12:00:00.000Z",
+            observedAt: "2026-10-15T08:00:00.000Z",
+          },
+        },
+      },
+    ];
+    const usages = buildOmpAccountProviderUsage(
+      {
+        provider: { ...codexProvider(accounts), id: "anthropic" },
+        accounts,
+        error: "Host query failed",
+        updatedAt: null,
+      },
+      { ...copy, providerId: "anthropic", providerName: "Claude" },
+    );
+    expect(usages[0]?.windows).toEqual([
+      expect.objectContaining({
+        id: "anthropic_five_hour",
+        usedPct: null,
+        remainingPct: null,
+        limitReached: true,
+        resetsAt: "2026-10-15T10:00:00.000Z",
+      }),
+    ]);
+    expect(usages[1]?.windows).toEqual([
+      expect.objectContaining({
+        id: "anthropic_five_hour",
+        usedPct: null,
+        remainingPct: null,
+        limitReached: false,
+      }),
+    ]);
+    expect(usages[0]?.accountQuota?.modelRateLimit).toBeUndefined();
+    expect(usages[1]?.accountQuota?.modelRateLimit?.scope).toBe("unknown");
+    expect(usages[1]?.windows[0]?.resetsAt).toBeUndefined();
+    expect(usages.map((usage) => usage.providerId)).toEqual(["anthropic:71", "anthropic:72"]);
   });
 });
 
