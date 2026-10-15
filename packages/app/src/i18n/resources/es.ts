@@ -1220,11 +1220,6 @@ export const es: TranslationResources = {
         status: "Estado",
         labels: "Etiquetas",
       },
-      titleSource: {
-        label: "Título",
-        title: "Título",
-        branch: "Nombre de rama",
-      },
       show: {
         label: "Mostrar",
         branch: "Rama",
@@ -1234,8 +1229,6 @@ export const es: TranslationResources = {
         checks: "Comprobaciones",
         services: "Servicios",
         labels: "Etiquetas",
-        diff: "Estadísticas de cambios",
-        timestamp: "Última actividad",
       },
       checks: {
         iconAndText: "Icono y texto",

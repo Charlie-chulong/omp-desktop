@@ -1218,11 +1218,6 @@ export const en = {
         status: "Status",
         labels: "Labels",
       },
-      titleSource: {
-        label: "Title",
-        title: "Title",
-        branch: "Branch name",
-      },
       show: {
         label: "Show",
         branch: "Branch",
@@ -1232,8 +1227,6 @@ export const en = {
         checks: "Checks",
         services: "Services",
         labels: "Labels",
-        diff: "Diff stats",
-        timestamp: "Last activity",
       },
       checks: {
         iconAndText: "Icon and text",

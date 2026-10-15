@@ -64,11 +64,7 @@ import { useSidebarWorkspaceFork } from "@/components/sidebar/use-sidebar-worksp
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { getStatusDotColor } from "@/utils/status-dot-color";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
-import {
-  SidebarWorkspaceTrailingContent,
-  useSidebarWorkspaceTrailing,
-  type SidebarWorkspaceTrailing,
-} from "@/components/sidebar/workspace-trailing";
+import { SidebarWorkspaceTrailingContent } from "@/components/sidebar/workspace-trailing";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import {
   SidebarWorkspaceContextMenu,
@@ -798,8 +794,6 @@ function StatusWorkspaceRowInnerContent({
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
   const [isPressed, setIsPressed] = useState(false);
-  const trailingPreference = useSidebarWorkspaceTrailing();
-  const trailing = trailingPreference === "diff" ? "none" : trailingPreference;
   const {
     role: _dragRole,
     tabIndex: _dragTabIndex,
@@ -848,7 +842,6 @@ function StatusWorkspaceRowInnerContent({
           reserveSlotWidth,
         } = resolveTrailingActionVisibility({
           workspace,
-          trailing,
           hasArchiveAction: Boolean(onArchive),
           isHovered,
           isTouchPlatform,
@@ -925,7 +918,6 @@ function StatusWorkspaceRowInnerContent({
                   <StatusWorkspaceActionSlot
                     workspace={workspace}
                     backdrop={backdrop}
-                    trailing={trailing}
                     showBase={showTrailing}
                     showKebab={showKebabInSlot}
                     showScrim={showScrim}
@@ -964,7 +956,6 @@ function StatusWorkspaceRowInnerContent({
 function StatusWorkspaceActionSlot({
   workspace,
   backdrop,
-  trailing,
   showBase,
   showKebab,
   showScrim,
@@ -992,7 +983,6 @@ function StatusWorkspaceActionSlot({
 }: {
   workspace: SidebarWorkspaceEntry;
   backdrop: SidebarSurfaceBackdrop;
-  trailing: SidebarWorkspaceTrailing;
   showBase: boolean;
   showKebab: boolean;
   showScrim: boolean;
@@ -1022,7 +1012,7 @@ function StatusWorkspaceActionSlot({
   return (
     <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
       <SidebarWorkspaceTrailingActionBase visible={showBase}>
-        <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
+        <SidebarWorkspaceTrailingContent workspace={workspace} />
       </SidebarWorkspaceTrailingActionBase>
       <SidebarWorkspaceTrailingActionOverlay
         visible={kebab.showKebab}

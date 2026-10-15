@@ -36,9 +36,6 @@ export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
 
 export type SendBehavior = ActiveTurnBehavior | "queue";
 export type ReleaseChannel = "stable" | "beta";
-export type WorkspaceTitleSource = "title" | "branch";
-/** What a sidebar workspace row shows in the space to the right of its title. */
-export type SidebarWorkspaceTrailing = "diff" | "timestamp" | "none";
 export type ToolCallDetailLevel = "overview" | "detailed";
 
 const ThemePreferenceSchema = z.enum([
@@ -48,12 +45,6 @@ const ThemePreferenceSchema = z.enum([
 const VALID_THEMES = new Set<string>(ThemePreferenceSchema.options);
 /** Where the theme picker lands when the persisted preference cannot be honoured. */
 export const DEFAULT_THEME_PREFERENCE = "dark" satisfies ThemePreference;
-const VALID_WORKSPACE_TITLE_SOURCES = new Set<WorkspaceTitleSource>(["title", "branch"]);
-const VALID_SIDEBAR_WORKSPACE_TRAILINGS = new Set<SidebarWorkspaceTrailing>([
-  "diff",
-  "timestamp",
-  "none",
-]);
 const VALID_TOOL_CALL_DETAIL_LEVELS = new Set<ToolCallDetailLevel>(["overview", "detailed"]);
 export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 10_000;
 export const MIN_TERMINAL_SCROLLBACK_LINES = 0;
@@ -96,8 +87,6 @@ export interface AppSettings {
   contentFontSize: number; // clamped px, default 14 (15 on native)
   codeFontSize: number; // clamped px, default 13
   syntaxTheme: SyntaxThemeId; // default "cursor"
-  workspaceTitleSource: WorkspaceTitleSource;
-  sidebarWorkspaceTrailing: SidebarWorkspaceTrailing;
   sidebarRowItems: SidebarRowItems;
   sidebarChecksDisplay: SidebarChecksDisplay;
   autoExpandReasoning: boolean;
@@ -153,8 +142,9 @@ const StoredAppSettingsSchema = z.strictObject({
   uiFontSize: z.union([z.number(), z.string()]).optional(),
   codeFontSize: z.union([z.number(), z.string()]).optional(),
   syntaxTheme: z.string().refine(isSyntaxThemeId).optional(),
-  workspaceTitleSource: z.enum(["title", "branch"]).optional(),
-  sidebarWorkspaceTrailing: z.enum(["diff", "timestamp", "none"]).optional(),
+  // COMPAT(sidebarDisplay): retired choices are ignored and removed on the next read.
+  workspaceTitleSource: z.unknown().optional(),
+  sidebarWorkspaceTrailing: z.unknown().optional(),
   sidebarRowItems: SidebarRowItemsSchema.optional(),
   sidebarChecksDisplay: z.enum(["iconAndText", "icon", "none"]).optional(),
   autoExpandReasoning: z.boolean().optional(),
@@ -194,8 +184,6 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   contentFontSize: DEFAULT_CONTENT_FONT_SIZE,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
   syntaxTheme: "cursor",
-  workspaceTitleSource: "title",
-  sidebarWorkspaceTrailing: "diff",
   sidebarRowItems: DEFAULT_SIDEBAR_ROW_ITEMS,
   sidebarChecksDisplay: DEFAULT_SIDEBAR_CHECKS_DISPLAY,
   autoExpandReasoning: false,
@@ -304,6 +292,8 @@ async function readAppSettings(
       // COMPAT(uiFontSizeScale): persist the converted base size, remove after 2027-08-17.
       needsWrite:
         stored.serviceUrlBehavior !== undefined ||
+        stored.workspaceTitleSource !== undefined ||
+        stored.sidebarWorkspaceTrailing !== undefined ||
         (stored.uiBaseFontSize === undefined && stored.uiFontSize !== undefined) ||
         stored.contentFontSize === undefined,
     };
@@ -428,18 +418,6 @@ function pickEnumAppSettings(stored: StoredAppSettings): Partial<AppSettings> {
   }
   if (typeof stored.syntaxTheme === "string" && isSyntaxThemeId(stored.syntaxTheme)) {
     result.syntaxTheme = stored.syntaxTheme;
-  }
-  if (
-    typeof stored.workspaceTitleSource === "string" &&
-    VALID_WORKSPACE_TITLE_SOURCES.has(stored.workspaceTitleSource)
-  ) {
-    result.workspaceTitleSource = stored.workspaceTitleSource;
-  }
-  if (
-    typeof stored.sidebarWorkspaceTrailing === "string" &&
-    VALID_SIDEBAR_WORKSPACE_TRAILINGS.has(stored.sidebarWorkspaceTrailing)
-  ) {
-    result.sidebarWorkspaceTrailing = stored.sidebarWorkspaceTrailing;
   }
   if (
     typeof stored.wallpaperSource === "string" &&

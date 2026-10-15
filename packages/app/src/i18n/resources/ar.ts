@@ -1181,11 +1181,6 @@ export const ar: TranslationResources = {
         status: "الحالة",
         labels: "التسميات",
       },
-      titleSource: {
-        label: "العنوان",
-        title: "العنوان",
-        branch: "اسم الفرع",
-      },
       show: {
         label: "إظهار",
         branch: "الفرع",
@@ -1195,8 +1190,6 @@ export const ar: TranslationResources = {
         checks: "الفحوصات",
         services: "الخدمات",
         labels: "التسميات",
-        diff: "إحصائيات الفروق",
-        timestamp: "آخر نشاط",
       },
       checks: {
         iconAndText: "أيقونة ونص",

@@ -149,14 +149,6 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.language).toBe("system");
   });
 
-  it("defaults workspace title source to title when storage is empty", async () => {
-    const deps = makeDeps();
-
-    const result = await loadAppSettingsFromStorage(deps);
-
-    expect(result.workspaceTitleSource).toBe("title");
-  });
-
   it("enables the chat outline by default", async () => {
     const deps = makeDeps();
 
@@ -221,28 +213,36 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.terminalScrollbackLines).toBe(42_000);
   });
 
-  it("loads configured workspace title source from app settings", async () => {
+  it("removes retired sidebar choices without resetting other settings", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
-        [APP_SETTINGS_KEY]: JSON.stringify({ workspaceTitleSource: "branch" }),
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          workspaceTitleSource: "branch",
+          sidebarWorkspaceTrailing: "none",
+          theme: "light",
+          language: "zh-CN",
+          chatOutlineEnabled: false,
+          uiBaseFontSize: 16,
+          contentFontSize: 18,
+        }),
       }),
     });
 
     const result = await loadAppSettingsFromStorage(deps);
-
-    expect(result.workspaceTitleSource).toBe("branch");
-  });
-
-  it("drops an unknown workspace title source back to title", async () => {
-    const deps = makeDeps({
-      storage: createInMemoryKeyValueStorage({
-        [APP_SETTINGS_KEY]: JSON.stringify({ workspaceTitleSource: "directory" }),
-      }),
-    });
-
-    const result = await loadAppSettingsFromStorage(deps);
-
-    expect(result.workspaceTitleSource).toBe("title");
+    const preserved = {
+      theme: "light",
+      language: "zh-CN",
+      chatOutlineEnabled: false,
+      uiBaseFontSize: 16,
+      contentFontSize: 18,
+    };
+    expect(result).toMatchObject(preserved);
+    expect(result).not.toHaveProperty("workspaceTitleSource");
+    expect(result).not.toHaveProperty("sidebarWorkspaceTrailing");
+    const persisted = JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY)!);
+    expect(persisted).toMatchObject(preserved);
+    expect(persisted).not.toHaveProperty("workspaceTitleSource");
+    expect(persisted).not.toHaveProperty("sidebarWorkspaceTrailing");
   });
 
   it("normalizes terminal scrollback lines from storage", async () => {

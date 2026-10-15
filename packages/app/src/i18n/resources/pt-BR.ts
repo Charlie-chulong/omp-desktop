@@ -1209,11 +1209,6 @@ export const ptBR: TranslationResources = {
         status: "Status",
         labels: "Etiquetas",
       },
-      titleSource: {
-        label: "Título",
-        title: "Título",
-        branch: "Nome da branch",
-      },
       show: {
         label: "Mostrar",
         branch: "Branch",
@@ -1223,8 +1218,6 @@ export const ptBR: TranslationResources = {
         checks: "Verificações",
         services: "Serviços",
         labels: "Etiquetas",
-        diff: "Estatísticas de diff",
-        timestamp: "Última atividade",
       },
       checks: {
         iconAndText: "Ícone e texto",

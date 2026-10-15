@@ -1190,11 +1190,6 @@ export const ko: TranslationResources = {
         status: "상태",
         labels: "레이블",
       },
-      titleSource: {
-        label: "제목",
-        title: "제목",
-        branch: "브랜치 이름",
-      },
       show: {
         label: "표시 항목",
         branch: "브랜치",
@@ -1204,8 +1199,6 @@ export const ko: TranslationResources = {
         checks: "검사",
         services: "서비스",
         labels: "레이블",
-        diff: "Diff 통계",
-        timestamp: "마지막 활동",
       },
       checks: {
         iconAndText: "아이콘 및 텍스트",

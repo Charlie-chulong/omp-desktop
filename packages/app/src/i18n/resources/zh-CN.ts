@@ -1199,11 +1199,6 @@ export const zhCN: TranslationResources = {
         status: "状态",
         labels: "标签",
       },
-      titleSource: {
-        label: "标题",
-        title: "标题",
-        branch: "分支名称",
-      },
       show: {
         label: "显示",
         branch: "分支",
@@ -1213,8 +1208,6 @@ export const zhCN: TranslationResources = {
         checks: "检查",
         services: "服务",
         labels: "标签",
-        diff: "差异统计",
-        timestamp: "最近活动",
       },
       checks: {
         iconAndText: "图标和文字",

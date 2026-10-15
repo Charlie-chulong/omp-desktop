@@ -33,6 +33,11 @@ Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left
 vertical workspace splitters use matching two-pixel accent highlights on hover, without
 narrowing their invisible drag targets.
 
+Sidebar conversations always use their conversation title, with only the last-activity time
+beside it (for example, `2h` or `2d`). Rows without an activity timestamp leave that space empty.
+Display preferences no longer include **Title**, **Diff stats**, or **Last activity** choices;
+previous choices are removed without resetting other settings.
+
 Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
 These tips follow the interface language in all nine supported locales.

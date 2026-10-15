@@ -1,16 +1,5 @@
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
-import type { WorkspaceTitleSource } from "@/hooks/use-settings";
 import { STATUS_BUCKET_LABELS } from "@/hooks/sidebar-status-view-model";
-
-export function resolveSidebarWorkspacePrimaryLabel(input: {
-  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch">;
-  workspaceTitleSource: WorkspaceTitleSource;
-}): string {
-  if (input.workspaceTitleSource === "branch") {
-    return input.workspace.currentBranch ?? input.workspace.name;
-  }
-  return input.workspace.name;
-}
 
 export function resolveAgentTabPrimaryLabel(input: {
   agentTitle: string | null | undefined;
@@ -29,8 +18,7 @@ export function resolveAgentTabPrimaryLabel(input: {
 }
 
 export function resolveSidebarWorkspaceAccessibilityLabel(input: {
-  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch" | "statusBucket">;
-  workspaceTitleSource: WorkspaceTitleSource;
+  workspace: Pick<SidebarWorkspaceEntry, "name" | "statusBucket">;
   leadingProjectName?: string | null;
   hostBadgeLabel?: string | null;
   pullRequestLabel?: string | null;
@@ -38,7 +26,7 @@ export function resolveSidebarWorkspaceAccessibilityLabel(input: {
 }): string {
   return [
     input.leadingProjectName,
-    resolveSidebarWorkspacePrimaryLabel(input),
+    input.workspace.name,
     input.hostBadgeLabel,
     input.pullRequestLabel,
     input.serviceLabel,

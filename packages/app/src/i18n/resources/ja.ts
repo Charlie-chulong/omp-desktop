@@ -1194,11 +1194,6 @@ export const ja: TranslationResources = {
         status: "ステータス",
         labels: "ラベル",
       },
-      titleSource: {
-        label: "タイトル",
-        title: "タイトル",
-        branch: "ブランチ名",
-      },
       show: {
         label: "表示項目",
         branch: "ブランチ",
@@ -1208,8 +1203,6 @@ export const ja: TranslationResources = {
         checks: "チェック",
         services: "サービス",
         labels: "ラベル",
-        diff: "差分統計",
-        timestamp: "最終アクティビティ",
       },
       checks: {
         iconAndText: "アイコンとテキスト",

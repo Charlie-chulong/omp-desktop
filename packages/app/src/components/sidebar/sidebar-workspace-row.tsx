@@ -39,11 +39,7 @@ import {
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
-import {
-  SidebarWorkspaceTrailingContent,
-  useSidebarWorkspaceTrailing,
-  type SidebarWorkspaceTrailing,
-} from "@/components/sidebar/workspace-trailing";
+import { SidebarWorkspaceTrailingContent } from "@/components/sidebar/workspace-trailing";
 import { useReferenceWorkspaceContent } from "@/components/sidebar/use-reference-workspace-content";
 
 function noop() {}
@@ -281,8 +277,6 @@ function WorkspaceRowBody({
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
   const [isPressed, setIsPressed] = useState(false);
-  const trailingPreference = useSidebarWorkspaceTrailing();
-  const trailing = trailingPreference === "diff" ? "none" : trailingPreference;
   const draggable = Boolean(drag);
   const interaction = useLongPressDragInteraction({
     drag: drag ?? noop,
@@ -384,7 +378,6 @@ function WorkspaceRowBody({
                 <WorkspaceRowTrailingActions
                   workspace={workspace}
                   backdrop={backdrop}
-                  trailing={trailing}
                   isHovered={isHovered}
                   isTouchPlatform={isTouchPlatform}
                   isCreating={isCreating}
@@ -412,7 +405,6 @@ function WorkspaceRowBody({
 function WorkspaceRowTrailingActions({
   workspace,
   backdrop,
-  trailing,
   isHovered,
   isTouchPlatform,
   isCreating,
@@ -430,7 +422,6 @@ function WorkspaceRowTrailingActions({
 }: {
   workspace: SidebarWorkspaceEntry;
   backdrop: SidebarSurfaceBackdrop;
-  trailing: SidebarWorkspaceTrailing;
   isHovered: boolean;
   isTouchPlatform: boolean;
   isCreating: boolean;
@@ -456,7 +447,6 @@ function WorkspaceRowTrailingActions({
     reserveSlotWidth,
   } = resolveTrailingActionVisibility({
     workspace,
-    trailing,
     hasArchiveAction: Boolean(onArchive),
     isHovered,
     isTouchPlatform,
@@ -472,7 +462,7 @@ function WorkspaceRowTrailingActions({
       {renderSlot ? (
         <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
           <SidebarWorkspaceTrailingActionBase visible={showTrailing}>
-            <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
+            <SidebarWorkspaceTrailingContent workspace={workspace} />
           </SidebarWorkspaceTrailingActionBase>
           <SidebarWorkspaceTrailingActionOverlay
             visible={kebab.showKebab}
