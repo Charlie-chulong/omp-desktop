@@ -12,7 +12,7 @@ import { mapOmpToolDetail } from "./tool-call-mapper.js";
 
 interface OmpSessionEntry {
   type?: string;
-  id?: string;
+  id: string;
   parentId?: string | null;
   timestamp?: string | number;
   message?: Record<string, unknown>;
@@ -68,7 +68,7 @@ export async function* streamOmpHistory(input: {
     const mapped = mapEntryMessage(entry);
     if (!mapped) continue;
     messages.push(mapped);
-    if (mapped.role === "user" && entry.id) {
+    if (mapped.role === "user") {
       userEntries.push({ id: entry.id, text: textOf(mapped.content) });
     }
   }
@@ -334,9 +334,9 @@ export async function readActiveOmpEntryChain(
     }
   });
   if (entries.length === 0) return [];
-  const byId = new Map(entries.map((entry) => [entry.id!, entry]));
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
   const parentIds = new Set(entries.flatMap((entry) => (entry.parentId ? [entry.parentId] : [])));
-  const leaves = entries.filter((entry) => !parentIds.has(entry.id!));
+  const leaves = entries.filter((entry) => !parentIds.has(entry.id));
   let current: OmpSessionEntry | undefined =
     (activeEntryId ? byId.get(activeEntryId) : undefined) ?? leaves.at(-1) ?? entries.at(-1);
   const chain: OmpSessionEntry[] = [];
@@ -376,6 +376,7 @@ function isControlEntryType(type: string): boolean {
     type === "custom" ||
     type === "system_prompt" ||
     type === "model_change" ||
+    type === "model_usage" ||
     type === "credential_pin" ||
     type === "ttsr_injection" ||
     type === "custom_message" ||
