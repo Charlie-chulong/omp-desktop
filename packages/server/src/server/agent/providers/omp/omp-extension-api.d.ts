@@ -8,6 +8,7 @@ declare module "@oh-my-pi/pi-coding-agent/async" {
     status: "running" | "completed" | "failed" | "cancelled";
     startTime: number;
     ownerId?: string;
+    progressText?: string;
     resultText?: string;
     promise: Promise<void>;
     errorText?: string;

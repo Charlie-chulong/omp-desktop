@@ -30,7 +30,8 @@ Native window buttons retain their reserved space. Tabs sit edge-to-edge with
 square corners and thin separators; the active tab shares the content background,
 with its close button visible on selection or hover.
 Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
-workspace splitters also use the same divider and accent highlight while resizing.
+vertical workspace splitters use matching two-pixel accent highlights on hover, without
+narrowing their invisible drag targets.
 
 Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
@@ -669,7 +670,9 @@ Collapsed activity groups show their item count in a compact, theme-aware pill w
 
 ## Background processes
 
-Background commands started by the current Agent appear beside the workspace branch under the composer. The indicator shows the active count; opening it lists live and recently completed commands. Select a command to open its read-only terminal output in a bottom pane, or use **Stop** to terminate that command. Closing the output pane does not stop the process. Stopping the current Agent response terminates that Agent's running background commands and suppresses their late completion events; reconnecting restores retained process state and output.
+Background work started by the current Agent, including Bash commands and `eval` cells, appears beside the workspace branch above the composer. While work is active, the indicator shows the active count; opening it lists live and recently completed jobs. Select a job to open its read-only terminal output in a bottom pane, or use **Stop** to cancel that job. Closing the output pane does not stop the work.
+
+All native background job types use the same list, live output, and stop controls. Jobs that move from foreground to background become visible when OMP exposes them in the current Agent's background snapshot; foreground jobs and other Agents' native jobs are not included. Stopping the current Agent response cancels that Agent's running background work and suppresses its late completion events; reconnecting restores retained job state and output.
 
 ## Independent agent conversations
 
