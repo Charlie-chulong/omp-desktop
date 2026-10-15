@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { useFetchQuery } from "@/data/query";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -26,8 +25,6 @@ import type { DesktopPetSettings, PetCreationWorkspace, PetDescriptor, PetSize }
 const PETS_QUERY_KEY = ["desktop-pets"] as const;
 const SIZES: PetSize[] = ["small", "medium", "large"];
 const AUTHOR_INITIAL_VALUES = { provider: "omp" } as const;
-const EXPANDED_ACCESSIBILITY_STATE = { expanded: true } as const;
-const COLLAPSED_ACCESSIBILITY_STATE = { expanded: false } as const;
 const fetchDesktopPets = () => invokeDesktopCommand<PetDescriptor[]>("list_desktop_pets");
 
 export function DesktopPetSection() {
@@ -39,8 +36,6 @@ function NativeDesktopPetSection() {
   const toast = useToast();
   const { settings, updateSettings, isLoading, isSaving } = useDesktopSettings();
   const [importing, setImporting] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const toggleExpanded = useStableEvent(() => setExpanded((current) => !current));
   const pets = useFetchQuery({
     queryKey: PETS_QUERY_KEY,
     queryFn: fetchDesktopPets,
@@ -84,39 +79,9 @@ function NativeDesktopPetSection() {
       setImporting(false);
     }
   });
-  const trailing = useMemo(
-    () => (
-      <View style={styles.actions}>
-        {expanded ? (
-          <Button variant="ghost" size="sm" onPress={refresh} disabled={busy || pets.isFetching}>
-            {pets.isFetching ? t("desktop.pets.refreshing") : t("desktop.pets.refresh")}
-          </Button>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="sm"
-          onPress={toggleExpanded}
-          leftIcon={expanded ? ChevronUp : ChevronDown}
-          accessibilityState={
-            expanded ? EXPANDED_ACCESSIBILITY_STATE : COLLAPSED_ACCESSIBILITY_STATE
-          }
-          aria-expanded={expanded}
-          accessibilityLabel={t(expanded ? "desktop.pets.collapse" : "desktop.pets.expand")}
-          testID="desktop-pet-settings-toggle"
-        >
-          {t(expanded ? "desktop.pets.collapse" : "desktop.pets.expand")}
-        </Button>
-      </View>
-    ),
-    [expanded, toggleExpanded, refresh, busy, pets.isFetching, t],
-  );
-
   return (
-    <SettingsSection title={t("desktop.pets.title")} trailing={trailing}>
-      <View
-        style={[settingsStyles.card, !expanded && styles.collapsed]}
-        testID="desktop-pet-settings-content"
-      >
+    <SettingsSection title={t("desktop.pets.title")}>
+      <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>{t("desktop.pets.enabled")}</Text>
@@ -130,45 +95,61 @@ function NativeDesktopPetSection() {
             testID="desktop-pet-enabled"
           />
         </View>
-        <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-          <Text style={settingsStyles.rowTitle}>{t("desktop.pets.size")}</Text>
-          <View style={styles.actions}>
-            {SIZES.map((size) => (
-              <PetSizeButton
-                key={size}
-                size={size}
-                selected={settings.pet.size === size}
-                disabled={busy}
-                onSelect={setSize}
-              />
-            ))}
+        {/* Hidden rather than unmounted so disabling keeps the creation draft and model selection. */}
+        <View
+          style={settings.pet.enabled ? undefined : styles.collapsed}
+          testID="desktop-pet-settings-content"
+        >
+          <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+            <Text style={settingsStyles.rowTitle}>{t("desktop.pets.size")}</Text>
+            <View style={styles.actions}>
+              {SIZES.map((size) => (
+                <PetSizeButton
+                  key={size}
+                  size={size}
+                  selected={settings.pet.size === size}
+                  disabled={busy}
+                  onSelect={setSize}
+                />
+              ))}
+            </View>
           </View>
-        </View>
-        <View style={[styles.library, settingsStyles.rowBorder]}>
-          <View style={styles.gallery}>
-            {pets.data?.map((pet) => (
-              <PetCard
-                key={pet.id}
-                pet={pet}
-                selected={settings.pet.selectedId === pet.id}
-                disabled={busy}
-                onSelect={selectPet}
-              />
-            ))}
+          <View style={[styles.library, settingsStyles.rowBorder]}>
+            <View style={styles.gallery}>
+              {pets.data?.map((pet) => (
+                <PetCard
+                  key={pet.id}
+                  pet={pet}
+                  selected={settings.pet.selectedId === pet.id}
+                  disabled={busy}
+                  onSelect={selectPet}
+                />
+              ))}
+            </View>
+            {pets.data?.length === 0 ? (
+              <Text style={settingsStyles.rowHint}>{t("desktop.pets.empty")}</Text>
+            ) : null}
+            <View style={styles.actions}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || !getDesktopHost()?.dialog?.open}
+                onPress={importPet}
+              >
+                {importing ? t("desktop.pets.importing") : t("desktop.pets.import")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onPress={refresh}
+                disabled={busy || pets.isFetching}
+              >
+                {pets.isFetching ? t("desktop.pets.refreshing") : t("desktop.pets.refresh")}
+              </Button>
+            </View>
           </View>
-          {pets.data?.length === 0 ? (
-            <Text style={settingsStyles.rowHint}>{t("desktop.pets.empty")}</Text>
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || !getDesktopHost()?.dialog?.open}
-            onPress={importPet}
-          >
-            {importing ? t("desktop.pets.importing") : t("desktop.pets.import")}
-          </Button>
+          <PetCreator disabled={busy} />
         </View>
-        <PetCreator disabled={busy} />
       </View>
     </SettingsSection>
   );

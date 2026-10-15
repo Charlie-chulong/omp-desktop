@@ -682,7 +682,6 @@ export function AppearanceSection() {
 
   return (
     <View>
-      <DesktopPetSection />
       <SettingsSection title={t("settings.appearance.theme.title")}>
         <View style={settingsStyles.card}>
           <ThemeRow
@@ -766,6 +765,7 @@ export function AppearanceSection() {
         </View>
       </SettingsSection>
       <WallpaperSection />
+      <DesktopPetSection />
       <SettingsSection title={t("settings.appearance.syntax.title")}>
         <View style={settingsStyles.card}>
           <SyntaxRow value={settings.syntaxTheme} onChange={handleSyntaxThemeChange} />

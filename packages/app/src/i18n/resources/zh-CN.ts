@@ -1404,8 +1404,6 @@ export const zhCN: TranslationResources = {
   desktop: {
     pets: {
       title: "桌面宠物",
-      expand: "展开宠物设置",
-      collapse: "收起宠物设置",
       enabled: "显示桌面宠物",
       enabledHint: "让悬浮伙伴展示已连接 OMP 任务的真实状态。",
       size: "大小",
