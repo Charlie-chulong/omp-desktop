@@ -481,6 +481,7 @@ export const zhCN: TranslationResources = {
       fastModeEnabled: "Fast 模式已开启",
       fastModeDisabled: "Fast 模式已关闭",
       modelChanged: "已切换至 {{model}}",
+      thinkingChanged: "思考强度已切换为 {{thinking}} · 从下一次模型请求起生效",
     },
     question: {
       submit: "提交",

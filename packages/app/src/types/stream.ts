@@ -849,6 +849,7 @@ export interface SystemNoticeItem {
   timestamp: Date;
   notice: Extract<AgentTimelineItem, { type: "system_notice" }>["notice"];
   modelId?: string;
+  thinkingOptionId?: string;
 }
 
 export interface CompactionItem {
@@ -1602,13 +1603,20 @@ function reduceTimelineEvent(
           id: createUniqueTimelineId(
             state,
             "system_notice",
-            item.notice === "model_changed" ? `${item.notice}:${item.modelId}` : item.notice,
+            item.notice === "model_changed"
+              ? `${item.notice}:${item.modelId}`
+              : item.notice === "thinking_changed"
+                ? `${item.notice}:${item.thinkingOptionId}`
+                : item.notice,
             timestamp,
           ),
           ...(timelineCursor ? { timelineCursor } : {}),
           timestamp,
           notice: item.notice,
           ...(item.notice === "model_changed" ? { modelId: item.modelId } : {}),
+          ...(item.notice === "thinking_changed"
+            ? { thinkingOptionId: item.thinkingOptionId }
+            : {}),
         },
       ];
     case "extension_notification":

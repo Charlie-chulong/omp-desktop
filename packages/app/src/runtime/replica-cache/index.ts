@@ -96,8 +96,14 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     ...TimelineItemBaseShape,
     kind: z.literal("system_notice"),
-    notice: z.enum(["fast_mode_enabled", "fast_mode_disabled", "model_changed"]),
+    notice: z.enum([
+      "fast_mode_enabled",
+      "fast_mode_disabled",
+      "model_changed",
+      "thinking_changed",
+    ]),
     modelId: z.string().optional(),
+    thinkingOptionId: z.string().optional(),
   }),
   z.strictObject({
     ...TimelineItemBaseShape,
@@ -394,6 +400,7 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         kind: item.kind,
         notice: item.notice,
         ...storedModelNoticeId(item.modelId),
+        ...(item.thinkingOptionId === undefined ? {} : { thinkingOptionId: item.thinkingOptionId }),
       };
     case "compaction":
       return {
@@ -475,6 +482,7 @@ function deserializeTimelineItem(item: StoredTimelineItem): StreamItem {
         kind: item.kind,
         notice: item.notice,
         ...storedModelNoticeId(item.modelId),
+        ...(item.thinkingOptionId === undefined ? {} : { thinkingOptionId: item.thinkingOptionId }),
       };
     case "compaction":
       return {

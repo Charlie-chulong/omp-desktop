@@ -617,6 +617,32 @@ describe("OMP agent client and session", () => {
     ]);
   });
 
+  test("records thinking changes only after successful transitions, without duplicate notices", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+
+    await omp.setThinkingOption("low");
+    await omp.setThinkingOption("low");
+    const setter = vi
+      .spyOn(omp.runtime(), "setThinkingLevel")
+      .mockRejectedValueOnce(new Error("Thinking update failed"));
+
+    await expect(omp.setThinkingOption("high")).rejects.toThrow("Thinking update failed");
+    expect(omp.timeline().filter((item) => item.type === "system_notice")).toEqual([
+      { type: "system_notice", notice: "thinking_changed", thinkingOptionId: "low" },
+    ]);
+    expect(await omp.runtimeInfo()).toMatchObject({ thinkingOptionId: "low" });
+
+    setter.mockRestore();
+    await omp.setThinkingOption("high");
+
+    expect(omp.timeline().filter((item) => item.type === "system_notice")).toEqual([
+      { type: "system_notice", notice: "thinking_changed", thinkingOptionId: "low" },
+      { type: "system_notice", notice: "thinking_changed", thinkingOptionId: "high" },
+    ]);
+    expect(await omp.runtimeInfo()).toMatchObject({ thinkingOptionId: "high" });
+  });
+
   test.each(["openai-codex/gpt-5.6", "anthropic/claude-opus-5-5"])(
     "records only successful fast-mode transitions as system notices for %s",
     async (model) => {

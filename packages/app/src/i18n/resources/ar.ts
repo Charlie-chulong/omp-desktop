@@ -456,6 +456,7 @@ export const ar: TranslationResources = {
       fastModeEnabled: "تم تفعيل الوضع السريع",
       fastModeDisabled: "تم إيقاف الوضع السريع",
       modelChanged: "تم التبديل إلى {{model}}",
+      thinkingChanged: "تم ضبط مستوى التفكير على {{thinking}} · يسري بدءًا من طلب النموذج التالي",
     },
     question: {
       submit: "يُقدِّم",

@@ -1,4 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { TaskListRow } from "@/components/task-list-row";
 import {
   View,
@@ -2256,16 +2257,21 @@ export const CompactionMarker = memo(function CompactionMarker({
 export const SystemNotice = memo(function SystemNotice({
   notice,
   modelId,
-}: Pick<SystemNoticeItem, "notice" | "modelId">) {
+  thinkingOptionId,
+}: Pick<SystemNoticeItem, "notice" | "modelId" | "thinkingOptionId">) {
   const { t } = useTranslation();
   const message =
     notice === "model_changed"
       ? t("message.systemNotice.modelChanged", { model: modelId })
-      : t(
-          notice === "fast_mode_enabled"
-            ? "message.systemNotice.fastModeEnabled"
-            : "message.systemNotice.fastModeDisabled",
-        );
+      : notice === "thinking_changed"
+        ? t("message.systemNotice.thinkingChanged", {
+            thinking: thinkingOptionId && formatThinkingOptionLabel({ id: thinkingOptionId }),
+          })
+        : t(
+            notice === "fast_mode_enabled"
+              ? "message.systemNotice.fastModeEnabled"
+              : "message.systemNotice.fastModeDisabled",
+          );
 
   return (
     <View style={compactionStylesheet.container} testID="system-notice">

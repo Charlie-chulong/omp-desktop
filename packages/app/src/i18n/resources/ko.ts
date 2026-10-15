@@ -457,6 +457,8 @@ export const ko: TranslationResources = {
       fastModeEnabled: "빠른 모드가 켜졌습니다",
       fastModeDisabled: "빠른 모드가 꺼졌습니다",
       modelChanged: "{{model}}(으)로 전환했습니다",
+      thinkingChanged:
+        "사고 강도를 {{thinking}}(으)로 변경했습니다 · 다음 모델 요청부터 적용됩니다",
     },
     question: {
       submit: "제출",

@@ -2867,12 +2867,24 @@ export class OmpAgentSession implements AgentSession {
     const thinkingLevel =
       normalizeOmpThinkingOption(thinkingOptionId) ?? DEFAULT_OMP_THINKING_LEVEL;
     await this.runtimeSession.setThinkingLevel(thinkingLevel);
+    const changed = this.state.thinkingLevel !== thinkingLevel;
     this.lastKnownThinkingOptionId = thinkingLevel;
     this.config.thinkingOptionId = thinkingLevel;
     this.state = {
       ...this.state,
       thinkingLevel,
     };
+    if (changed) {
+      this.emit({
+        type: "timeline",
+        provider: this.provider,
+        item: {
+          type: "system_notice",
+          notice: "thinking_changed",
+          thinkingOptionId: thinkingLevel,
+        },
+      });
+    }
   }
 
   private emit(event: AgentStreamEvent): void {

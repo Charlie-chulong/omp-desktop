@@ -468,6 +468,8 @@ export const ru: TranslationResources = {
       fastModeEnabled: "Быстрый режим включён",
       fastModeDisabled: "Быстрый режим выключен",
       modelChanged: "Переключено на {{model}}",
+      thinkingChanged:
+        "Уровень размышлений: {{thinking}} · Применяется со следующего запроса к модели",
     },
     question: {
       submit: "Отправить",

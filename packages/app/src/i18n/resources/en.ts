@@ -481,6 +481,7 @@ export const en = {
       fastModeEnabled: "Fast mode enabled",
       fastModeDisabled: "Fast mode disabled",
       modelChanged: "Switched to {{model}}",
+      thinkingChanged: "Thinking set to {{thinking}} · Applies from the next model request",
     },
     question: {
       submit: "Submit",

@@ -1035,7 +1035,13 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             );
 
           case "system_notice":
-            return <SystemNotice notice={item.notice} modelId={item.modelId} />;
+            return (
+              <SystemNotice
+                notice={item.notice}
+                modelId={item.modelId}
+                thinkingOptionId={item.thinkingOptionId}
+              />
+            );
 
           case "todo_list":
             return <TodoListCard items={item.items} activity={item.activity} />;

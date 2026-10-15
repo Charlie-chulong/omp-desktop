@@ -459,6 +459,8 @@ export const ja: TranslationResources = {
       fastModeEnabled: "高速モードを有効にしました",
       fastModeDisabled: "高速モードを無効にしました",
       modelChanged: "{{model}} に切り替えました",
+      thinkingChanged:
+        "思考レベルを {{thinking}} に変更しました · 次のモデルリクエストから適用されます",
     },
     question: {
       submit: "送信",
