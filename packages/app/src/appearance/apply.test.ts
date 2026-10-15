@@ -207,6 +207,14 @@ describe("applyAppearance", () => {
     expect(colors.surfaceUserMessage).toBe("rgba(69, 69, 69, 0.85)");
   });
 
+  it("keeps floating panels opaque over a transparent wallpaper canvas", () => {
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 1 }));
+
+    const { colors } = runCapturedUpdater();
+    expect(colors.popover).toBe(REGISTERED_THEMES.dark.colors.popover);
+    expect(colors.surface0).toBe("rgba(24, 24, 24, 0)");
+  });
+
   it("keeps remounted tab canvases transparent across repeated wallpaper applies", () => {
     applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.9 }));
     applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.4 }));
