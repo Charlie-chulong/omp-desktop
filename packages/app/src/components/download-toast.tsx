@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Check, X, XCircle } from "lucide-react-native";
 import { useDownloadStore, formatSpeed, formatEta, type Download } from "@/stores/download-store";
+import { setCssColorAlpha } from "@/wallpaper/color";
 
 const AUTO_DISMISS_DELAY = 3000;
 
@@ -116,7 +117,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[3],
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
     borderRadius: theme.borderRadius.lg,
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,

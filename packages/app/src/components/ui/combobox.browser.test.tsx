@@ -1,4 +1,5 @@
-import React, { act, useMemo, useRef } from "react";
+import React, { useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { Text, View } from "react-native";
 import { userEvent } from "vitest/browser";
@@ -6,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Combobox, type ComboboxDesktopPlacement } from "./combobox";
 
 vi.mock("expo-clipboard", () => ({}));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 const options = Array.from({ length: 60 }, (_, index) => ({
   id: `model-${index}`,
@@ -46,7 +48,7 @@ function mountPicker(top: number, placement: ComboboxDesktopPlacement, fixedHeig
       </>
     );
   }
-  act(() => root.render(<Picker />));
+  flushSync(() => root.render(<Picker />));
   mounted.push({ root, container });
   return onSelect;
 }
@@ -79,13 +81,24 @@ async function expectUsablePanel() {
 
 afterEach(() => {
   for (const { root, container } of mounted.splice(0)) {
-    act(() => root.unmount());
+    flushSync(() => root.unmount());
     container.remove();
   }
   document.getElementById("overlay-root")?.remove();
 });
 
 describe("desktop model picker viewport boundaries", () => {
+  it("keeps the floating model panel opaque so content behind it cannot bleed through", async () => {
+    mountPicker(window.innerHeight - 52, "bottom-start");
+    await expectUsablePanel();
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Browser did not provide a canvas context");
+    context.fillStyle = getComputedStyle(panel()).backgroundColor;
+    context.fillRect(0, 0, 1, 1);
+    expect(context.getImageData(0, 0, 1, 1).data[3]).toBe(255);
+  });
+
   it("opens upward at the bottom and selects the last model through scrolling", async () => {
     const onSelect = mountPicker(window.innerHeight - 52, "bottom-start");
     await expectUsablePanel();

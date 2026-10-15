@@ -2517,7 +2517,7 @@ function ComposerContentImpl({
                   onSelectionChange={handleSelectionChange}
                   onFocusChange={handleFocusChange}
                   onHeightChange={onComposerHeightChange}
-                  inputWrapperStyle={inputWrapperStyle}
+                  inputWrapperStyle={inputWrapperStyle ?? styles.inputWrapper}
                   attachmentSlot={attachmentTray}
                   inputMode={inputMode}
                   readOnly={readOnly}
@@ -2561,6 +2561,9 @@ const animatedStaticStyles = RNStyleSheet.create({
 });
 
 const styles = StyleSheet.create((theme: Theme) => ({
+  inputWrapper: {
+    backgroundColor: theme.colors.surfaceComposer,
+  },
   borderSeparator: {
     height: theme.borderWidth[1],
     backgroundColor: theme.colors.border,

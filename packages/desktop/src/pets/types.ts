@@ -70,10 +70,21 @@ export interface DesktopPetLabels {
   taskCount: string;
 }
 
+export interface DesktopPetRevision {
+  generation: string;
+  seq: number;
+  previousGeneration?: string;
+}
+
+export interface DesktopPetActivityResult {
+  revalidate: Array<{ serverId: string; generation: string }>;
+}
+
 export interface DesktopPetActivity {
   tasks: DesktopPetTask[];
   connected: boolean;
   serverIds: string[];
+  revisions: Record<string, DesktopPetRevision | null>;
   labels: DesktopPetLabels;
   fontFamily: string;
 }

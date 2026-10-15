@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { darkHighlightColors, resolveSyntaxColors } from "@omp-desktop/highlight";
 import { DEFAULT_UI_FONT_STACK, REGISTERED_THEMES, type Theme } from "@/styles/theme";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { applyAppearance, type AppearanceInput } from "./apply";
 
 // Override the global react-native-unistyles mock (vitest.setup.ts) so that
@@ -197,14 +198,32 @@ describe("applyAppearance", () => {
     expect(runCapturedUpdater().colors.syntax).toEqual(resolveSyntaxColors("github", "dark"));
   });
 
-  it("makes base canvases transparent without compounding a second veil", () => {
-    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.6 }));
+  it("removes panel and composer backgrounds at 100% without changing text colors", () => {
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 1 }));
 
     const { colors } = runCapturedUpdater();
     expect(colors.surface0).toBe("rgba(24, 24, 24, 0)");
     expect(colors.background).toBe("rgba(24, 24, 24, 0)");
-    expect(colors.surface2).toBe("rgba(46, 46, 46, 0.85)");
-    expect(colors.surfaceUserMessage).toBe("rgba(69, 69, 69, 0.85)");
+    expect(colors.surface1).toBe("rgba(35, 35, 35, 0)");
+    expect(colors.surface2).toBe("rgba(46, 46, 46, 0)");
+    expect(colors.surfaceUserMessage).toBe("rgba(69, 69, 69, 0)");
+    expect(colors.surfaceSidebar).toBe(
+      setCssColorAlpha(REGISTERED_THEMES.dark.colors.surfaceSidebar, 0),
+    );
+    expect(colors.input).toBe(setCssColorAlpha(REGISTERED_THEMES.dark.colors.input, 0));
+    expect(colors.foreground).toBe(REGISTERED_THEMES.dark.colors.foreground);
+    expect(colors.surfaceComposer).toBe(
+      setCssColorAlpha(REGISTERED_THEMES.dark.colors.surfaceComposer, 0),
+    );
+  });
+
+  it("preserves the selected theme canvas color beneath fully transparent media", () => {
+    for (const theme of Object.values(REGISTERED_THEMES)) {
+      const transparentCanvas = setCssColorAlpha(theme.colors.surface0, 0);
+      expect(setCssColorAlpha(transparentCanvas, 1)).toBe(
+        setCssColorAlpha(theme.colors.surface0, 1),
+      );
+    }
   });
 
   it("keeps floating panels opaque over a transparent wallpaper canvas", () => {
@@ -215,21 +234,28 @@ describe("applyAppearance", () => {
     expect(colors.surface0).toBe("rgba(24, 24, 24, 0)");
   });
 
-  it("keeps remounted tab canvases transparent across repeated wallpaper applies", () => {
-    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.9 }));
-    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.4 }));
+  it("previews intermediate transparency and restores solid panels without compounding", () => {
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0.5 }));
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 1 }));
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 0 }));
 
-    const reapplied = runCapturedUpdater(ALL_THEME_KEYS.length);
-    expect(reapplied.colors.surface0).toBe("rgba(24, 24, 24, 0)");
-    expect(reapplied.colors.surface1).toBe("rgba(35, 35, 35, 0.85)");
+    expect(runCapturedUpdater().colors.surface1).toBe("rgba(35, 35, 35, 0.5)");
+    expect(runCapturedUpdater(ALL_THEME_KEYS.length).colors.surface1).toBe("rgba(35, 35, 35, 0)");
+    const solid = runCapturedUpdater(ALL_THEME_KEYS.length * 2);
+    expect(solid.colors.surface1).toBe("rgba(35, 35, 35, 1)");
+    expect(solid.colors.surfaceUserMessage).toBe("rgba(69, 69, 69, 1)");
+    expect(solid.colors.surfaceComposer).toBe(
+      setCssColorAlpha(REGISTERED_THEMES.dark.colors.surfaceComposer, 1),
+    );
   });
 
   it("restores authored surfaces when wallpaper is disabled", () => {
-    applyAppearance(makeInput({ wallpaperActive: true }));
-    applyAppearance(makeInput({ wallpaperActive: false }));
+    applyAppearance(makeInput({ wallpaperActive: true, wallpaperOpacity: 1 }));
+    applyAppearance(makeInput({ wallpaperActive: false, wallpaperOpacity: 1 }));
 
     const restored = runCapturedUpdater(ALL_THEME_KEYS.length);
     expect(restored.colors.surface0).toBe(REGISTERED_THEMES.dark.colors.surface0);
     expect(restored.colors.surface2).toBe(REGISTERED_THEMES.dark.colors.surface2);
+    expect(restored.colors.surfaceComposer).toBe(REGISTERED_THEMES.dark.colors.surfaceComposer);
   });
 });

@@ -19,6 +19,7 @@ import { AdaptiveTextInput } from "@/components/adaptive-modal-sheet";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Theme } from "@/styles/theme";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { MenuDepthProvider, useMenuContext } from "./menu-context";
 
 const ThemedCheck = withUnistyles(Check);
@@ -464,7 +465,7 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   fieldFocused: {
     borderColor: theme.colors.borderAccent,
@@ -478,14 +479,14 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 0,
   },
   itemHovered: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   itemPressed: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   // The row you are inside, not the value you chose. A chosen value is marked by its check.
   itemActive: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   itemDisabled: {
     opacity: 0.5,

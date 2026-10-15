@@ -57,8 +57,9 @@ function applyWallpaperSurfaces<TColors extends Theme["colors"]>(
   opacity: number,
 ): TColors {
   if (!active) return colors;
-  const surfaceAlpha = Math.max(0.85, 1 - Math.max(0, Math.min(1, opacity)));
-  // Floating panels retain their authored opacity so wallpaper cannot bleed through them.
+  // One control reveals the media and removes the interface veil. Surface RGB
+  // stays unchanged so AppearanceStyleBoundary preserves focused controls.
+  const surfaceAlpha = 1 - opacity;
   return {
     ...colors,
     surface0: setCssColorAlpha(colors.surface0, 0),
@@ -70,6 +71,7 @@ function applyWallpaperSurfaces<TColors extends Theme["colors"]>(
     surface4: setCssColorAlpha(colors.surface4, surfaceAlpha),
     surfaceSidebar: setCssColorAlpha(colors.surfaceSidebar, surfaceAlpha),
     surfaceUserMessage: setCssColorAlpha(colors.surfaceUserMessage, surfaceAlpha),
+    surfaceComposer: setCssColorAlpha(colors.surfaceComposer, surfaceAlpha),
     secondary: setCssColorAlpha(colors.secondary, surfaceAlpha),
     muted: setCssColorAlpha(colors.muted, surfaceAlpha),
     input: setCssColorAlpha(colors.input, surfaceAlpha),
@@ -92,10 +94,10 @@ function getAuthoredColors<TColors extends Theme["colors"]>(
  * and adaptive mode can flip light/dark — patching all keys keeps the active key
  * always current and makes ordering vs `setTheme`/`setAdaptiveThemes` irrelevant.
  *
- * The updater starts from each theme's authored colors so enabling/disabling
- * wallpaper is idempotent. Wallpaper mode makes only base canvas tokens fully
- * transparent; one explicit veil controls wallpaper visibility, avoiding the
- * compounded opacity and remount flashes caused by DOM-wide style rewrites.
+ * The updater starts from authored colors so repeated previews never compound
+ * opacity. Base canvases stay transparent while media is ready. The wallpaper
+ * value fades media in and panel backgrounds out; 100% reveals the original image.
+ * Floating popovers retain their authored backing; other overlays restore opacity locally.
  */
 export function applyAppearance(input: AppearanceInput): void {
   const ui = input.uiFontFamily.trim() || DEFAULT_UI_FONT_STACK;

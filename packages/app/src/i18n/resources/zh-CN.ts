@@ -1404,6 +1404,8 @@ export const zhCN: TranslationResources = {
   desktop: {
     pets: {
       title: "桌面宠物",
+      expand: "展开宠物设置",
+      collapse: "收起宠物设置",
       enabled: "显示桌面宠物",
       enabledHint: "让悬浮伙伴展示已连接 OMP 任务的真实状态。",
       size: "大小",
@@ -2355,6 +2357,7 @@ export const zhCN: TranslationResources = {
       wallpaper: {
         title: "壁纸",
         enabled: "启用壁纸",
+        loadError: "无法加载壁纸，请检查所选文件或网址。",
         source: {
           label: "来源",
           none: "禁用",
@@ -2367,9 +2370,9 @@ export const zhCN: TranslationResources = {
           accessibilityLabel: "壁纸图片或视频 URL",
         },
         opacity: {
-          label: "不透明度",
-          hint: "壁纸覆盖层的透明度级别",
-          accessibilityLabel: "壁纸不透明度",
+          label: "界面透明度",
+          hint: "数值越高，壁纸越清晰；100% 去除主界面底色。",
+          accessibilityLabel: "界面透明度",
         },
         directory: {
           label: "壁纸目录",

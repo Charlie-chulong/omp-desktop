@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/isolated-bottom-sheet-modal";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { useAggregatedAgents, type AggregatedAgent } from "@/hooks/use-aggregated-agents";
 import { useProjects } from "@/hooks/use-projects";
 import {
@@ -831,7 +832,7 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.lg,
     overflow: "hidden",
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: setCssColorAlpha(theme.colors.surface0, 1),
     ...theme.shadow.lg,
   },
   header: {
@@ -889,7 +890,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   row: { height: 36, paddingHorizontal: theme.spacing[4], paddingVertical: theme.spacing[2] },
   tallRow: { height: 56 },
-  activeRow: { backgroundColor: theme.colors.surface1 },
+  activeRow: { backgroundColor: setCssColorAlpha(theme.colors.surface1, 1) },
   rowContent: {
     flexDirection: "row",
     alignItems: "center",
@@ -950,7 +951,7 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.statusDanger,
     fontSize: theme.fontSize.base,
   },
-  sheetBackground: { backgroundColor: theme.colors.surface0 },
+  sheetBackground: { backgroundColor: setCssColorAlpha(theme.colors.surface0, 1) },
   sheetHandle: { backgroundColor: theme.colors.palette.zinc[600] },
   titledSection: { height: 32, justifyContent: "flex-end" },
   dividedSection: { height: 49, justifyContent: "flex-end" },
