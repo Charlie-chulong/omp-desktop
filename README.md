@@ -153,6 +153,9 @@ value. Base workspaces remain transparent while wallpaper is enabled, including 
 selected tabs; cards retain an opaque-enough surface for text. Local media is streamed
 through app-scoped opaque identifiers rather than embedding full files in renderer IPC.
 Windows and Linux keep their native, opaque title-bar controls over wallpaper content.
+Desktop model pickers keep an opaque, theme-matched panel behind the model list and its
+**Thinking**, **Fast**, and **Context window** settings, so wallpaper and conversation text
+cannot show through the footer.
 
 ## Stopping conversations and subagents
 

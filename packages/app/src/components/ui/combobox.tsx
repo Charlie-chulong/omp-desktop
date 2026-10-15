@@ -1789,7 +1789,8 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
   },
   desktopContainer: {
-    backgroundColor: theme.colors.surface0,
+    // Wallpaper makes canvas surfaces transparent; pickers must still occlude content behind them.
+    backgroundColor: theme.colors.popover,
     borderRadius: theme.borderRadius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,

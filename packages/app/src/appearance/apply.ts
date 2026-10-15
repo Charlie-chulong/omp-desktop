@@ -58,6 +58,7 @@ function applyWallpaperSurfaces<TColors extends Theme["colors"]>(
 ): TColors {
   if (!active) return colors;
   const surfaceAlpha = Math.max(0.85, 1 - Math.max(0, Math.min(1, opacity)));
+  // Floating panels retain their authored opacity so wallpaper cannot bleed through them.
   return {
     ...colors,
     surface0: setCssColorAlpha(colors.surface0, 0),
@@ -69,7 +70,6 @@ function applyWallpaperSurfaces<TColors extends Theme["colors"]>(
     surface4: setCssColorAlpha(colors.surface4, surfaceAlpha),
     surfaceSidebar: setCssColorAlpha(colors.surfaceSidebar, surfaceAlpha),
     surfaceUserMessage: setCssColorAlpha(colors.surfaceUserMessage, surfaceAlpha),
-    popover: setCssColorAlpha(colors.popover, surfaceAlpha),
     secondary: setCssColorAlpha(colors.secondary, surfaceAlpha),
     muted: setCssColorAlpha(colors.muted, surfaceAlpha),
     input: setCssColorAlpha(colors.input, surfaceAlpha),
