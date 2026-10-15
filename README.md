@@ -84,6 +84,20 @@ their selector according to the available window space, and constrain their heig
 to keep search and the scrollable model list inside the window. Scroll the list or
 search to select any available model, including in a small window.
 
+Each selected model also exposes its supported **Thinking** levels and, when the host's
+OMP capability probe confirms support, a **Fast** switch. Unsupported controls are hidden.
+**OMP default** leaves the native thinking or service-tier policy unchanged; a manually
+configured service tier is shown rather than treated as an explicit Fast-off selection.
+Fast can incur higher provider charges.
+
+Changes are saved to OMP's user configuration and apply to newly spawned task/eval
+subagents, including spawns from an already running conversation. Thinking uses the
+native model selector suffix (`provider/model:high`); Fast writes `priority` or `none`
+to `task.agentServiceTierOverrides` for that agent. Existing children are not reconfigured.
+Choosing inheritance clears that agent's model and Fast overrides. Disabling the section
+removes the model mapping and bundled agents' Fast overrides, preserving custom agents'
+service tiers and unrelated OMP settings.
+
 ## Completing conversations
 
 After OMP finishes a model turn and reports that it is no longer streaming or compacting,

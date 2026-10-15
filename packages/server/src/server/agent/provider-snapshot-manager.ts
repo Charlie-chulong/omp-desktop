@@ -194,7 +194,9 @@ interface MutableProviderState {
   providerLoads: Map<string, Map<AgentProvider, ProviderLoad>>;
 }
 
-type ProviderCatalogScope = { scope: "global" };
+interface ProviderCatalogScope {
+  scope: "global";
+}
 
 interface ProviderSnapshotTarget {
   snapshotCwd: string;
@@ -528,14 +530,18 @@ export class ProviderSnapshotManager {
     return await client.getOmpSubagentSettings();
   }
 
-  async updateOmpSubagentModel(agentName: string, model: string | null) {
+  async updateOmpSubagentModel(
+    agentName: string,
+    model: string | null,
+    options?: { fastMode?: boolean | null },
+  ) {
     const definition = this.providerRegistry.omp;
     if (!definition) throw new Error("OMP provider is not configured");
     const client = this.ensureClient("omp", definition);
     if (!client.updateOmpSubagentModel) {
       throw new Error("OMP subagent configuration is read-only");
     }
-    return await client.updateOmpSubagentModel(agentName, model);
+    return await client.updateOmpSubagentModel(agentName, model, options);
   }
   async updateOmpSubagentSettingsEnabled(enabled: boolean) {
     const definition = this.providerRegistry.omp;

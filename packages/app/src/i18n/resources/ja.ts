@@ -2658,7 +2658,11 @@ export const ja: TranslationResources = {
         moveUp: "上に移動",
         moveDown: "下に移動",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "OMP の既定値",
+        currentTier: "現在の OMP サービス階層: {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "ラベルを編集",

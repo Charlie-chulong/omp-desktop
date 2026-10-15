@@ -2831,12 +2831,14 @@ export const en = {
         loading: "Loading OMP subagent settings...",
         overrideEnabled: "Override built-in subagent models",
         overrideEnabledHint:
-          "Write task.agentModelOverrides for scout, task, sonic, reviewer, and security-reviewer. Turning this off removes the entire mapping.",
+          "Set model, thinking, and Fast overrides for scout, task, sonic, reviewer, and security-reviewer. New subagents use saved settings. Turning this off removes model overrides and these agents' Fast overrides.",
         inherit: "Inherit parent agent",
         inheritHint: "Use the parent agent's active or default model.",
         modelLabel: "Model",
         noModels: "No OMP models are available on this host",
         selectModelTitle: "Select a model for {{name}}",
+        ompDefault: "OMP default",
+        currentTier: "Current OMP tier: {{tier}}",
         configPath: "User configuration: {{path}}",
         descriptions: {
           scout: "Read-only codebase research and analysis.",

@@ -2689,7 +2689,11 @@ export const ru: TranslationResources = {
         moveUp: "Переместить вверх",
         moveDown: "Переместить вниз",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "По умолчанию OMP",
+        currentTier: "Текущий уровень OMP: {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "Изменить название",

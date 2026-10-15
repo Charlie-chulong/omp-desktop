@@ -2737,12 +2737,14 @@ export const zhCN: TranslationResources = {
         loading: "正在加载 OMP 子智能体配置...",
         overrideEnabled: "复写内置子智能体模型",
         overrideEnabledHint:
-          "通过 task.agentModelOverrides 管理 scout、task、sonic、reviewer 和 security-reviewer。关闭后会删除整个映射。",
+          "为 scout、task、sonic、reviewer 和 security-reviewer 设置模型、思考强度与 Fast 覆写。新启动的子智能体使用保存的设置。关闭后会删除模型覆写及这些智能体的 Fast 覆写。",
         inherit: "继承父 Agent",
         inheritHint: "使用父 Agent 当前或默认的模型。",
         modelLabel: "模型",
         noModels: "此 Host 上没有可用的 OMP 模型",
         selectModelTitle: "为 {{name}} 选择模型",
+        ompDefault: "OMP 默认",
+        currentTier: "当前 OMP 服务等级：{{tier}}",
         configPath: "用户级配置：{{path}}",
         descriptions: {
           scout: "只读代码库调研与分析。",

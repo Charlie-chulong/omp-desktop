@@ -4937,11 +4937,16 @@ export class DaemonClient {
   async updateOmpSubagentModel(
     agentName: string,
     model: string | null,
-    options?: { requestId?: string },
+    options?: { requestId?: string; fastMode?: boolean | null },
   ): Promise<OmpSubagentSettingsUpdatePayload> {
     return this.sendCorrelatedSessionRequest({
       requestId: options?.requestId,
-      message: { type: "omp.subagents.management.update.request", agentName, model },
+      message: {
+        type: "omp.subagents.management.update.request",
+        agentName,
+        model,
+        ...(options?.fastMode !== undefined ? { fastMode: options.fastMode } : {}),
+      },
       responseType: "omp.subagents.management.update.response",
       timeout: 30_000,
     });

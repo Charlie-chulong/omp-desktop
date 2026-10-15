@@ -863,7 +863,11 @@ export interface AgentClient {
   ): Promise<OmpClaudeLimitResetConsumeResult>;
   saveOmpProviderConfig?(configYaml: string): Promise<OmpProviderManagement>;
   getOmpSubagentSettings?(): Promise<OmpSubagentSettings>;
-  updateOmpSubagentModel?(agentName: string, model: string | null): Promise<OmpSubagentSettings>;
+  updateOmpSubagentModel?(
+    agentName: string,
+    model: string | null,
+    options?: { fastMode?: boolean | null },
+  ): Promise<OmpSubagentSettings>;
   updateOmpSubagentSettingsEnabled?(enabled: boolean): Promise<OmpSubagentSettings>;
   getOmpMemorySettings?(): Promise<OmpMemorySettings>;
   updateOmpMemorySettings?(

@@ -2693,7 +2693,11 @@ export const fr: TranslationResources = {
         moveUp: "Déplacer vers le haut",
         moveDown: "Déplacer vers le bas",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "Valeur par défaut d’OMP",
+        currentTier: "Niveau de service OMP actuel : {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "Modifier l'étiquette",

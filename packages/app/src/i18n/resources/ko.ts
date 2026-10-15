@@ -2647,7 +2647,11 @@ export const ko: TranslationResources = {
         moveUp: "위로 이동",
         moveDown: "아래로 이동",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "OMP 기본값",
+        currentTier: "현재 OMP 서비스 등급: {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "레이블 편집",

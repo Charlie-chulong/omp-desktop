@@ -9,10 +9,14 @@ import {
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
+import type { AgentModelDefinition } from "@omp-desktop/protocol/agent-types";
 import type { OmpSubagentSettings } from "@omp-desktop/protocol/messages";
 
+import { formatThinkingOptionLabel } from "@/agent-controls/labels";
+import { FAST_MODE_FEATURE_ID } from "@/agent-controls/policy";
 import { SelectField, type SelectFieldOption } from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
+import { useFetchQuery } from "@/data/query";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
@@ -20,36 +24,154 @@ import { SettingsSection } from "@/screens/settings/settings-section";
 import { settingsStyles } from "@/styles/settings";
 
 const INHERIT_MODEL = "__inherit_parent_agent__";
+const DEFAULT_THINKING = "__omp_default_thinking__";
+const NATIVE_THINKING_OPTIONS: Record<string, true> = {
+  off: true,
+  minimal: true,
+  low: true,
+  medium: true,
+  high: true,
+  xhigh: true,
+  max: true,
+  auto: true,
+};
 type SubagentEntry = OmpSubagentSettings["agents"][number];
 
+function resolveModelSelector(raw: string | undefined, models: readonly AgentModelDefinition[]) {
+  if (!raw) return { model: undefined, selector: raw, thinking: undefined };
+  // A literal catalog ID (including one ending in :max) wins over effort syntax.
+  const exact = models.find((model) => model.id === raw);
+  if (exact) return { model: exact, selector: raw, thinking: undefined };
+  const alias = models.find((model) => model.aliases?.includes(raw));
+  if (alias) return { model: alias, selector: raw, thinking: undefined };
+  const separator = raw.lastIndexOf(":");
+  const thinking = raw.slice(separator + 1);
+  if (separator > 0 && NATIVE_THINKING_OPTIONS[thinking] === true) {
+    const selector = raw.slice(0, separator);
+    const model =
+      models.find((entry) => entry.id === selector) ??
+      models.find((entry) => entry.aliases?.includes(selector));
+    if (model) return { model, selector, thinking };
+  }
+  // Unknown selectors/roles remain raw until the user explicitly chooses a model.
+  return { model: undefined, selector: raw, thinking: undefined };
+}
+
 interface OmpSubagentRowProps {
+  serverId: string;
   agent: SubagentEntry;
+  models: readonly AgentModelDefinition[];
   modelOptions: SelectFieldOption<string>[];
   catalogLoading: boolean;
   disabled: boolean;
-  onChange: (agentName: string, model: string) => void;
+  onChange: (agentName: string, model: string, options?: { fastMode: boolean | null }) => void;
 }
 
 function OmpSubagentRow({
+  serverId,
   agent,
+  models,
   modelOptions,
   catalogLoading,
   disabled,
   onChange,
 }: OmpSubagentRowProps): ReactElement {
   const { t } = useTranslation();
-  const value = agent.model ?? INHERIT_MODEL;
+  const client = useHostRuntimeClient(serverId);
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { model, selector, thinking } = useMemo(
+    () => resolveModelSelector(agent.model, models),
+    [agent.model, models],
+  );
+  const value = selector ?? INHERIT_MODEL;
   const selectedDisplay = useMemo(() => {
     const selected = modelOptions.find((option) => option.value === value);
-    if (!selected) return { label: value };
+    const description =
+      selected?.description ?? (agent.model !== model?.id ? agent.model : undefined);
     return {
-      label: selected.label,
-      ...(selected.description ? { description: selected.description } : {}),
+      label: selected?.label ?? model?.label ?? value,
+      ...(description ? { description } : {}),
     };
-  }, [modelOptions, value]);
+  }, [agent.model, model, modelOptions, value]);
+  const thinkingOptions = useMemo<SelectFieldOption<string>[]>(() => {
+    const supported = (model?.thinkingOptions ?? []).filter(
+      (option) => NATIVE_THINKING_OPTIONS[option.id] === true,
+    );
+    if (supported.length === 0) return [];
+    return [
+      {
+        id: DEFAULT_THINKING,
+        value: DEFAULT_THINKING,
+        label: t("settings.host.ompSubagents.ompDefault"),
+      },
+      ...supported.map((option) => {
+        const entry: SelectFieldOption<string> = {
+          id: option.id,
+          value: option.id,
+          label: formatThinkingOptionLabel(option),
+        };
+        if (option.description) entry.description = option.description;
+        return entry;
+      }),
+    ];
+  }, [model, t]);
+  const thinkingValue = thinking ?? DEFAULT_THINKING;
+  const thinkingDisplay = useMemo(
+    () =>
+      thinkingOptions.find((option) => option.value === thinkingValue) ?? {
+        label: thinking ?? t("settings.host.ompSubagents.ompDefault"),
+      },
+    [thinking, thinkingOptions, thinkingValue, t],
+  );
+  // Share capability probes across rows, without leaking the previous model's data.
+  const featuresQuery = useFetchQuery({
+    queryKey: ["ompSubagentFeatures", serverId, model?.id ?? null],
+    dataShape: "value",
+    staleTimeMs: 5 * 60 * 1000,
+    enabled: Boolean(client && isConnected && model),
+    retry: false,
+    queryFn: async () => {
+      if (!client || !model) throw new Error(t("workspace.terminal.hostDisconnected"));
+      const payload = await client.listProviderFeatures({
+        provider: "omp",
+        model: model.id,
+        cwd: "~",
+      });
+      if (payload.error) throw new Error(payload.error);
+      return payload.features ?? [];
+    },
+  });
+  const supportsFast =
+    model !== undefined &&
+    featuresQuery.data?.some(
+      (feature) => feature.id === FAST_MODE_FEATURE_ID && feature.type === "toggle",
+    ) === true;
+  let fastState: string;
+  if (agent.fastMode !== undefined) {
+    fastState = t(
+      agent.fastMode ? "shell.commandCenter.settingOn" : "shell.commandCenter.settingOff",
+    );
+  } else if (agent.serviceTier) {
+    fastState = t("settings.host.ompSubagents.currentTier", { tier: agent.serviceTier });
+  } else {
+    fastState = t("settings.host.ompSubagents.ompDefault");
+  }
   const handleChange = useCallback(
     (next: string) => onChange(agent.name, next),
     [agent.name, onChange],
+  );
+  const handleThinkingChange = useCallback(
+    (next: string) => {
+      if (!selector) return;
+      onChange(agent.name, next === DEFAULT_THINKING ? selector : `${selector}:${next}`);
+    },
+    [agent.name, onChange, selector],
+  );
+  const handleFastChange = useCallback(
+    (fastMode: boolean) => {
+      if (agent.model) onChange(agent.name, agent.model, { fastMode });
+    },
+    [agent.model, agent.name, onChange],
   );
 
   return (
@@ -65,23 +187,63 @@ function OmpSubagentRow({
           })}
         </Text>
       </View>
-      <View style={styles.modelField}>
-        <SelectField
-          field={false}
-          label={t("settings.host.ompSubagents.modelLabel")}
-          value={value}
-          selectedDisplay={selectedDisplay}
-          options={modelOptions}
-          onChange={handleChange}
-          placeholder={t("settings.host.ompSubagents.modelLabel")}
-          emptyText={t("settings.host.ompSubagents.noModels")}
-          loading={catalogLoading}
-          disabled={disabled}
-          searchable={modelOptions.length > 7}
-          title={t("settings.host.ompSubagents.selectModelTitle", { name: agent.name })}
-          size="sm"
-          testID={`omp-subagent-model-${agent.name}`}
-        />
+      <View style={styles.agentControls}>
+        <View style={styles.modelField}>
+          <SelectField
+            field={false}
+            label={t("settings.host.ompSubagents.modelLabel")}
+            value={value}
+            selectedDisplay={selectedDisplay}
+            options={modelOptions}
+            onChange={handleChange}
+            placeholder={t("settings.host.ompSubagents.modelLabel")}
+            emptyText={t("settings.host.ompSubagents.noModels")}
+            loading={catalogLoading}
+            disabled={disabled}
+            searchable={modelOptions.length > 7}
+            title={t("settings.host.ompSubagents.selectModelTitle", { name: agent.name })}
+            size="sm"
+            testID={`omp-subagent-model-${agent.name}`}
+          />
+        </View>
+        {thinkingOptions.length > 0 ? (
+          <View style={styles.controlRow} testID={`omp-subagent-thinking-row-${agent.name}`}>
+            <Text style={styles.controlLabel}>{t("agentControls.thinking.title")}</Text>
+            <View style={styles.thinkingField}>
+              <SelectField
+                field={false}
+                label={t("agentControls.thinking.title")}
+                value={thinkingValue}
+                selectedDisplay={thinkingDisplay}
+                options={thinkingOptions}
+                onChange={handleThinkingChange}
+                placeholder={t("settings.host.ompSubagents.ompDefault")}
+                emptyText={t("settings.host.agentProfiles.noThinkingOptions")}
+                disabled={disabled || catalogLoading}
+                title={t("agentControls.thinking.title")}
+                size="sm"
+                testID={`omp-subagent-thinking-${agent.name}`}
+              />
+            </View>
+          </View>
+        ) : null}
+        {supportsFast ? (
+          <View style={styles.controlRow} testID={`omp-subagent-fast-row-${agent.name}`}>
+            <View style={styles.fastMeta}>
+              <Text style={styles.controlLabel}>
+                {t("shell.commandCenter.fastModeGroupLabel")} · {fastState}
+              </Text>
+              <Text style={styles.mutedText}>{t("shell.commandCenter.fastModeDescription")}</Text>
+            </View>
+            <Switch
+              value={agent.fastMode ?? false}
+              onValueChange={handleFastChange}
+              disabled={disabled || catalogLoading}
+              accessibilityLabel={`${t("shell.commandCenter.fastModeGroupLabel")} · ${fastState}`}
+              testID={`omp-subagent-fast-${agent.name}`}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -126,9 +288,12 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
     };
   }, [client, isConnected, isSupported]);
 
+  const models = useMemo(
+    () => entries?.find((entry) => entry.provider === "omp")?.models ?? [],
+    [entries],
+  );
   const modelOptions = useMemo<SelectFieldOption<string>[]>(() => {
-    const omp = entries?.find((entry) => entry.provider === "omp");
-    const models = (omp?.models ?? [])
+    const selectableModels = models
       .filter((model) => model.isSelectable !== false)
       .map((model) => {
         const option: SelectFieldOption<string> = {
@@ -146,18 +311,22 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
         label: t("settings.host.ompSubagents.inherit"),
         description: t("settings.host.ompSubagents.inheritHint"),
       },
-      ...models,
+      ...selectableModels,
     ];
-  }, [entries, t]);
+  }, [models, t]);
 
   const updateModel = useCallback(
-    async (agentName: string, value: string) => {
+    async (agentName: string, value: string, options?: { fastMode: boolean | null }) => {
       if (!client) return;
       setSavingAgent(agentName);
       setError(null);
       try {
         setSettings(
-          await client.updateOmpSubagentModel(agentName, value === INHERIT_MODEL ? null : value),
+          await client.updateOmpSubagentModel(
+            agentName,
+            value === INHERIT_MODEL ? null : value,
+            options,
+          ),
         );
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -231,7 +400,9 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
         {settings.agents.map((agent) => (
           <OmpSubagentRow
             key={agent.name}
+            serverId={serverId}
             agent={agent}
+            models={models}
             modelOptions={modelOptions}
             catalogLoading={catalogLoading}
             disabled={!settings.enabled || savingEnabled || savingAgent !== null}
@@ -265,12 +436,15 @@ export function OmpSubagentsSection({ serverId }: { serverId: string }): ReactEl
 const styles = StyleSheet.create((theme) => ({
   agentRow: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
     gap: theme.spacing[4],
     paddingVertical: theme.spacing[3],
   },
   agentIdentity: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 200,
+    minWidth: 0,
     gap: theme.spacing[1],
   },
   agentName: {
@@ -278,9 +452,32 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.semibold,
   },
+  agentControls: {
+    flexGrow: 1,
+    flexBasis: 280,
+    minWidth: 0,
+    maxWidth: "100%",
+    gap: theme.spacing[3],
+  },
   modelField: {
-    width: 280,
-    maxWidth: "50%",
+    width: "100%",
+  },
+  controlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+  },
+  controlLabel: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+  },
+  thinkingField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  fastMeta: {
+    flex: 1,
+    gap: theme.spacing[1],
   },
   messageRow: {
     padding: theme.spacing[4],
