@@ -41,9 +41,7 @@ import {
   type ReleaseChannel,
   type SendBehavior,
   type Settings,
-  type SidebarWorkspaceTrailing,
   type SettingsDeps,
-  type WorkspaceTitleSource,
 } from "./storage";
 
 export {
@@ -76,8 +74,6 @@ export type {
   SendBehavior,
   Settings,
   SettingsDeps,
-  SidebarWorkspaceTrailing,
-  WorkspaceTitleSource,
 };
 
 /**

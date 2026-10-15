@@ -1207,11 +1207,6 @@ export const ru: TranslationResources = {
         status: "Статус",
         labels: "Метки",
       },
-      titleSource: {
-        label: "Заголовок",
-        title: "Заголовок",
-        branch: "Имя ветки",
-      },
       show: {
         label: "Показывать",
         branch: "Ветка",
@@ -1221,8 +1216,6 @@ export const ru: TranslationResources = {
         checks: "Проверки",
         services: "Сервисы",
         labels: "Метки",
-        diff: "Статистика изменений",
-        timestamp: "Последняя активность",
       },
       checks: {
         iconAndText: "Значок и текст",

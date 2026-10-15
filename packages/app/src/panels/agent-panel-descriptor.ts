@@ -1,11 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/shallow";
 import { getProviderIcon } from "@/components/provider-icons";
-import {
-  resolveAgentTabPrimaryLabel,
-  resolveSidebarWorkspacePrimaryLabel,
-} from "@/components/sidebar/sidebar-workspace-title";
-import { useAppSettings } from "@/hooks/use-settings";
+import { resolveAgentTabPrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
 import type { PanelDescriptor, PanelDescriptorContext } from "@/panels/panel-registry";
 import { selectAgentTurnPresentation, useSessionStore, type Agent } from "@/stores/session-store";
 import { pickWorkspacePrimaryAgentId } from "@/subagents/policies";
@@ -42,9 +38,6 @@ export function useAgentPanelDescriptor(
   context: PanelDescriptorContext,
 ): PanelDescriptor {
   const { t } = useTranslation();
-  const {
-    settings: { workspaceTitleSource },
-  } = useAppSettings();
   const descriptorState = useSessionStore(
     useShallow((state) => {
       const session = state.sessions[context.serverId];
@@ -53,7 +46,6 @@ export function useAgentPanelDescriptor(
           ...resolveAgentDescriptorIdentity(null),
           isPrimaryAgent: false,
           workspaceName: null,
-          currentBranch: null,
           isTurnActive: false,
         };
       }
@@ -78,26 +70,15 @@ export function useAgentPanelDescriptor(
         ...resolveAgentDescriptorIdentity(agent),
         isPrimaryAgent,
         workspaceName: workspace?.title ?? workspace?.name ?? null,
-        currentBranch: workspace?.gitRuntime?.currentBranch ?? null,
         isTurnActive: selectAgentTurnPresentation(session, target.agentId).isActive,
       };
     }),
   );
   const provider = descriptorState.provider;
-  const currentBranch = descriptorState.currentBranch?.trim();
-  const workspaceLabel = descriptorState.workspaceName
-    ? resolveSidebarWorkspacePrimaryLabel({
-        workspace: {
-          name: descriptorState.workspaceName,
-          currentBranch: currentBranch && currentBranch !== "HEAD" ? currentBranch : null,
-        },
-        workspaceTitleSource,
-      })
-    : null;
   const label = resolveAgentTabPrimaryLabel({
     agentTitle: descriptorState.title,
     isPrimaryAgent: descriptorState.isPrimaryAgent,
-    workspaceLabel,
+    workspaceLabel: descriptorState.workspaceName,
     newConversationLabel: t("newWorkspace.title"),
   });
   const icon = getProviderIcon(provider);

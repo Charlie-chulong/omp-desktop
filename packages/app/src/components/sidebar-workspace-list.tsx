@@ -126,10 +126,7 @@ import {
 import { useOpenKebabMenuVisibility } from "@/components/sidebar/use-open-kebab-menu-visibility";
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
 import { selectWorkspaceServiceSummary } from "@/components/sidebar/workspace-meta-row";
-import {
-  SidebarWorkspaceTrailingContent,
-  useSidebarWorkspaceTrailing,
-} from "@/components/sidebar/workspace-trailing";
+import { SidebarWorkspaceTrailingContent } from "@/components/sidebar/workspace-trailing";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -697,8 +694,6 @@ function WorkspaceRowRightGroup({
 }) {
   const workspacePath = workspace.workspaceDirectory ?? workspace.projectRootPath;
   const { t } = useTranslation();
-  const trailingPreference = useSidebarWorkspaceTrailing();
-  const trailing = trailingPreference === "diff" ? "none" : trailingPreference;
   const showShortcut = showShortcutBadge && shortcutNumber !== null;
   const {
     showTrailing,
@@ -708,7 +703,6 @@ function WorkspaceRowRightGroup({
     reserveSlotWidth,
   } = resolveTrailingActionVisibility({
     workspace,
-    trailing,
     hasArchiveAction: Boolean(onArchive),
     isHovered,
     isTouchPlatform,
@@ -724,7 +718,7 @@ function WorkspaceRowRightGroup({
       {renderSlot ? (
         <SidebarWorkspaceTrailingActionSlot reserveWidth={reserveSlotWidth}>
           <SidebarWorkspaceTrailingActionBase visible={showTrailing}>
-            <SidebarWorkspaceTrailingContent workspace={workspace} trailing={trailing} />
+            <SidebarWorkspaceTrailingContent workspace={workspace} />
           </SidebarWorkspaceTrailingActionBase>
           <SidebarWorkspaceTrailingActionOverlay
             visible={kebab.showKebab}

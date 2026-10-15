@@ -24,7 +24,6 @@ import {
 import { isWeb } from "@/constants/platform";
 import { getForgePresentation, normalizeForge } from "@/git/forge";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
-import { useAppSettings } from "@/hooks/use-settings";
 import type { Theme } from "@/styles/theme";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import {
@@ -433,9 +432,6 @@ export function SidebarWorkspaceContextMenu({
       highlightStyle: ComponentProps<typeof ContextMenuTrigger>["highlightStyle"];
     }
 >) {
-  const {
-    settings: { workspaceTitleSource },
-  } = useAppSettings();
   const { t } = useTranslation();
   const pullRequestLabel = workspace.prHint
     ? t("workspace.git.pr.accessibility.pullRequest", {
@@ -445,7 +441,6 @@ export function SidebarWorkspaceContextMenu({
     : null;
   const rowAccessibilityLabel = resolveSidebarWorkspaceAccessibilityLabel({
     workspace,
-    workspaceTitleSource,
     leadingProjectName,
     hostBadgeLabel,
     pullRequestLabel,

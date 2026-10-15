@@ -11,11 +11,6 @@ import {
 import { WorkspaceHoverCard } from "@/components/workspace-hover-card";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
-import {
-  hasSidebarWorkspaceTrailing,
-  type SidebarWorkspaceTrailing,
-} from "@/components/sidebar/workspace-trailing";
-import { useAppSettings } from "@/hooks/use-settings";
 import { SIDEBAR_LIST_INSET } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
@@ -27,7 +22,6 @@ import {
 } from "@/utils/status-indicator-geometry";
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
 import { StatusRing } from "@/components/status-ring";
-import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
 import {
@@ -129,10 +123,6 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
   rename?: SidebarWorkspaceRename;
   children?: ReactNode;
 }) {
-  const {
-    settings: { workspaceTitleSource },
-  } = useAppSettings();
-  const workspaceLabel = resolveSidebarWorkspacePrimaryLabel({ workspace, workspaceTitleSource });
   // The workspace carries label names; their colors live in its host's catalog, so the row is
   // where the two meet — the meta line is handed finished definitions.
   const labels = useWorkspaceLabelDefinitions(workspace.serverId, workspace.labels);
@@ -179,7 +169,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
               <SidebarWorkspaceInlineRename workspaceKey={workspace.workspaceKey} rename={rename} />
             ) : (
               <Text style={workspaceTitleTextStyle} numberOfLines={1}>
-                {workspaceLabel}
+                {workspace.name}
               </Text>
             )}
             {!rename ? <View style={sidebarWorkspaceRowStyles.rowRight}>{children}</View> : null}
@@ -368,10 +358,7 @@ export function SidebarWorkspaceShortcutBadge({ number }: { number: number }) {
 }
 
 /**
- * What the trailing slot shows for a row. Derived in one place because three row renderers
- * share it: the two project-mode rows and the status-mode row. The rule used to be copied
- * into each of them and immediately drifted — one call site kept hiding the diff after the
- * others stopped.
+ * Activity timestamp and hover actions, shared by the project-mode and status-mode rows.
  *
  * The trailing content survives the kebab on hover and fades under the scrim instead of
  * blinking out. Touch has no hover, so its permanent kebab still hides the content outright
@@ -379,14 +366,12 @@ export function SidebarWorkspaceShortcutBadge({ number }: { number: number }) {
  */
 export function resolveTrailingActionVisibility({
   workspace,
-  trailing,
   hasArchiveAction,
   isHovered,
   isTouchPlatform,
   showShortcut,
 }: {
   workspace: SidebarWorkspaceEntry;
-  trailing: SidebarWorkspaceTrailing;
   hasArchiveAction: boolean;
   isHovered: boolean;
   isTouchPlatform: boolean;
@@ -398,7 +383,7 @@ export function resolveTrailingActionVisibility({
   renderSlot: boolean;
   reserveSlotWidth: boolean;
 } {
-  const hasTrailing = hasSidebarWorkspaceTrailing({ workspace, trailing });
+  const hasTrailing = workspace.statusEnteredAt !== null;
   const showKebab =
     Boolean(hasArchiveAction && (isHovered || isTouchPlatform)) && (!showShortcut || isHovered);
   const showTrailing = hasTrailing && !showShortcut && (isHovered || !showKebab);
@@ -455,7 +440,7 @@ export function SidebarWorkspaceTrailingActionOverlay({
   children,
 }: {
   visible: boolean;
-  /** Fade the row into the kebab when something (the diff stat) is still rendered behind it. */
+  /** Fade the row into the kebab while the activity timestamp remains behind it. */
   scrimBackdrop?: SidebarSurfaceBackdrop;
   children: ReactNode;
 }) {

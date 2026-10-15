@@ -14,8 +14,6 @@ import {
   Circle,
   CircleCheck,
   CircleDashed,
-  Clock,
-  Diff,
   EyeOff,
   Folder,
   GitBranch,
@@ -24,7 +22,6 @@ import {
   Server,
   Settings2,
   Tag,
-  Type,
 } from "lucide-react-native";
 import {
   MenuItem,
@@ -54,9 +51,8 @@ import {
   workspaceLabelKey,
   type WorkspaceLabelColor,
 } from "@omp-desktop/protocol/workspace-labels";
-import type { WorkspaceTitleSource } from "@/hooks/use-settings";
 import { SIDEBAR_CHECKS_DISPLAYS, type SidebarChecksDisplay } from "./checks-display";
-import { useSidebarDisplayPreferences, type SidebarTrailingChoice } from "./model";
+import { useSidebarDisplayPreferences } from "./model";
 import { SIDEBAR_ROW_ITEMS, type SidebarRowItem } from "./row-items";
 import { useWorkspaceLabelProjection } from "@/workspace-labels";
 import { WorkspaceLabelDot } from "@/workspace-labels/swatch";
@@ -87,16 +83,10 @@ type OptionIcon = ComponentType<{
   uniProps: (theme: Theme) => { color: string };
 }>;
 
-// Options carry icons; the root rows deliberately do not. The root is four labels with their
-// current values, and a column of icons there would be decoration competing with the values.
+// Root rows show their current values without competing decorative icons.
 const GROUPING_ICONS: Record<SidebarGroupMode, OptionIcon> = {
   project: withUnistyles(Folder),
   status: withUnistyles(CircleDashed),
-};
-
-const TITLE_SOURCE_ICONS: Record<WorkspaceTitleSource, OptionIcon> = {
-  title: withUnistyles(Type),
-  branch: withUnistyles(GitBranch),
 };
 
 // The same marks these things carry on the workspace row itself, so the menu and the row it
@@ -118,23 +108,11 @@ const CHECKS_DISPLAY_ICONS: Record<SidebarChecksDisplay, OptionIcon> = {
   none: withUnistyles(EyeOff),
 };
 
-const TRAILING_ICONS: Record<SidebarTrailingChoice, OptionIcon> = {
-  diff: withUnistyles(Diff),
-  timestamp: withUnistyles(Clock),
-};
-
 const GROUPING_MODES: readonly SidebarGroupMode[] = ["project", "status"];
-const TITLE_SOURCES: readonly WorkspaceTitleSource[] = ["title", "branch"];
-const TRAILING_CHOICES: readonly SidebarTrailingChoice[] = ["diff", "timestamp"];
 
 const GROUPING_LABEL_KEYS: Record<SidebarGroupMode, string> = {
   project: "sidebar.display.grouping.project",
   status: "sidebar.display.grouping.status",
-};
-
-const TITLE_SOURCE_LABEL_KEYS: Record<WorkspaceTitleSource, string> = {
-  title: "sidebar.display.titleSource.title",
-  branch: "sidebar.display.titleSource.branch",
 };
 
 const ROW_ITEM_LABEL_KEYS: Record<SidebarRowItem, string> = {
@@ -150,11 +128,6 @@ const CHECKS_DISPLAY_LABEL_KEYS: Record<SidebarChecksDisplay, string> = {
   iconAndText: "sidebar.display.checks.iconAndText",
   icon: "sidebar.display.checks.icon",
   none: "sidebar.display.checks.none",
-};
-
-const TRAILING_LABEL_KEYS: Record<SidebarTrailingChoice, string> = {
-  diff: "sidebar.display.show.diff",
-  timestamp: "sidebar.display.show.timestamp",
 };
 
 /**
@@ -203,20 +176,6 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
             selectedValue={preferences.grouping}
             onSelect={preferences.setGrouping}
             testIDPrefix="sidebar-grouping"
-          />
-        ),
-      },
-      {
-        id: "titleSource",
-        title: t("sidebar.display.titleSource.label"),
-        content: (
-          <OptionList
-            values={TITLE_SOURCES}
-            icons={TITLE_SOURCE_ICONS}
-            labelKeys={TITLE_SOURCE_LABEL_KEYS}
-            selectedValue={preferences.titleSource}
-            onSelect={preferences.setTitleSource}
-            testIDPrefix="sidebar-workspace-title-source"
           />
         ),
       },
@@ -301,13 +260,6 @@ export function SidebarDisplayPreferencesMenu(): ReactElement {
             testID="sidebar-display-grouping"
           >
             {t("sidebar.display.grouping.label")}
-          </MenuSubTrigger>
-          <MenuSubTrigger
-            id="titleSource"
-            value={t(TITLE_SOURCE_LABEL_KEYS[preferences.titleSource])}
-            testID="sidebar-display-title-source"
-          >
-            {t("sidebar.display.titleSource.label")}
           </MenuSubTrigger>
           <MenuSubTrigger id="show" testID="sidebar-display-show">
             {t("sidebar.display.show.label")}
@@ -533,15 +485,7 @@ function OptionList<Value extends string>({
   ));
 }
 
-/**
- * Two groups, split by the separator. Above it, what a row may say about a workspace — each one
- * independent. Below it, the one thing the slot to the right of the title holds, so picking the
- * one already showing empties the slot and gives the width back to the title.
- *
- * CI is the one item above the separator with three answers rather than two, so it opens a page
- * instead of ticking, and it goes last: a row that navigates does not belong in the middle of a
- * column you are running down with your eyes ticking things on and off.
- */
+/** Independent row details, followed by the checks display options. */
 function ShowPage({ preferences }: { preferences: Preferences }): ReactElement {
   const { t } = useTranslation();
   return (
@@ -559,19 +503,6 @@ function ShowPage({ preferences }: { preferences: Preferences }): ReactElement {
         />
       ))}
       <ChecksSubTrigger />
-      <MenuSeparator />
-      {TRAILING_CHOICES.map((choice) => (
-        <OptionItem
-          key={choice}
-          value={choice}
-          icon={TRAILING_ICONS[choice]}
-          label={t(TRAILING_LABEL_KEYS[choice])}
-          selected={preferences.trailing === choice}
-          closeOnSelect={false}
-          onSelect={preferences.toggleTrailing}
-          testID={`sidebar-workspace-trailing-${choice}`}
-        />
-      ))}
     </>
   );
 }

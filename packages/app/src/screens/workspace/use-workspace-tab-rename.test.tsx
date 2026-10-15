@@ -9,13 +9,8 @@ import { useWorkspaceTabRename } from "@/screens/workspace/use-workspace-tab-ren
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import { useSessionStore, type Agent, type WorkspaceDescriptor } from "@/stores/session-store";
 import { useAgentPanelDescriptor } from "@/panels/agent-panel-descriptor";
-import type * as SettingsModule from "@/hooks/use-settings";
 
 vi.mock("@/components/rename-modal", () => ({ AdaptiveRenameModal: () => null }));
-vi.mock("@/hooks/use-settings", async (importOriginal) => ({
-  ...(await importOriginal<typeof SettingsModule>()),
-  useAppSettings: () => ({ settings: { workspaceTitleSource: "title" } }),
-}));
 void i18n;
 
 const SERVER_ID = "rename-test-server";
