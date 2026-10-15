@@ -177,6 +177,8 @@ export const zhCN: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "编辑排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
+      moveQueuedMessageEarlier: "将排队消息前移",
+      moveQueuedMessageLater: "将排队消息后移",
       queuedConversationPosition: "排队会话第 {{position}} 个，共 {{count}} 个",
       moveQueuedConversationEarlier: "将排队会话前移",
       moveQueuedConversationLater: "将排队会话后移",

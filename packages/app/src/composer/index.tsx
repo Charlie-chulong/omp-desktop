@@ -66,6 +66,7 @@ import {
   editQueuedComposerMessage,
   findGithubItemByOption,
   isAttachmentSelectedForGithubItem,
+  moveQueuedComposerMessage,
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
@@ -382,10 +383,13 @@ interface RenderQueueTrackArgs {
   queueCount: number;
   handleEditQueuedMessage: (id: string) => void;
   handleSendQueuedNow: (id: string) => Promise<void>;
+  handleMoveQueuedMessage: (id: string, offset: -1 | 1) => void;
   handleMoveQueuedAgentEarlier: () => void;
   handleMoveQueuedAgentLater: () => void;
   editLabel: string;
   sendNowLabel: string;
+  moveMessageEarlierLabel: string;
+  moveMessageLaterLabel: string;
   positionLabel: string;
   moveEarlierLabel: string;
   moveLaterLabel: string;
@@ -398,10 +402,13 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
     queueCount,
     handleEditQueuedMessage,
     handleSendQueuedNow,
+    handleMoveQueuedMessage,
     handleMoveQueuedAgentEarlier,
     handleMoveQueuedAgentLater,
     editLabel,
     sendNowLabel,
+    moveMessageEarlierLabel,
+    moveMessageLaterLabel,
     positionLabel,
     moveEarlierLabel,
     moveLaterLabel,
@@ -437,14 +444,19 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
           </View>
         </View>
       ) : null}
-      {queuedMessages.map((item) => (
+      {queuedMessages.map((item, index) => (
         <QueuedMessageRow
           key={item.id}
           item={item}
           onEdit={handleEditQueuedMessage}
           onSendNow={handleSendQueuedNow}
+          onMove={handleMoveQueuedMessage}
+          canMoveEarlier={index > 0}
+          canMoveLater={index < queuedMessages.length - 1}
           editLabel={editLabel}
           sendNowLabel={sendNowLabel}
+          moveEarlierLabel={moveMessageEarlierLabel}
+          moveLaterLabel={moveMessageLaterLabel}
         />
       ))}
     </View>
@@ -678,16 +690,26 @@ interface QueuedMessageRowProps {
   item: QueuedMessage;
   onEdit: (id: string) => void;
   onSendNow: (id: string) => void;
+  onMove: (id: string, offset: -1 | 1) => void;
+  canMoveEarlier: boolean;
+  canMoveLater: boolean;
   editLabel: string;
   sendNowLabel: string;
+  moveEarlierLabel: string;
+  moveLaterLabel: string;
 }
 
 function QueuedMessageRow({
   item,
   onEdit,
   onSendNow,
+  onMove,
+  canMoveEarlier,
+  canMoveLater,
   editLabel,
   sendNowLabel,
+  moveEarlierLabel,
+  moveLaterLabel,
 }: QueuedMessageRowProps) {
   const handleEdit = useCallback(() => {
     onEdit(item.id);
@@ -695,12 +717,40 @@ function QueuedMessageRow({
   const handleSendNow = useCallback(() => {
     onSendNow(item.id);
   }, [onSendNow, item.id]);
+  const handleMoveEarlier = useCallback(() => {
+    onMove(item.id, -1);
+  }, [onMove, item.id]);
+  const handleMoveLater = useCallback(() => {
+    onMove(item.id, 1);
+  }, [onMove, item.id]);
   return (
     <View style={styles.queueItem}>
       <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
         {item.text}
       </Text>
       <View style={styles.queueActions}>
+        {canMoveEarlier || canMoveLater ? (
+          <>
+            <Pressable
+              onPress={handleMoveEarlier}
+              disabled={!canMoveEarlier}
+              style={[styles.queueActionButton, !canMoveEarlier && styles.buttonDisabled]}
+              accessibilityLabel={moveEarlierLabel}
+              accessibilityRole="button"
+            >
+              <ThemedChevronUp size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+            </Pressable>
+            <Pressable
+              onPress={handleMoveLater}
+              disabled={!canMoveLater}
+              style={[styles.queueActionButton, !canMoveLater && styles.buttonDisabled]}
+              accessibilityLabel={moveLaterLabel}
+              accessibilityRole="button"
+            >
+              <ThemedChevronDown size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
+            </Pressable>
+          </>
+        ) : null}
         <Pressable
           onPress={handleEdit}
           style={styles.queueActionButton}
@@ -1925,6 +1975,13 @@ function ComposerContentImpl({
     [agentId, queueWriter, replaceUserInput, serverId, setSelectedAttachments],
   );
 
+  const handleMoveQueuedMessage = useCallback(
+    (id: string, offset: -1 | 1) => {
+      moveQueuedComposerMessage({ agentId, messageId: id, offset, queue: queueWriter });
+    },
+    [agentId, queueWriter],
+  );
+
   const handleMoveQueuedAgentEarlier = useCallback(() => {
     moveQueuedAgent(serverId, agentId, -1);
     getHostRuntimeStore().reevaluateQueuedAgentMessages(serverId);
@@ -2324,10 +2381,13 @@ function ComposerContentImpl({
         queueCount,
         handleEditQueuedMessage,
         handleSendQueuedNow,
+        handleMoveQueuedMessage,
         handleMoveQueuedAgentEarlier,
         handleMoveQueuedAgentLater,
         editLabel: t("composer.attachments.editQueuedMessage"),
         sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
+        moveMessageEarlierLabel: t("composer.attachments.moveQueuedMessageEarlier"),
+        moveMessageLaterLabel: t("composer.attachments.moveQueuedMessageLater"),
         positionLabel: t("composer.attachments.queuedConversationPosition", {
           position: queuePosition,
           count: queueCount,
@@ -2338,6 +2398,7 @@ function ComposerContentImpl({
     [
       handleEditQueuedMessage,
       handleMoveQueuedAgentEarlier,
+      handleMoveQueuedMessage,
       handleMoveQueuedAgentLater,
       handleSendQueuedNow,
       queueCount,

@@ -162,6 +162,8 @@ export const ptBR: TranslationResources = {
       dropFilesHere: "Solte arquivos aqui",
       editQueuedMessage: "Editar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
+      moveQueuedMessageEarlier: "Adiantar a mensagem na fila",
+      moveQueuedMessageLater: "Atrasar a mensagem na fila",
       queuedConversationPosition: "Conversa na fila {{position}} de {{count}}",
       moveQueuedConversationEarlier: "Adiantar a conversa na fila",
       moveQueuedConversationLater: "Atrasar a conversa na fila",

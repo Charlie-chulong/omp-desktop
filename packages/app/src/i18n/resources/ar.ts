@@ -162,6 +162,8 @@ export const ar: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "تحرير الرسالة في قائمة الانتظار",
       sendQueuedMessageNow: "إرسال رسالة في قائمة الانتظار الآن",
+      moveQueuedMessageEarlier: "تقديم الرسالة في قائمة الانتظار",
+      moveQueuedMessageLater: "تأخير الرسالة في قائمة الانتظار",
       queuedConversationPosition: "المحادثة في قائمة الانتظار {{position}} من {{count}}",
       moveQueuedConversationEarlier: "تقديم المحادثة في قائمة الانتظار",
       moveQueuedConversationLater: "تأخير المحادثة في قائمة الانتظار",

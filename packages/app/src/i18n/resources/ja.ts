@@ -162,6 +162,8 @@ export const ja: TranslationResources = {
       dropFilesHere: "ここにファイルをドロップ",
       editQueuedMessage: "キューに入れたメッセージを編集",
       sendQueuedMessageNow: "キューに入れたメッセージを今すぐ送信",
+      moveQueuedMessageEarlier: "キュー内のメッセージを前に移動",
+      moveQueuedMessageLater: "キュー内のメッセージを後ろに移動",
       queuedConversationPosition: "キュー内の会話 {{position}} / {{count}}",
       moveQueuedConversationEarlier: "キュー内の会話を前に移動",
       moveQueuedConversationLater: "キュー内の会話を後ろに移動",

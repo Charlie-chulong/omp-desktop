@@ -162,6 +162,8 @@ export const ru: TranslationResources = {
       dropFilesHere: "Переместите файлы сюда",
       editQueuedMessage: "Изменить сообщение из очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
+      moveQueuedMessageEarlier: "Переместить сообщение вперёд в очереди",
+      moveQueuedMessageLater: "Переместить сообщение назад в очереди",
       queuedConversationPosition: "Разговор в очереди: {{position}} из {{count}}",
       moveQueuedConversationEarlier: "Переместить разговор вперёд в очереди",
       moveQueuedConversationLater: "Переместить разговор назад в очереди",

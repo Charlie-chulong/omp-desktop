@@ -162,6 +162,8 @@ export const ko: TranslationResources = {
       dropFilesHere: "여기에 파일을 끌어다 놓으세요",
       editQueuedMessage: "대기 중인 메시지 편집",
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
+      moveQueuedMessageEarlier: "대기 중인 메시지를 앞으로 이동",
+      moveQueuedMessageLater: "대기 중인 메시지를 뒤로 이동",
       queuedConversationPosition: "대기 중인 대화 {{count}}개 중 {{position}}번째",
       moveQueuedConversationEarlier: "대기 중인 대화를 앞으로 이동",
       moveQueuedConversationLater: "대기 중인 대화를 뒤로 이동",
