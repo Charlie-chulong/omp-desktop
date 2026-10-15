@@ -790,9 +790,21 @@ describe("OMP history mapper", () => {
           message: { role: "user", content: "active branch" },
         },
         {
+          type: "model_usage",
+          id: "usage-active",
+          parentId: "user-active",
+          purpose: "memory",
+          role: "memory",
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          model: "gpt-6-astra",
+          usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 },
+          stopReason: "stop",
+        },
+        {
           type: "compaction",
           id: "compact-active",
-          parentId: "user-active",
+          parentId: "usage-active",
           timestamp: "2026-08-01T12:00:00.000Z",
           tokensBefore: 1234,
         },
@@ -864,6 +876,7 @@ describe("OMP history mapper", () => {
         .map((entry) => JSON.stringify(entry))
         .join("\n"),
     );
+    const originalContent = readFileSync(sessionFile);
 
     const events: AgentStreamEvent[] = [];
     for await (const event of streamOmpHistory({
@@ -908,6 +921,7 @@ describe("OMP history mapper", () => {
         messageId: "omp-history-assistant-1",
       },
     ]);
+    expect(readFileSync(sessionFile)).toEqual(originalContent);
   });
 
   test.each([{ provider: "openai-codex", modelId: "gpt-5.5" }, { model: "openai-codex/gpt-5.5" }])(

@@ -201,6 +201,14 @@ When OMP asks several questions together, use the labeled question tabs to move 
 any order. Selections and typed answers remain intact while switching. After every required
 question has an answer, **Submit** sends the complete group.
 
+## Replaying conversation history
+
+OMP `model_usage` records, including background-memory usage, are metadata rather
+than chat messages. History replay preserves the original JSONL records and usage
+values without displaying an unsupported-record notice for them. Messages before
+and after usage records remain visible; genuinely unknown record types still
+produce diagnostic messages.
+
 ## Permanently deleting conversation history
 
 Desktop-injected agent tools distinguish four operations: `cancel_agent` stops a run,
