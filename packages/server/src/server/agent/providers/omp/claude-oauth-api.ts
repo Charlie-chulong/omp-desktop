@@ -1,12 +1,35 @@
+import type { OmpProviderAccountQuota } from "@omp-desktop/protocol/messages";
 import type { ClaudeAccountQuotaFetchOptions } from "./claude-account-quota.js";
 
 export const CLAUDE_PROFILE_ENDPOINT = "https://api.anthropic.com/api/oauth/profile";
 export const CLAUDE_USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1";
 
+type ClaudeQueryError = NonNullable<OmpProviderAccountQuota["queryError"]>;
+
+export function parseClaudeRetryAt(headers: Pick<Headers, "get">, now: number): string | null {
+  const milliseconds = headers.get("retry-after-ms");
+  const seconds = headers.get("retry-after");
+  let deadline = NaN;
+  if (milliseconds?.trim() && Number.isFinite(Number(milliseconds)) && Number(milliseconds) >= 0) {
+    deadline = now + Number(milliseconds);
+  } else if (seconds?.trim()) {
+    const duration = Number(seconds);
+    if (Number.isFinite(duration)) {
+      if (duration >= 0) deadline = now + duration * 1_000;
+    } else {
+      deadline = Date.parse(seconds);
+    }
+  }
+  return Number.isFinite(deadline) && Math.abs(deadline) <= 8.64e15
+    ? new Date(deadline).toISOString()
+    : null;
+}
+
 export class ClaudeOAuthRequestError extends Error {
   constructor(
     message: string,
     readonly status: "unavailable" | "error" = "error",
+    readonly queryError: ClaudeQueryError = { kind: "http" },
   ) {
     super(message);
   }
@@ -19,7 +42,9 @@ export async function requestClaudeOAuth(
 ): Promise<unknown> {
   const accessToken = options.credential.accessToken.trim();
   if (!accessToken) {
-    throw new ClaudeOAuthRequestError("Claude account credential is unavailable", "unavailable");
+    throw new ClaudeOAuthRequestError("Claude account credential is unavailable", "unavailable", {
+      kind: "authentication",
+    });
   }
   const controller = new AbortController();
   let rejectDeadline!: (reason: unknown) => void;
@@ -29,7 +54,11 @@ export async function requestClaudeOAuth(
   const timeout = setTimeout(
     () => {
       controller.abort();
-      rejectDeadline(new ClaudeOAuthRequestError(`Claude ${request.resource} request timed out`));
+      rejectDeadline(
+        new ClaudeOAuthRequestError(`Claude ${request.resource} request timed out`, "error", {
+          kind: "timeout",
+        }),
+      );
     },
     request.timeoutMs ?? options.timeoutMs ?? 15_000,
   );
@@ -52,12 +81,25 @@ export async function requestClaudeOAuth(
           ...(request.body ? { body: JSON.stringify(request.body) } : {}),
         });
         if (response.status === 401 || response.status === 403) {
-          throw new ClaudeOAuthRequestError("Claude account authentication expired", "unavailable");
+          throw new ClaudeOAuthRequestError(
+            "Claude account authentication expired",
+            "unavailable",
+            {
+              kind: "authentication",
+              httpStatus: response.status,
+              retryAt: parseClaudeRetryAt(response.headers, (options.now ?? Date.now)()),
+            },
+          );
         }
         if (!response.ok) {
           throw new ClaudeOAuthRequestError(
             `Claude ${request.resource} request failed`,
             [404, 405, 501].includes(response.status) ? "unavailable" : "error",
+            {
+              kind: response.status === 429 ? "rate_limited" : "http",
+              httpStatus: response.status,
+              retryAt: parseClaudeRetryAt(response.headers, (options.now ?? Date.now)()),
+            },
           );
         }
         // A successful status is not confirmation. Keep the deadline through body consumption.
@@ -68,6 +110,8 @@ export async function requestClaudeOAuth(
         } catch {
           throw new ClaudeOAuthRequestError(
             `Claude ${request.resource} response was not valid JSON`,
+            "error",
+            { kind: "invalid_response", httpStatus: response.status },
           );
         }
       })(),
@@ -77,11 +121,15 @@ export async function requestClaudeOAuth(
       controller.signal.aborted ||
       (error instanceof DOMException && error.name === "AbortError")
     ) {
-      throw new ClaudeOAuthRequestError(`Claude ${request.resource} request timed out`);
+      throw new ClaudeOAuthRequestError(`Claude ${request.resource} request timed out`, "error", {
+        kind: "timeout",
+      });
     }
     if (error instanceof ClaudeOAuthRequestError) throw error;
     // Network and body-reader exceptions may contain credentials or backend details.
-    throw new ClaudeOAuthRequestError(`Claude ${request.resource} request failed`);
+    throw new ClaudeOAuthRequestError(`Claude ${request.resource} request failed`, "error", {
+      kind: "network",
+    });
   } finally {
     clearTimeout(timeout);
   }

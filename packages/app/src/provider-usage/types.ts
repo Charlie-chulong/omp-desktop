@@ -13,11 +13,13 @@ export type { ProviderUsageBalance, ProviderUsageDetail, ProviderUsageStatus, Pr
 
 export type ProviderUsageWindow = ProtocolProviderUsageWindow & {
   percentageDisplay?: "used" | "remaining";
+  limitReached?: boolean;
 };
 
 export type ProviderUsage = Omit<ProtocolProviderUsage, "windows"> & {
   windows: ProviderUsageWindow[];
   extraUsage?: OmpProviderAccountQuota["extraUsage"];
+  accountQuota?: OmpProviderAccountQuota;
 };
 
 export type ProviderUsageBalanceUnit = ProviderUsageBalance["unit"];

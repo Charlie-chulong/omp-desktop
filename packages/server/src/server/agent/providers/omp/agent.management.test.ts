@@ -376,6 +376,196 @@ providers:
     expect(after.prepare("SELECT * FROM auth_credentials ORDER BY id").all()).toEqual(storedBefore);
     after.close();
   });
+
+  test("shares native Claude restrictions across sessions only for the actual enabled account", async () => {
+    const now = Date.parse("2026-10-11T00:00:00Z");
+    const { agentDir, client, runtime } = await createClient({
+      quotaNow: () => now,
+      quotaFetch: async () =>
+        new Response("private-details", {
+          status: 429,
+          headers: { "Retry-After": "39" },
+        }),
+    });
+    const database = new DatabaseSync(path.join(agentDir, "agent.db"));
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY, provider TEXT NOT NULL, credential_type TEXT NOT NULL,
+        data TEXT NOT NULL, disabled_cause TEXT, identity_key TEXT
+      );
+      INSERT INTO auth_credentials VALUES
+        (11, 'anthropic', 'oauth', '{"access":"private-one"}', NULL, 'account-one'),
+        (12, 'anthropic', 'oauth', '{"access":"private-two"}', NULL, 'account-two'),
+        (13, 'anthropic', 'oauth', '{"access":"disabled"}', 'expired', 'disabled');
+    `);
+    database.close();
+    runtime.setInitialModel({ provider: "anthropic", id: "claude-sonnet-4" });
+    const config = {
+      provider: "omp" as const,
+      cwd: agentDir,
+      model: "anthropic/claude-sonnet-4",
+      featureValues: { oauth_account_credential: "11", workflow_mode: "standard" },
+    };
+    const first = await client.createSession(config);
+    const firstRuntime = runtime.latestSession();
+    const second = await client.createSession(config);
+    const secondRuntime = runtime.latestSession();
+    const message = {
+      role: "assistant" as const,
+      content: [],
+      provider: "anthropic",
+      stopReason: "error",
+      errorStatus: 429,
+      errorMessage: "rate_limit_error retry-after-ms=8016000",
+    };
+    // Native credential_changed wins over the configured account.
+    firstRuntime.emit({ type: "credential_changed", provider: "anthropic", credentialId: 12 });
+    firstRuntime.emit({ type: "message_end", message });
+    async function query() {
+      runtime.queueModels([]);
+      runtime.queueLoginProviders([
+        { id: "anthropic", name: "Anthropic", authenticated: true, available: true },
+      ]);
+      return (await client.getOmpProviderManagement()).loginProviders[0]!.accounts!;
+    }
+    const limited = await query();
+    expect(limited.find((account) => account.credentialId === 12)?.quota).toMatchObject({
+      fiveHourUsedPct: null,
+      fiveHourLimitReached: null,
+      fiveHourResetsAt: null,
+      queryError: { kind: "rate_limited", httpStatus: 429, retryAt: "2026-10-11T00:00:39.000Z" },
+      modelRateLimit: { scope: "unknown", resetsAt: "2026-10-11T02:13:36.000Z" },
+    });
+    expect(limited.find((account) => account.credentialId === 11)?.quota).not.toHaveProperty(
+      "modelRateLimit",
+    );
+    expect(limited.some((account) => account.credentialId === 13)).toBe(false);
+
+    // A success on another account, or another provider, cannot clear it.
+    secondRuntime.emit({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [],
+        provider: "anthropic",
+        stopReason: "stop",
+      },
+    });
+    secondRuntime.emit({ type: "message_end", message: { ...message, provider: "openai-codex" } });
+    expect((await query()).find((account) => account.credentialId === 12)?.quota).toHaveProperty(
+      "modelRateLimit.scope",
+      "unknown",
+    );
+    secondRuntime.emit({ type: "credential_changed", provider: "anthropic", credentialId: 12 });
+    secondRuntime.finishTurn({
+      role: "assistant",
+      content: [],
+      provider: "anthropic",
+      stopReason: "stop",
+    });
+    expect(
+      (await query()).find((account) => account.credentialId === 12)?.quota,
+    ).not.toHaveProperty("modelRateLimit");
+    // Agent-end-only failure is also a real native completion path.
+    secondRuntime.finishTurn(message);
+    expect((await query()).find((account) => account.credentialId === 12)?.quota).toHaveProperty(
+      "modelRateLimit.scope",
+      "unknown",
+    );
+    await first.close();
+    await second.close();
+  });
+
+  test("retains native five-hour evidence during a stale in-flight read and verifies again after expiry", async () => {
+    let now = Date.parse("2026-10-11T00:00:00Z");
+    let mode: "available" | "failed" | "stalled" = "available";
+    let used = 100;
+    let reset = "2026-10-11T05:00:00Z";
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<Response>();
+    const { agentDir, client, runtime } = await createClient({
+      quotaNow: () => now,
+      quotaFetch: async () => {
+        if (mode === "stalled") {
+          started.resolve();
+          return release.promise;
+        }
+        return mode === "failed"
+          ? new Response(null, { status: 429, headers: { "Retry-After": "39" } })
+          : new Response(JSON.stringify({ five_hour: { utilization: used, resets_at: reset } }));
+      },
+    });
+    const database = new DatabaseSync(path.join(agentDir, "agent.db"));
+    database.exec(`
+      CREATE TABLE auth_credentials (
+        id INTEGER PRIMARY KEY, provider TEXT NOT NULL, credential_type TEXT NOT NULL,
+        data TEXT NOT NULL, disabled_cause TEXT, identity_key TEXT
+      );
+      INSERT INTO auth_credentials VALUES
+        (11, 'anthropic', 'oauth', '{"access":"private-one","subscriptionType":"pro"}', NULL, 'account-one');
+    `);
+    database.close();
+    runtime.setInitialModel({ provider: "anthropic", id: "claude-sonnet-4" });
+    runtime.setInitialActiveCredential({ provider: "anthropic", credentialId: 11 });
+    const session = await client.createSession({
+      provider: "omp",
+      cwd: agentDir,
+      model: "anthropic/claude-sonnet-4",
+      featureValues: { workflow_mode: "standard" },
+    });
+    const native = runtime.latestSession();
+    async function query() {
+      runtime.queueModels([]);
+      runtime.queueLoginProviders([
+        { id: "anthropic", name: "Anthropic", authenticated: true, available: true },
+      ]);
+      return (await client.getOmpProviderManagement()).loginProviders[0]!.accounts![0]!.quota!;
+    }
+    await query();
+    mode = "stalled";
+    const pending = query();
+    await started.promise;
+    native.emit({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [],
+        provider: "anthropic",
+        stopReason: "error",
+        errorStatus: 429,
+        errorMessage: "rate_limit_error retry-after-ms=8016000",
+      },
+    });
+    release.resolve(
+      new Response(
+        JSON.stringify({
+          five_hour: { utilization: 12, resets_at: reset },
+        }),
+      ),
+    );
+    expect(await pending).toMatchObject({
+      fiveHourUsedPct: null,
+      fiveHourLimitReached: true,
+      fiveHourResetsAt: "2026-10-11T05:00:00.000Z",
+      modelRateLimit: { scope: "five_hour", resetsAt: "2026-10-11T05:00:00.000Z" },
+    });
+    mode = "failed";
+    now += 6 * 60 * 60_000;
+    expect(await query()).toMatchObject({
+      fiveHourUsedPct: null,
+      fiveHourLimitReached: true,
+      fiveHourResetsAt: "2026-10-11T05:00:00.000Z",
+      modelRateLimit: { scope: "five_hour" },
+      queryError: { retryAt: "2026-10-11T06:00:39.000Z" },
+    });
+    mode = "available";
+    used = 12;
+    reset = "2026-10-11T11:00:00Z";
+    const verified = await query();
+    expect(verified).toMatchObject({ fiveHourUsedPct: 12, fiveHourLimitReached: false });
+    expect(verified).not.toHaveProperty("modelRateLimit");
+    await session.close();
+  });
   test("reads the unexpired OAuth credential selected for an OMP session", async () => {
     const agentDir = await mkdtemp(path.join(tmpdir(), "omp-desktop-session-credential-"));
     tempDirs.push(agentDir);

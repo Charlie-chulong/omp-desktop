@@ -62,6 +62,7 @@ import {
   shouldShowOmpFiveHourQuota,
 } from "@/components/omp-provider-quota";
 import { OmpQuotaCountdown } from "@/components/omp-codex-quota-details";
+import { OmpClaudeQuotaNotices } from "@/components/omp-claude-quota-notices";
 import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
 import { ProviderUsageCard } from "@/provider-usage/card";
 import { selectProviderUsages } from "@/provider-usage/login-usage";
@@ -573,6 +574,7 @@ function SidebarQuotaMeter({
   resetsAt?: string | null;
 }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
   const reached = limitReached === true || remainingPct === 0;
   const accessibilityValue = useMemo(
@@ -587,7 +589,9 @@ function SidebarQuotaMeter({
   } else if (remainingPct !== null) {
     color = theme.colors.palette.green[500];
   }
-  const percentage = remainingPct === null ? "—" : `${Math.round(remainingPct)}%`;
+  let percentage = t("providerUsage.usageUnknown");
+  if (reached) percentage = t("providerUsage.limitReached");
+  else if (remainingPct !== null) percentage = `${Math.round(remainingPct)}%`;
 
   return (
     <View style={styles.sidebarQuotaMeter}>
@@ -646,6 +650,7 @@ function SidebarProviderUsageDetails({
   if (!usage) {
     return <Text style={styles.sidebarQuotaLoading}>{t("providerUsage.empty")}</Text>;
   }
+  if (usage.accountQuota) return <ProviderUsageCard usage={usage} compact />;
   if (usage.status !== "available") {
     return (
       <Text style={styles.sidebarQuotaLoading}>{usage.error ?? t("providerUsage.errorTitle")}</Text>
@@ -940,6 +945,7 @@ function useSidebarSelectedAccountQuotaRefresh(
         ? selectedAccount?.quota?.fiveHourResetsAt
         : null,
       ...(selectedAccount?.quota?.modelWindows ?? []).map((window) => window.resetsAt),
+      selectedAccount?.quota?.modelRateLimit?.resetsAt,
     ],
     quotaNow,
     Boolean(selectedAccount),
@@ -1251,7 +1257,7 @@ function SidebarProviderAccountDetails({
                 usedPct={selectedAccount.quota?.weeklyUsedPct}
                 resetsAt={selectedAccount.quota?.weeklyResetsAt}
               />
-              {shouldShowOmpFiveHourQuota(selectedAccount.quota) ? (
+              {shouldShowOmpFiveHourQuota(selectedAccount.quota, selectedProviderUsageId) ? (
                 <SidebarQuotaMeter
                   label={t("agentControls.quota.fiveHour")}
                   usedPct={selectedAccount.quota?.fiveHourUsedPct}
@@ -1267,6 +1273,9 @@ function SidebarProviderAccountDetails({
                   resetsAt={window.resetsAt}
                 />
               ))}
+              {selectedProviderUsageId === "anthropic" ? (
+                <OmpClaudeQuotaNotices quota={selectedAccount.quota} />
+              ) : null}
             </View>
           ) : null}
         </>

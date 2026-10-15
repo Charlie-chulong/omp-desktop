@@ -13,7 +13,8 @@ import {
   mergeOmpAccountProviderUsage,
 } from "@/provider-usage/omp-account";
 import { selectOmpQuotaAccounts } from "@/components/omp-provider-accounts";
-import { formatTokenCount } from "./context-window-meter.utils";
+import { formatSessionCost, formatTokenCount } from "./context-window-meter.utils";
+import { OmpClaudeQuotaEntry } from "./omp-claude-quota-entry";
 
 interface ContextWindowMeterProps {
   maxTokens: number | null;
@@ -58,16 +59,6 @@ function clampPercentage(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-function formatSessionCost(value: number): string | null {
-  if (!Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-  if (value < 0.01) {
-    return `$${value.toFixed(4)}`;
-  }
-  return `$${value.toFixed(2)}`;
-}
-
 function getMeterColors(
   percentage: number,
   theme: ReturnType<typeof useUnistyles>["theme"],
@@ -105,7 +96,12 @@ function getMeterGeometry(showPercentage: boolean, glyphSize?: number) {
   };
 }
 
-export function ContextWindowMeter({
+export function ContextWindowMeter(props: ContextWindowMeterProps) {
+  if (props.provider === "anthropic") return <OmpClaudeQuotaEntry {...props} />;
+  return <TokenContextWindowMeter {...props} />;
+}
+
+function TokenContextWindowMeter({
   maxTokens,
   usedTokens,
   totalCostUsd,

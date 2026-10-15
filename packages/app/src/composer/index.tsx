@@ -271,7 +271,7 @@ function renderContextWindowMeter(
   glyphSize: number,
 ): ReactElement | null {
   const hasData = contextWindowMaxTokens !== null && contextWindowUsedTokens !== null;
-  if (!hasData && !pending) {
+  if (!hasData && !pending && provider !== "anthropic") {
     return null;
   }
   return (
@@ -301,8 +301,13 @@ function renderContextWindowMeter(
 function resolveContextWindowPlacement(
   meter: ReactElement | null,
   reserveSlot: boolean,
+  quotaEntry = false,
 ): ReactNode {
-  return reserveSlot ? <View style={styles.contextWindowMeterSlot}>{meter}</View> : null;
+  return reserveSlot ? (
+    <View style={[styles.contextWindowMeterSlot, quotaEntry && styles.quotaEntrySlot]}>
+      {meter}
+    </View>
+  ) : null;
 }
 
 interface RenderLeftContentArgs {
@@ -2037,8 +2042,19 @@ function ComposerContentImpl({
     ],
   );
   const rightLeadingContent = useMemo(
-    () => resolveContextWindowPlacement(contextWindowMeter, hasAgent),
-    [contextWindowMeter, hasAgent],
+    () =>
+      resolveContextWindowPlacement(
+        contextWindowMeter,
+        hasAgent,
+        Boolean(
+          agentState.provider &&
+          resolveModelBrowserProviderNamespaceId(
+            agentState.provider,
+            agentState.model ?? undefined,
+          ) === "anthropic",
+        ),
+      ),
+    [contextWindowMeter, hasAgent, agentState.provider, agentState.model],
   );
 
   const hasGithubAttachment = useMemo(
@@ -2531,6 +2547,9 @@ const styles = StyleSheet.create((theme: Theme) => ({
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
+  },
+  quotaEntrySlot: {
+    width: "auto",
   },
   iconButtonHovered: {
     backgroundColor: theme.colors.surface2,
