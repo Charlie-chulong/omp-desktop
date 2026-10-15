@@ -1042,7 +1042,6 @@ export const en = {
           failedUnstage: "Failed to unstage changes",
         },
         openChangesTab: "Open Changes tab",
-        closeChangesTab: "Close Changes tab",
         binaryFile: "Binary file",
         tooLarge: "Diff too large to display",
         previewTooLargeTitle: "This diff is too large to preview",
