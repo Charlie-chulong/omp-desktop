@@ -192,8 +192,14 @@ When several conversations on the same host have queued follow-up messages, each
 composer shows that conversation's queue position and controls to move it earlier or later.
 Automatic delivery starts one queued conversation at a time in the displayed order; moving a
 conversation changes the next actual start, not only the UI. Existing active turns continue
-without interruption, and every conversation retains the FIFO order of its own queued messages.
-**Send queued message now** remains an explicit override of the shared order.
+without interruption.
+
+Within a conversation, each queued message also has **Move queued message earlier/later**
+controls when at least two messages are waiting. These controls change both the displayed
+order and the subsequent automatic delivery order, preserving the message text and attachments.
+Messages keep their enqueue order unless explicitly moved; already submitted or executing
+messages are not sortable. Reordering does not send or interrupt a turn.
+**Send queued message now** remains a separate, explicit override of the shared order.
 
 ## Answering grouped questions
 

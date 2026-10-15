@@ -162,6 +162,8 @@ export const es: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Editar mensaje en cola",
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
+      moveQueuedMessageEarlier: "Adelantar el mensaje en cola",
+      moveQueuedMessageLater: "Retrasar el mensaje en cola",
       queuedConversationPosition: "Conversación en cola {{position}} de {{count}}",
       moveQueuedConversationEarlier: "Adelantar la conversación en cola",
       moveQueuedConversationLater: "Retrasar la conversación en cola",

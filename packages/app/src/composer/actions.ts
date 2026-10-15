@@ -265,6 +265,27 @@ export function queueComposerMessage(input: QueueComposerMessageInput): QueueCom
   return { queued: item };
 }
 
+export function moveQueuedComposerMessage(input: {
+  agentId: string;
+  messageId: string;
+  offset: -1 | 1;
+  queue: QueueWriter;
+}): void {
+  input.queue.write((prev) => {
+    const messages = prev.get(input.agentId);
+    if (!messages) return prev;
+    const index = messages.findIndex((message) => message.id === input.messageId);
+    const target = index + input.offset;
+    if (index < 0 || target < 0 || target >= messages.length) return prev;
+
+    const reordered = [...messages];
+    [reordered[index], reordered[target]] = [reordered[target]!, reordered[index]!];
+    const next = new Map(prev);
+    next.set(input.agentId, reordered);
+    return next;
+  });
+}
+
 export interface EditQueuedComposerMessageInput {
   agentId: string;
   messageId: string;

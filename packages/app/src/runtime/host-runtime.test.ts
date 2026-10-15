@@ -22,6 +22,7 @@ import {
   type HostRuntimeStorage,
 } from "./host-runtime";
 import { ReplicaCache } from "./replica-cache";
+import { moveQueuedComposerMessage, type QueueWriter } from "@/composer/actions";
 
 class FakeDaemonClient {
   private state: ConnectionState = { status: "idle" };
@@ -2642,6 +2643,89 @@ describe("HostRuntimeStore", () => {
     expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["second", "first"]);
 
     useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("drains a reordered conversation in visible order without interrupting its active turn", async () => {
+    const host = makeHost({ serverId: "srv_reordered_messages" });
+    const fakeClient = new FakeDaemonClient();
+    const store = new HostRuntimeStore();
+    const sessionStore = useSessionStore.getState();
+    const entry = makeFetchAgentsEntry({
+      id: "agent",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    const activeTurn = { turnId: "original-turn", startedAt: new Date(0) };
+    const running = {
+      ...replicaAgent(entry.agent, host.serverId),
+      status: "running" as const,
+      activeTurn,
+    };
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    sessionStore.setAgents(host.serverId, new Map([["agent", running]]));
+    const messages = [
+      { id: "A", text: "做 A", attachments: [] },
+      { id: "B", text: "做 B", attachments: [] },
+      {
+        id: "C",
+        text: "做 C",
+        attachments: [
+          {
+            kind: "file" as const,
+            attachment: {
+              type: "uploaded_file" as const,
+              id: "queued-file",
+              fileName: "evidence.txt",
+              mimeType: "text/plain",
+              size: 42,
+              path: "/uploads/evidence.txt",
+            },
+          },
+        ],
+      },
+    ];
+    sessionStore.setQueuedMessages(host.serverId, new Map([["agent", messages]]));
+    const queue: QueueWriter = {
+      read: (id) =>
+        useSessionStore.getState().sessions[host.serverId]!.queuedMessages.get(id) ?? [],
+      write: (update) => sessionStore.setQueuedMessages(host.serverId, update),
+    };
+    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: -1, queue });
+    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: -1, queue });
+    store.reevaluateQueuedAgentMessages(host.serverId);
+
+    expect(queue.read("agent")).toEqual([messages[2], messages[0], messages[1]]);
+    expect(fakeClient.sentAgentMessages).toEqual([]);
+    expect(
+      useSessionStore.getState().sessions[host.serverId]?.agents.get("agent")?.activeTurn,
+    ).toBe(activeTurn);
+
+    const send = fakeClient.sendAgentMessage.bind(fakeClient);
+    fakeClient.sendAgentMessage = async (...args) => {
+      sessionStore.setAgents(host.serverId, new Map([["agent", running]]));
+      await send(...args);
+    };
+    for (const count of [1, 2, 3]) {
+      sessionStore.setAgents(
+        host.serverId,
+        new Map([["agent", { ...running, status: "idle", activeTurn: null }]]),
+      );
+      await vi.waitFor(() => {
+        store.drainQueuedAgentMessage(host.serverId, "agent");
+        expect(fakeClient.sentAgentMessages).toHaveLength(count);
+      });
+    }
+
+    expect(fakeClient.sentAgentMessages.map(([, text]) => text)).toEqual(["做 C", "做 A", "做 B"]);
+    expect(fakeClient.sentAgentMessages[0]?.[2]?.attachments).toEqual([
+      messages[2]!.attachments[0]!.attachment,
+    ]);
+    expect(queue.read("agent")).toEqual([]);
+    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: 1, queue });
+    store.reevaluateQueuedAgentMessages(host.serverId);
+    expect(fakeClient.sentAgentMessages).toHaveLength(3);
+    expect(queue.read("agent")).toEqual([]);
+    sessionStore.clearSession(host.serverId);
   });
 
   it("submits an automatically drained message through the submission producer", async () => {

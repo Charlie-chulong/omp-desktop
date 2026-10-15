@@ -176,6 +176,8 @@ export const en = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Edit queued message",
       sendQueuedMessageNow: "Send queued message now",
+      moveQueuedMessageEarlier: "Move queued message earlier",
+      moveQueuedMessageLater: "Move queued message later",
       queuedConversationPosition: "Queued conversation {{position}} of {{count}}",
       moveQueuedConversationEarlier: "Move queued conversation earlier",
       moveQueuedConversationLater: "Move queued conversation later",

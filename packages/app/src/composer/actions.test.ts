@@ -24,6 +24,7 @@ import {
   editQueuedComposerMessage,
   findGithubItemByOption,
   isAttachmentSelectedForGithubItem,
+  moveQueuedComposerMessage,
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
@@ -783,6 +784,62 @@ describe("queueComposerMessage", () => {
       { kind: "image", metadata: image },
       review,
     ]);
+  });
+});
+
+describe("moveQueuedComposerMessage", () => {
+  it("moves pending messages in both directions without changing their contents or other queues", () => {
+    const messages: QueuedComposerMessage[] = [
+      { id: "A", text: "做 A", attachments: [] },
+      { id: "B", text: "做 B", attachments: [] },
+      {
+        id: "C",
+        text: "  做 C\nKeep exact text.  ",
+        attachments: [
+          { kind: "image", metadata: imageWithId("queued-image") },
+          reviewWorkspaceAttachment("Keep the queued review snapshot."),
+        ],
+      },
+    ];
+    const other = [{ id: "other", text: "another conversation", attachments: [] }];
+    const queue = createFakeQueue(
+      new Map([
+        ["agent", messages],
+        ["other", other],
+      ]),
+    );
+    const move = (offset: -1 | 1) =>
+      moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset, queue });
+
+    move(-1);
+    move(-1);
+    expect(queue.state.get("agent")).toEqual([messages[2], messages[0], messages[1]]);
+    expect(queue.state.get("agent")?.[0]).toBe(messages[2]);
+    expect(queue.state.get("agent")?.[0]?.attachments).toBe(messages[2]!.attachments);
+    expect(messages.map((message) => message.id)).toEqual(["A", "B", "C"]);
+    expect(queue.state.get("other")).toBe(other);
+
+    move(1);
+    expect(queue.state.get("agent")).toEqual([messages[0], messages[2], messages[1]]);
+  });
+
+  it.each([
+    { agentId: "agent", messageId: "A", offset: -1 as const },
+    { agentId: "agent", messageId: "B", offset: 1 as const },
+    { agentId: "agent", messageId: "already-submitted", offset: -1 as const },
+    { agentId: "missing", messageId: "A", offset: 1 as const },
+  ])("ignores an unavailable move: $agentId/$messageId/$offset", (input) => {
+    const messages = [
+      { id: "A", text: "first pending", attachments: [] },
+      { id: "B", text: "last pending", attachments: [] },
+    ];
+    const queue = createFakeQueue(new Map([["agent", messages]]));
+    const before = queue.state;
+
+    moveQueuedComposerMessage({ ...input, queue });
+
+    expect(queue.state).toBe(before);
+    expect(queue.state.get("agent")).toEqual(messages);
   });
 });
 
