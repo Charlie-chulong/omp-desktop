@@ -2272,6 +2272,7 @@ export const ar: TranslationResources = {
       wallpaper: {
         title: "الخلفية",
         enabled: "تفعيل الخلفية",
+        loadError: "تعذر تحميل الخلفية. تحقق من الملف أو الرابط المحدد.",
         source: {
           label: "المصدر",
           none: "معطل",
@@ -2284,9 +2285,9 @@ export const ar: TranslationResources = {
           accessibilityLabel: "رابط صورة الخلفية",
         },
         opacity: {
-          label: "العتامة",
-          hint: "مستوى شفافية تراكب الخلفية",
-          accessibilityLabel: "عتامة الخلفية",
+          label: "شفافية الواجهة",
+          hint: "القيم الأعلى تُظهر الخلفية أكثر؛ 100٪ تزيل خلفيات اللوحات.",
+          accessibilityLabel: "شفافية الواجهة",
         },
         directory: {
           label: "دليل الخلفية",

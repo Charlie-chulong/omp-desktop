@@ -1,7 +1,9 @@
 import type {
   DesktopPetActivity,
+  DesktopPetActivityResult,
   DesktopPetLabels,
   DesktopPetTask,
+  DesktopPetRevision,
   PetTaskStatus,
 } from "./types.js";
 
@@ -14,6 +16,7 @@ const PRIORITY: Record<PetTaskStatus, number> = {
 export const DEFAULT_PET_ACTIVITY: DesktopPetActivity = {
   connected: false,
   serverIds: [],
+  revisions: {},
   tasks: [],
   fontFamily: "Segoe UI",
   labels: {
@@ -31,6 +34,48 @@ export const DEFAULT_PET_ACTIVITY: DesktopPetActivity = {
   },
 };
 
+function parsePetRevision(value: unknown): DesktopPetRevision | null {
+  if (value === null) return null;
+  if (!value || typeof value !== "object") throw new Error("Invalid pet directory revision");
+  const raw = value as Record<string, unknown>;
+  if (
+    typeof raw.generation !== "string" ||
+    !raw.generation ||
+    raw.generation.length > 512 ||
+    typeof raw.seq !== "number" ||
+    !Number.isSafeInteger(raw.seq) ||
+    raw.seq < 0 ||
+    (raw.previousGeneration !== undefined &&
+      (typeof raw.previousGeneration !== "string" ||
+        !raw.previousGeneration ||
+        raw.previousGeneration.length > 512 ||
+        raw.previousGeneration === raw.generation))
+  ) {
+    throw new Error("Invalid pet directory revision");
+  }
+  return {
+    generation: raw.generation,
+    seq: raw.seq,
+    ...(raw.previousGeneration !== undefined ? { previousGeneration: raw.previousGeneration } : {}),
+  };
+}
+
+function parsePetRevisions(
+  values: Record<string, unknown>,
+  serverIds: ReadonlySet<string>,
+  connected: boolean,
+): DesktopPetActivity["revisions"] {
+  const revisions: DesktopPetActivity["revisions"] = {};
+  for (const [serverId, raw] of Object.entries(values)) {
+    if (!serverIds.has(serverId)) {
+      if (!connected) continue;
+      throw new Error("Invalid pet directory host");
+    }
+    revisions[serverId] = parsePetRevision(raw);
+  }
+  return revisions;
+}
+
 export function parsePetActivity(value: unknown): DesktopPetActivity {
   if (!value || typeof value !== "object") throw new Error("Invalid pet activity");
   const input = value as Record<string, unknown>;
@@ -44,6 +89,9 @@ export function parsePetActivity(value: unknown): DesktopPetActivity {
     ) ||
     typeof input.fontFamily !== "string" ||
     input.fontFamily.length > 512 ||
+    !input.revisions ||
+    typeof input.revisions !== "object" ||
+    Array.isArray(input.revisions) ||
     !input.labels ||
     typeof input.labels !== "object"
   )
@@ -56,6 +104,11 @@ export function parsePetActivity(value: unknown): DesktopPetActivity {
     labels[key] = rawLabels[key];
   }
   const serverIds = new Set<string>(input.connected ? (input.serverIds as string[]) : []);
+  const revisions = parsePetRevisions(
+    input.revisions as Record<string, unknown>,
+    serverIds,
+    input.connected,
+  );
   const tasks: DesktopPetTask[] = input.tasks.map((raw: unknown) => {
     if (!raw || typeof raw !== "object") throw new Error("Invalid pet task");
     const task = raw as Record<string, unknown>;
@@ -72,7 +125,7 @@ export function parsePetActivity(value: unknown): DesktopPetActivity {
       !Number.isFinite(task.updatedAt) ||
       typeof task.status !== "string" ||
       !Object.hasOwn(PRIORITY, task.status) ||
-      (input.connected && !serverIds.has(task.serverId))
+      (input.connected && !Object.hasOwn(revisions, task.serverId))
     )
       throw new Error("Invalid pet task fields");
     return {
@@ -87,40 +140,78 @@ export function parsePetActivity(value: unknown): DesktopPetActivity {
     tasks: input.connected ? tasks : [],
     connected: input.connected,
     serverIds: [...serverIds],
+    revisions,
     fontFamily: input.fontFamily,
     labels,
   };
 }
 
+interface HostActivityRevision {
+  revision: DesktopPetRevision | null;
+  owner: number;
+  report: DesktopPetActivity | null;
+}
+
 export class PetActivitySnapshots {
   private readonly snapshots = new Map<number, DesktopPetActivity>();
-  private readonly hostTasks = new Map<string, DesktopPetTask[]>();
+  private readonly hosts = new Map<string, HostActivityRevision>();
 
-  publish(senderId: number, activity: DesktopPetActivity): void {
+  publish(senderId: number, activity: DesktopPetActivity): DesktopPetActivityResult {
     this.snapshots.delete(senderId);
     this.snapshots.set(senderId, activity);
-    if (!activity.connected) return;
-    const reports = new Map<string, Map<string, DesktopPetTask>>();
-    for (const serverId of activity.serverIds) reports.set(serverId, new Map());
-    for (const task of activity.tasks) {
-      const report = reports.get(task.serverId);
-      if (!report) continue;
-      const previous = report.get(task.agentId);
-      if (
-        !previous ||
-        task.updatedAt > previous.updatedAt ||
-        (task.updatedAt === previous.updatedAt && PRIORITY[task.status] < PRIORITY[previous.status])
-      ) {
-        report.set(task.agentId, task);
+    const result: DesktopPetActivityResult = { revalidate: [] };
+    if (!activity.connected) return result;
+    for (const serverId of activity.serverIds) {
+      if (!Object.hasOwn(activity.revisions, serverId)) continue;
+      const revision = activity.revisions[serverId];
+      const current = this.hosts.get(serverId);
+      if (!current) {
+        this.hosts.set(serverId, { revision, owner: senderId, report: activity });
+      } else if (revision && !current.revision) {
+        current.revision = revision;
+        current.owner = senderId;
+        current.report = activity;
+      } else if (revision && current.revision) {
+        if (revision.generation !== current.revision.generation) {
+          // UUID epochs are unordered. Only a fresh daemon read made against our
+          // current generation proves a transition; a late unknown epoch cannot.
+          if (revision.previousGeneration !== current.revision.generation) {
+            result.revalidate.push({ serverId, generation: current.revision.generation });
+            continue;
+          }
+          current.revision = revision;
+          current.owner = senderId;
+          current.report = activity;
+        } else if (revision.seq >= current.revision.seq) {
+          current.revision = revision;
+          current.owner = senderId;
+          current.report = activity;
+        } else {
+          result.revalidate.push({ serverId, generation: current.revision.generation });
+        }
+      } else if (current.revision) {
+        result.revalidate.push({ serverId, generation: current.revision.generation });
+      } else if (current.owner === senderId || !this.hasReport(current.owner, serverId)) {
+        // The existing protocol also supports legacy daemons without sequences.
+        // Keep one writer rather than treating IPC arrival time as freshness.
+        current.owner = senderId;
+        current.report = activity;
       }
     }
-    // Each publisher reports the complete outstanding directory for these hosts.
-    // Keep an empty acknowledgement even if that window subsequently closes.
-    for (const [serverId, report] of reports) this.hostTasks.set(serverId, [...report.values()]);
+    return result;
   }
 
   remove(senderId: number): void {
     this.snapshots.delete(senderId);
+  }
+
+  private hasReport(senderId: number, serverId: string): boolean {
+    const activity = this.snapshots.get(senderId);
+    return (
+      !!activity?.connected &&
+      activity.serverIds.includes(serverId) &&
+      Object.hasOwn(activity.revisions, serverId)
+    );
   }
 
   get(): DesktopPetActivity {
@@ -133,9 +224,32 @@ export class PetActivitySnapshots {
       }
     }
     const tasks: DesktopPetTask[] = [];
-    for (const [serverId, report] of this.hostTasks) {
-      if (activeServers.has(serverId)) tasks.push(...report);
-      else this.hostTasks.delete(serverId);
+    const revisions: DesktopPetActivity["revisions"] = {};
+    for (const [serverId, host] of this.hosts) {
+      if (!activeServers.has(serverId)) {
+        host.report = null;
+        continue;
+      }
+      // Directory state belongs to the host, not its publishing window. Keep the
+      // newest accepted report while any window is connected; never revive an
+      // older peer's tasks or lose real pending work when one publisher closes.
+      const report = host.report;
+      if (!report) continue;
+      revisions[serverId] = host.revision;
+      const byAgent = new Map<string, DesktopPetTask>();
+      for (const task of report.tasks) {
+        if (task.serverId !== serverId) continue;
+        const previous = byAgent.get(task.agentId);
+        if (
+          !previous ||
+          task.updatedAt > previous.updatedAt ||
+          (task.updatedAt === previous.updatedAt &&
+            PRIORITY[task.status] < PRIORITY[previous.status])
+        ) {
+          byAgent.set(task.agentId, task);
+        }
+      }
+      tasks.push(...byAgent.values());
     }
     tasks.sort(
       (a, b) =>
@@ -144,6 +258,12 @@ export class PetActivitySnapshots {
         a.serverId.localeCompare(b.serverId) ||
         a.agentId.localeCompare(b.agentId),
     );
-    return { ...latest, connected: activeServers.size > 0, tasks };
+    return {
+      ...latest,
+      serverIds: [...activeServers],
+      revisions,
+      connected: activeServers.size > 0,
+      tasks,
+    };
   }
 }

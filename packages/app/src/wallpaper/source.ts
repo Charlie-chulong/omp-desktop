@@ -15,15 +15,14 @@ export interface RemoteWallpaperSource {
   kind: WallpaperMediaKind;
 }
 
-export function isWallpaperConfigured(settings: AppSettings): boolean {
-  if (!settings.wallpaperEnabled) return false;
-  if (settings.wallpaperSource === "file") {
-    return Boolean(settings.wallpaperDir && settings.wallpaperPath);
-  }
+export function getWallpaperSourceKey(settings: AppSettings): string | null {
+  if (!settings.wallpaperEnabled) return null;
   if (settings.wallpaperSource === "url") {
-    return parseRemoteWallpaperSource(settings.wallpaperUrl) !== null;
+    return parseRemoteWallpaperSource(settings.wallpaperUrl)?.key ?? null;
   }
-  return false;
+  return settings.wallpaperSource === "file" && settings.wallpaperDir && settings.wallpaperPath
+    ? `file:${JSON.stringify([settings.wallpaperDir, settings.wallpaperPath])}`
+    : null;
 }
 
 export function parseRemoteWallpaperSource(value: string | null): RemoteWallpaperSource | null {

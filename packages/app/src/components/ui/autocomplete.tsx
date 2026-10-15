@@ -13,6 +13,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { File, Folder } from "lucide-react-native";
 import type { Theme } from "@/styles/theme";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import { getAutocompleteScrollOffset } from "./autocomplete-utils";
 
 export interface AutocompleteOption {
@@ -343,7 +344,7 @@ const styles = StyleSheet.create((theme: Theme) => ({
     marginRight: theme.spacing[1],
   },
   itemActive: {
-    backgroundColor: theme.colors.surface2,
+    backgroundColor: setCssColorAlpha(theme.colors.surface2, 1),
   },
   itemMain: {
     flex: 1,

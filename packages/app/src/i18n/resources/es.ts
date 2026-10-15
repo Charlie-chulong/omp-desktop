@@ -2324,6 +2324,8 @@ export const es: TranslationResources = {
       wallpaper: {
         title: "Fondo de pantalla",
         enabled: "Activar fondo de pantalla",
+        loadError:
+          "No se pudo cargar el fondo de pantalla. Comprueba el archivo o la URL seleccionados.",
         source: {
           label: "Origen",
           none: "Desactivado",
@@ -2336,9 +2338,9 @@ export const es: TranslationResources = {
           accessibilityLabel: "URL de la imagen de fondo de pantalla",
         },
         opacity: {
-          label: "Opacidad",
-          hint: "Nivel de transparencia de la superposición del fondo de pantalla",
-          accessibilityLabel: "Opacidad del fondo de pantalla",
+          label: "Transparencia de la interfaz",
+          hint: "Un valor mayor muestra más el fondo; el 100 % elimina los fondos de los paneles.",
+          accessibilityLabel: "Transparencia de la interfaz",
         },
         directory: {
           label: "Directorio de fondo de pantalla",

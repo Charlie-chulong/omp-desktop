@@ -44,9 +44,11 @@ These tips follow the interface language in all nine supported locales.
 
 ## Desktop pet
 
-Enable **Settings → Appearance → Desktop pet → Show desktop pet** to display Iris,
-the built-in pink fluffy kitten, in a separate transparent, always-on-top window.
-The feature is off by default and is only available in the Electron app.
+In **Settings → Appearance**, expand **Desktop pet** and enable **Show desktop pet**
+to display Iris, the built-in pink fluffy kitten, in a separate transparent,
+always-on-top window. The feature is off by default and is only available in the Electron app.
+The settings section starts collapsed. Folding it preserves the creation draft and
+model selection without hiding or disabling an enabled pet.
 
 - Drag the kitten to move it; size, selection, visibility, and position are saved
   locally. Transparent space lets mouse input pass through to other applications.
@@ -56,11 +58,24 @@ The feature is off by default and is only available in the Electron app.
 - The status bubble stays close to the kitten's upper left and follows its size.
 - Connected hosts supply real task state. Permissions take priority over errors,
   unread completions, and running work. No task or animation triggers a model call.
+- On daemons with directory revisions, completed directory reads determine freshness,
+  not window arrival order. Older reports cannot restore acknowledged or archived
+  tasks. Tasks remain identified by host and conversation, not a shared workspace
+  entry. Closing one publishing window does not discard known pending work while
+  another window remains connected to that host.
+- While the highest-priority task is running, Iris shows a random work caption every
+  30–60 seconds for five seconds: `智商变高了！`, `不想上班...`, `大佬！`,
+  `wooo！wow！`, or `Tibo什么时候重置...`. The two complaint lines use the wistful
+  working face; the other three use the happy face without changing task status.
+  Captions stop immediately when work ends, a higher-priority task needs attention,
+  the host disconnects, or the pet is dragged/petted. Idle and non-running tasks
+  never trigger captions. Custom pets are unchanged; reduced-motion mode keeps
+  the selected expression static.
 - Iris has six registered 24-frame, 12-fps action sequences with continuous local
   breathing/sway. Idle actions play for two seconds and rest for six seconds;
-  waiting, completed, and blocked states also have quiet pauses. Working and carried
-  loops continue. Only the working face keeps its wistful expression; other faces
-  are relaxed or happy. Blinks use short, tapered eyelids.
+  waiting, completed, and blocked states also have quiet pauses. Outside temporary
+  reactions, working and carried loops continue. Only the working face keeps its
+  wistful expression; other faces are relaxed or happy. Blinks use short, tapered eyelids.
   System reduced-motion preferences keep the pose static.
 - Right-click the pet to hide it or reset its position. Minimizing OMP does not hide
   the pet; quitting still follows the existing desktop/daemon settings.
@@ -167,11 +182,25 @@ HTTP(S) image/video URL. Local previews are limited to the first 48 supported re
 expand the preview grid to see all returned entries. URL media type detection uses the URL
 pathname, so signed video URLs with query strings are supported.
 
-The opacity slider covers 0–100% and previews changes without writing every intermediate
-value. Base workspaces remain transparent while wallpaper is enabled, including newly
-selected tabs; cards retain an opaque-enough surface for text. Local media is streamed
-through app-scoped opaque identifiers rather than embedding full files in renderer IPC.
-Windows and Linux keep their native, opaque title-bar controls over wallpaper content.
+The **Interface transparency** slider covers 0–100% and previews changes without
+writing every intermediate value. Increasing it reveals the media and fades regular
+panel backgrounds: 0% shows the selected theme's solid background, while 100% removes
+the sidebar, titlebar, and composer veils. Dragging does not remount the settings page,
+lose slider focus, or reset its scroll position.
+
+Base workspaces become transparent only after the selected media loads, including
+newly selected tabs. Floating menus, command palettes, tooltips, dialogs, and notifications
+keep opaque backing for readability. Text colors still follow the selected theme;
+use a matching wallpaper/theme or lower transparency when contrast is insufficient.
+Loading failures show a message in Wallpaper settings and retain normal theme surfaces.
+Switching sources or recovering from a failed load preserves focused inputs and pet
+creation drafts. The selected media and committed transparency are saved across restarts.
+
+Local media is streamed through app-scoped opaque identifiers rather than embedding
+full files in renderer IPC. Windows/Linux native caption controls use a transparent
+overlay over the HTML titlebar rather than a separate opaque patch. The top resize
+strip stays within the titlebar bounds, keeping the right edge aligned when the window
+is restored or maximized.
 Desktop model pickers keep an opaque, theme-matched panel behind the model list and its
 **Thinking**, **Fast**, and **Context window** settings, so wallpaper and conversation text
 cannot show through the footer.

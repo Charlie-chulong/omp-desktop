@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
+import { setCssColorAlpha } from "@/wallpaper/color";
 
 interface AppearanceStyleBoundaryProps {
   appearanceKey?: string;
@@ -28,8 +29,9 @@ export function appearanceStyleBoundaryKey(theme: Theme): string {
     theme.colors.foreground,
     theme.colors.foregroundMuted,
     theme.colors.mutedForeground,
-    theme.colors.surface1,
-    theme.colors.surface2,
+    // Loading or replacing wallpaper changes surface alpha, not form identity.
+    setCssColorAlpha(theme.colors.surface1, 1),
+    setCssColorAlpha(theme.colors.surface2, 1),
     theme.colors.border,
     theme.colors.accentBright,
     theme.colors.syntax.keyword,

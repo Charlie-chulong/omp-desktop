@@ -1,16 +1,26 @@
 /// <reference types="vite/client" />
 
-import { afterEach, describe, expect, it } from "vitest";
-import appShellHtml from "/index.html?raw&url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type * as LayoutModule from "@/constants/layout";
+import { TitlebarDragRegion } from "./titlebar-drag-region";
+
+vi.mock("@/constants/layout", async (importOriginal) => {
+  const original = await importOriginal<typeof LayoutModule>();
+  return { ...original, getIsElectronRuntime: () => true };
+});
 
 const mountedFrames: HTMLIFrameElement[] = [];
 
 async function mountAppShell(): Promise<Document> {
+  const response = await fetch("/index.html");
+  if (!response.ok) throw new Error(`App shell request failed: ${response.status}`);
   const frame = document.createElement("iframe");
   const loaded = new Promise<void>((resolve) => {
     frame.addEventListener("load", () => resolve(), { once: true });
   });
-  frame.srcdoc = appShellHtml;
+  frame.srcdoc = await response.text();
   document.body.appendChild(frame);
   mountedFrames.push(frame);
   await loaded;
@@ -31,6 +41,33 @@ afterEach(() => {
 });
 
 describe("window drag region CSS", () => {
+  it("keeps a padded titlebar inside its viewport and leaves both top corners resizable", async () => {
+    const frameDocument = await mountAppShell();
+    const viewport = frameDocument.createElement("div");
+    viewport.style.cssText =
+      "position:absolute;left:0;top:0;width:240px;height:80px;overflow:hidden";
+    const titlebar = frameDocument.createElement("div");
+    titlebar.style.cssText =
+      "box-sizing:border-box;position:relative;display:flex;align-items:center;width:100%;height:36px;padding:0 12px";
+    titlebar.innerHTML = renderToStaticMarkup(createElement(TitlebarDragRegion));
+    viewport.appendChild(titlebar);
+    frameDocument.body.appendChild(viewport);
+
+    expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+    viewport.scrollLeft = 1000;
+    const bounds = titlebar.getBoundingClientRect();
+    expect(bounds.left).toBe(viewport.getBoundingClientRect().left);
+    const leftCorner = frameDocument.elementFromPoint(bounds.left + 1, bounds.top + 1);
+    const rightCorner = frameDocument.elementFromPoint(bounds.right - 1, bounds.top + 1);
+    const dragSurface = frameDocument.elementFromPoint(bounds.left + 1, bounds.top + 10);
+    if (!leftCorner || !rightCorner || !dragSurface) {
+      throw new Error("Titlebar hit regions were not rendered");
+    }
+    expect(readAppRegion(leftCorner)).toBe("no-drag");
+    expect(readAppRegion(rightCorner)).toBe("no-drag");
+    expect(readAppRegion(dragSurface)).toBe("drag");
+  });
+
   it("leaves an overflow-clipped chat control out of the native no-drag map", async () => {
     const frameDocument = await mountAppShell();
     frameDocument.body.innerHTML = `

@@ -18,7 +18,7 @@ import {
   shouldUseLegacyDaemonWorkspaceDirectory,
   stampLegacyWorkspaceIds,
 } from "@/workspace/legacy-daemon-workspaces";
-import type { AgentDirectoryDelta } from "@/utils/agent-directory-sync";
+import { buildAgentDirectoryState, type AgentDirectoryDelta } from "@/utils/agent-directory-sync";
 import { AgentDirectoryReplica } from "./agent-replica";
 import {
   WorkspaceDirectoryReplica,
@@ -54,6 +54,8 @@ interface AgentSnapshot {
   syncMode?: "snapshot" | "changes";
   syncCursor?: DirectoryCursor;
   syncRemovals: Array<{ id: string; seq: number }>;
+  requestedGeneration?: string;
+  previousGeneration?: string;
 }
 
 interface AgentPageInfo {
@@ -74,6 +76,11 @@ interface DirectoryCursors {
   agents?: DirectoryCursor;
 }
 
+export interface AgentDirectoryPublication {
+  agents: ReadonlyMap<string, Agent>;
+  revision: { generation: string; seq: number; previousGeneration?: string } | null;
+}
+
 export interface DirectoryConnection {
   client: DaemonClient | null;
   status: "online" | "offline";
@@ -89,6 +96,7 @@ export interface RefreshAgentDirectoryInput {
   filter?: FetchAgentsOptions["filter"];
   subscribe?: FetchAgentsOptions["subscribe"];
   page?: FetchAgentsOptions["page"];
+  expectedGeneration?: string;
 }
 
 export interface RefreshAgentDirectoryResult {
@@ -114,6 +122,11 @@ export class DirectorySync {
   };
   private unsubscribe: (() => void) | null = null;
   private readonly abortSessionWaits = new Set<() => void>();
+  private agentPublication: AgentDirectoryPublication | null = null;
+  private agentGenerationProof: { generation: string; previousGeneration: string } | null = null;
+  private agentPublicationRefresh: Promise<void> | null = null;
+  private agentPublicationRefreshRequested = false;
+  private agentReadInProgress: object | null = null;
 
   constructor(
     private readonly serverId: string,
@@ -122,6 +135,7 @@ export class DirectorySync {
       markAgentLoading: () => void;
       markAgentReady: () => void;
       markAgentError: (error: string) => void;
+      onAgentDirectoryCommitted?: () => void;
     },
     private readonly checkpoints?: DirectoryCheckpointStorage,
   ) {
@@ -139,6 +153,11 @@ export class DirectorySync {
       this.connection = connection;
       return false;
     }
+    this.agentPublication = null;
+    this.agentPublicationRefresh = null;
+    this.agentPublicationRefreshRequested = false;
+    this.agentReadInProgress = null;
+    this.callbacks.onAgentDirectoryCommitted?.();
     this.flushAbortedTransactions();
     this.unsubscribe?.();
     this.unsubscribe = null;
@@ -157,8 +176,7 @@ export class DirectorySync {
         if (message.type !== "agent_update" || !this.isCurrent(client, source)) return;
         const recorded = this.agentTransactions.record(source, message.payload);
         if (!recorded) {
-          this.agents.applyDelta(message.payload);
-          this.noteLiveCursor("agents", message.payload);
+          this.applyLiveAgentDelta(message.payload);
         }
       }),
       client.on("workspace_update", (message) => {
@@ -180,11 +198,13 @@ export class DirectorySync {
       client.on("agent_deleted", (message) => {
         if (message.type === "agent_deleted" && this.isCurrent(client, source)) {
           this.agents.remove(message.payload.agentId);
+          this.requestAgentPublicationRefresh();
         }
       }),
       client.on("agent_archived", (message) => {
         if (message.type === "agent_archived" && this.isCurrent(client, source)) {
           this.agents.archive(message.payload.agentId, message.payload.archivedAt);
+          this.requestAgentPublicationRefresh();
         }
       }),
     ];
@@ -195,11 +215,15 @@ export class DirectorySync {
   }
 
   dispose(): void {
+    this.agentPublication = null;
+    this.agentPublicationRefreshRequested = false;
+    this.agentReadInProgress = null;
     this.flushAbortedTransactions();
     this.abortPendingSessionWaits();
     this.unsubscribe?.();
     this.unsubscribe = null;
     workspaceLabels.disconnect(this.serverId);
+    this.callbacks.onAgentDirectoryCommitted?.();
   }
 
   async fetchTimeline(
@@ -223,26 +247,14 @@ export class DirectorySync {
       legacy: false,
       syncRemovals: [],
     }));
+    this.agentReadInProgress = transaction;
+    let committed = false;
     this.callbacks.markAgentLoading();
     try {
       await this.waitForSession(client, source);
       const session = useSessionStore.getState().sessions[this.serverId];
       if (!input.filter && shouldUseLegacyDaemonWorkspaceDirectory(session?.serverInfo)) {
-        const directory = await readLegacyDaemonWorkspaceDirectory({
-          client,
-          subscribe: input.subscribe,
-          page: input.page,
-        });
-        if (
-          !directory ||
-          !this.agentTransactions.isCurrent(transaction) ||
-          !this.isCurrent(client, source)
-        ) {
-          throw new DirectoryRefreshSupersededError("legacy fetch no longer current");
-        }
-        transaction.snapshot.entries.push(...stampLegacyWorkspaceIds(directory.entries));
-        transaction.snapshot.subscriptionId = directory.subscriptionId;
-        transaction.snapshot.legacy = true;
+        await this.fetchLegacyAgents(client, source, transaction, input);
       } else {
         await this.fetchAgents(client, source, transaction, input);
       }
@@ -270,17 +282,89 @@ export class DirectorySync {
               : delta,
           )
         : completion.deltas;
+      // Keep the existing UI/timeline merge policy independent of pet authority.
       const agents = this.commitAgentSnapshot(completion.snapshot, deltas);
       this.persistAgentCursors(completion.snapshot, completion.deltas);
+      if (!input.filter && !input.page?.cursor) {
+        this.commitAgentPublication(completion.snapshot, completion.deltas);
+      } else if (completion.deltas.length > 0) {
+        this.requestAgentPublicationRefresh();
+      }
       this.callbacks.markAgentReady();
+      committed = true;
       return { agents, subscriptionId: completion.snapshot.subscriptionId };
     } catch (error) {
       const deltas = this.agentTransactions.fail(transaction);
-      if (deltas) for (const delta of deltas) this.agents.applyDelta(delta);
+      if (deltas) for (const delta of deltas) this.applyLiveAgentDelta(delta);
       if (!(error instanceof DirectoryRefreshSupersededError)) {
         this.callbacks.markAgentError(error instanceof Error ? error.message : String(error));
       }
       throw error;
+    } finally {
+      this.finishAgentRead(transaction, committed);
+    }
+  }
+
+  private finishAgentRead(
+    transaction: DirectoryTransaction<AgentSnapshot, AgentDirectoryDelta>,
+    committed: boolean,
+  ): void {
+    if (this.agentReadInProgress !== transaction) return;
+    this.agentReadInProgress = null;
+    if (committed && this.agentPublicationRefreshRequested) {
+      this.requestAgentPublicationRefresh();
+    } else if (!committed) {
+      this.agentPublicationRefreshRequested = false;
+    }
+  }
+
+  private commitAgentPublication(
+    snapshot: AgentSnapshot,
+    deltas: readonly AgentDirectoryDelta[],
+  ): void {
+    const cursor = snapshot.syncCursor;
+    if (cursor && snapshot.previousGeneration) {
+      this.agentGenerationProof = {
+        generation: cursor.generation,
+        previousGeneration: snapshot.previousGeneration,
+      };
+    }
+    const revision: AgentDirectoryPublication["revision"] = cursor
+      ? {
+          generation: cursor.generation,
+          seq: cursor.afterSeq,
+          ...(this.agentGenerationProof?.generation === cursor.generation
+            ? { previousGeneration: this.agentGenerationProof.previousGeneration }
+            : {}),
+        }
+      : null;
+    const fetched = buildAgentDirectoryState({
+      serverId: this.serverId,
+      entries: snapshot.entries,
+    }).agents;
+    let published: ReadonlyMap<string, Agent> = fetched;
+    if (snapshot.syncMode === "changes") {
+      const previous = this.agentPublication;
+      if (!previous || previous.revision?.generation !== cursor?.generation) {
+        throw new Error("Agent directory changes have no matching committed base");
+      }
+      const merged = new Map(previous.agents);
+      for (const { id } of snapshot.syncRemovals) merged.delete(id);
+      for (const [id, agent] of fetched) merged.set(id, agent);
+      published = merged;
+    }
+    // Only a completed read proves complete coverage; live B:12 may precede A:11.
+    this.publishAgentDirectory(revision, published);
+    if (
+      deltas.some(
+        (delta) =>
+          !cursor ||
+          delta.generation !== cursor.generation ||
+          delta.seq === undefined ||
+          delta.seq > cursor.afterSeq,
+      )
+    ) {
+      this.requestAgentPublicationRefresh();
     }
   }
 
@@ -385,6 +469,37 @@ export class DirectorySync {
     });
   }
 
+  private async fetchLegacyAgents(
+    client: DaemonClient,
+    source: DirectorySourceToken,
+    transaction: DirectoryTransaction<AgentSnapshot, AgentDirectoryDelta>,
+    input: RefreshAgentDirectoryInput,
+  ): Promise<void> {
+    const directory = await readLegacyDaemonWorkspaceDirectory({
+      client,
+      subscribe: input.subscribe,
+      page: input.page,
+    });
+    if (
+      !directory ||
+      !this.agentTransactions.isCurrent(transaction) ||
+      !this.isCurrent(client, source)
+    ) {
+      throw new DirectoryRefreshSupersededError("legacy fetch no longer current");
+    }
+    transaction.snapshot.entries.push(...stampLegacyWorkspaceIds(directory.entries));
+    transaction.snapshot.subscriptionId = directory.subscriptionId;
+    transaction.snapshot.legacy = true;
+  }
+
+  private agentReadCursor(expectedGeneration?: string): { generation?: string; afterSeq?: number } {
+    if (expectedGeneration) return { generation: expectedGeneration };
+    const revision = this.agentPublication?.revision;
+    if (revision) return { generation: revision.generation, afterSeq: revision.seq };
+    const savedCursor = this.readCursors().agents;
+    return savedCursor ? { generation: savedCursor.generation } : {};
+  }
+
   private async fetchAgents(
     client: DaemonClient,
     source: DirectorySourceToken,
@@ -395,13 +510,18 @@ export class DirectorySync {
     let subscribe = input.subscribe;
     while (true) {
       const limit = input.page?.limit ?? PAGE_LIMIT;
+      // A persisted UI replica can contain timeline/local writes. Establish the
+      // connection's first publication from a full authoritative directory; only
+      // subsequent reads can safely catch up from our pinned commit view.
+      const syncCursor = this.agentReadCursor(input.expectedGeneration);
+      if (cursor === null) transaction.snapshot.requestedGeneration = syncCursor.generation;
       const payload = await client.fetchAgents({
         ...(input.filter ? { filter: input.filter } : { scope: "active" as const }),
         sort: AGENT_SORT,
         ...(subscribe ? { subscribe } : {}),
         page: cursor ? { limit, cursor } : { limit },
         ...(!input.filter && cursor === null && this.supportsDirectorySync()
-          ? { sync: this.readCursors().agents ?? {} }
+          ? { sync: syncCursor }
           : {}),
       });
       this.assertAgentTransactionCurrent(client, source, transaction);
@@ -519,9 +639,82 @@ export class DirectorySync {
     sync: Awaited<ReturnType<DaemonClient["fetchAgents"]>>["sync"],
   ): void {
     if (!sync) return;
+    if (snapshot.requestedGeneration && snapshot.requestedGeneration !== sync.generation) {
+      // The daemon answered a read explicitly based on this previous epoch.
+      snapshot.previousGeneration = snapshot.requestedGeneration;
+    }
     snapshot.syncMode = sync.mode;
     snapshot.syncRemovals.push(...sync.removals);
     snapshot.syncCursor = { generation: sync.generation, afterSeq: sync.headSeq };
+  }
+
+  getAgentPublication(): AgentDirectoryPublication | null {
+    return this.agentPublication;
+  }
+
+  private publishAgentDirectory(
+    revision: AgentDirectoryPublication["revision"],
+    agents: ReadonlyMap<string, Agent>,
+  ): void {
+    // An immutable commit view of the existing directory pipeline. Later
+    // timeline/local UI writes must not become evidence for this sequence.
+    this.agentPublication = { agents, revision };
+    this.callbacks.onAgentDirectoryCommitted?.();
+  }
+
+  private applyLiveAgentDelta(delta: AgentDirectoryDelta): void {
+    // Cross-entity event completion is unordered. Never drop A:11 just because
+    // B:12 arrived first, and never assign a directory coverage cursor to either.
+    this.agents.applyDelta(delta);
+    this.noteLiveCursor("agents", delta);
+    const covered = this.agentPublication?.revision;
+    if (
+      covered &&
+      delta.generation === covered.generation &&
+      delta.seq !== undefined &&
+      delta.seq <= covered.seq
+    )
+      return;
+    // Workspace attention clearing also emits unsequenced updates. Re-read the
+    // existing directory instead of discarding those or inventing a revision.
+    this.requestAgentPublicationRefresh();
+  }
+
+  private requestAgentPublicationRefresh(): void {
+    // Do not add event-driven reads to Web/native clients without a pet consumer.
+    if (
+      !this.callbacks.onAgentDirectoryCommitted ||
+      !this.agentPublication ||
+      this.connection.status !== "online"
+    )
+      return;
+    this.agentPublicationRefreshRequested = true;
+    if (this.agentPublicationRefresh || this.agentReadInProgress) return;
+    const { client, source } = this.connection;
+    if (!client) return;
+    const refresh = Promise.resolve()
+      .then(async () => {
+        if (!this.isCurrent(client, source) || this.agentReadInProgress) return undefined;
+        this.agentPublicationRefreshRequested = false;
+        await this.refreshAgents();
+        return undefined;
+      })
+      .catch((error: unknown) => {
+        if (!this.isCurrent(client, source)) return;
+        // refreshAgents records the directory error; do not retry a failed read.
+        this.agentPublicationRefreshRequested = false;
+        if (!(error instanceof DirectoryRefreshSupersededError)) {
+          console.error("[DirectorySync] Failed to refresh pet activity", error);
+        }
+      })
+      .finally(() => {
+        if (this.agentPublicationRefresh !== refresh) return;
+        this.agentPublicationRefresh = null;
+        if (this.isCurrent(client, source) && this.agentPublicationRefreshRequested) {
+          this.requestAgentPublicationRefresh();
+        }
+      });
+    this.agentPublicationRefresh = refresh;
   }
 
   private noteLiveCursor(
@@ -618,7 +811,7 @@ export class DirectorySync {
   }
 
   private flushAbortedTransactions(): void {
-    for (const delta of this.agentTransactions.abort()) this.agents.applyDelta(delta);
+    for (const delta of this.agentTransactions.abort()) this.applyLiveAgentDelta(delta);
     for (const delta of this.workspaceTransactions.abort()) this.workspaces.applyDelta(delta);
   }
 

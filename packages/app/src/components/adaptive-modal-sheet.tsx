@@ -14,6 +14,7 @@ import {
 import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import {
   getOverlayRoot,
   OverlayLayerProvider,
@@ -91,7 +92,7 @@ const styles = StyleSheet.create((theme) => ({
     maxHeight: "85%",
     flexShrink: 1,
     minHeight: 0,
-    backgroundColor: theme.colors.surface1,
+    backgroundColor: setCssColorAlpha(theme.colors.surface1, 1),
     borderRadius: theme.borderRadius.xl,
     borderWidth: 1,
     borderColor: theme.colors.surface2,
@@ -256,7 +257,7 @@ function SheetBackground({ style }: BottomSheetBackgroundProps) {
     () => [
       style,
       {
-        backgroundColor: theme.colors.surface0,
+        backgroundColor: setCssColorAlpha(theme.colors.surface0, 1),
         borderTopLeftRadius: theme.borderRadius["2xl"],
         borderTopRightRadius: theme.borderRadius["2xl"],
       },

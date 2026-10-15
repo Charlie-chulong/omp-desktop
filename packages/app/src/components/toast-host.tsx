@@ -8,6 +8,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react-native";
 import { getOverlayRoot, OVERLAY_Z } from "@/lib/overlay-root";
+import { setCssColorAlpha } from "@/wallpaper/color";
 import {
   HEADER_INNER_HEIGHT,
   HEADER_INNER_HEIGHT_MOBILE,
@@ -308,7 +309,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
-    backgroundColor: theme.colors.surface0,
+    backgroundColor: setCssColorAlpha(theme.colors.surface0, 1),
     borderRadius: theme.borderRadius["2xl"],
     borderWidth: theme.borderWidth[1],
     borderColor: theme.colors.border,

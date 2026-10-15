@@ -19,6 +19,7 @@ const testTheme = {
     surface1: "#fafafa",
     surface2: "#f4f4f5",
     surface3: "#e4e4e7",
+    surfaceComposer: "#ffffff",
     popover: "#ffffff",
     border: "#e4e4e7",
     borderAccent: "#a1a1aa",

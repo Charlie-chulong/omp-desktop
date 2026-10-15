@@ -1,3 +1,5 @@
+import { createWorkChatter } from "./work-chatter.js";
+
 // Static trusted document: descriptors and labels arrive only over the isolated preload bridge.
 export const PET_HTML = String.raw`<!doctype html>
 <html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src omp-desktop:; style-src 'unsafe-inline'; script-src 'nonce-omp-pet-renderer'; connect-src 'none'"><style>
@@ -10,10 +12,12 @@ const bridge=window.ompPet, canvas=document.getElementById('mascot'), bubble=doc
 const ctx=canvas.getContext('2d',{willReadFrequently:true}), motion=matchMedia('(prefers-reduced-motion: reduce)');
 const sizes={small:112,medium:152,large:200},holds={idle:6000,needs_input:6000,ready:7000,blocked:9000};
 const frameInterval=1000/30,transitionDuration=210,patDuration=850,motionEpoch=performance.now();
+const chatter=(${createWorkChatter.toString()})();
 let state=null,image=null,imageUrl='',loadGeneration=0,animationKey='',animationStarted=0;
 let poseImage=null,poseDescriptor=null,transition=null,patStarted=-1;
 let dragging=false,pointerStart=null,moved=false,interactive=null,pointer={x:-1,y:-1};
 let animationTimer=null,timerDue=0,lastDraw=-Infinity,checkPointerAfterDraw=false;
+let chatterTimer=null,chatterDue=Infinity;
 let canvasLeft=0,canvasTop=0,canvasRight=0,canvasBottom=0,bubbleLeft=0,bubbleTop=0,bubbleRight=0,bubbleBottom=0;
 function fail(error){bridge.reportError(error instanceof Error ? error.message : String(error)).catch(console.error)}
 function setInteractive(value){if(interactive!==value){interactive=value;bridge.interactive(value)}}
@@ -30,6 +34,30 @@ function hitTest(){
   }
   setInteractive(hit);
 }
+function renderBubble(){
+  const activity=state.activity,task=activity.tasks[0];
+  const count=activity.tasks.length>1?' · '+activity.labels.taskCount.replace('{{count}}',String(activity.tasks.length)):'';
+  bubble.textContent=chatter.line?chatter.line.text:(task?activity.labels[task.status]:(activity.connected?activity.labels.idle:activity.labels.offline))+count;
+  bubble.style.whiteSpace=chatter.line?'normal':'nowrap';
+  bubble.title=task?task.title:activity.labels.openApp;
+  bubble.setAttribute('aria-label',task?activity.labels.openTask+': '+task.title:activity.labels.openApp);
+  bubble.hidden=false;
+  refreshHitBounds();checkPointerAfterDraw=true;
+}
+function syncChatter(now){
+  const enabled=!!image&&state.descriptor.builtIn&&state.descriptor.id==='iris'&&!dragging&&patStarted<0;
+  const changed=chatter.update(state.activity,now,enabled);
+  if(chatter.nextAt!==chatterDue){
+    clearTimeout(chatterTimer);chatterTimer=null;chatterDue=chatter.nextAt;
+    if(Number.isFinite(chatterDue))chatterTimer=setTimeout(onChatterTimer,Math.ceil(Math.max(0,chatterDue-now)));
+  }
+  return changed;
+}
+function onChatterTimer(){
+  chatterTimer=null;chatterDue=Infinity;
+  const now=performance.now();
+  if(syncChatter(now)){renderBubble();syncPose(now);requestDraw()}
+}
 function frameAt(animation,key,started,now){
   if(motion.matches||animation.frames===1)return 0;
   if(key==='ready'&&patStarted>=0)return Math.min(animation.frames-1,Math.floor(Math.max(0,now-patStarted)*(animation.frames-1)/patDuration));
@@ -39,7 +67,7 @@ function frameAt(animation,key,started,now){
 function syncPose(now){
   if(!state||!image)return;
   const descriptor=state.descriptor,key=dragging&&descriptor.animations.dragging?'dragging':
-    patStarted>=0&&now-patStarted<patDuration?'ready':state.activity.tasks[0]?.status||'idle';
+    patStarted>=0&&now-patStarted<patDuration?'ready':chatter.line?.animation||state.activity.tasks[0]?.status||'idle';
   const animation=descriptor.animations[key],previous=poseDescriptor?.animations[animationKey];
   const changed=!poseDescriptor||poseImage!==image||poseDescriptor.id!==descriptor.id||animationKey!==key||
     poseDescriptor.frameWidth!==descriptor.frameWidth||poseDescriptor.frameHeight!==descriptor.frameHeight||
@@ -74,7 +102,7 @@ function draw(now){
   if(!poseImage)return;
   const width=canvas.width,height=canvas.height;
   const age=patStarted<0?patDuration:now-patStarted;
-  if(age>=patDuration&&patStarted>=0){syncPose(now);patStarted=-1}
+  if(age>=patDuration&&patStarted>=0){patStarted=-1;if(syncChatter(now))renderBubble();syncPose(now)}
   ctx.clearRect(0,0,width,height);
   if(!motion.matches){
     const elapsed=now-motionEpoch,breath=Math.sin(elapsed*Math.PI*2/4200),angle=Math.sin(elapsed*Math.PI*2/6900)*.006;
@@ -130,13 +158,8 @@ function advance(){
 }
 function update(next){
   state=next;
-  const activity=state.activity,task=activity.tasks[0];
+  const activity=state.activity;
   document.body.style.fontFamily=activity.fontFamily+", 'Segoe UI', sans-serif";
-  const count=activity.tasks.length>1?' · '+activity.labels.taskCount.replace('{{count}}',String(activity.tasks.length)):'';
-  bubble.textContent=(task?activity.labels[task.status]:(activity.connected?activity.labels.idle:activity.labels.offline))+count;
-  bubble.title=task?task.title:activity.labels.openApp;
-  bubble.setAttribute('aria-label',task?activity.labels.openTask+': '+task.title:activity.labels.openApp);
-  bubble.hidden=false;
   const size=sizes[state.size],ratio=state.descriptor.frameHeight/state.descriptor.frameWidth;
   const width=ratio>1?size/ratio:size,height=ratio>1?size:size*ratio;
   const pixelWidth=Math.round(width*devicePixelRatio),pixelHeight=Math.round(height*devicePixelRatio);
@@ -145,13 +168,13 @@ function update(next){
   const bubbleX=Math.max(8,canvas.offsetLeft-40);
   bubble.style.left=bubbleX+'px';bubble.style.maxWidth=(innerWidth-bubbleX-8)+'px';
   bubble.style.bottom=Math.round(height*.8+10)+'px';
-  refreshHitBounds();checkPointerAfterDraw=true;
   if(imageUrl!==state.descriptor.spriteUrl){
     imageUrl=state.descriptor.spriteUrl;image=null;const generation=++loadGeneration;
-    const pending=new Image();pending.onload=()=>{if(generation===loadGeneration){image=pending;syncPose(performance.now());requestDraw()}};
+    const pending=new Image();pending.onload=()=>{if(generation===loadGeneration){image=pending;const now=performance.now();if(syncChatter(now))renderBubble();syncPose(now);requestDraw()}};
     pending.onerror=()=>{if(generation===loadGeneration)fail(new Error('Cannot load selected companion spritesheet'))};pending.src=imageUrl;
-  }else syncPose(performance.now());
-  requestDraw();
+  }
+  const now=performance.now();
+  syncChatter(now);renderBubble();syncPose(now);requestDraw();
 }
 bridge.onState(update);bridge.onPointer(point=>{pointer=point;hitTest()});
 bridge.ready().then(update).catch(fail);
@@ -167,7 +190,7 @@ canvas.addEventListener('pointermove',event=>{
   pointer.x=event.clientX;pointer.y=event.clientY;
   if(pointerStart&&event.pointerId===pointerStart.id&&!moved&&Math.hypot(event.screenX-pointerStart.x,event.screenY-pointerStart.y)>4){
     moved=true;dragging=true;patStarted=-1;canvas.classList.add('dragging');setInteractive(true);bridge.dragStart().catch(fail);
-    syncPose(performance.now());requestDraw();
+    const now=performance.now();if(syncChatter(now))renderBubble();syncPose(now);requestDraw();
   }
   hitTest();
 });
@@ -179,6 +202,7 @@ function finish(event){
   const now=performance.now();
   if(wasDragging)bridge.dragEnd().catch(fail);
   else if(event.type==='pointerup'&&event.button===0&&!moved)patStarted=now;
+  if(syncChatter(now))renderBubble();
   syncPose(now);checkPointerAfterDraw=true;requestDraw();hitTest();
 }
 canvas.addEventListener('pointerup',finish);canvas.addEventListener('pointercancel',finish);canvas.addEventListener('lostpointercapture',finish);
