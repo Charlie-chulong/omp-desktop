@@ -262,6 +262,8 @@ export function buildLightSemanticColors(tint: LightThemeConfig) {
     surfaceWorkspace: tint.surface0,
     // surface3 reads as a solid block on the light canvas, so sent-message bubbles sit a step lighter.
     surfaceUserMessage: tint.surface2,
+    // Separate from popover so floating panels can stay opaque.
+    surfaceComposer: tint.surface0,
 
     foreground: tint.foreground,
     foregroundMuted: tint.foregroundMuted,
@@ -393,6 +395,7 @@ export function buildDarkSemanticColors(tint: DarkThemeConfig) {
     surfaceSidebarSelected: tint.surface2,
     surfaceWorkspace: tint.surface1,
     surfaceUserMessage: tint.surface3,
+    surfaceComposer: tint.surface1,
 
     foreground,
     foregroundMuted: tint.foregroundMuted,

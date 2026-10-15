@@ -207,7 +207,7 @@ ipcMain.handle("paseo:window:respondCloseChoice", (event, response: unknown) => 
 protocol.registerSchemesAsPrivileged([
   {
     scheme: APP_SCHEME,
-    privileges: { standard: true, secure: true, supportFetchAPI: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
 ]);
 

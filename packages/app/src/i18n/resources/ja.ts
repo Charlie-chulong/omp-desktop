@@ -2294,6 +2294,7 @@ export const ja: TranslationResources = {
       wallpaper: {
         title: "壁紙",
         enabled: "壁紙を有効化",
+        loadError: "壁紙を読み込めません。選択したファイルまたはURLを確認してください。",
         source: {
           label: "ソース",
           none: "無効",
@@ -2306,9 +2307,9 @@ export const ja: TranslationResources = {
           accessibilityLabel: "壁紙画像URL",
         },
         opacity: {
-          label: "不透明度",
-          hint: "壁紙オーバーレイの透明度レベル",
-          accessibilityLabel: "壁紙の不透明度",
+          label: "インターフェースの透明度",
+          hint: "値を上げるほど壁紙が鮮明になり、100% でパネルの背景色が透明になります。",
+          accessibilityLabel: "インターフェースの透明度",
         },
         directory: {
           label: "壁紙ディレクトリ",

@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import { getElectronHost } from "@/desktop/electron/host";
-import type { DesktopPetActivity } from "@/desktop/pets/types";
+import type { DesktopPetActivity, DesktopPetActivityResult } from "@/desktop/pets/types";
 
 export type DesktopNotificationPermission = "granted" | "denied" | "default";
 
@@ -259,7 +259,7 @@ export interface DesktopInvokeBridge {
 }
 
 export interface DesktopPetBridge {
-  publishActivity?: (activity: DesktopPetActivity) => Promise<void>;
+  publishActivity?: (activity: DesktopPetActivity) => Promise<DesktopPetActivityResult>;
 }
 
 export interface DesktopHostBridge {

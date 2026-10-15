@@ -2323,6 +2323,7 @@ export const ru: TranslationResources = {
       wallpaper: {
         title: "Обои",
         enabled: "Включить обои",
+        loadError: "Не удалось загрузить обои. Проверьте выбранный файл или URL.",
         source: {
           label: "Источник",
           none: "Отключено",
@@ -2335,9 +2336,9 @@ export const ru: TranslationResources = {
           accessibilityLabel: "URL изображения обоев",
         },
         opacity: {
-          label: "Непрозрачность",
-          hint: "Уровень прозрачности наложения обоев",
-          accessibilityLabel: "Непрозрачность обоев",
+          label: "Прозрачность интерфейса",
+          hint: "Чем выше значение, тем лучше видны обои; при 100% фон панелей исчезает.",
+          accessibilityLabel: "Прозрачность интерфейса",
         },
         directory: {
           label: "Каталог обоев",

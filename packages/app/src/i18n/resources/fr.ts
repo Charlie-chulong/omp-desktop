@@ -2326,6 +2326,8 @@ export const fr: TranslationResources = {
       wallpaper: {
         title: "Fond d'écran",
         enabled: "Activer le fond d'écran",
+        loadError:
+          "Impossible de charger le fond d’écran. Vérifiez le fichier ou l’URL sélectionné.",
         source: {
           label: "Source",
           none: "Désactivé",
@@ -2338,9 +2340,9 @@ export const fr: TranslationResources = {
           accessibilityLabel: "URL de l'image de fond d'écran",
         },
         opacity: {
-          label: "Opacité",
-          hint: "Niveau de transparence de l'overlay de fond d'écran",
-          accessibilityLabel: "Opacité du fond d'écran",
+          label: "Transparence de l'interface",
+          hint: "Une valeur élevée révèle davantage le fond d'écran ; à 100 %, les panneaux sont transparents.",
+          accessibilityLabel: "Transparence de l'interface",
         },
         directory: {
           label: "Dossier de fond d'écran",

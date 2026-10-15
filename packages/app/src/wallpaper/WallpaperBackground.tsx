@@ -1,9 +1,23 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Platform } from "react-native";
+import { withUnistyles } from "react-native-unistyles";
 import { useAppSettings } from "@/hooks/use-settings";
 import { getDesktopHost, isElectronRuntime } from "@/desktop/host";
 import { buildWallpaperMediaSrc } from "@/wallpaper/media-src";
-import { isWallpaperConfigured, parseRemoteWallpaperSource } from "@/wallpaper/source";
+import { setCssColorAlpha } from "@/wallpaper/color";
+import { getWallpaperSourceKey, parseRemoteWallpaperSource } from "@/wallpaper/source";
+import {
+  beginWallpaperLoad,
+  finishWallpaperLoad,
+  useWallpaperLoadStatus,
+} from "@/wallpaper/load-state";
 import type { WallpaperMediaDescriptor, WallpaperMediaKind } from "@/wallpaper/types";
 
 interface ResolvedWallpaperSource {
@@ -39,24 +53,26 @@ function isWallpaperMediaDescriptor(value: unknown): value is WallpaperMediaDesc
   );
 }
 
-export function WallpaperBackground() {
+function WallpaperBackgroundBase({ canvasColor }: { canvasColor: string }) {
   const { settings } = useAppSettings();
   const [localSource, setLocalSource] = useState<ResolvedWallpaperSource | null>(null);
-  const [failedKey, setFailedKey] = useState<string | null>(null);
 
-  const configured = isWallpaperConfigured(settings);
+  const configuredKey = getWallpaperSourceKey(settings);
+  const configured = configuredKey !== null;
+  const loadStatus = useWallpaperLoadStatus(configuredKey);
   const remoteSource = useMemo(() => {
     if (settings.wallpaperSource !== "url") return null;
     return parseRemoteWallpaperSource(settings.wallpaperUrl);
   }, [settings.wallpaperSource, settings.wallpaperUrl]);
-  const localKey =
-    settings.wallpaperSource === "file" && settings.wallpaperDir && settings.wallpaperPath
-      ? `file:${settings.wallpaperDir}:${settings.wallpaperPath}`
-      : null;
+  const localKey = settings.wallpaperSource === "file" ? configuredKey : null;
+
+  useLayoutEffect(() => {
+    beginWallpaperLoad(configuredKey);
+    return () => beginWallpaperLoad(null);
+  }, [configuredKey]);
 
   useEffect(() => {
     let cancelled = false;
-    setFailedKey(null);
 
     if (!configured || settings.wallpaperSource !== "file" || !localKey) {
       setLocalSource(null);
@@ -64,14 +80,14 @@ export function WallpaperBackground() {
     }
     if (!isElectronRuntime()) {
       setLocalSource(null);
-      setFailedKey(localKey);
+      finishWallpaperLoad(localKey, "error");
       return;
     }
 
     const invoke = getDesktopHost()?.invoke;
     if (typeof invoke !== "function") {
       setLocalSource(null);
-      setFailedKey(localKey);
+      finishWallpaperLoad(localKey, "error");
       return;
     }
 
@@ -83,7 +99,7 @@ export function WallpaperBackground() {
       .then((result) => {
         if (cancelled) return undefined;
         if (!isWallpaperMediaDescriptor(result)) {
-          setFailedKey(localKey);
+          finishWallpaperLoad(localKey, "error");
           return undefined;
         }
         setLocalSource({
@@ -94,7 +110,7 @@ export function WallpaperBackground() {
         return undefined;
       })
       .catch(() => {
-        if (!cancelled) setFailedKey(localKey);
+        if (!cancelled) finishWallpaperLoad(localKey, "error");
         return undefined;
       });
 
@@ -103,19 +119,32 @@ export function WallpaperBackground() {
     };
   }, [
     configured,
+    configuredKey,
     localKey,
     settings.wallpaperDir,
     settings.wallpaperPath,
     settings.wallpaperSource,
   ]);
 
-  const source = settings.wallpaperSource === "url" ? remoteSource : localSource;
+  let source = remoteSource;
+  if (settings.wallpaperSource !== "url") {
+    source = localSource?.key === localKey ? localSource : null;
+  }
   const sourceKey = source?.key ?? null;
   const opacity = Math.max(0, Math.min(1, settings.wallpaperOpacity));
-  const mediaVisible = source !== null && source.key !== failedKey;
-  const layerStyle = useMemo<CSSProperties>(() => ({ ...LAYER_STYLE, opacity }), [opacity]);
+  const mediaVisible = source !== null && loadStatus !== "error";
+  // The selected theme remains an opaque canvas beneath the media, including
+  // at 0% opacity; never fall through to the document/OS background color.
+  const layerStyle = useMemo<CSSProperties>(
+    () => ({ ...LAYER_STYLE, backgroundColor: canvasColor }),
+    [canvasColor],
+  );
+  const mediaStyle = useMemo<CSSProperties>(() => ({ ...MEDIA_STYLE, opacity }), [opacity]);
   const markFailed = useCallback(() => {
-    if (sourceKey) setFailedKey(sourceKey);
+    if (sourceKey) finishWallpaperLoad(sourceKey, "error");
+  }, [sourceKey]);
+  const markReady = useCallback(() => {
+    if (sourceKey) finishWallpaperLoad(sourceKey, "ready");
   }, [sourceKey]);
 
   if (Platform.OS !== "web" || !configured) return null;
@@ -126,18 +155,30 @@ export function WallpaperBackground() {
         <video
           key={source.key}
           src={source.src}
-          style={MEDIA_STYLE}
+          style={mediaStyle}
           autoPlay
           loop
           muted
           playsInline
           preload="auto"
+          onLoadedData={markReady}
           onError={markFailed}
         />
       ) : null}
       {mediaVisible && source?.kind === "image" ? (
-        <img key={source.key} src={source.src} alt="" style={MEDIA_STYLE} onError={markFailed} />
+        <img
+          key={source.key}
+          src={source.src}
+          alt=""
+          style={mediaStyle}
+          onLoad={markReady}
+          onError={markFailed}
+        />
       ) : null}
     </div>
   );
 }
+
+export const WallpaperBackground = withUnistyles(WallpaperBackgroundBase, (theme) => ({
+  canvasColor: setCssColorAlpha(theme.colors.surface0, 1),
+}));

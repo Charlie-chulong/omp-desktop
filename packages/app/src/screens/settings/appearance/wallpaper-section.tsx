@@ -26,6 +26,8 @@ import { SettingsSection } from "@/screens/settings/settings-section";
 import { settingsStyles } from "@/styles/settings";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { buildWallpaperMediaSrc } from "@/wallpaper/media-src";
+import { getWallpaperSourceKey } from "@/wallpaper/source";
+import { useWallpaperLoadStatus } from "@/wallpaper/load-state";
 import type { WallpaperMediaDescriptor } from "@/wallpaper/types";
 import {
   COLLAPSED_WALLPAPER_PREVIEW_COUNT,
@@ -262,6 +264,7 @@ export function WallpaperSection() {
   const { settings, updateSettings, previewSettings } = useAppSettings();
   const [wallpaperFiles, setWallpaperFiles] = useState<WallpaperMediaDescriptor[]>([]);
   const [scanning, setScanning] = useState(false);
+  const wallpaperLoadStatus = useWallpaperLoadStatus(getWallpaperSourceKey(settings));
 
   const handleToggle = useCallback(
     (wallpaperEnabled: boolean) => void updateSettings({ wallpaperEnabled }),
@@ -427,13 +430,19 @@ export function WallpaperSection() {
               </View>
             ) : null}
 
+            {wallpaperLoadStatus === "error" ? (
+              <Text style={styles.wallpaperPreviewHint} accessibilityRole="alert">
+                {t("settings.appearance.wallpaper.loadError")}
+              </Text>
+            ) : null}
+
             <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
               <View style={settingsStyles.rowContent}>
                 <Text style={settingsStyles.rowTitle}>
                   {t("settings.appearance.wallpaper.opacity.label")}
                 </Text>
                 <Text style={settingsStyles.rowHint}>
-                  {t("settings.appearance.wallpaper.opacity.hint")} {opacityPercent}%
+                  {t("settings.appearance.wallpaper.opacity.hint")}
                 </Text>
               </View>
               <View style={styles.opacitySliderRow}>

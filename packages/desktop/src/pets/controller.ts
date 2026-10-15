@@ -43,8 +43,9 @@ export class DesktopPetController {
     ipcMain.handle("paseo:pet:publishActivity", (event, value: unknown) => {
       if (!isMainWindowSender(event.sender) || event.senderFrame !== event.sender.mainFrame)
         throw new Error("Pet activity requires a main application window");
-      this.snapshots.publish(event.sender.id, parsePetActivity(value));
+      const result = this.snapshots.publish(event.sender.id, parsePetActivity(value));
       this.sendState();
+      return result;
     });
     this.handlers.push("paseo:pet:publishActivity");
     const handle = (

@@ -123,4 +123,29 @@ describe("desktop pet task activity", () => {
       { serverId: "local", agentId: "same", title: "未命名任务", updatedAt: 1000 },
     ]);
   });
+  it("derives committed directory maps without merging a shared workspace or hiding child permissions", () => {
+    const root = {
+      ...agent("root", { status: "running", workspaceId: "shared" }),
+      pendingPermissions: [],
+    };
+    const child = {
+      ...agent("child", { workspaceId: "shared", pendingPermissionCount: undefined }),
+      parentAgentId: "root",
+      pendingPermissions: [{}],
+    };
+    const directory = new Map<string, typeof root | typeof child>([
+      ["root", root],
+      ["child", child],
+    ]);
+    const tasks = deriveDesktopPetTasks(
+      directory.values(),
+      new Set(["remote"]),
+      "Untitled",
+      "remote",
+    );
+    expect(tasks.map(({ serverId, agentId, status }) => [serverId, agentId, status])).toEqual([
+      ["remote", "child", "needs_input"],
+      ["remote", "root", "running"],
+    ]);
+  });
 });
