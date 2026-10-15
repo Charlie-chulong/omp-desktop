@@ -5109,11 +5109,14 @@ export class OmpAgentClient implements AgentClient {
   async updateOmpSubagentModel(
     agentName: string,
     model: string | null,
+    options?: { fastMode?: boolean | null },
   ): Promise<OmpSubagentSettings> {
-    return updateOmpSubagentModel(agentName, model, {
-      ...process.env,
-      ...this.runtimeSettings?.env,
-    });
+    return updateOmpSubagentModel(
+      agentName,
+      model,
+      { ...process.env, ...this.runtimeSettings?.env },
+      options,
+    );
   }
   async updateOmpSubagentSettingsEnabled(enabled: boolean): Promise<OmpSubagentSettings> {
     return updateOmpSubagentSettingsEnabled(enabled, {

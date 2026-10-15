@@ -2631,7 +2631,11 @@ export const ar: TranslationResources = {
         moveUp: "نقل لأعلى",
         moveDown: "نقل لأسفل",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "إعداد OMP الافتراضي",
+        currentTier: "مستوى خدمة OMP الحالي: {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "تحرير التسمية",

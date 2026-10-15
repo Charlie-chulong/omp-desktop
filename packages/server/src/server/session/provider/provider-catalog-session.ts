@@ -654,6 +654,7 @@ export class ProviderCatalogSession {
       const settings = await this.providerSnapshotManager.updateOmpSubagentModel(
         msg.agentName,
         msg.model,
+        { fastMode: msg.fastMode },
       );
       this.host.emit({
         type: "omp.subagents.management.update.response",

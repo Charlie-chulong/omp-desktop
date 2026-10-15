@@ -1782,6 +1782,7 @@ export const OmpSubagentSettingsUpdateRequestMessageSchema = z.object({
   type: z.literal("omp.subagents.management.update.request"),
   agentName: z.string().trim().min(1),
   model: z.string().trim().min(1).nullable(),
+  fastMode: z.boolean().nullable().optional(),
   requestId: z.string(),
 });
 export const OmpSubagentSettingsEnabledUpdateRequestMessageSchema = z.object({
@@ -6560,6 +6561,8 @@ export const OmpSubagentSettingsSchema = z.object({
       name: z.string(),
       description: z.string(),
       model: z.string().optional(),
+      fastMode: z.boolean().optional(),
+      serviceTier: z.string().optional(),
     }),
   ),
 });

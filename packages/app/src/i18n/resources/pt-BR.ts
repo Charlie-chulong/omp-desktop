@@ -2676,7 +2676,11 @@ export const ptBR: TranslationResources = {
         moveUp: "Mover para cima",
         moveDown: "Mover para baixo",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "Padrão do OMP",
+        currentTier: "Nível atual do OMP: {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "Editar rótulo",

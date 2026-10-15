@@ -2688,7 +2688,11 @@ export const es: TranslationResources = {
         moveUp: "Mover hacia arriba",
         moveDown: "Mover hacia abajo",
       },
-      ompSubagents: en.settings.host.ompSubagents,
+      ompSubagents: {
+        ...en.settings.host.ompSubagents,
+        ompDefault: "Predeterminado de OMP",
+        currentTier: "Nivel actual de OMP: {{tier}}",
+      },
       daemon: {
         rename: {
           editLabel: "Editar etiqueta",

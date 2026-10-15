@@ -30,38 +30,49 @@ function parseConfig(raw: string): Document.Parsed {
   return document;
 }
 
-function readModelOverrides(document: Document.Parsed): Record<string, string> {
-  const root = document.toJS() as unknown;
+function readStringOverrides(
+  root: unknown,
+  key: "agentModelOverrides" | "agentServiceTierOverrides",
+): Record<string, string> {
   if (root == null) return {};
   if (typeof root !== "object" || Array.isArray(root)) {
     throw new Error("Invalid OMP config: root must be a mapping");
   }
-  const task = (root as Record<string, unknown>).task;
+  const task = "task" in root ? root.task : undefined;
   if (task == null) return {};
   if (typeof task !== "object" || Array.isArray(task)) {
     throw new Error("Invalid OMP config: task must be a mapping");
   }
-  const value = (task as Record<string, unknown>).agentModelOverrides;
+  const value: unknown = Reflect.get(task, key);
   if (value == null) return {};
   if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Invalid OMP config: task.agentModelOverrides must be a mapping");
+    throw new Error(`Invalid OMP config: task.${key} must be a mapping`);
   }
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).flatMap(([name, model]) =>
-      typeof model === "string" && model.trim() ? [[name, model.trim()]] : [],
+    Object.entries(value).flatMap(([name, override]) =>
+      typeof override === "string" && override.trim() ? [[name, override]] : [],
     ),
   );
 }
 
 function toSettings(configPath: string, document: Document.Parsed): OmpSubagentSettings {
-  const overrides = readModelOverrides(document);
+  const root: unknown = document.toJS();
+  const overrides = readStringOverrides(root, "agentModelOverrides");
+  const serviceTiers = readStringOverrides(root, "agentServiceTierOverrides");
   return {
     configPath,
     enabled: isMap(document.getIn(["task", "agentModelOverrides"], true)),
-    agents: BUNDLED_SUBAGENTS.map((agent) => ({
-      ...agent,
-      ...(overrides[agent.name] ? { model: overrides[agent.name] } : {}),
-    })),
+    agents: BUNDLED_SUBAGENTS.map((agent) => {
+      const model = overrides[agent.name]?.trim();
+      const serviceTier = serviceTiers[agent.name];
+      return {
+        ...agent,
+        ...(model ? { model } : {}),
+        ...(serviceTier ? { serviceTier } : {}),
+        ...(serviceTier === "priority" ? { fastMode: true } : {}),
+        ...(serviceTier === "none" ? { fastMode: false } : {}),
+      };
+    }),
   };
 }
 
@@ -85,9 +96,11 @@ function assertEditableMappings(document: Document.Parsed): void {
   if (task != null && !isMap(task)) {
     throw new Error("Invalid OMP config: task must be a mapping");
   }
-  const overrides = document.getIn(["task", "agentModelOverrides"], true);
-  if (overrides != null && !isMap(overrides)) {
-    throw new Error("Invalid OMP config: task.agentModelOverrides must be a mapping");
+  for (const key of ["agentModelOverrides", "agentServiceTierOverrides"]) {
+    const overrides = document.getIn(["task", key], true);
+    if (overrides != null && !isMap(overrides)) {
+      throw new Error(`Invalid OMP config: task.${key} must be a mapping`);
+    }
   }
 }
 
@@ -98,10 +111,24 @@ function removeEmptyTaskMapping(document: Document.Parsed): void {
   }
 }
 
+function removeServiceTierOverride(document: Document.Parsed, agentName: string): void {
+  const serviceTiers = document.getIn(["task", "agentServiceTierOverrides"], true);
+  if (!isMap(serviceTiers)) return;
+  serviceTiers.delete(agentName);
+  if (serviceTiers.items.length === 0) {
+    document.deleteIn(["task", "agentServiceTierOverrides"]);
+  }
+}
+
+interface OmpSubagentModelOptions {
+  fastMode?: boolean | null;
+}
+
 export async function updateOmpSubagentModel(
   agentName: string,
   model: string | null,
   env: NodeJS.ProcessEnv = process.env,
+  options?: OmpSubagentModelOptions,
 ): Promise<OmpSubagentSettings> {
   if (!BUNDLED_SUBAGENTS.some((agent) => agent.name === agentName)) {
     throw new Error(`Unknown bundled OMP subagent: ${agentName}`);
@@ -121,8 +148,17 @@ export async function updateOmpSubagentModel(
 
   if (normalizedModel) {
     document.setIn(["task", "agentModelOverrides", agentName], normalizedModel);
+    if (options?.fastMode === null) {
+      removeServiceTierOverride(document, agentName);
+    } else if (options?.fastMode !== undefined) {
+      document.setIn(
+        ["task", "agentServiceTierOverrides", agentName],
+        options.fastMode ? "priority" : "none",
+      );
+    }
   } else {
     document.deleteIn(["task", "agentModelOverrides", agentName]);
+    removeServiceTierOverride(document, agentName);
   }
 
   await fs.mkdir(dirname(configPath), { recursive: true });
@@ -149,6 +185,9 @@ export async function updateOmpSubagentSettingsEnabled(
     }
   } else {
     document.deleteIn(["task", "agentModelOverrides"]);
+    for (const agent of BUNDLED_SUBAGENTS) {
+      removeServiceTierOverride(document, agent.name);
+    }
     removeEmptyTaskMapping(document);
   }
 
