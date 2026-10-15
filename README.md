@@ -44,11 +44,11 @@ These tips follow the interface language in all nine supported locales.
 
 ## Desktop pet
 
-In **Settings → Appearance**, expand **Desktop pet** and enable **Show desktop pet**
-to display Iris, the built-in pink fluffy kitten, in a separate transparent,
+In **Settings → Appearance**, the **Desktop pet** section follows **Wallpaper**. Enable
+**Show desktop pet** to display Iris, the built-in pink fluffy kitten, in a separate transparent,
 always-on-top window. The feature is off by default and is only available in the Electron app.
-The settings section starts collapsed. Folding it preserves the creation draft and
-model selection without hiding or disabling an enabled pet.
+Like wallpaper, size, library, import/refresh, and creation settings appear only while the pet
+is enabled. Disabling it preserves the creation draft and model selection.
 
 - Drag the kitten to move it; size, selection, visibility, and position are saved
   locally. Transparent space lets mouse input pass through to other applications.

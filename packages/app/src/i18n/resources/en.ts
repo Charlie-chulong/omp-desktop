@@ -1426,8 +1426,6 @@ export const en = {
   desktop: {
     pets: {
       title: "Desktop pet",
-      expand: "Expand pet settings",
-      collapse: "Collapse pet settings",
       enabled: "Show desktop pet",
       enabledHint: "A floating companion shows the status of your connected OMP tasks.",
       size: "Size",
