@@ -464,9 +464,11 @@ Missing or removed image credentials disable image access without blocking ordin
 ## Image previews
 
 Images in assistant messages, including `generate_image` and `present_image` previews, show a
-**View full screen** button in the image's top-right corner once loaded. The preview fills the
-app window while preserving the image's aspect ratio. Use the close button or **Esc** to return
-to the conversation. Loading and failed images do not show the full-screen button.
+**View full screen** button in the image's top-right corner once loaded. In the full-window
+preview, use the mouse wheel or the **Zoom in** / **Zoom out** controls, drag an enlarged image to
+inspect another region, and switch between **Fit to window** and **Actual size (100%)**. Use the
+close button or **Esc** to return to the conversation. Loading and failed images do not show the
+full-screen button.
 
 Image tool badges follow the selected interface language and show one action label without a
 repeated status summary. When tools preview the same image in one turn, Desktop keeps the first
@@ -687,9 +689,10 @@ does not change the conversation's owning workspace.
 
 ## Image previews
 
-Click an image attachment or generated image to open a full-window preview. If Desktop asks what
-to do when its window closes, that choice dialog stays above the preview; canceling returns to the
-open image.
+Click an image attachment or generated image to open a full-window preview. Use the mouse wheel or
+zoom buttons to change scale, drag an enlarged image to pan, or select fit-to-window / 100% size.
+If Desktop asks what to do when its window closes, that choice dialog stays above the preview;
+canceling returns to the open image.
 
 Right-click a workspace file tab and choose **Reveal in Files** to open the right-side Files
 panel, expand its parent directories, select the file, and scroll it into view. Hidden files
