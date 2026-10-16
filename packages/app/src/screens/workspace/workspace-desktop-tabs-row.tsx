@@ -76,7 +76,7 @@ import {
 } from "@/screens/workspace/workspace-tab-menu";
 import { openTabInSidePanel } from "@/workspace-tabs/side-panel";
 import { resolveWorkspaceFilePaths } from "@/workspace/file-open";
-import { buildWorkspaceExplorerStateKey } from "@/hooks/use-file-explorer-actions";
+import { buildWorkspaceExplorerStateKey } from "@/file-explorer/state-key";
 import { resolveProjectLayoutKey } from "@/workspace-tabs/project-scope";
 import { usePanelStore } from "@/stores/panel-store";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";

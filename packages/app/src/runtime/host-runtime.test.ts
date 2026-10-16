@@ -2521,6 +2521,26 @@ describe("HostRuntimeStore", () => {
         ],
       ]),
     );
+    sessionStore.setFileExplorer(
+      host.serverId,
+      new Map([
+        [
+          "root:/repo",
+          {
+            directories: new Map(),
+            files: new Map(),
+            refreshRevision: 0,
+            isLoading: false,
+            lastError: null,
+            pendingRequest: null,
+            currentPath: ".",
+            history: ["."],
+            lastVisitedPath: ".",
+            selectedEntryPath: null,
+          },
+        ],
+      ]),
+    );
     sessionStore.setQueuedMessages(
       host.serverId,
       new Map([
@@ -2570,6 +2590,10 @@ describe("HostRuntimeStore", () => {
     await vi.waitFor(() => {
       expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.size).toBe(0);
     });
+    expect(
+      useSessionStore.getState().sessions[host.serverId]?.fileExplorer.get("root:/repo")
+        ?.refreshRevision,
+    ).toBe(3);
 
     store.syncHosts([]);
     useSessionStore.getState().clearSession(host.serverId);

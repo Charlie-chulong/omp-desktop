@@ -279,6 +279,7 @@ interface ExplorerRequestState {
 export interface AgentFileExplorerState {
   directories: Map<string, ExplorerDirectory>;
   files: Map<string, ExplorerFile>;
+  refreshRevision: number;
   isLoading: boolean;
   lastError: string | null;
   pendingRequest: ExplorerRequestState | null;
@@ -652,6 +653,7 @@ interface SessionStoreActions {
       | Map<string, AgentFileExplorerState>
       | ((prev: Map<string, AgentFileExplorerState>) => Map<string, AgentFileExplorerState>),
   ) => void;
+  requestFileExplorerRefresh: (serverId: string, workspaceStateKey: string) => void;
 
   // Queued messages
   setQueuedMessages: (
@@ -1975,6 +1977,26 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, fileExplorer: nextState },
+            },
+          };
+        });
+      },
+      requestFileExplorerRefresh: (serverId, workspaceStateKey) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          const explorerState = session?.fileExplorer.get(workspaceStateKey);
+          if (!session || !explorerState) return prev;
+
+          const fileExplorer = new Map(session.fileExplorer);
+          fileExplorer.set(workspaceStateKey, {
+            ...explorerState,
+            refreshRevision: explorerState.refreshRevision + 1,
+          });
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, fileExplorer },
             },
           };
         });

@@ -67,6 +67,7 @@ import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
 import { mountProjectLayoutMigrationRuntime } from "@/workspace-tabs/project-layout-migration-runtime";
 import { createAppWebSocketFactory } from "./websocket-factory";
+import { buildWorkspaceExplorerStateKey } from "@/file-explorer/state-key";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
@@ -1621,7 +1622,7 @@ export class HostRuntimeStore {
     const directory = new DirectorySync(
       newServerId,
       {
-        onAgentStoppedRunning: (agentId) => this.drainQueuedAgentMessage(newServerId, agentId),
+        onAgentStoppedRunning: (agentId) => this.handleAgentStoppedRunning(newServerId, agentId),
         markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
         markAgentReady: () => controller.markAgentDirectorySyncReady(),
         markAgentError: (error) => controller.markAgentDirectorySyncError(error),
@@ -2025,7 +2026,7 @@ export class HostRuntimeStore {
           host.serverId,
           {
             onAgentStoppedRunning: (agentId) =>
-              this.drainQueuedAgentMessage(host.serverId, agentId),
+              this.handleAgentStoppedRunning(host.serverId, agentId),
             markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
             markAgentReady: () => controller.markAgentDirectorySyncReady(),
             markAgentError: (error) => controller.markAgentDirectorySyncError(error),
@@ -2191,6 +2192,22 @@ export class HostRuntimeStore {
       });
 
     this.directoryBootstrapInFlight.set(serverId, bootstrap);
+  }
+
+  private handleAgentStoppedRunning(serverId: string, agentId: string): void {
+    const store = useSessionStore.getState();
+    const session = store.sessions[serverId];
+    const agent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
+    const workspaceStateKey = agent
+      ? buildWorkspaceExplorerStateKey({
+          workspaceId: agent.workspaceId,
+          workspaceRoot: agent.cwd,
+        })
+      : null;
+    if (workspaceStateKey) {
+      store.requestFileExplorerRefresh(serverId, workspaceStateKey);
+    }
+    this.drainQueuedAgentMessage(serverId, agentId);
   }
 
   drainQueuedAgentMessage(serverId: string, agentId: string): void {

@@ -7,11 +7,16 @@ import {
 } from "@/stores/session-store";
 import { explorerFileFromReadResult } from "@/file-explorer/read-result";
 import { parentExplorerPath } from "@/utils/explorer-paths";
+import {
+  buildWorkspaceExplorerStateKey,
+  type FileExplorerWorkspaceScope,
+} from "@/file-explorer/state-key";
 
 function createExplorerState(): AgentFileExplorerState {
   return {
     directories: new Map(),
     files: new Map(),
+    refreshRevision: 0,
     isLoading: false,
     lastError: null,
     pendingRequest: null,
@@ -31,40 +36,15 @@ function pushHistory(history: string[], path: string): string[] {
   return [...normalizedHistory, path];
 }
 
-export interface FileExplorerWorkspaceScope {
-  workspaceId?: string | null;
-  workspaceRoot?: string | null;
-}
-
-function normalizeWorkspaceValue(value: string | null | undefined): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-export function buildWorkspaceExplorerStateKey(scope: FileExplorerWorkspaceScope): string | null {
-  const normalizedWorkspaceId = normalizeWorkspaceValue(scope.workspaceId);
-  if (normalizedWorkspaceId) {
-    return `workspace:${normalizedWorkspaceId}`;
-  }
-  const normalizedWorkspaceRoot = normalizeWorkspaceValue(scope.workspaceRoot);
-  if (!normalizedWorkspaceRoot) {
-    return null;
-  }
-  return `root:${normalizedWorkspaceRoot}`;
-}
-
 export function useFileExplorerActions(params: { serverId: string } & FileExplorerWorkspaceScope) {
   const { t } = useTranslation();
   const { serverId, workspaceId, workspaceRoot } = params;
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const setFileExplorer = useSessionStore((state) => state.setFileExplorer);
-  const normalizedWorkspaceRoot = useMemo(
-    () => normalizeWorkspaceValue(workspaceRoot),
-    [workspaceRoot],
-  );
+  const normalizedWorkspaceRoot = useMemo(() => {
+    const trimmed = workspaceRoot?.trim();
+    return trimmed ? trimmed : null;
+  }, [workspaceRoot]);
   const workspaceStateKey = useMemo(
     () =>
       buildWorkspaceExplorerStateKey({

@@ -71,7 +71,7 @@ import { ContextMenu, ContextMenuTrigger, useContextMenu } from "@/components/ui
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
-import { buildWorkspaceExplorerStateKey } from "@/hooks/use-file-explorer-actions";
+import { buildWorkspaceExplorerStateKey } from "@/file-explorer/state-key";
 import { usePanelStore, type ExpandedPathsUpdate, type SortOption } from "@/stores/panel-store";
 import { formatTimeAgo } from "@/utils/time";
 import { buildAbsoluteExplorerPath, parentExplorerPath } from "@/utils/explorer-paths";
@@ -545,6 +545,7 @@ export function FileExplorerPane({
       ? state.sessions[serverId]?.fileExplorer.get(workspaceStateKey)
       : undefined,
   );
+  const refreshRevision = explorerState?.refreshRevision ?? 0;
 
   const {
     requestDirectoryListing,
@@ -1173,6 +1174,18 @@ export function FileExplorerPane({
     queryFn: refreshExplorer,
     enabled: false,
   });
+  const observedRefreshRef = useRef({ workspaceStateKey, revision: refreshRevision });
+  useEffect(() => {
+    const observed = observedRefreshRef.current;
+    if (observed.workspaceStateKey !== workspaceStateKey) {
+      observed.workspaceStateKey = workspaceStateKey;
+      observed.revision = refreshRevision;
+      return;
+    }
+    if (refreshRevision <= observed.revision) return;
+    observed.revision = refreshRevision;
+    void refetchExplorer();
+  }, [refreshRevision, refetchExplorer, workspaceStateKey]);
 
   const handleRefresh = useCallback(() => {
     void refetchExplorer();
