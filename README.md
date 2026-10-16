@@ -2,7 +2,7 @@
 
 An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). It runs a private daemon on your machine and talks to `omp --mode rpc-ui` through OMP's native JSONL RPC protocol. Web clients can control a remote daemon through a self-hosted, end-to-end encrypted relay.
 
-Current source version: **0.5.0**.
+Current source version: **0.5.1**.
 
 ## Requirements
 
@@ -80,7 +80,8 @@ is enabled. Disabling it preserves the creation draft and model selection.
   wistful expression; other faces are relaxed or happy. Blinks use short, tapered eyelids.
   System reduced-motion preferences keep the pose static.
 - Right-click the pet to hide it or reset its position. Minimizing OMP does not hide
-  the pet; quitting still follows the existing desktop/daemon settings.
+  the pet. Quitting detaches it only after in-flight activity publications settle,
+  then follows the existing desktop/daemon shutdown settings.
 
 **Create with OMP** opens an independent local authoring workspace and a normal OMP
 conversation using the selected model, thinking level, and approval mode.

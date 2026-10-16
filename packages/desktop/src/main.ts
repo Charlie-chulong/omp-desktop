@@ -877,7 +877,7 @@ if (!isPetCreationCli) {
 
   app.on("before-quit", (event) => {
     backgroundModeController.markAppQuitting();
-    petController?.dispose();
+    petController?.beginShutdown();
     quitLifecycle.handleBeforeQuit(event);
   });
   registerExternalQuitSignals({ signals: process, quit: () => app.quit() });
