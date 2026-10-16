@@ -8,6 +8,7 @@ import {
   selectAgentTurnPresentation,
   selectAgentTimelineState,
   useSessionStore,
+  type AgentFileExplorerState,
   type WorkspaceDescriptor,
 } from "./session-store";
 import type { StreamItem } from "../types/stream";
@@ -754,6 +755,43 @@ describe("setWorkspaces", () => {
     expect(after.session).toBe(before.session);
     expect(after.workspaces).toBe(before.workspaces);
     expect(after.workspaces.get(workspace.id)).toBe(before.workspaces.get(workspace.id));
+  });
+});
+
+describe("file explorer refresh", () => {
+  function explorerState(refreshRevision: number): AgentFileExplorerState {
+    return {
+      directories: new Map(),
+      files: new Map(),
+      refreshRevision,
+      isLoading: false,
+      lastError: null,
+      pendingRequest: null,
+      currentPath: ".",
+      history: ["."],
+      lastVisitedPath: ".",
+      selectedEntryPath: null,
+    };
+  }
+
+  it("increments only the loaded workspace requested by a completed turn", () => {
+    initializeTestSession();
+    const store = useSessionStore.getState();
+    store.setFileExplorer(
+      "test-server",
+      new Map([
+        ["workspace:a", explorerState(2)],
+        ["workspace:b", explorerState(7)],
+      ]),
+    );
+
+    store.requestFileExplorerRefresh("test-server", "workspace:a");
+    store.requestFileExplorerRefresh("test-server", "workspace:missing");
+
+    const fileExplorer = useSessionStore.getState().sessions["test-server"]?.fileExplorer;
+    expect(fileExplorer?.get("workspace:a")?.refreshRevision).toBe(3);
+    expect(fileExplorer?.get("workspace:b")?.refreshRevision).toBe(7);
+    expect(fileExplorer?.has("workspace:missing")).toBe(false);
   });
 });
 

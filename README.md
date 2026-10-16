@@ -699,6 +699,10 @@ panel, expand its parent directories, select the file, and scroll it into view. 
 are made visible when needed. This uses the file's owning workspace on local or remote hosts;
 files outside that workspace cannot be revealed in its tree.
 
+The Files tree refreshes its root and expanded directories when a conversation in that workspace
+finishes, fails, or is canceled. Background conversations refresh only their own workspace; manual
+refresh remains available for filesystem changes made outside a conversation.
+
 ## Text editor shortcuts
 
 In an editable source tab, press **Ctrl+/** to comment or uncomment the selected lines. **Cmd+/**
