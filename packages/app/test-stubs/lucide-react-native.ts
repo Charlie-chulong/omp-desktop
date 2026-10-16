@@ -64,6 +64,7 @@ export const Info = StubIcon;
 export const Layers = StubIcon;
 export const Link = StubIcon;
 export const Link2 = StubIcon;
+export const Maximize = StubIcon;
 export const Maximize2 = StubIcon;
 export const MessageSquare = StubIcon;
 export const MessageSquarePlus = StubIcon;
