@@ -1,3 +1,6 @@
+import type * as NodeFs from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveBundledOmpPath, resolveNodeExecPath } from "./runtime-paths";
 
@@ -74,27 +77,29 @@ describe("runtime-paths", () => {
     );
   });
 
-  it("resolves the packaged OMP executable from app resources", () => {
-    expect(resolveBundledOmpPath()).toBe("/Applications/Paseo.app/Contents/Resources/bin/omp");
+  it("uses an existing resource runtime and otherwise allows PATH fallback", async () => {
+    const fs = await vi.importActual<typeof NodeFs>("node:fs");
+    const resourcesPath = fs.mkdtempSync(path.join(tmpdir(), "omp resources 中文 "));
+    const executablePath = path.join(
+      resourcesPath,
+      "bin",
+      originalPlatform === "win32" ? "omp.exe" : "omp",
+    );
+    try {
+      setProcessRuntime({
+        platform: originalPlatform,
+        execPath: originalExecPath,
+        resourcesPath,
+      });
+      mocks.existsSync.mockImplementation(fs.existsSync);
+      expect(resolveBundledOmpPath()).toBeNull();
 
-    setProcessRuntime({
-      platform: "linux",
-      execPath: "/opt/omp/omp-desktop",
-      resourcesPath: "/opt/omp/resources",
-    });
-    expect(resolveBundledOmpPath()).toBe("/opt/omp/resources/bin/omp");
-
-    setProcessRuntime({
-      platform: "win32",
-      execPath: "/opt/omp/OMP Desktop.exe",
-      resourcesPath: "/opt/omp/resources",
-    });
-    expect(resolveBundledOmpPath()).toBe("/opt/omp/resources/bin/omp.exe");
-  });
-
-  it("falls back to OMP on PATH when a package does not bundle the executable", () => {
-    mocks.existsSync.mockReturnValue(false);
-    expect(resolveBundledOmpPath()).toBeNull();
+      fs.mkdirSync(path.dirname(executablePath));
+      fs.writeFileSync(executablePath, "installed runtime");
+      expect(resolveBundledOmpPath()).toBe(executablePath);
+    } finally {
+      fs.rmSync(resourcesPath, { recursive: true, force: true });
+    }
   });
 
   it("does not resolve a bundled OMP executable during development", () => {

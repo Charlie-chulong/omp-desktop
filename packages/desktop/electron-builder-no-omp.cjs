@@ -8,6 +8,6 @@ baseConfig.win.artifactName = "OMP-Desktop-No-OMP-Setup-${version}-${arch}.${ext
 baseConfig.win.extraResources = baseConfig.win.extraResources.filter(
   (resource) => resource.to !== "bin/omp.exe",
 );
-baseConfig.nsis.include = "build/preserve-omp.nsh";
+baseConfig.nsis.include = "scripts/preserve-omp.nsh";
 
 module.exports = baseConfig;
