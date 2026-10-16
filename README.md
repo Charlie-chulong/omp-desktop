@@ -144,16 +144,17 @@ and the current-mode control (toolbar or compact settings sheet), to keep
 model-request failures running automatically. Both **Standard** and **Enhanced**
 continue responses that reach the model's output-length limit.
 
-When OMP reports a terminal model-request error with HTTP status **400–599**,
-Enhanced waits **five seconds** and sends a localized **Continue** message
-(`继续` in Chinese). Every 4xx and 5xx status is eligible, including invalid requests,
-authentication failures, rate limits, and server errors. Repeated errors repeat this
-wait with no attempt limit or increasing backoff; non-HTTP errors remain terminal.
+When OMP reports a terminal model-request error, Enhanced waits **five seconds** and
+sends a localized **Continue** message (`继续` in Chinese). Every terminal error is
+eligible: HTTP 4xx/5xx responses, provider stream errors without an HTTP status (for
+example `Error Code server_error: … the param is invalid`), and failures where OMP's
+own retry budget is exhausted. Repeated errors repeat this wait with no attempt limit
+or increasing backoff. Aborted responses are not resumed.
 
 The conversation stays active until a continuation succeeds or is stopped.
 **Stop**, closing the session, or leaving Enhanced prevents pending continuations.
 OMP's internal request retries are unchanged; the five-second wait starts after OMP
-reports the terminal error, not after each internal HTTP attempt.
+reports the terminal error, not after each internal request attempt.
 
 ## Switching approval modes
 

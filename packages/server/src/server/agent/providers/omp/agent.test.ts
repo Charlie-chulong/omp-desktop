@@ -1065,22 +1065,6 @@ describe("OMP agent client and session", () => {
     expect(omp.runtime().followUpRequests).toEqual([{ message: expected, imageCount: 0 }]);
   });
 
-  test("leaves non-HTTP failures terminal in enhanced workflow", async () => {
-    const omp = new OmpHarness();
-    await omp.start({ featureValues: { workflow_mode: "enhanced" } });
-
-    await expect(
-      omp.runPromptWithTerminalAssistant("finish the task", "partial output", {
-        role: "assistant",
-        content: [{ type: "text", text: "partial output" }],
-        responseId: "omp-assistant-1",
-        stopReason: "error",
-        errorMessage: "provider request failed",
-      }),
-    ).rejects.toThrow("provider request failed");
-    expect(omp.runtime().followUpRequests).toEqual([]);
-  });
-
   test("surfaces a sanitized proxy rejection and keeps the session retryable", async () => {
     const omp = new OmpHarness();
     await omp.start();
@@ -1108,7 +1092,7 @@ describe("OMP agent client and session", () => {
     expect(omp.completedTurnCount()).toBe(1);
   });
 
-  describe("enhanced HTTP error continuation", () => {
+  describe("enhanced model error continuation", () => {
     const sessions = new Set<OmpHarness>();
 
     beforeEach(() => {
@@ -1180,47 +1164,32 @@ describe("OMP agent client and session", () => {
     );
 
     test.each([
-      ["400 Bad Request", true],
-      ["Error: 401 Unauthorized", true],
-      ["HTTP/1.1 503 Service Unavailable", true],
-      ["request failed with status code 429", true],
-      ["HTTP error: 599 upstream failure", true],
-      ["request failed after 500 ms", false],
-      ["requested 429 tokens", false],
-      ["399 redirect", false],
-      ["600 unknown status", false],
-    ])("handles legacy model error %s", async (errorMessage, continues) => {
+      [
+        "a stream error without HTTP status",
+        undefined,
+        "Error Code server_error: We're sorry, the param is invalid. Please try with a valid param.",
+      ],
+      [
+        "an exhausted OMP retry budget",
+        undefined,
+        "Retry budget exhausted after 10 retries: Error Code server_error: invalid param",
+      ],
+      ["a non-HTTP status", 600, "upstream failure"],
+      ["a missing error message", undefined, undefined],
+    ])("continues after %s", async (_label, errorStatus, errorMessage) => {
       const omp = await startFailedTurn({
         role: "assistant",
         content: [],
         stopReason: "error",
-        errorMessage,
+        ...(errorStatus === undefined ? {} : { errorStatus }),
+        ...(errorMessage === undefined ? {} : { errorMessage }),
       });
 
       await vi.advanceTimersByTimeAsync(5_000);
-      expect(omp.runtime().followUpRequests).toEqual(
-        continues ? [{ message: "继续", imageCount: 0 }] : [],
-      );
-      expect(omp.failedTurnCount()).toBe(continues ? 0 : 1);
+      expect(omp.runtime().followUpRequests).toEqual([{ message: "继续", imageCount: 0 }]);
+      expect(omp.failedTurnCount()).toBe(0);
       expect(omp.completedTurnCount()).toBe(0);
     });
-
-    test.each([399, 600])(
-      "trusts HTTP status %i over incidental error text",
-      async (errorStatus) => {
-        const omp = await startFailedTurn({
-          role: "assistant",
-          content: [],
-          stopReason: "error",
-          errorStatus,
-          errorMessage: "upstream message mentions 401 Unauthorized",
-        });
-
-        await vi.advanceTimersByTimeAsync(5_000);
-        expect(omp.runtime().followUpRequests).toEqual([]);
-        expect(omp.failedTurnCount()).toBe(1);
-      },
-    );
 
     test("continues repeated HTTP errors once per five-second wait without completing the turn", async () => {
       const omp = await startFailedTurn({
@@ -2395,7 +2364,10 @@ describe("OMP agent client and session", () => {
     runtime.beginTurn();
     runtime.streamAssistantText("handled follow-up");
     runtime.state = { ...runtime.state, isStreaming: false };
-    runtime.finishTurn({ role: "assistant", content: [{ type: "text", text: "handled follow-up" }] });
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: "handled follow-up" }],
+    });
     await vi.waitFor(() => expect(omp.completedTurnCount()).toBe(1));
     expect(omp.failedTurnCount()).toBe(0);
     expect(omp.timeline()).toContainEqual(
