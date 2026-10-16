@@ -1,6 +1,19 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const electronPackagePath = "node_modules/electron/package.json";
+const miniElectronPackagePath = "node_modules/@iriscat/mini-electron/package.json";
+if (existsSync(electronPackagePath) && existsSync(miniElectronPackagePath)) {
+  const miniElectronExecutable = require("@iriscat/mini-electron");
+  const electronPackageDir = dirname(electronPackagePath);
+  writeFileSync(
+    join(electronPackageDir, "path.txt"),
+    `${relative(electronPackageDir, miniElectronExecutable)}\n`,
+  );
+}
 
 // In CI we often install a single workspace (e.g. server/relay/website). Only apply patches
 // when the patched dependency is actually present.
@@ -8,6 +21,10 @@ import { join, relative } from "node:path";
 // workspace root live in their workspace's own node_modules, and patch-package resolves
 // the patch's node_modules/... paths relative to its working directory.
 const patchedPackages = [
+  {
+    nodeModulesPath: "node_modules/app-builder-lib",
+    patchPrefix: "app-builder-lib+",
+  },
   {
     nodeModulesPath: "node_modules/react-native-markdown-display",
     patchPrefix: "react-native-markdown-display+",

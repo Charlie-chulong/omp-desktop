@@ -3,6 +3,7 @@ import { BrowserWindow } from "electron";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getMainWindows,
+  getOrCreateMainWindow,
   isMainWindowSender,
   onMainWindowRemoved,
   registerMainWindow,
@@ -80,5 +81,56 @@ describe("main window registry", () => {
     expect(isMainWindowSender(main.webContents)).toBe(false);
     expect(removed).toHaveBeenCalledWith(42);
     unsubscribe();
+  });
+
+  it("shares concurrent implicit opens, reopens after close, and keeps explicit extra windows", async () => {
+    let finish!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let nextId = 10;
+    const createWindow = async () => {
+      await ready;
+      const window = windowFixture(nextId++);
+      registerMainWindow(window as unknown as BrowserWindow);
+      return window as unknown as BrowserWindow;
+    };
+    const openings = [
+      getOrCreateMainWindow(createWindow),
+      getOrCreateMainWindow(createWindow),
+      getOrCreateMainWindow(createWindow),
+    ];
+    finish();
+    const [first, second, third] = await Promise.all(openings);
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(getMainWindows()).toEqual([first]);
+
+    (first as unknown as WindowFixture).close();
+    const replacement = await getOrCreateMainWindow(createWindow);
+    expect(replacement).not.toBe(first);
+    expect(getMainWindows()).toEqual([replacement]);
+
+    const explicit = await createWindow();
+    expect(getMainWindows()).toEqual([replacement, explicit]);
+    expect(await getOrCreateMainWindow(createWindow)).toBe(replacement);
+    expect(getMainWindows()).toEqual([replacement, explicit]);
+  });
+
+  it("releases a failed creation so a later launch can create a usable window", async () => {
+    const failure = new Error("Window initialization failed");
+    await expect(
+      getOrCreateMainWindow(async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(getMainWindows()).toEqual([]);
+
+    const window = await getOrCreateMainWindow(async () => {
+      const replacement = windowFixture(20);
+      registerMainWindow(replacement as unknown as BrowserWindow);
+      return replacement as unknown as BrowserWindow;
+    });
+    expect(getMainWindows()).toEqual([window]);
   });
 });

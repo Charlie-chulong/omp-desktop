@@ -1,18 +1,5 @@
 npmRebuild: false
-electronLanguages:
-  - ar
-  - en-US
-  - en-GB
-  - es
-  - es-419
-  - fr
-  - ja
-  - ko
-  - pt-BR
-  - pt-PT
-  - ru
-  - zh-CN
-  - zh-TW
+asar: false
 appId: sh.omp.desktop
 productName: OMP Desktop
 executableName: OMP Desktop
@@ -41,19 +28,12 @@ files:
   - "!node_modules/@omp-desktop/**/*.spec.*"
   - "!node_modules/@omp-desktop/server/dist/server/web-ui/**"
   - "!node_modules/@vscode/ripgrep*/**"
-  # Workspace packages are symlinked, so anything a dev generates inside them
-  # lands in the asar. CI never has these; a local .debug run adds gigabytes.
+  # Workspace packages are symlinked, so anything a developer generates inside them
+  # can land in the application bundle. CI never has these; a local .debug run adds gigabytes.
   - "!node_modules/@omp-desktop/*/.debug/**"
   - "!node_modules/@omp-desktop/*/.tasks/**"
   - "!node_modules/@omp-desktop/*/conversations/**"
   - "!node_modules/@omp-desktop/*/test-results/**"
-asarUnpack:
-  - dist/daemon/node-entrypoint-runner.js
-  - node_modules/@omp-desktop/server/dist/server/terminal/shell-integration/**/*
-  - node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/background-jobs-extension.js
-  - node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/image-settings-extension.js
-  - node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/codex-catalog-preload.js
-  - node_modules/@napi-rs/keyring-win32-*/**/*
 extraResources:
   - from: ../app/dist
     to: app-dist
@@ -67,61 +47,6 @@ mac:
   icon: assets/icon-macos.png
   hardenedRuntime: true
   notarize: true
-  electronLanguages:
-    [
-      ar,
-      ar_FEMININE,
-      ar_MASCULINE,
-      ar_NEUTER,
-      en,
-      en_FEMININE,
-      en_MASCULINE,
-      en_NEUTER,
-      en_GB,
-      en_GB_FEMININE,
-      en_GB_MASCULINE,
-      en_GB_NEUTER,
-      es,
-      es_FEMININE,
-      es_MASCULINE,
-      es_NEUTER,
-      es_419,
-      es_419_FEMININE,
-      es_419_MASCULINE,
-      es_419_NEUTER,
-      fr,
-      fr_FEMININE,
-      fr_MASCULINE,
-      fr_NEUTER,
-      ja,
-      ja_FEMININE,
-      ja_MASCULINE,
-      ja_NEUTER,
-      ko,
-      ko_FEMININE,
-      ko_MASCULINE,
-      ko_NEUTER,
-      pt_BR,
-      pt_BR_FEMININE,
-      pt_BR_MASCULINE,
-      pt_BR_NEUTER,
-      pt_PT,
-      pt_PT_FEMININE,
-      pt_PT_MASCULINE,
-      pt_PT_NEUTER,
-      ru,
-      ru_FEMININE,
-      ru_MASCULINE,
-      ru_NEUTER,
-      zh_CN,
-      zh_CN_FEMININE,
-      zh_CN_MASCULINE,
-      zh_CN_NEUTER,
-      zh_TW,
-      zh_TW_FEMININE,
-      zh_TW_MASCULINE,
-      zh_TW_NEUTER,
-    ]
   extraResources:
     - from: ../../bin/omp-darwin-${arch}
       to: bin/omp

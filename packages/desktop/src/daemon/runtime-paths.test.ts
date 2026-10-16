@@ -2,7 +2,7 @@ import type * as NodeFs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveBundledOmpPath, resolveNodeExecPath } from "./runtime-paths";
+import { resolveBundledOmpPath } from "./runtime-paths";
 
 const mocks = vi.hoisted(() => ({
   existsSync: vi.fn(),
@@ -69,12 +69,6 @@ describe("runtime-paths", () => {
       execPath: originalExecPath,
       resourcesPath: originalResourcesPath,
     });
-  });
-
-  it("uses the macOS Helper executable for packaged daemon node launches", () => {
-    expect(resolveNodeExecPath()).toBe(
-      "/Applications/Paseo.app/Contents/Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper",
-    );
   });
 
   it("uses an existing resource runtime and otherwise allows PATH fallback", async () => {
