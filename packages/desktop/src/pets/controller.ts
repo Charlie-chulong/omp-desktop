@@ -43,6 +43,7 @@ export class DesktopPetController {
     ipcMain.handle("paseo:pet:publishActivity", (event, value: unknown) => {
       if (!isMainWindowSender(event.sender) || event.senderFrame !== event.sender.mainFrame)
         throw new Error("Pet activity requires a main application window");
+      if (this.stopped) return { revalidate: [] };
       const result = this.snapshots.publish(event.sender.id, parsePetActivity(value));
       this.sendState();
       return result;
@@ -93,17 +94,25 @@ export class DesktopPetController {
     this.sendState();
   }
 
-  dispose(): void {
+  beginShutdown(): void {
     if (this.stopped) return;
     this.stopped = true;
     this.unsubscribeSettings?.();
     this.unsubscribeWindows?.();
-    for (const channel of this.handlers) ipcMain.removeHandler(channel);
+    for (const channel of this.handlers) {
+      if (channel !== "paseo:pet:publishActivity") ipcMain.removeHandler(channel);
+    }
     ipcMain.removeListener("paseo:pet:interactive", this.onInteractive);
     screen.removeListener("display-added", this.onDisplaysChanged);
     screen.removeListener("display-removed", this.onDisplaysChanged);
     screen.removeListener("display-metrics-changed", this.onDisplaysChanged);
     this.destroyWindow();
+  }
+
+  dispose(): void {
+    this.beginShutdown();
+    for (const channel of this.handlers) ipcMain.removeHandler(channel);
+    this.handlers.length = 0;
   }
 
   private enqueueSettings(settings: DesktopSettings): void {

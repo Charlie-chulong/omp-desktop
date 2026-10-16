@@ -212,7 +212,29 @@ describe("native companion controller", () => {
     expect(mock.report).toHaveBeenCalledWith("Desktop companion", "Invalid selected spritesheet");
   });
 
-  it("disposes overlay and handlers on quit without requesting a settings write", async () => {
+  it("keeps activity publication available while the app finishes quitting", async () => {
+    mock.settings.pet.enabled = true;
+    const { instance } = controller();
+    await instance.initialize();
+    const destroy = vi.spyOn(mock.windows[0], "destroy");
+
+    instance.beginShutdown();
+
+    expect(destroy).toHaveBeenCalledOnce();
+    expect([...mock.handlers.keys()]).toEqual(["paseo:pet:publishActivity"]);
+    expect(mock.subscribers.size).toBe(0);
+    const publish = mock.handlers.get("paseo:pet:publishActivity")!;
+    const mainFrame = {};
+    expect(
+      publish(
+        { sender: { id: 12, main: true, mainFrame }, senderFrame: mainFrame },
+        DEFAULT_PET_ACTIVITY,
+      ),
+    ).toEqual({ revalidate: [] });
+    expect(mock.patch).not.toHaveBeenCalled();
+  });
+
+  it("fully disposes overlay and handlers without requesting a settings write", async () => {
     mock.settings.pet.enabled = true;
     const { instance } = controller();
     await instance.initialize();
