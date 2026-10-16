@@ -1,6 +1,6 @@
 # OMP Desktop
 
-An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). It runs a private daemon on your machine and talks to `omp --mode rpc-ui` through OMP's native JSONL RPC protocol. Web clients can control a remote daemon through a self-hosted, end-to-end encrypted relay.
+A [mini-electron](https://github.com/iris-cat-dev/mini-electron) and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). It runs a private daemon on your machine and talks to `omp --mode rpc-ui` through OMP's native JSONL RPC protocol. Web clients can control a remote daemon through a self-hosted, end-to-end encrypted relay.
 
 Current source version: **0.5.1**.
 
@@ -10,9 +10,19 @@ Current source version: **0.5.1**.
 - `omp >= 18.8.7` on `PATH` for development and standalone daemon runs
 - A configured OMP model provider
 
-Standard macOS, Linux, and Windows packages include OMP and do not require a system OMP installation.
+Standard Apple Silicon macOS and Windows x64 packages include OMP and do not require a system OMP installation.
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
+
+The desktop development and packaging runtime is `@iriscat/mini-electron`. Main-process
+code keeps Electron-compatible `electron` imports; the stock `electron` package is retained
+only for its TypeScript declarations and its binary download is not used by project scripts.
+mini-electron currently supports Windows x64 and Apple Silicon macOS.
+
+**Settings → General → Language → System** selects the first supported system
+language; a manually selected language takes precedence. The macOS runtime
+reads the actual OS language preference order rather than a fixed browser locale.
+Restart Desktop after changing macOS language preferences.
 
 **Host Settings → Agents** reports the version, source, and path of the exact OMP executable used
 for Agent sessions. Update checks and installs target that same executable. Packaged applications
@@ -31,6 +41,10 @@ Workspace tabs sit directly below the title bar without a second workspace heade
 Native window buttons retain their reserved space. Tabs sit edge-to-edge with
 square corners and thin separators; the active tab shares the content background,
 with its close button visible on selection or hover.
+On macOS, titlebar dragging and double-click zoom/restore use native AppKit
+handling, including while maximized; the Windows/Linux manual restore-and-drag
+fallback is not used. Titlebar buttons remain excluded from drag regions.
+Double-click follows the macOS titlebar action preference.
 Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
 vertical workspace splitters use matching two-pixel accent highlights on hover, without
 narrowing their invisible drag targets.
@@ -840,6 +854,62 @@ The macOS arm64 application is written to:
 packages/desktop/release/mac-arm64/OMP Desktop.app
 ```
 
+The macOS mini-electron distribution uses one runtime executable for the GUI,
+sandboxed renderer processes, and `ELECTRON_RUN_AS_NODE` daemon/CLI workers.
+It does not need the four Electron Helper application bundles. The remaining
+Squirrel, Mantle, and ReactiveObjC frameworks support updates and must remain.
+The runtime bundle defaults to `LSUIElement=true`; only the GUI window host
+promotes itself to a normal Dock application. Background renderers and Node
+workers must not create additional Dock icons.
+The macOS runtime must include a WebSocket-enabled libcurl build. A reachable
+daemon reported by the CLI is not sufficient: renderer TCP connections use
+native WebSocket, not the Node-side CLI transport. mini-electron statically
+links this network library and reuses its TLS implementation without adding
+another framework bundle.
+IPC must also expose native-validated, stable `senderFrame`/`mainFrame` identity:
+desktop pet activity publication enforces main-window and main-frame authority.
+The macOS renderer permits only the extra `/System` directory metadata lookup
+needed by CoreText's system CJK font fallback, without bundling additional fonts.
+Native macOS presentation keeps the last complete shared frame during renderer
+writes. Hover and scroll animations must not clear the entire window when the
+new frame is temporarily unavailable; they remain enabled.
+Hidden-titlebar macOS windows also require native edge/corner resize handling:
+the runtime reserves a five-point border ahead of caption and webpage input,
+preserving opposite-edge anchoring, size limits, and interior titlebar controls.
+Resize presentation must also retain the active child surface until replacement
+content activates. Latest size/scale updates coalesce, and completed software
+swaps are published before acknowledging the draw; newly allocated, unpainted
+pixels must never replace the visible page.
+Retained frames must preserve pixel geometry rather than stretch to changed
+window proportions. Both publication and child-readiness transitions retry a
+pending latest viewport, so static session pages cannot remain at an old size;
+delayed metadata must not roll the canonical parent surface ID backward.
+Plain relaunch, native reopen, tray and pet requests reuse the existing main
+window and share one pending creation when none exists. Explicit New Window and
+project launches retain their additional-window behavior. Only the successful
+desktop single-instance lock owner performs daemon/update shutdown; a secondary
+launch must not stop the primary's daemon.
+The native runtime must report `WebContents.isDestroyed()` from object lifetime,
+not renderer liveness, and deliver storage acknowledgements after pending
+mutations are registered. Synchronous reply notification must complete before
+its waiter's stack condition variable can be destroyed.
+
+Known macOS host limitation: the optional pet overlay still requires the missing
+`BrowserWindow.setIgnoreMouseEvents` API. Activity publication was verified with
+the default hidden pet; this does not establish full overlay compatibility.
+
+For an unpublished local mini-electron build, run its `build.py --package-dist`
+with Python 3.12 or newer, then select its verified distribution explicitly:
+
+```bash
+MINI_ELECTRON_DIST_PATH=/absolute/path/to/mini-electron/out/mac-arm64/runtime-dist \
+  npm run build:desktop -- --dir --publish never
+```
+
+The `app-builder-lib` patch applied by `npm install` allows distributions without
+a generic Helper bundle. Packaged smoke checks verify macOS Dock visibility,
+including a cold daemon launch, rather than requiring a separate Helper path.
+
 Desktop packaging keeps build/test-only dependencies out of the production dependency graph and
 excludes third-party TypeScript sources, declarations, and MCP SDK examples from the ASAR.
 Standard packages retain the bundled OMP executable, runtime workers, shell integration, and
@@ -873,8 +943,9 @@ npm run build:mac
 Without notarization credentials this produces an unsigned package and prints a warning. Gatekeeper
 will reject that package unless quarantine is explicitly removed on the test Mac.
 
-macOS signing uses electron-builder's bundled entitlement template for the app and
-helpers; no separate entitlement files are required in `packages/desktop/build`.
+macOS signing uses electron-builder's bundled entitlement template for the app;
+no separate Helper applications or entitlement files are required in
+`packages/desktop/build`.
 
 For a signed, notarized release, the build machine needs a valid `Developer ID Application`
 certificate (or `CSC_LINK`) and one of electron-builder's notarization credential sets:

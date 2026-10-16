@@ -288,8 +288,9 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
 
   // If the renderer reloads mid-capture (e.g. Cmd+R) its cleanup callback
   // never gets to send `false`, so reset the flag when the window finishes loading.
-  app.on("browser-window-created", (_event, win) => {
-    win.webContents.on("did-finish-load", () => {
+  app.on("browser-window-created", (...args: unknown[]) => {
+    const win = args.find((value): value is BrowserWindow => value instanceof BrowserWindow);
+    win?.webContents.on("did-finish-load", () => {
       if (!capturingShortcut) return;
       capturingShortcut = false;
       rebuildApplicationMenu();

@@ -118,10 +118,10 @@ Write-Host @"
 ======================================================
 "@
 
-# Launch Metro + Electron together, kill both on exit
+# Launch Metro + mini-electron together, kill both on exit
 concurrently `
     --kill-others `
-    --names "metro,electron" `
+    --names "metro,mini-electron" `
     --prefix-colors "magenta,cyan" `
     "cd `"$AppDir`" && cross-env PASEO_WEB_PLATFORM=electron npx expo start --clear --port $($env:EXPO_PORT)" `
-    "npx wait-on tcp:$($env:EXPO_PORT) && npx electron `"$DesktopDir`""
+    "npx wait-on tcp:$($env:EXPO_PORT) && npx mini-electron `"$DesktopDir`""

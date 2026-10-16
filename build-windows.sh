@@ -3,14 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# Windows installers must be built one architecture per electron-builder
-# invocation. Passing both architectures in one invocation emits an additional
-# universal NSIS installer containing both payloads.
-read -r -a arches <<<"${WINDOWS_ARCHES:-x64 arm64}"
+# mini-electron currently publishes a Windows x64 runtime only.
+read -r -a arches <<<"${WINDOWS_ARCHES:-x64}"
 
 for arch in "${arches[@]}"; do
   case "$arch" in
-    x64 | arm64) ;;
+    x64) ;;
     *)
       echo "Unsupported Windows architecture: $arch" >&2
       exit 2

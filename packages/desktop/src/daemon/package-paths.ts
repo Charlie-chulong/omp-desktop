@@ -46,6 +46,6 @@ export function findPackageRootFromResolvedPath(input: {
   throw new Error(`Unable to resolve ${input.packageName} package root`);
 }
 
-export function resolvePackagedAsarPath(): string {
-  return path.join(process.resourcesPath, "app.asar");
+export function resolvePackagedAppPath(): string {
+  return path.join(process.resourcesPath, "app");
 }

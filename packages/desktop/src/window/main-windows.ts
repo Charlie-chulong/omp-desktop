@@ -2,6 +2,7 @@ import { BrowserWindow, type WebContents } from "electron";
 
 const mainWindows = new Set<BrowserWindow>();
 const removalListeners = new Set<(senderId: number) => void>();
+let mainWindowCreation: Promise<BrowserWindow> | null = null;
 
 export function registerMainWindow(window: BrowserWindow): void {
   mainWindows.add(window);
@@ -32,6 +33,21 @@ export function selectMainWindow(sender?: WebContents): BrowserWindow | null {
     windows[0] ??
     null
   );
+}
+
+// Relaunch, tray, pet and activation requests share one creation when no main
+// window exists. Explicit New Window/project requests bypass this operation.
+export function getOrCreateMainWindow(
+  createWindow: () => Promise<BrowserWindow>,
+): Promise<BrowserWindow> {
+  const existing = selectMainWindow();
+  if (existing) return Promise.resolve(existing);
+  mainWindowCreation ??= Promise.resolve()
+    .then(createWindow)
+    .finally(() => {
+      mainWindowCreation = null;
+    });
+  return mainWindowCreation;
 }
 
 export function onMainWindowRemoved(listener: (senderId: number) => void): () => void {

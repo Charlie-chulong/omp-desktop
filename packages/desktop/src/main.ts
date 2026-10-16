@@ -80,7 +80,12 @@ import {
 } from "@omp-desktop/protocol/agent-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 import { installAppUpdateOnQuit as installDownloadedAppUpdateOnQuit } from "./features/auto-updater.js";
-import { getMainWindows, registerMainWindow, selectMainWindow } from "./window/main-windows.js";
+import {
+  getMainWindows,
+  getOrCreateMainWindow,
+  registerMainWindow,
+  selectMainWindow,
+} from "./window/main-windows.js";
 import { DesktopPetController } from "./pets/controller.js";
 import { PET_HTML } from "./pets/html.js";
 import { getPetLibrary } from "./pets/library.js";
@@ -95,6 +100,7 @@ const isPetCreationCli = process.argv.includes("--desktop-pet-install");
 const agentNavigationInbox = new AgentNavigationInbox();
 const closeChoiceRequests = new CloseChoiceRequestBroker();
 let petController: DesktopPetController | null = null;
+let ownsDesktopInstance = false;
 
 // A second-instance launch can arrive before the packaged protocol handler,
 // IPC handlers, and first window exist. Wait for full bootstrap, not just
@@ -114,7 +120,9 @@ const forcedUserDataDir = process.env.PASEO_ELECTRON_USER_DATA_DIR?.trim();
 if (forcedUserDataDir) {
   app.setPath("userData", forcedUserDataDir);
   log.info("[dev-user-data] forced userData dir:", forcedUserDataDir);
-} else if (!app.isPackaged) {
+} else if (app.isPackaged) {
+  app.setPath("userData", path.join(app.getPath("appData"), "OMP Desktop mini-electron"));
+} else {
   try {
     const topLevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       encoding: "utf-8",
@@ -376,7 +384,7 @@ async function createWindow(
     title,
     ...resolveWindowBounds(restoredWindowState),
     show: false,
-    backgroundColor: getWindowBackgroundColor(systemTheme),
+    backgroundColor: app.isPackaged ? "#181818" : getWindowBackgroundColor(systemTheme),
     ...(iconPath ? { icon: iconPath } : {}),
     ...getMainWindowChromeOptions({
       platform: process.platform,
@@ -397,6 +405,11 @@ async function createWindow(
   mainWindow.webContents.on("render-process-gone", () =>
     petController?.clearActivity(webContentsId),
   );
+  if (PASEO_DEBUG) {
+    mainWindow.webContents.on("did-fail-load", (...args: unknown[]) => {
+      log.error("[renderer] page load failed", args);
+    });
+  }
   pendingOpenProjectStore.set(webContentsId, options.pendingOpenProjectPath);
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
     if (isMainFrame && !isSameDocument) {
@@ -427,9 +440,11 @@ async function createWindow(
   mainWindow.webContents.on("will-attach-webview", (event) => {
     event.preventDefault();
   });
-
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow.webContents.invalidate();
+    setTimeout(() => mainWindow.webContents.invalidate(), 100);
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
   });
 
   if (!app.isPackaged) {
@@ -442,6 +457,8 @@ async function createWindow(
     return mainWindow;
   }
 
+  mainWindow.show();
+  mainWindow.focus();
   await mainWindow.loadURL(`${APP_SCHEME}://app${options.initialRoute ?? "/"}`);
   return mainWindow;
 }
@@ -505,13 +522,13 @@ const backgroundModeController = new BackgroundModeController({
     backgroundTray.setToolTip(APP_NAME);
     backgroundTray.on("click", restore);
     updateBackgroundTrayContextMenu();
-    log.info("[background mode] system tray created", {
-      iconPath,
-      bounds: backgroundTray.getBounds(),
-    });
+    log.info("[background mode] system tray created", { iconPath });
   },
   getWindows: getMainWindows,
-  createWindow: () => createWindow({ restoreWindowState: true }),
+  createWindow: async () => {
+    await bootstrapComplete;
+    return getOrCreateMainWindow(() => createWindow({ restoreWindowState: true }));
+  },
   quitApp: () => app.quit(),
   onError: (error) => log.error("[background mode] operation failed", error),
 });
@@ -521,8 +538,6 @@ onDesktopContextMenuLabelsChange(updateBackgroundTrayContextMenu);
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
-
-let agentNavigationWindowCreation: Promise<BrowserWindow> | null = null;
 
 function focusExistingWindow(): BrowserWindow | null {
   const mainWindow = selectMainWindow();
@@ -538,28 +553,28 @@ function focusExistingWindow(): BrowserWindow | null {
   return mainWindow;
 }
 
+async function focusOrCreateWindow(): Promise<void> {
+  const window = await getOrCreateMainWindow(() => createWindow({ restoreWindowState: true }));
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
 function focusExistingWindowOnAgent(target: AgentDeepLinkTarget): void {
   const mainWindow = focusExistingWindow();
   if (!mainWindow) {
-    if (!agentNavigationWindowCreation) {
-      const creation = createWindow({
+    let createdForTarget = false;
+    void getOrCreateMainWindow(() => {
+      createdForTarget = true;
+      return createWindow({
         initialRoute: buildAgentDeepLinkRoute(target),
         restoreWindowState: true,
       });
-      agentNavigationWindowCreation = creation;
-      void creation
-        .catch((error) => log.error("[window] failed to create window for agent link", error))
-        .finally(() => {
-          if (agentNavigationWindowCreation === creation) {
-            agentNavigationWindowCreation = null;
-          }
-        });
-      return;
-    }
-
-    void agentNavigationWindowCreation
-      .then(() => focusExistingWindowOnAgent(target))
-      .catch((error) => log.error("[window] failed to deliver queued agent link", error));
+    })
+      .then(() => {
+        if (!createdForTarget) focusExistingWindowOnAgent(target);
+      })
+      .catch((error) => log.error("[window] failed to open window for agent link", error));
     return;
   }
 
@@ -605,6 +620,7 @@ function setupSingleInstanceLock(): boolean {
     app.quit();
     return false;
   }
+  ownsDesktopInstance = true;
 
   app.on("second-instance", (_event, commandLine) => {
     const agentTarget = parseAgentDeepLinkFromArgv(commandLine);
@@ -622,11 +638,10 @@ function setupSingleInstanceLock(): boolean {
     // A normal relaunch foregrounds the existing desktop. An explicit project
     // launch remains a new window inside the already-running app process.
     void bootstrapComplete
-      .then(() =>
-        openProjectPath
-          ? createWindow({ pendingOpenProjectPath: openProjectPath })
-          : focusExistingWindow(),
-      )
+      .then(async () => {
+        if (openProjectPath) await createWindow({ pendingOpenProjectPath: openProjectPath });
+        else await focusOrCreateWindow();
+      })
       .catch((error) => {
         log.error("[window] failed to handle second-instance launch", error);
       });
@@ -773,10 +788,13 @@ async function bootstrap(): Promise<void> {
   registerRemoteSshHandlers();
   petController = new DesktopPetController({
     openApp: async () => {
-      if (!focusExistingWindow()) await createWindow({ restoreWindowState: true });
+      await bootstrapComplete;
+      await focusOrCreateWindow();
     },
-    openTask: (task) =>
-      focusExistingWindowOnAgent({ serverId: task.serverId, agentId: task.agentId }),
+    openTask: async (task) => {
+      await bootstrapComplete;
+      focusExistingWindowOnAgent({ serverId: task.serverId, agentId: task.agentId });
+    },
   });
   await petController.initialize();
 
@@ -813,11 +831,7 @@ async function bootstrap(): Promise<void> {
     focusExistingWindowOnAgent(target);
   }
 
-  app.on("activate", async () => {
-    if (getMainWindows().length === 0) {
-      await createWindow({ restoreWindowState: true });
-      return;
-    }
+  app.on("activate", () => {
     backgroundModeController.restoreWindows();
   });
 }
@@ -876,6 +890,8 @@ if (!isPetCreationCli) {
   });
 
   app.on("before-quit", (event) => {
+    // A failed-lock relaunch must not stop the primary GUI's daemon or updater.
+    if (!ownsDesktopInstance) return;
     backgroundModeController.markAppQuitting();
     petController?.beginShutdown();
     quitLifecycle.handleBeforeQuit(event);
