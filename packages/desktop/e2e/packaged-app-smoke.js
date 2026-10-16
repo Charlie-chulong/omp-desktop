@@ -39,16 +39,16 @@ function assertExecutable(filePath, label) {
   }
 }
 
-function getExecutablePath(appPath) {
+function getExecutablePath(appPath, executableName = EXECUTABLE_NAME) {
   if (process.platform === "darwin") {
-    return path.join(appPath, "Contents", "MacOS", EXECUTABLE_NAME);
+    return path.join(appPath, "Contents", "MacOS", executableName);
   }
 
   if (process.platform === "win32") {
-    return path.join(appPath, `${EXECUTABLE_NAME}.exe`);
+    return path.join(appPath, `${executableName}.exe`);
   }
 
-  return path.join(appPath, EXECUTABLE_NAME);
+  return path.join(appPath, executableName);
 }
 
 function getCliShimPath(appPath) {
@@ -148,7 +148,8 @@ function getShellCommand(script) {
   if (process.platform === "win32") {
     return {
       command: "cmd.exe",
-      args: ["/d", "/c", script],
+      // Generated batch helpers are UTF-8 and embed the installation path.
+      args: ["/d", "/c", `chcp 65001>nul && ${script}`],
     };
   }
 
@@ -908,8 +909,8 @@ async function smokePetCreationHelper({ page, appPath, env }) {
   );
 }
 
-async function smokePackagedDesktopApp({ appPath }) {
-  const executablePath = getExecutablePath(appPath);
+async function smokePackagedDesktopApp({ appPath, executableName }) {
+  const executablePath = getExecutablePath(appPath, executableName);
   assertExecutable(executablePath, "Packaged app executable");
   ensureLinuxSandboxPermissions(appPath);
   await smokeColdCliDaemonStart({ appPath });

@@ -10,7 +10,9 @@ Current source version: **0.5.0**.
 - `omp >= 18.8.7` on `PATH` for development and standalone daemon runs
 - A configured OMP model provider
 
-Packaged macOS, Linux, and Windows applications include OMP and do not require a system OMP installation.
+Standard macOS, Linux, and Windows packages include OMP and do not require a system OMP installation.
+Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
+`no omp` installation requires `omp` on `PATH`.
 
 **Host Settings → Agents** reports the version, source, and path of the exact OMP executable used
 for Agent sessions. Update checks and installs target that same executable. Packaged applications
@@ -927,6 +929,9 @@ This also preserves an independently updated bundled runtime and works when chan
 installation directory. Repeated `no omp` installations retain it; switching back to the
 standard installer replaces it with that package's bundled runtime.
 
+Preservation applies only to installing the `no omp` upgrade, including silent installation.
+Explicitly uninstalling Desktop still removes its installation directory and bundled OMP.
+
 If the existing runtime cannot be backed up, installation stops before removing the previous
 version. If restoration fails, installation reports the location of the retained backup.
 The `no omp` ZIP payload itself still contains no OMP executable.
@@ -938,11 +943,19 @@ installers for the same version and architecture:
 node packages/desktop/e2e/windows-installer-switch-smoke.js --standard "packages/desktop/release/OMP-Desktop-Setup-<version>-<arch>.exe" --no-omp "packages/desktop/release/OMP-Desktop-No-OMP-Setup-<version>-<arch>.exe"
 ```
 
-The smoke refuses to run if Desktop is already registered. It checks fresh installation,
-switching to `no omp`, repeated installation with a changed directory, and switching back.
-It verifies the preserved executable's SHA-256 and runs the packaged renderer, daemon, OMP,
-CLI, and terminal checks after the `no omp` upgrades. Wine checks do not replace this real
-Windows installation and startup verification.
+The smoke refuses to run if the configured application is already registered. It checks fresh
+installation, switching to `no omp`, repeated installation with a changed directory, switching
+back, and explicit uninstallation. It verifies the preserved executable's SHA-256 and runs the
+packaged renderer, daemon, OMP, CLI, and terminal checks after the `no omp` upgrades, including
+the daemon's actual runtime path. Wine checks do not replace this real Windows installation
+and startup verification.
+
+Pass `--updated-omp "<path-to-another-omp.exe>"` to replace the initially installed runtime
+before switching, proving that `no omp` preserves independently updated bytes and that the
+standard installer restores its own packaged version. The replacement must differ from the
+standard payload. For disposable installers built with an isolated application identity, pass
+`--config "<electron-builder.cjs-or-yml>"` describing their `appId` and executable name; the
+registration safety check then uses that identity instead of the production application.
 
 Download and checksum-verify the latest supported OMP binaries:
 
