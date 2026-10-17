@@ -69,7 +69,9 @@ export class BackgroundModeController {
     try {
       const choice = await this.dependencies.promptForCloseChoice(window);
       if (choice === "quit") {
-        this.quitApp();
+        this.appQuitting = true;
+        if (!window.isDestroyed()) window.hide();
+        this.dependencies.quitApp();
         return;
       }
       if (choice === "cancel") {
