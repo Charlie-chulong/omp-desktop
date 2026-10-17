@@ -175,12 +175,13 @@ describe("background window mode", () => {
     expect(harness.quitApp).not.toHaveBeenCalled();
   });
 
-  it("quits when the close dialog selects exit", async () => {
+  it("hides the window before starting the asynchronous exit lifecycle", async () => {
     const harness = createHarness("quit");
 
     expect(harness.window.close().prevented).toBe(true);
     await vi.waitFor(() => expect(harness.quitApp).toHaveBeenCalledOnce());
-    expect(harness.window.hiddenCount).toBe(0);
+    expect(harness.window.hiddenCount).toBe(1);
+    expect(harness.window.visible).toBe(false);
     expect(harness.getTrayActions()).toBeNull();
   });
 
