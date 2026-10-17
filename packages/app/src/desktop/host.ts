@@ -147,22 +147,6 @@ export interface DesktopWindowControlsOverlayUpdate {
   trafficLightOffsetY?: number;
 }
 
-export type DesktopCloseChoice = "background" | "quit" | "cancel";
-
-export interface DesktopCloseChoiceRequest {
-  requestId: number;
-}
-
-export interface DesktopCloseChoiceResponse extends DesktopCloseChoiceRequest {
-  choice: DesktopCloseChoice;
-  remember: boolean;
-}
-
-export interface DesktopCloseChoiceBridge {
-  ready?: () => Promise<DesktopCloseChoiceRequest | null>;
-  respond?: (response: DesktopCloseChoiceResponse) => Promise<boolean>;
-}
-
 export interface DesktopWindowBridge {
   label?: string;
   toggleMaximize?: () => Promise<void>;
@@ -182,7 +166,6 @@ export interface DesktopWindowBridge {
 export interface DesktopWindowModuleBridge {
   contentReady?: () => Promise<void>;
   openNew?: (options?: { pendingOpenProjectPath?: string | null }) => Promise<void>;
-  closeChoice?: DesktopCloseChoiceBridge;
   getCurrentWindow?: () => DesktopWindowBridge;
 }
 
