@@ -912,6 +912,9 @@ window and share one pending creation when none exists. Explicit New Window and
 project launches retain their additional-window behavior. Only the successful
 desktop single-instance lock owner performs daemon/update shutdown; a secondary
 launch must not stop the primary's daemon.
+Window-close choices use a main-process native dialog before the close is
+intercepted. They must not depend on renderer IPC, because a lost renderer event
+would leave the native close action pending with no visible response.
 The native runtime must report `WebContents.isDestroyed()` from object lifetime,
 not renderer liveness, and deliver storage acknowledgements after pending
 mutations are registered. Synchronous reply notification must complete before
