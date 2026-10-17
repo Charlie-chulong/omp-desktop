@@ -1,6 +1,6 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import {
   Pressable,
@@ -10,7 +10,7 @@ import {
   StyleSheet as RNStyleSheet,
 } from "react-native";
 import Animated, { runOnJS, useAnimatedReaction } from "react-native-reanimated";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { Keyboard as KeyboardIcon, KeyboardOff as KeyboardOffIcon } from "lucide-react-native";
 import type { TerminalKeyInput } from "@omp-desktop/protocol/terminal-key-input";
 import type { TerminalState } from "@omp-desktop/protocol/messages";
@@ -58,7 +58,7 @@ import { usePanelStore } from "@/stores/panel-store";
 import { useBlockMobilePanelOpenGestures } from "@/mobile-panels/provider";
 import { useSessionStore } from "@/stores/session-store";
 import { toXtermTheme } from "@/utils/to-xterm-theme";
-import TerminalEmulator, { type TerminalEmulatorHandle } from "./terminal-emulator";
+import type { TerminalEmulatorHandle } from "./terminal-emulator";
 import { TerminalFloatingCopyAction, TerminalPasteAction } from "./terminal-copy-paste-actions";
 import {
   createTerminalResizeDebouncer,
@@ -84,6 +84,12 @@ import {
   type OpenFileDisposition,
   type WorkspaceFileOpenRequest,
 } from "@/workspace/file-open";
+
+const TerminalEmulator = lazy(() => import("./terminal-emulator"));
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const TERMINAL_LOADING_FALLBACK = <ThemedLoadingSpinner size="small" />;
 
 interface TerminalPaneProps {
   serverId: string;
@@ -1050,38 +1056,40 @@ export function TerminalPane({
     <Animated.View style={containerStyle}>
       <View style={styles.outputContainer}>
         <View style={styles.terminalGestureContainer}>
-          <TerminalEmulator
-            ref={emulatorRef}
-            dom={TERMINAL_EMULATOR_DOM_PROPS}
-            streamKey={terminalStreamKey}
-            supportsTerminalInputModeReplay={supportsTerminalInputModeReplay}
-            testId="terminal-surface"
-            xtermTheme={xtermTheme}
-            windowsPty={windowsPty}
-            scrollbackLines={settings.terminalScrollbackLines}
-            contextMenuClearLabel={t("workspace.terminal.clear")}
-            fontFamily={terminalFontFamily}
-            fontSize={settings.codeFontSize}
-            keyboardInset={keyboardInset}
-            isKeyboardVisible={isKeyboardVisible}
-            swipeGesturesEnabled={swipeGesturesEnabled}
-            initialSnapshot={initialSnapshot}
-            onRendererReadyChange={handleRendererReadyChange}
-            onSwipeRight={handleSwipeRight}
-            onSwipeLeft={handleSwipeLeft}
-            onInput={handleTerminalData}
-            onFocus={handleTerminalFocus}
-            onResize={handleTerminalResize}
-            onTerminalKey={handleTerminalKey}
-            onInputModeChange={handleInputModeChange}
-            onSelectionChange={handleSelectionChange}
-            onResolveLocalFileLink={handleResolveLocalFileLink}
-            onOpenLocalFileLink={handleOpenLocalFileLink}
-            onPendingModifiersConsumed={handlePendingModifiersConsumed}
-            pendingModifiers={modifiers}
-            focusRequestToken={focusRequestToken}
-            resizeRequestToken={resizeRequestToken}
-          />
+          <Suspense fallback={TERMINAL_LOADING_FALLBACK}>
+            <TerminalEmulator
+              ref={emulatorRef}
+              dom={TERMINAL_EMULATOR_DOM_PROPS}
+              streamKey={terminalStreamKey}
+              supportsTerminalInputModeReplay={supportsTerminalInputModeReplay}
+              testId="terminal-surface"
+              xtermTheme={xtermTheme}
+              windowsPty={windowsPty}
+              scrollbackLines={settings.terminalScrollbackLines}
+              contextMenuClearLabel={t("workspace.terminal.clear")}
+              fontFamily={terminalFontFamily}
+              fontSize={settings.codeFontSize}
+              keyboardInset={keyboardInset}
+              isKeyboardVisible={isKeyboardVisible}
+              swipeGesturesEnabled={swipeGesturesEnabled}
+              initialSnapshot={initialSnapshot}
+              onRendererReadyChange={handleRendererReadyChange}
+              onSwipeRight={handleSwipeRight}
+              onSwipeLeft={handleSwipeLeft}
+              onInput={handleTerminalData}
+              onFocus={handleTerminalFocus}
+              onResize={handleTerminalResize}
+              onTerminalKey={handleTerminalKey}
+              onInputModeChange={handleInputModeChange}
+              onSelectionChange={handleSelectionChange}
+              onResolveLocalFileLink={handleResolveLocalFileLink}
+              onOpenLocalFileLink={handleOpenLocalFileLink}
+              onPendingModifiersConsumed={handlePendingModifiersConsumed}
+              pendingModifiers={modifiers}
+              focusRequestToken={focusRequestToken}
+              resizeRequestToken={resizeRequestToken}
+            />
+          </Suspense>
         </View>
 
         {showLoadingOverlay ? (

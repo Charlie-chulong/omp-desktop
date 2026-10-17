@@ -19,6 +19,15 @@ code keeps Electron-compatible `electron` imports; the stock `electron` package 
 only for its TypeScript declarations and its binary download is not used by project scripts.
 mini-electron currently supports Windows x64 and Apple Silicon macOS.
 
+Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
+avoiding repeated small-file-read overhead. The main window stays native-hidden until
+the renderer has painted a branded startup surface and the runtime has copied that
+frame into the AppKit backing store, avoiding an unpainted first reveal. Mermaid,
+WebSocket response validation, and terminal emulation load on first use instead of
+inflating the startup entry. Desktop daemon setup imports only its configuration/runtime
+helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell
+environment inheritance and daemon readiness checks are unchanged.
+
 **Settings → General → Language → System** selects the first supported system
 language; a manually selected language takes precedence. The macOS runtime
 reads the actual OS language preference order rather than a fixed browser locale.
@@ -65,6 +74,12 @@ In **Settings → Appearance**, the **Desktop pet** section follows **Wallpaper*
 always-on-top window. The feature is off by default and is only available in the Electron app.
 Like wallpaper, size, library, import/refresh, and creation settings appear only while the pet
 is enabled. Disabling it preserves the creation draft and model selection.
+On macOS, enabling the pet does not activate its window or take keyboard focus away from
+the application you are using. It stays visible across Spaces, including full-screen apps.
+On launch, an enabled pet waits until initial service startup settles and the main
+interface restores its appearance, saved layout, and navigation. Offline, disabled
+daemon management, and startup-error screens also complete this gate. Changes made
+before readiness use the latest pet settings; disabling it prevents a startup flash.
 
 - Drag the kitten to move it; size, selection, visibility, and position are saved
   locally. Transparent space lets mouse input pass through to other applications.
@@ -696,6 +711,8 @@ does not change the conversation's owning workspace.
 ## File drag and drop
 
 - Drop files onto the message input to add attachments without sending a message.
+- Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina displays use the same visible drop target as ordinary displays.
+- Paste a clipboard image into the message input to add it as an attachment. The draft is not sent automatically.
 - Drop external UTF-8 text files onto the conversation history or other ordinary areas to open local, read-only file tabs, not a dialog. Each tab offers **Preview / Source** modes; Markdown and HTML render in Preview mode. Files are not uploaded.
   - Outside a workspace, files open on a dedicated preview page with file tabs.
   - Preview tabs and their contents are session-only. Switching tabs retains the selected mode; closing a tab releases its content, and reloading removes local preview tabs.
@@ -719,6 +736,12 @@ finishes, fails, or is canceled. Background conversations refresh only their own
 refresh remains available for filesystem changes made outside a conversation.
 
 ## Text editor shortcuts
+
+Desktop inputs retain standard native editing shortcuts: **Cmd+A/C/X/V/Z** and
+**Cmd+Shift+Z** on macOS (select all, copy, cut, paste, undo, and redo).
+Use **Cmd+=** or **Cmd+Shift+=** to zoom in, **Cmd+-** to zoom out, and **Cmd+0**
+to restore actual size. Windows and Linux use **Ctrl** in place of **Cmd**.
+Zoom shortcuts are suspended while recording a custom shortcut in settings.
 
 In an editable source tab, press **Ctrl+/** to comment or uncomment the selected lines. **Cmd+/**
 continues to work on macOS. The editor uses the comment syntax of the current file type.
@@ -911,8 +934,9 @@ a generic Helper bundle. Packaged smoke checks verify macOS Dock visibility,
 including a cold daemon launch, rather than requiring a separate Helper path.
 
 Desktop packaging keeps build/test-only dependencies out of the production dependency graph and
-excludes third-party TypeScript sources, declarations, and MCP SDK examples from the ASAR.
-Standard packages retain the bundled OMP executable, runtime workers, shell integration, and
+excludes third-party TypeScript sources, declarations, and MCP SDK examples from the unpacked
+`resources/app` tree. Standard packages retain the bundled OMP executable, runtime workers,
+shell integration, and
 the target platform's native bindings. The early OMP catalog hook is loaded through an encoded
 module URL, so installation directories containing spaces remain valid. Windows ConPTY files are
 loaded from the matching node-pty prebuild, not its duplicate `third_party` directory.

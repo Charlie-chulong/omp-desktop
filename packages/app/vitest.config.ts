@@ -115,9 +115,14 @@ export default defineConfig({
     ],
     alias: [
       { find: "@", replacement: path.resolve(__dirname, "src") },
-      // Must precede the `react-native` alias: a string `find` matches by prefix, so this subpath
-      // would otherwise resolve inside a react-native-web *file* and break the dependency scan.
-      // Reanimated only imports it on the native path, which no test takes.
+      // Must precede the `react-native` alias: a string `find` matches by prefix, so these
+      // subpaths would otherwise resolve inside a react-native-web *file* and break dependency
+      // scanning. Expo maps its image resolver to the web implementation; Reanimated imports
+      // the Fabric shim only on the native path, which no test takes.
+      {
+        find: /^react-native\/Libraries\/Image\/resolveAssetSource$/,
+        replacement: path.resolve(rootNodeModules, "expo-asset/build/resolveAssetSource.js"),
+      },
       {
         find: /^react-native\/Libraries\/Renderer\/shims\/ReactFabric$/,
         replacement: path.resolve(__dirname, "test-stubs/react-native-fabric-shim.ts"),

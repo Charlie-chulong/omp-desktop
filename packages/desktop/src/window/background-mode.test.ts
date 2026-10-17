@@ -52,6 +52,12 @@ class FakeWindow implements BackgroundModeWindow {
   }
 }
 
+function showWindow(window: BackgroundModeWindow, focus: boolean): void {
+  const nativeWindow = window as FakeWindow;
+  if (!nativeWindow.isVisible()) nativeWindow.show();
+  if (focus) nativeWindow.focus();
+}
+
 function createHarness(choice: BackgroundModeCloseChoice) {
   const window = new FakeWindow();
   const quitApp = vi.fn();
@@ -64,6 +70,7 @@ function createHarness(choice: BackgroundModeCloseChoice) {
     },
     getWindows: () => [window],
     createWindow: vi.fn().mockResolvedValue(window),
+    showWindow,
     quitApp,
     onError: (error) => {
       throw error;
@@ -80,12 +87,77 @@ function createHarness(choice: BackgroundModeCloseChoice) {
 }
 
 describe("background window mode", () => {
+  it("presents a created replacement through the same restore policy", async () => {
+    const window = new FakeWindow();
+    window.visible = false;
+    const controller = new BackgroundModeController({
+      promptForCloseChoice: vi.fn(),
+      createTray: vi.fn(),
+      getWindows: () => [],
+      createWindow: async () => window,
+      showWindow,
+      quitApp: vi.fn(),
+      onError: vi.fn(),
+    });
+    controller.restoreWindows();
+    await vi.waitFor(() => expect(window.visible).toBe(true));
+    expect(window.shownCount).toBe(1);
+    expect(window.focusedCount).toBe(1);
+  });
+
+  it("restores every hidden window while focusing only the first", () => {
+    const first = new FakeWindow();
+    const second = new FakeWindow();
+    first.hide();
+    second.hide();
+    const controller = new BackgroundModeController({
+      promptForCloseChoice: vi.fn(),
+      createTray: vi.fn(),
+      getWindows: () => [first, second],
+      createWindow: vi.fn(),
+      showWindow,
+      quitApp: vi.fn(),
+      onError: vi.fn(),
+    });
+    controller.restoreWindows();
+    expect(first.visible).toBe(true);
+    expect(second.visible).toBe(true);
+    expect(first.focusedCount).toBe(1);
+    expect(second.focusedCount).toBe(0);
+  });
+
+  it("does not reveal a newly created window if shutdown begins during creation", async () => {
+    const window = new FakeWindow();
+    window.visible = false;
+    let finish!: (window: BackgroundModeWindow) => void;
+    const creation = new Promise<BackgroundModeWindow>((resolve) => {
+      finish = resolve;
+    });
+    const controller = new BackgroundModeController({
+      promptForCloseChoice: vi.fn(),
+      createTray: vi.fn(),
+      getWindows: () => [],
+      createWindow: () => creation,
+      showWindow,
+      quitApp: vi.fn(),
+      onError: vi.fn(),
+    });
+    controller.restoreWindows();
+    controller.markAppQuitting();
+    finish(window);
+    await creation;
+    expect(window.visible).toBe(false);
+    expect(window.focusedCount).toBe(0);
+    controller.restoreWindows();
+    expect(window.focusedCount).toBe(0);
+  });
+
   it("creates the tray eagerly and only once", () => {
     const harness = createHarness("background");
-    +harness.controller.initializeTray();
+    harness.controller.initializeTray();
     const trayActions = harness.getTrayActions();
     harness.controller.initializeTray();
-    +expect(trayActions).not.toBeNull();
+    expect(trayActions).not.toBeNull();
     expect(harness.getTrayActions()).toBe(trayActions);
   });
 

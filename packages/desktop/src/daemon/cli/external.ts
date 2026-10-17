@@ -1,4 +1,4 @@
-import { spawnProcess } from "@omp-desktop/server";
+import { spawnProcess } from "@omp-desktop/server/utils/spawn";
 import log from "electron-log/main";
 import type { NodeEntrypointInvocation } from "../node-entrypoint-launcher.js";
 import { createNodeEntrypointInvocation } from "../runtime-paths.js";

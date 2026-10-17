@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { BackgroundProcessOutput } from "@omp-desktop/protocol/background-processes";
 import { Terminal } from "lucide-react-native";
 import { Text, View } from "react-native";
@@ -7,7 +7,8 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import invariant from "tiny-invariant";
 import { useBackgroundProcesses } from "@/background-processes/query";
 import { useFetchQuery } from "@/data/query";
-import TerminalEmulator, { type TerminalEmulatorHandle } from "@/components/terminal-emulator";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import type { TerminalEmulatorHandle } from "@/components/terminal-emulator";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { useAppVisible } from "@/hooks/use-app-visible";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -22,10 +23,18 @@ import type { PanelRegistration } from "./panel-registry";
 const MAX_DISPLAY_CHARACTERS = 1_000_000;
 const DOM_PROPS = { style: { flex: 1 }, matchContents: false };
 const outputEncoder = new TextEncoder();
-const ThemedTerminalEmulator = withUnistyles(TerminalEmulator);
 const terminalThemeMapping = (theme: Theme) => ({
   xtermTheme: toXtermTheme(theme.colors.terminal),
 });
+const ThemedTerminalEmulator = lazy(() =>
+  import("@/components/terminal-emulator").then(({ default: TerminalEmulator }) => ({
+    default: withUnistyles(TerminalEmulator),
+  })),
+);
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner, (theme) => ({
+  color: theme.colors.foregroundMuted,
+}));
+const TERMINAL_LOADING_FALLBACK = <ThemedLoadingSpinner size="small" />;
 
 function normalizeOutputText(
   chunk: BackgroundProcessOutput,
@@ -202,19 +211,21 @@ function BackgroundProcessOutput({
         <Text style={styles.notice}>{t("backgroundProcesses.loading")}</Text>
       ) : null}
       <View style={styles.output}>
-        <ThemedTerminalEmulator
-          ref={emulator}
-          dom={DOM_PROPS}
-          streamKey={streamKey}
-          supportsTerminalInputModeReplay={false}
-          testId="background-process-output"
-          scrollbackLines={Math.min(settings.terminalScrollbackLines, 10_000)}
-          fontFamily={settings.monoFontFamily}
-          fontSize={settings.codeFontSize}
-          uniProps={terminalThemeMapping}
-          onRendererReadyChange={onRendererReadyChange}
-          onResize={onResize}
-        />
+        <Suspense fallback={TERMINAL_LOADING_FALLBACK}>
+          <ThemedTerminalEmulator
+            ref={emulator}
+            dom={DOM_PROPS}
+            streamKey={streamKey}
+            supportsTerminalInputModeReplay={false}
+            testId="background-process-output"
+            scrollbackLines={Math.min(settings.terminalScrollbackLines, 10_000)}
+            fontFamily={settings.monoFontFamily}
+            fontSize={settings.codeFontSize}
+            uniProps={terminalThemeMapping}
+            onRendererReadyChange={onRendererReadyChange}
+            onResize={onResize}
+          />
+        </Suspense>
       </View>
     </View>
   );

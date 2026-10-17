@@ -2,8 +2,6 @@ export interface BackgroundModeWindow {
   isDestroyed(): boolean;
   isVisible(): boolean;
   hide(): void;
-  show(): void;
-  focus(): void;
   on(event: "close", listener: (event: BackgroundModeCloseEvent) => void): void;
 }
 
@@ -18,6 +16,7 @@ interface BackgroundModeDependencies {
   createTray(actions: { restore: () => void; quit: () => void }): void;
   getWindows(): BackgroundModeWindow[];
   createWindow(): Promise<BackgroundModeWindow>;
+  showWindow(window: BackgroundModeWindow, focus: boolean): void;
   quitApp(): void;
   onError(error: unknown): void;
 }
@@ -103,6 +102,7 @@ export class BackgroundModeController {
   }
 
   private async restoreWindowsAsync(): Promise<void> {
+    if (this.appQuitting) return;
     const backgroundWindows = [...this.backgroundWindows].filter((window) => !window.isDestroyed());
     this.backgroundWindows.clear();
 
@@ -112,18 +112,15 @@ export class BackgroundModeController {
         : this.dependencies.getWindows().filter((window) => !window.isDestroyed());
     if (windows.length === 0) {
       const window = await this.dependencies.createWindow();
-      if (!window.isDestroyed()) {
-        window.show();
-        window.focus();
+      if (!this.appQuitting && !window.isDestroyed()) {
+        this.dependencies.showWindow(window, true);
       }
       return;
     }
 
-    for (const window of windows) {
-      if (!window.isVisible()) {
-        window.show();
-      }
+    for (let index = 0; index < windows.length; index += 1) {
+      const window = windows[index];
+      if (window) this.dependencies.showWindow(window, index === 0);
     }
-    windows[0]?.focus();
   }
 }

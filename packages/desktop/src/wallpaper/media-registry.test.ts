@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MAX_WALLPAPER_DIRECTORY_ENTRIES, WallpaperMediaRegistry } from "./media-registry";
@@ -35,7 +35,10 @@ describe("WallpaperMediaRegistry", () => {
       files.map((file) => file.id),
     );
     expect(registry.get(files[0].id)).toEqual(
-      expect.objectContaining({ path: path.join(root, "wallpaper2.png"), mime: "image/png" }),
+      expect.objectContaining({
+        path: realpathSync(path.join(root, "wallpaper2.png")),
+        mime: "image/png",
+      }),
     );
   });
 

@@ -16,7 +16,6 @@ import {
   type ActiveTurnBehavior,
   type ServerInfoStatusPayload,
 } from "@omp-desktop/protocol/messages";
-import { validateWSOutboundMessage } from "@omp-desktop/protocol/validation/ws-outbound";
 import type {
   AgentStreamEventPayload,
   AgentSnapshotPayload,
@@ -144,6 +143,7 @@ import type {
   OmpPluginMarketplaceInfo,
   OmpPluginDoctorCheck,
 } from "@omp-desktop/protocol/messages";
+
 import type {
   AgentPermissionRequest,
   AgentPermissionResponse,
@@ -186,6 +186,24 @@ import {
   normalizeProvidersSnapshotPayload,
 } from "./compat/normalize-provider-models.js";
 import { TerminalStreamRouter, type TerminalStreamEvent } from "./terminal-stream-router.js";
+type WSOutboundMessageValidator =
+  typeof import("@omp-desktop/protocol/validation/ws-outbound").validateWSOutboundMessage;
+
+let loadedWSOutboundMessageValidator: WSOutboundMessageValidator | null = null;
+let wsOutboundMessageValidatorPromise: Promise<WSOutboundMessageValidator> | null = null;
+
+function loadWSOutboundMessageValidator(): Promise<WSOutboundMessageValidator> {
+  if (loadedWSOutboundMessageValidator) return Promise.resolve(loadedWSOutboundMessageValidator);
+  wsOutboundMessageValidatorPromise ??= import("@omp-desktop/protocol/validation/ws-outbound").then(
+    ({ validateWSOutboundMessage }) =>
+      (loadedWSOutboundMessageValidator = validateWSOutboundMessage),
+    (error) => {
+      wsOutboundMessageValidatorPromise = null;
+      throw error;
+    },
+  );
+  return wsOutboundMessageValidatorPromise;
+}
 
 export interface Logger {
   debug(obj: object, msg?: string): void;
@@ -1099,6 +1117,7 @@ interface PingProbe {
 export class DaemonClient {
   private transport: DaemonTransport | null = null;
   private transportCleanup: Array<() => void> = [];
+  private transportValidationEpoch = 0;
   private rawMessageListeners: Set<(message: SessionOutboundMessage) => void> = new Set();
   private messageHandlers: Map<
     SessionOutboundMessage["type"],
@@ -6106,6 +6125,7 @@ export class DaemonClient {
       }
     }
     this.transportCleanup = [];
+    this.transportValidationEpoch += 1;
   }
 
   private resetConnectTimeout(): void {
@@ -6142,6 +6162,7 @@ export class DaemonClient {
       "paseo.ws.frame.inbound",
       describeInboundTransportFrame(rawData, rawBytes),
     );
+    let traceEndDeferred = false;
     try {
       if (rawBytes && this.tryHandleBinaryFrame(rawBytes)) {
         return;
@@ -6150,13 +6171,19 @@ export class DaemonClient {
       if (!payload) {
         return;
       }
-      this.handleJsonPayload(payload, rawBytes?.byteLength);
+      traceEndDeferred = this.handleJsonPayload(payload, rawBytes?.byteLength, () =>
+        this.endTraceSection(isOpen),
+      );
     } finally {
-      this.endTraceSection(isOpen);
+      if (!traceEndDeferred) this.endTraceSection(isOpen);
     }
   }
 
-  private handleJsonPayload(payload: string, rawBytesLength: number | undefined): void {
+  private handleJsonPayload(
+    payload: string,
+    rawBytesLength: number | undefined,
+    completeDeferredTrace: () => void,
+  ): boolean {
     const bytes = rawBytesLength ?? payload.length;
     const startMs = perfNow();
     let parsedJson: unknown;
@@ -6166,12 +6193,50 @@ export class DaemonClient {
     try {
       parsedJson = JSON.parse(payload);
     } catch {
-      return;
+      return false;
     } finally {
       this.endTraceSection(parseTraceOpen);
     }
 
-    const parsed = validateWSOutboundMessage(parsedJson);
+    if (loadedWSOutboundMessageValidator) {
+      this.handleParsedJsonPayload(parsedJson, bytes, startMs, loadedWSOutboundMessageValidator);
+      return false;
+    }
+
+    const validationEpoch = this.transportValidationEpoch;
+    void loadWSOutboundMessageValidator().then(
+      (validate) => {
+        try {
+          if (validationEpoch !== this.transportValidationEpoch) return undefined;
+          this.handleParsedJsonPayload(parsedJson, bytes, startMs, validate);
+          return undefined;
+        } finally {
+          completeDeferredTrace();
+        }
+      },
+      (error) => {
+        try {
+          if (validationEpoch !== this.transportValidationEpoch) return undefined;
+          this.logger.warn(
+            { error: error instanceof Error ? error.message : String(error) },
+            "Message validator failed to load",
+          );
+          return undefined;
+        } finally {
+          completeDeferredTrace();
+        }
+      },
+    );
+    return true;
+  }
+
+  private handleParsedJsonPayload(
+    parsedJson: unknown,
+    bytes: number,
+    startMs: number,
+    validate: WSOutboundMessageValidator,
+  ): void {
+    const parsed = validate(parsedJson);
     if (!parsed.success) {
       const responseIdentity = extractCorrelatedResponseIdentity(parsedJson);
       const envelopeType =

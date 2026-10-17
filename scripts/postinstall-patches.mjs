@@ -11,7 +11,7 @@ if (existsSync(electronPackagePath) && existsSync(miniElectronPackagePath)) {
   const electronPackageDir = dirname(electronPackagePath);
   writeFileSync(
     join(electronPackageDir, "path.txt"),
-    `${relative(electronPackageDir, miniElectronExecutable)}\n`,
+    `${relative(join(electronPackageDir, "dist"), miniElectronExecutable)}\n`,
   );
 }
 
