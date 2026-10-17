@@ -912,11 +912,25 @@ window and share one pending creation when none exists. Explicit New Window and
 project launches retain their additional-window behavior. Only the successful
 desktop single-instance lock owner performs daemon/update shutdown; a secondary
 launch must not stop the primary's daemon.
-Window-close choices use a main-process native dialog before the close is
-intercepted. They must not depend on renderer IPC, because a lost renderer event
-would leave the native close action pending with no visible response. Choosing
-Exit hides the window before daemon and updater shutdown so the native action
-has immediate visual feedback.
+Window-close choices retain the application's existing modal sheet, including
+Cancel, Exit, background-to-tray, and the remembered choice. The main process
+holds pending requests until that renderer is ready. Choosing Exit hides the
+window before daemon and updater shutdown for immediate visual feedback.
+The macOS runtime must preserve native click gestures across event-pump turns:
+repeated `NSApplication.run`/`stop` calls cancel a normal mouse-down before its
+mouse-up. Verify the packaged app with system mouse events, not direct
+`NSWindow.sendEvent` calls or a substituted close dialog:
+
+```bash
+swift packages/desktop/e2e/macos-window-close-smoke.swift \
+  "packages/desktop/release/mac-arm64/OMP Desktop.app"
+```
+
+This requires macOS Accessibility, screen-capture and input-event permission.
+It uses isolated settings and a real managed daemon, checking Cancel, tray
+background/restore, and Exit through system mouse input and the original UI.
+It also checks equal traffic-light spacing, yellow-button minimization and Dock
+restore, and green-button enlargement followed by restoration of the actual size.
 The native runtime must report `WebContents.isDestroyed()` from object lifetime,
 not renderer liveness, and deliver storage acknowledgements after pending
 mutations are registered. Synchronous reply notification must complete before
