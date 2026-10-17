@@ -43,7 +43,7 @@ import {
 } from "./window/window-manager.js";
 import { wallpaperMediaRegistry } from "./wallpaper/media-registry.js";
 import { BackgroundModeController } from "./window/background-mode.js";
-import { promptForNativeCloseChoice } from "./window/native-close-choice.js";
+import { CloseChoiceRequestBroker } from "./window/close-choice-request.js";
 import { setupDarwinCompositorWatchdog } from "./window/compositor-watchdog/index.js";
 import { registerDialogHandlers } from "./features/dialogs.js";
 import {
@@ -103,6 +103,7 @@ const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "OMP Desktop";
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
 const isPetCreationCli = process.argv.includes("--desktop-pet-install");
 const agentNavigationInbox = new AgentNavigationInbox();
+const closeChoiceRequests = new CloseChoiceRequestBroker();
 let petController: DesktopPetController | null = null;
 let ownsDesktopInstance = false;
 let mainWindowsQuitting = false;
@@ -248,6 +249,13 @@ ipcMain.handle("paseo:pet:startup-ready", async (event) => {
   await bootstrapComplete;
   if (!isMainWindowSender(event.sender) || event.senderFrame !== event.sender.mainFrame) return;
   await petController?.start();
+});
+ipcMain.handle("paseo:window:closeChoiceReady", (event) => {
+  return closeChoiceRequests.getPending(event.sender.id);
+});
+
+ipcMain.handle("paseo:window:respondCloseChoice", (event, response: unknown) => {
+  return closeChoiceRequests.respond(event.sender.id, response);
 });
 
 protocol.registerSchemesAsPrivileged([
@@ -521,17 +529,22 @@ function updateBackgroundTrayContextMenu(): void {
 }
 
 const backgroundModeController = new BackgroundModeController({
-  promptForCloseChoice: (window) => {
+  promptForCloseChoice: async (window) => {
     const settingsStore = getDesktopSettingsStore();
-    return promptForNativeCloseChoice(window as BrowserWindow, {
-      getCloseBehavior: async () => (await settingsStore.get()).window.closeBehavior,
-      showMessageBox: (browserWindow, options) => dialog.showMessageBox(browserWindow, options),
-      rememberCloseBehavior: async (closeBehavior) => {
-        await settingsStore.patch({ window: { closeBehavior } });
-      },
-      onRememberError: (error) =>
-        log.error("[background mode] failed to remember close choice", error),
-    });
+    const closeBehavior = (await settingsStore.get()).window.closeBehavior;
+    if (closeBehavior !== "ask") {
+      return closeBehavior;
+    }
+
+    const result = await closeChoiceRequests.request((window as BrowserWindow).webContents);
+    if (result.remember && result.choice !== "cancel") {
+      try {
+        await settingsStore.patch({ window: { closeBehavior: result.choice } });
+      } catch (error) {
+        log.error("[background mode] failed to remember close choice", error);
+      }
+    }
+    return result.choice;
   },
   createTray: ({ restore, quit }) => {
     backgroundTrayActions = { restore, quit };
