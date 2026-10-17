@@ -24,10 +24,6 @@ vi.mock("electron-log/main", () => ({
   default: { warn: vi.fn() },
 }));
 
-vi.mock("@omp-desktop/server", () => ({
-  spawnProcess: vi.fn(),
-}));
-
 const originalPlatform = process.platform;
 const originalExecPath = process.execPath;
 const originalResourcesPath = process.resourcesPath;

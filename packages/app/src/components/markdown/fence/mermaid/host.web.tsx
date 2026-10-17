@@ -22,7 +22,6 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import type { Theme } from "@/styles/theme";
 import type { MarkdownFenceRendererProps } from "../types";
 import type { MermaidRenderRequest } from "./render-model";
-import { mermaidRuntimeHtml } from "./runtime/html.gen";
 import { parseMermaidRuntimeMessage, type MermaidRuntimeRenderMessage } from "./runtime/messages";
 import { MermaidRuntimeRequestDriver } from "./runtime/request-driver";
 import { useMermaidRenderModel } from "./use-render-model";
@@ -56,6 +55,9 @@ function MermaidIframeRuntime({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const driverRef = useRef<MermaidRuntimeRequestDriver | null>(null);
   const initialRequestRef = useRef(initialRequest);
+  const latestRequestRef = useRef(initialRequest);
+  const [runtimeHtml, setRuntimeHtml] = useState<string | null>(null);
+  const [runtimeLoadFailed, setRuntimeLoadFailed] = useState(false);
   driverRef.current ??= new MermaidRuntimeRequestDriver();
   const iframeStyle = useMemo<React.CSSProperties>(
     () => ({
@@ -85,12 +87,47 @@ function MermaidIframeRuntime({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    let active = true;
+    // Scoped lazy-load exception: a static import adds this 3.4 MB runtime to the startup entry.
+    void import("./runtime/html.gen").then(
+      ({ mermaidRuntimeHtml }) => {
+        if (active) {
+          setRuntimeHtml(mermaidRuntimeHtml);
+        }
+        return undefined;
+      },
+      () => {
+        if (active) {
+          setRuntimeLoadFailed(true);
+        }
+        return undefined;
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const next = request ?? initialRequestRef.current;
     initialRequestRef.current = null;
+    latestRequestRef.current = next ?? latestRequestRef.current;
     sendRequest(driverRef.current?.update(next) ?? null);
   }, [request, sendRequest]);
 
   useEffect(() => {
+    if (runtimeLoadFailed && latestRequestRef.current) {
+      onRenderFailed(latestRequestRef.current.revision);
+    }
+  }, [onRenderFailed, request, runtimeLoadFailed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     function receiveMessage(event: MessageEvent): void {
       if (event.source !== iframeRef.current?.contentWindow) {
         return;
@@ -115,13 +152,17 @@ function MermaidIframeRuntime({
     return () => window.removeEventListener("message", receiveMessage);
   }, [onRenderFailed, onRendered, sendRequest]);
 
+  if (runtimeHtml === null) {
+    return null;
+  }
+
   return (
     <iframe
       ref={iframeRef}
       title=""
       aria-hidden
       sandbox="allow-scripts"
-      srcDoc={mermaidRuntimeHtml}
+      srcDoc={runtimeHtml}
       tabIndex={-1}
       style={iframeStyle}
     />
@@ -131,6 +172,8 @@ function MermaidIframeRuntime({
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 8;
 
+// The host intentionally coordinates the renderer lifecycle and one interactive canvas state.
+// eslint-disable-next-line complexity
 function MermaidFenceHostImpl({
   code,
   phase,
@@ -358,15 +401,21 @@ function MermaidFenceHostImpl({
     rootStyle = sourceView.container;
   }
   const sourceTextStyle = showSource ? sourceView.text : textStyle;
-  const viewportStyle = diagramVisible
-    ? fullscreenOpen
-      ? fullscreenViewportDomStyle
-      : viewportDomStyle
-    : measuringRuntimeStyle;
-  const transformedContentStyle =
-    fullscreenOpen && visible
-      ? { ...contentDomStyle, width: Math.max(visible.width, 1) }
-      : contentDomStyle;
+  let viewportStyle = measuringRuntimeStyle;
+  if (diagramVisible) {
+    viewportStyle = fullscreenOpen ? fullscreenViewportDomStyle : viewportDomStyle;
+  }
+  const transformedContentStyle = useMemo<React.CSSProperties>(
+    () =>
+      fullscreenOpen && visible
+        ? { ...contentDomStyle, width: Math.max(visible.width, 1) }
+        : contentDomStyle,
+    [fullscreenOpen, visible],
+  );
+  const runtimePlaceholderStyle = useMemo<ViewStyle>(
+    () => ({ height: runtimeHeight }),
+    [runtimeHeight],
+  );
 
   const runtime = (
     <MermaidIframeRuntime
@@ -467,7 +516,7 @@ function MermaidFenceHostImpl({
   return (
     <>
       <View style={[diagramBoxStyle, containerStyle]}>
-        <View style={{ height: runtimeHeight }} />
+        <View style={runtimePlaceholderStyle} />
       </View>
       <Modal visible animationType="fade" onRequestClose={closeViewer}>
         <View style={controlStyles.viewerBackdrop}>{content}</View>

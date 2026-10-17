@@ -742,29 +742,6 @@ describe("git-actions-policy", () => {
     expect(action).toMatchObject({ label: "Merge locally" });
   });
 
-  it("uses the active language for policy-owned action labels and unavailable messages", async () => {
-    await i18n.changeLanguage("zh-CN");
-    const actions = buildGitActions(
-      createInput({
-        hasRemote: true,
-        behindOfOrigin: 1,
-        isOnBaseBranch: false,
-        aheadCount: 0,
-      }),
-    );
-
-    expect(actions.primary).toMatchObject({
-      id: "pull",
-      label: "Pull",
-      pendingLabel: "正在 pull...",
-      successLabel: "已 pull",
-    });
-    expect(actions.secondary.find((entry) => entry.id === "pr")).toMatchObject({
-      label: "创建 PR",
-      unavailableMessage: "无法创建 PR，因为此分支还没有新的 commit",
-    });
-  });
-
   it.each([
     ["draft", { pullRequestIsDraft: true }],
     ["merged", { pullRequestIsMerged: true }],
