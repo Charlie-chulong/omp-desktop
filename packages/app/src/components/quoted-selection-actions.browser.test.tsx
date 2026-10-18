@@ -49,6 +49,7 @@ afterEach(async () => {
   window.getSelection()?.removeAllRanges();
   root = null;
   container = null;
+  delete window.paseoDesktop;
 });
 
 async function mountTranscript() {
@@ -212,5 +213,14 @@ describe("explicit transcript selection actions", () => {
       quote.click();
     });
     expect(onQuote).not.toHaveBeenCalled();
+  });
+
+  it("hides persistent Quote and Ask in Electron while retaining the right-click menu", async () => {
+    window.paseoDesktop = { platform: "win32" };
+    const onQuote = await mountTranscript();
+    await openSelectionContextMenu();
+    expect(container?.querySelector('[data-testid="quoted-selection-actions"]')).toBeNull();
+    await act(async () => userEvent.click(menuElement("quoted-selection-context-menu-quote")));
+    expect(onQuote).toHaveBeenCalledExactlyOnceWith("Selected transcript text");
   });
 });
