@@ -313,43 +313,6 @@ describe("queued conversation ordering", () => {
       before.sessions["other-server"]?.queuedMessages,
     );
   });
-
-  it("retains one-position arrow moves after drag reordering without changing messages", () => {
-    const store = initializeQueues(["a", "b", "c", "d"]);
-    store.reorderQueuedAgents("test-server", ["d", "a", "b", "c"]);
-    const messages = useSessionStore.getState().sessions["test-server"]?.queuedMessages;
-
-    store.moveQueuedAgent("test-server", "b", -1);
-    expect(useSessionStore.getState().sessions["test-server"]?.queuedAgentOrder).toEqual([
-      "d",
-      "b",
-      "a",
-      "c",
-    ]);
-
-    store.moveQueuedAgent("test-server", "b", 1);
-    expect(useSessionStore.getState().sessions["test-server"]?.queuedAgentOrder).toEqual([
-      "d",
-      "a",
-      "b",
-      "c",
-    ]);
-    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages).toBe(messages);
-  });
-
-  it("retains arrow boundary, missing-conversation, and missing-host no-ops", () => {
-    const store = initializeQueues();
-    const before = useSessionStore.getState();
-
-    store.moveQueuedAgent("test-server", "a", -1);
-    expect(useSessionStore.getState()).toBe(before);
-    store.moveQueuedAgent("test-server", "c", 1);
-    expect(useSessionStore.getState()).toBe(before);
-    store.moveQueuedAgent("test-server", "missing", 1);
-    expect(useSessionStore.getState()).toBe(before);
-    store.moveQueuedAgent("missing-server", "a", 1);
-    expect(useSessionStore.getState()).toBe(before);
-  });
 });
 
 describe("agent task state", () => {

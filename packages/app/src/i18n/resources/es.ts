@@ -128,8 +128,9 @@ export const es: TranslationResources = {
   composer: {
     queueOrder: {
       title: "Conversaciones en cola",
-      hint: "Mantén pulsado y arrastra un asa o usa las flechas. Los turnos en curso continúan.",
+      hint: "Mantén pulsado y arrastra un asa. Los turnos en curso continúan.",
       dragConversation: "Reordenar {{title}}",
+      dragMessage: "Reordenar el mensaje en cola: {{text}}",
       messageCount: "Mensajes en cola: {{count}}",
       untitledConversation: "Conversación sin título · {{id}}",
     },
@@ -170,11 +171,7 @@ export const es: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Editar mensaje en cola",
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
-      moveQueuedMessageEarlier: "Adelantar el mensaje en cola",
-      moveQueuedMessageLater: "Retrasar el mensaje en cola",
       queuedConversationPosition: "Conversación en cola {{position}} de {{count}}",
-      moveQueuedConversationEarlier: "Adelantar la conversación en cola",
-      moveQueuedConversationLater: "Retrasar la conversación en cola",
       openImage: "Abrir imagen adjunta",
       removeImage: "Quitar imagen adjunta",
       removeFile: "Remove file attachment",

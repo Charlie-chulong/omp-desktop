@@ -302,18 +302,16 @@ discarding the current draft. They are unavailable while the conversation is run
 When two or more conversations on the same host have queued follow-up messages, a shared order
 board appears above the input in every composer on that host, including conversations without
 their own queued message. Each row shows its position, title, and queued-message count. Hold
-and drag the handle to move a conversation directly to another position, or tap its up/down
-buttons to move one position at a time; neither action needs hover or a right-click. Automatic
-delivery uses the displayed order. Already running turns continue without interruption, and a
-conversation added or drained during a drag cannot be restored by an outdated drop.
-With a keyboard, focus a handle, press Space, move with the arrow keys, then press Space again
-to drop; the up/down buttons remain available for a single-step move.
+and drag the handle to move a conversation directly to another position; no hover, right-click,
+or separate order buttons are needed. Automatic delivery uses the displayed order. Already
+running turns continue without interruption, and a conversation added or drained during a drag
+cannot be restored by an outdated drop. With a keyboard, focus a handle, press Space, move with
+the arrow keys, then press Space again to drop.
 
-Within a conversation, each queued message also has **Move queued message earlier/later**
-controls when at least two messages are waiting. These controls change both the displayed
-order and the subsequent automatic delivery order, preserving the message text and attachments.
-Messages keep their enqueue order unless explicitly moved; already submitted or executing
-messages are not sortable. Reordering does not send or interrupt a turn.
+Within a conversation, hold and drag a queued message's handle to reorder its pending messages.
+Editing, sending, or adding a message during a drag cancels that outdated reorder. Message text
+and attachments stay intact; messages keep their enqueue order unless explicitly moved. Already
+submitted or executing messages are not sortable. Reordering does not send or interrupt a turn.
 **Send queued message now** remains a separate, explicit override of the shared order.
 
 ## Answering grouped questions
