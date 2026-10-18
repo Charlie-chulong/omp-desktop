@@ -189,6 +189,7 @@ export function DraggableList<T>({
   keyExtractor,
   renderItem,
   onDragEnd,
+  onReorder,
   style,
   containerStyle,
   contentContainerStyle,
@@ -208,6 +209,7 @@ export function DraggableList<T>({
     data,
     keyExtractor,
     onDragEnd,
+    onReorder,
     onDragBegin,
   });
   const activationConstraints = getDragActivationConstraints(useDragHandle, DRAG_ACTIVATION_CONFIG);

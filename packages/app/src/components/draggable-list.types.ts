@@ -24,7 +24,9 @@ export interface DraggableListProps<T> {
   data: T[];
   keyExtractor: (item: T, index: number) => string;
   renderItem: (info: DraggableRenderItemInfo<T>) => ReactElement;
-  onDragEnd: (data: T[]) => void;
+  onDragEnd?: (data: T[]) => void;
+  /** Commit an ID-based move against authoritative data, without retaining a drag snapshot. */
+  onReorder?: (activeId: string, overId: string) => void;
   style?: StyleProp<ViewStyle>;
   /** Outer container style (useful for nested, non-scrolling lists). */
   containerStyle?: StyleProp<ViewStyle>;

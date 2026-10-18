@@ -367,11 +367,17 @@ Automatic delivery starts one queued conversation at a time in the displayed ord
 conversation changes the next actual start, not only the UI. Existing active turns continue
 without interruption.
 
-Within a conversation, each queued message also has **Move queued message earlier/later**
-controls when at least two messages are waiting. These controls change both the displayed
-order and the subsequent automatic delivery order, preserving the message text and attachments.
-Messages keep their enqueue order unless explicitly moved; already submitted or executing
-messages are not sortable. Reordering does not send or interrupt a turn.
+Within a conversation, drag a queued message's handle directly to its new position. The
+highlighted row and moving gap preview the drop; releasing commits the displayed order to the
+same queue used for automatic delivery. For keyboard sorting, focus the handle, press **Space**,
+use **Up/Down**, and press **Space** again to drop; **Escape** cancels without changing the order.
+Native clients retain **Move queued message earlier/later** controls.
+Messages keep their text, attachments, identity, and enqueue order unless explicitly moved;
+already submitted or executing messages are not sortable. Reordering does not send or interrupt
+a turn, and dispatch during a drag cannot restore an already submitted message.
+After a normal turn completes, the next queued message starts automatically, even if completion
+arrives before the previous submission's acknowledgment. Messages are submitted once in queue
+order; a failed submission retains the original message and attachments for retry.
 **Send queued message now** remains a separate, explicit override of the shared order.
 
 ## Answering grouped questions

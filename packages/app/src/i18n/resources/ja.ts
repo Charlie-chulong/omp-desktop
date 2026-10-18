@@ -165,6 +165,9 @@ export const ja: TranslationResources = {
       sendQueuedMessageNow: "キューに入れたメッセージを今すぐ送信",
       moveQueuedMessageEarlier: "キュー内のメッセージを前に移動",
       moveQueuedMessageLater: "キュー内のメッセージを後ろに移動",
+      dragQueuedMessage: "ドラッグしてキュー内のメッセージを並べ替え",
+      dragQueuedMessageHint:
+        "スペースキーで選択し、矢印キーで移動、スペースキーで確定、Escape キーでキャンセルします。",
       queuedConversationPosition: "キュー内の会話 {{position}} / {{count}}",
       moveQueuedConversationEarlier: "キュー内の会話を前に移動",
       moveQueuedConversationLater: "キュー内の会話を後ろに移動",

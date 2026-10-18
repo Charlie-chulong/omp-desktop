@@ -165,6 +165,9 @@ export const ptBR: TranslationResources = {
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
       moveQueuedMessageEarlier: "Adiantar a mensagem na fila",
       moveQueuedMessageLater: "Atrasar a mensagem na fila",
+      dragQueuedMessage: "Arrastar para reordenar a mensagem na fila",
+      dragQueuedMessageHint:
+        "Pressione Espaço para selecionar, as setas para mover, Espaço para soltar ou Escape para cancelar.",
       queuedConversationPosition: "Conversa na fila {{position}} de {{count}}",
       moveQueuedConversationEarlier: "Adiantar a conversa na fila",
       moveQueuedConversationLater: "Atrasar a conversa na fila",

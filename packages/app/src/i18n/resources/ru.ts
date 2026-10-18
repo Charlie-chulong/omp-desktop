@@ -165,6 +165,9 @@ export const ru: TranslationResources = {
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
       moveQueuedMessageEarlier: "Переместить сообщение вперёд в очереди",
       moveQueuedMessageLater: "Переместить сообщение назад в очереди",
+      dragQueuedMessage: "Перетащить для изменения порядка сообщений в очереди",
+      dragQueuedMessageHint:
+        "Нажмите пробел для захвата, стрелки для перемещения, пробел для размещения или Escape для отмены.",
       queuedConversationPosition: "Разговор в очереди: {{position}} из {{count}}",
       moveQueuedConversationEarlier: "Переместить разговор вперёд в очереди",
       moveQueuedConversationLater: "Переместить разговор назад в очереди",

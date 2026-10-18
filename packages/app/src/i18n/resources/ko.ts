@@ -165,6 +165,9 @@ export const ko: TranslationResources = {
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
       moveQueuedMessageEarlier: "대기 중인 메시지를 앞으로 이동",
       moveQueuedMessageLater: "대기 중인 메시지를 뒤로 이동",
+      dragQueuedMessage: "드래그하여 대기 중인 메시지 순서 변경",
+      dragQueuedMessageHint:
+        "스페이스 키로 선택하고 방향키로 이동한 뒤 스페이스 키로 놓거나 Escape 키로 취소하세요.",
       queuedConversationPosition: "대기 중인 대화 {{count}}개 중 {{position}}번째",
       moveQueuedConversationEarlier: "대기 중인 대화를 앞으로 이동",
       moveQueuedConversationLater: "대기 중인 대화를 뒤로 이동",

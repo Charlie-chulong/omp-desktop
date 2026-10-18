@@ -286,6 +286,29 @@ export function moveQueuedComposerMessage(input: {
   });
 }
 
+export function moveQueuedComposerMessageTo(input: {
+  agentId: string;
+  messageId: string;
+  targetMessageId: string;
+  queue: QueueWriter;
+}): void {
+  input.queue.write((prev) => {
+    const messages = prev.get(input.agentId);
+    if (!messages || input.messageId === input.targetMessageId) return prev;
+    const index = messages.findIndex((message) => message.id === input.messageId);
+    const target = messages.findIndex((message) => message.id === input.targetMessageId);
+    // A drag may outlive dispatch/removal of either endpoint. Never restore its snapshot.
+    if (index < 0 || target < 0) return prev;
+
+    const reordered = [...messages];
+    const [message] = reordered.splice(index, 1);
+    reordered.splice(target, 0, message!);
+    const next = new Map(prev);
+    next.set(input.agentId, reordered);
+    return next;
+  });
+}
+
 export interface EditQueuedComposerMessageInput {
   agentId: string;
   messageId: string;
