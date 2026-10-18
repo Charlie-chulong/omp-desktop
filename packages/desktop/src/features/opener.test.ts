@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,8 +7,12 @@ import { ipcMain, shell } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isAllowedExternalUrl, registerOpenerHandlers } from "./opener";
-import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
-import type { ExternalAppRuntime } from "./external-app-runtime";
+import { createDesktopSettingsStore, DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
+import {
+  createExternalAppRuntime,
+  type ExternalAppRuntime,
+  type ExternalSpawnedProcess,
+} from "./external-app-runtime";
 
 vi.mock("electron", () => ({
   ipcMain: { handle: vi.fn() },
@@ -41,6 +46,13 @@ function getRegisteredPathHandler(
     throw new Error(`${action} handler was not registered`);
   }
   return handler as (_event: unknown, input: unknown) => Promise<void>;
+}
+
+function createSpawnedProcess(): EventEmitter & ExternalSpawnedProcess {
+  const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
+  child.unref = vi.fn();
+  queueMicrotask(() => child.emit("spawn"));
+  return child;
 }
 
 describe("desktop opener", () => {
@@ -87,7 +99,7 @@ describe("desktop opener", () => {
       settingsStore: {
         get: async () => ({
           ...DEFAULT_DESKTOP_SETTINGS,
-          browser: { target: "firefox" },
+          browser: { ...DEFAULT_DESKTOP_SETTINGS.browser, target: "firefox" },
         }),
       },
     });
@@ -98,6 +110,90 @@ describe("desktop opener", () => {
       command: "/usr/bin/firefox",
       args: ["https://example.com/a%20b"],
     });
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("uses reloaded custom settings at the existing opener with exact argv and no shell", async () => {
+    const userDataPath = await mkdtemp(path.join(tmpdir(), "desktop-custom-browser-"));
+    try {
+      const executable = path.join(userDataPath, 'Browser "one" & 中文', "browser.exe");
+      const args = ["", "--profile", 'a profile "quoted" & 中文', "{url}", ""];
+      await createDesktopSettingsStore({ userDataPath }).patch({
+        browser: { target: "custom", custom: { executable, args } },
+      });
+      const spawn = vi.fn(createSpawnedProcess);
+      const settingsStore = createDesktopSettingsStore({ userDataPath });
+      const handler = getRegisteredOpenUrlHandler({
+        settingsStore,
+        runtime: createExternalAppRuntime({ platform: process.platform, env: {}, spawn }),
+      });
+      const url = 'https://example.com/a b?q="quoted"&other=中文#é';
+
+      await handler({}, url);
+      expect(spawn).toHaveBeenNthCalledWith(
+        1,
+        executable,
+        ["", "--profile", 'a profile "quoted" & 中文', url, ""],
+        expect.objectContaining({ shell: false, detached: true }),
+      );
+      expect(shell.openExternal).not.toHaveBeenCalled();
+      await settingsStore.patch({ browser: { target: "system" } });
+      await handler({}, url);
+      expect(shell.openExternal).toHaveBeenCalledWith(url);
+      await settingsStore.patch({ browser: { target: "custom" } });
+      await handler({}, url);
+      expect(spawn).toHaveBeenCalledTimes(2);
+      expect(shell.openExternal).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(userDataPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects non-HTTP URLs before reading or launching custom settings", async () => {
+    const spawn = vi.fn();
+    const get = vi.fn(async () => ({
+      ...DEFAULT_DESKTOP_SETTINGS,
+      browser: {
+        target: "custom" as const,
+        custom: { executable: process.execPath, args: ["{url}"] },
+      },
+    }));
+    const handler = getRegisteredOpenUrlHandler({
+      settingsStore: { get },
+      runtime: createExternalAppRuntime({ spawn }),
+    });
+
+    for (const url of [
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "paseo://settings",
+      "/relative",
+      null,
+    ]) {
+      await expect(handler({}, url)).rejects.toThrow("Unsupported external URL");
+    }
+    expect(get).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("revalidates an invalid saved custom launch instead of falling back to the system", async () => {
+    const spawn = vi.fn();
+    const handler = getRegisteredOpenUrlHandler({
+      runtime: createExternalAppRuntime({ spawn }),
+      settingsStore: {
+        get: async () => ({
+          ...DEFAULT_DESKTOP_SETTINGS,
+          browser: {
+            target: "custom",
+            custom: { executable: process.execPath, args: ["--url={url}"] },
+          },
+        }),
+      },
+    });
+
+    await expect(handler({}, "https://example.com")).rejects.toThrow("embedded {url}");
+    expect(spawn).not.toHaveBeenCalled();
     expect(shell.openExternal).not.toHaveBeenCalled();
   });
 

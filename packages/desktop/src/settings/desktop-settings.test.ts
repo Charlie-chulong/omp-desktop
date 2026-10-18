@@ -209,6 +209,122 @@ describe("desktop-settings", () => {
     expect(restored.browser.target).toBe("firefox");
   });
 
+  it("roundtrips exact custom arguments and preserves them while switching browser targets", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+    const custom = {
+      executable: path.join(userDataPath, "My Browser 中文", "browser.exe"),
+      args: ["", "--profile", 'profile "one" & 中文', "{url}", "", "--last='two words'"],
+    };
+
+    await store.patch({ browser: { target: "custom", custom } });
+    const restored = createDesktopSettingsStore({ userDataPath });
+    expect((await restored.get()).browser).toEqual({ target: "custom", custom });
+    await restored.patch({ browser: { target: "firefox" } });
+    expect((await restored.get()).browser).toEqual({ target: "firefox", custom });
+    await restored.patch({ browser: { target: "system" } });
+    expect((await restored.get()).browser).toEqual({ target: "system", custom });
+    await restored.patch({ browser: { target: "custom" } });
+    expect((await createDesktopSettingsStore({ userDataPath }).get()).browser).toEqual({
+      target: "custom",
+      custom,
+    });
+  });
+
+  it("allows selecting an unconfigured custom target without saving an invalid new config", async () => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    await createDesktopSettingsStore({ userDataPath }).patch({ browser: { target: "custom" } });
+
+    expect((await createDesktopSettingsStore({ userDataPath }).get()).browser).toEqual({
+      target: "custom",
+      custom: { executable: "", args: ["{url}"] },
+    });
+  });
+
+  it("isolates nested browser defaults, patch inputs, and returned argument arrays", async () => {
+    const firstDirectory = await createTempUserDataDir();
+    const secondDirectory = await createTempUserDataDir();
+    directories.add(firstDirectory);
+    directories.add(secondDirectory);
+    const first = createDesktopSettingsStore({ userDataPath: firstDirectory });
+    const second = createDesktopSettingsStore({ userDataPath: secondDirectory });
+    const defaults = await first.get();
+    defaults.browser.custom.executable = "mutated";
+    defaults.browser.custom.args.push("mutated");
+    expect((await first.get()).browser).toEqual(DEFAULT_DESKTOP_SETTINGS.browser);
+    expect((await second.get()).browser).toEqual({
+      target: "system",
+      custom: { executable: "", args: ["{url}"] },
+    });
+    const custom = { executable: process.execPath, args: ["", "{url}"] };
+    const saved = await first.patch({ browser: { target: "custom", custom } });
+    custom.args.push("mutated input");
+    saved.browser.custom.args[0] = "mutated output";
+    expect((await first.get()).browser.custom.args).toEqual(["", "{url}"]);
+    expect(
+      (await createDesktopSettingsStore({ userDataPath: firstDirectory }).get()).browser.custom
+        .args,
+    ).toEqual(["", "{url}"]);
+    expect(DEFAULT_DESKTOP_SETTINGS.browser.custom).toEqual({ executable: "", args: ["{url}"] });
+  });
+
+  it.each([
+    null,
+    undefined,
+    {},
+    { executable: "", args: ["{url}"] },
+    { executable: "relative/browser.exe", args: ["{url}"] },
+    { executable: `${process.execPath}\0`, args: ["{url}"] },
+    { executable: process.execPath, args: [] },
+    { executable: process.execPath, args: ["{url}", "{url}"] },
+    { executable: process.execPath, args: ["prefix{url}"] },
+    { executable: process.execPath, args: ["{url}", "suffix{url}"] },
+    { executable: process.execPath, args: ["{url}", "bad\0value"] },
+    { executable: process.execPath, args: ["{url}", 42] },
+    { executable: process.execPath, args: "{url}" },
+  ])("atomically rejects explicitly invalid custom configuration: %j", async (custom) => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    const store = createDesktopSettingsStore({ userDataPath });
+    const previous = await store.get();
+    const raw = await readFile(settingsFilePath(userDataPath), "utf8");
+    const notifications: DesktopSettings[] = [];
+    store.subscribe((settings) => notifications.push(settings));
+
+    await expect(
+      store.patch({
+        releaseChannel: "beta",
+        browser: { target: "custom", custom },
+        notifications: { playSound: false },
+      }),
+    ).rejects.toThrow(/custom browser/i);
+    expect(await store.get()).toEqual(previous);
+    expect(await readFile(settingsFilePath(userDataPath), "utf8")).toBe(raw);
+    expect(notifications).toEqual([]);
+    await store.patch({ browser: { target: "firefox" } });
+    expect((await store.get()).browser.target).toBe("firefox");
+  });
+
+  it.each([
+    { target: "firefox" },
+    { target: "firefox", custom: { executable: "relative", args: ["{url}"] } },
+    { target: "custom", custom: { executable: process.execPath, args: ["--url={url}"] } },
+  ])("normalizes older or malformed saved browser configuration: %j", async (browser) => {
+    const userDataPath = await createTempUserDataDir();
+    directories.add(userDataPath);
+    await writeFile(
+      settingsFilePath(userDataPath),
+      JSON.stringify({ version: 1, settings: { browser } }),
+    );
+
+    expect((await createDesktopSettingsStore({ userDataPath }).get()).browser).toEqual({
+      target: browser.target,
+      custom: { executable: "", args: ["{url}"] },
+    });
+  });
+
   it("defaults notification sounds on for existing settings documents", async () => {
     const userDataPath = await createTempUserDataDir();
     directories.add(userDataPath);

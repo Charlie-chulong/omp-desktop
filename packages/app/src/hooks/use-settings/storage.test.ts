@@ -390,7 +390,7 @@ describe("loadSettingsFromStorage", () => {
       isElectron: true,
       settings: {
         releaseChannel: "beta",
-        browser: { target: "system" },
+        browser: { target: "system", custom: { executable: "", args: ["{url}"] } },
         notifications: { playSound: true },
         daemon: { manageBuiltInDaemon: false, keepRunningAfterQuit: true },
         pet: { enabled: false, size: "medium", selectedId: "iris", position: null },

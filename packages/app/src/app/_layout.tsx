@@ -436,12 +436,17 @@ function DesktopWindowContentReadySignal() {
     let firstFrame = 0;
     let secondFrame = 0;
     let scheduled = false;
+    let presenting = false;
     async function notifyContentReady(): Promise<void> {
+      if (notified.current || presenting) return;
+      presenting = true;
       try {
         await signalContentReady();
         notified.current = true;
       } catch (error) {
         console.error("[startup] Window presentation failed", error);
+      } finally {
+        presenting = false;
       }
     }
     const afterContentPaint = () => {
@@ -451,14 +456,22 @@ function DesktopWindowContentReadySignal() {
         secondFrame = requestAnimationFrame(() => void notifyContentReady());
       });
     };
-    const observer = new PerformanceObserver((list) => {
-      if (list.getEntries().some((entry) => entry.name === "first-contentful-paint")) {
-        afterContentPaint();
-      }
-    });
-    observer.observe({ type: "paint", buffered: true });
+    // Hidden mini-electron windows may never report a paint entry or run animation frames.
+    // Settings have loaded and React has committed this tree, so do not hide indefinitely.
+    const fallback = window.setTimeout(() => void notifyContentReady(), 2_000);
+    const observer =
+      typeof PerformanceObserver !== "undefined" &&
+      PerformanceObserver.supportedEntryTypes?.includes("paint")
+        ? new PerformanceObserver((list) => {
+            if (list.getEntries().some((entry) => entry.name === "first-contentful-paint")) {
+              afterContentPaint();
+            }
+          })
+        : null;
+    observer?.observe({ type: "paint", buffered: true });
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
+      window.clearTimeout(fallback);
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
     };

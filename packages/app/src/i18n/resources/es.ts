@@ -2178,6 +2178,24 @@ export const es: TranslationResources = {
       selectedUnavailable: "{{browser}} no está instalado. Elige otro navegador.",
       accessibilityLabel: "Abrir enlaces con {{browser}}",
       loadFailed: "No se pudieron cargar los navegadores disponibles.",
+      custom: "Ejecutable personalizado",
+      executable: "Ruta del ejecutable",
+      executableHint:
+        "Introduce una ruta absoluta al ejecutable sin comillas de shell. En Windows, usa un archivo nativo .exe o .com.",
+      arguments: "Argumentos",
+      argumentsHint:
+        "Cada fila es un argumento literal, incluidas las filas vacías, comillas, barras inversas y saltos de línea. Usa exactamente una fila que contenga solo {url}. No se interpreta como un comando de shell.",
+      argument: "Argumento {{index}}",
+      addArgument: "Añadir argumento",
+      remove: "Eliminar",
+      removeArgument: "Eliminar argumento {{index}}",
+      save: "Guardar navegador personalizado",
+      executableError: "Introduce una ruta absoluta al ejecutable.",
+      urlArgumentError:
+        "Incluye exactamente un argumento igual a {url}; no insertes {url} dentro de otro argumento.",
+      nulError: "La ruta del ejecutable y los argumentos no pueden contener caracteres NUL.",
+      customSaveFailed:
+        "No se pudo guardar el navegador personalizado. Se han conservado tus cambios; revisa el ejecutable y los argumentos e inténtalo de nuevo.",
     },
     general: {
       title: "General",

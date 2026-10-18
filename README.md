@@ -18,10 +18,11 @@ Standard Apple Silicon macOS and Windows x64 packages include OMP and do not req
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
 
-The desktop development and packaging runtime is `@iriscat/mini-electron@0.1.5`. Main-process
-code keeps Electron-compatible `electron` imports; the stock `electron` package is retained
-only for its TypeScript declarations and its binary download is not used by project scripts.
-mini-electron currently supports Windows x64 and Apple Silicon macOS.
+The desktop declares `@iriscat/mini-electron@^0.1.5` for development and packaging.
+Main-process code keeps Electron-compatible `electron` imports; the stock `electron`
+package is retained only for its TypeScript declarations and its binary download
+is not used by project scripts. mini-electron currently supports Windows x64 and
+Apple Silicon macOS.
 
 Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
 avoiding repeated small-file-read overhead. The main window stays native-hidden until
@@ -31,6 +32,11 @@ WebSocket response validation, and terminal emulation load on first use instead 
 inflating the startup entry. Desktop daemon setup imports only its configuration/runtime
 helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell
 environment inheritance and daemon readiness checks are unchanged.
+
+On Windows, the first window stays hidden until app settings have loaded and the
+renderer reports content readiness. If the hidden runtime provides no paint
+notification, a bounded fallback reveals the committed UI instead of leaving
+the window invisible.
 
 **Settings → General → Language → System** selects the first supported system
 language; a manually selected language takes precedence. The macOS runtime
@@ -107,6 +113,12 @@ In **Settings → Appearance**, the **Desktop pet** section follows **Wallpaper*
 always-on-top window. The feature is off by default and is only available in the Electron app.
 Like wallpaper, size, library, import/refresh, and creation settings appear only while the pet
 is enabled. Disabling it preserves the creation draft and model selection.
+
+Pet packages, selection, visibility, size, and position remain on this computer;
+connecting a phone or tablet to its daemon does not synchronize the pet or its
+overlay. The authoring conversation is an ordinary OMP conversation, not a pet
+asset-sync channel.
+
 On macOS, enabling the pet does not activate its window or take keyboard focus away from
 the application you are using. It stays visible across Spaces, including full-screen apps.
 On launch, an enabled pet waits until initial service startup settles and the main
@@ -260,6 +272,11 @@ In **Settings → Appearance**, enable **Wallpaper**, choose **File**, and use
 **Add files** to select images and videos with the system file picker. Ctrl/Shift
 multi-selection and files from different folders are supported. Candidates are saved
 across restarts; the originals stay in their existing locations.
+
+Wallpaper files, candidate records, and the Desktop selection stay on this
+computer. Pairing a phone or tablet does not copy wallpaper media or settings
+from Desktop. A Web browser may set its own URL wallpaper independently in that
+browser's local settings; this is not synchronization with the Desktop wallpaper.
 
 The candidate grid scrolls continuously inside Settings. It is virtualized rather
 than paginated or limited to the first 48 files. Covers are static images, including
@@ -920,6 +937,23 @@ On desktop, right-click an HTTP(S) conversation link to open it in the selected 
 
 Choose the external browser under **Settings → General → Browser**. **System default** follows the operating system; installed Chrome, Edge, Firefox, Brave, Chromium, and Safari targets appear where supported. If a selected browser is later removed, OMP Desktop reports the unavailable browser instead of silently opening a different one.
 
+Choose **Custom executable** to use an absolute browser or launcher path and an
+ordered argument list, then select **Save custom browser**. Each editable argument
+is passed literally, including spaces, quotes, backslashes, newlines, and empty
+values. Include exactly one argument equal to `{url}`; OMP replaces that entire
+argument with the original HTTP(S) URL. Do not add shell quotes around paths or
+embed `{url}` in another argument. For example, select
+`C:\Program Files\Google\Chrome\Application\chrome.exe` with separate arguments
+`--profile-directory=OMP Profile` and `{url}`.
+
+Windows custom launchers must be native `.exe` or `.com` files; `.cmd` and `.bat`
+are rejected because they require command-shell interpretation. On macOS, use
+the executable inside an application bundle rather than its `.app` directory.
+Custom launch failures are reported without falling back to another browser.
+Saved custom arguments survive switching browser targets and restarting Desktop.
+This preference affects only OMP's external HTTP(S) links: it does not change the
+OS default browser, other applications, or assistant browser relay/CDP settings.
+
 On the local desktop host, right-click a resolvable workspace file link to reveal it in the system file manager (Explorer on Windows), without opening or executing it. Relative paths, URL-encoded names, and line suffixes use the same resolution as left-click. Remote-host links do not offer local reveal; missing targets and paths outside the workspace, including symlink escapes, are rejected with an error. Left-click behavior is unchanged.
 
 ## Assistant message math
@@ -1140,14 +1174,14 @@ certificate (or `CSC_LINK`) and one of electron-builder's notarization credentia
 When those credentials are present, the script verifies the application's code signature, stapled
 notarization ticket, and Gatekeeper assessment after packaging.
 
-Windows installers are produced in separate electron-builder invocations. Build one architecture with:
+The mini-electron Windows runtime currently supports x64 only. Build its installer with:
 
 ```bash
 npm run build:windows:x64
-npm run build:windows:arm64
 ```
 
-Run `npm run build:windows` to build both sequentially. Publish the resulting `OMP-Desktop-Setup-<version>-x64.exe` and `OMP-Desktop-Setup-<version>-arm64.exe`; no combined installer is produced.
+`npm run build:windows` builds the same x64 target. The installer is
+`OMP-Desktop-Setup-<version>-x64.exe`; there is no arm64 or combined installer.
 
 Windows daemon and CLI process-tree cleanup launch `taskkill.exe /T /F` directly with a hidden
 console, avoiding transient `cmd.exe` windows during provider refresh and process shutdown.
