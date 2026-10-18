@@ -4,6 +4,10 @@ A [mini-electron](https://github.com/iris-cat-dev/mini-electron) and Web client 
 
 Current source version: **0.5.2**.
 
+The daemon decodes OMP's JSONL stdout and diagnostic stderr as UTF-8 streams,
+preserving Chinese characters and emoji even when their bytes span pipe data blocks.
+JSONL line framing and protocol-v2 chunk reassembly remain unchanged.
+
 ## Requirements
 
 - Node.js from `.tool-versions` and npm workspaces for development and source builds
