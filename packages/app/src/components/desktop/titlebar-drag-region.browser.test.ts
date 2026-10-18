@@ -1,5 +1,3 @@
-/// <reference types="vite/client" />
-
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
