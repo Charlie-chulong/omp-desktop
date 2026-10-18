@@ -25,7 +25,12 @@ vi.mock("@/desktop/hooks/desktop-ipc-error", () => ({
   useDesktopIpcErrorReporter: () => service.report,
   useDesktopIpcQueryErrorToast: () => {},
 }));
-import { DEFAULT_DESKTOP_SETTINGS, useDesktopSettings } from "./desktop-settings";
+import {
+  DEFAULT_DESKTOP_SETTINGS,
+  loadDesktopSettings,
+  updatePersistedDesktopSettings,
+  useDesktopSettings,
+} from "./desktop-settings";
 
 let queryClient: QueryClient;
 function Wrapper({ children }: PropsWithChildren) {
@@ -67,6 +72,48 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   queryClient.clear();
+});
+
+describe("desktop browser settings normalization", () => {
+  it("keeps legacy browser targets and supplies unconfigured custom defaults", async () => {
+    service.invoke.mockResolvedValueOnce({ browser: { target: "firefox" } });
+    expect((await loadDesktopSettings()).browser).toEqual({
+      target: "firefox",
+      custom: { executable: "", args: ["{url}"] },
+    });
+  });
+
+  it("preserves literal custom executable and argv text when reading and patching", async () => {
+    const custom = {
+      executable: "/Applications/Browser With Spaces/browser",
+      args: ["", 'literal "quotes"', "C:\\literal\\path", "first\nsecond", "{url}", "  "],
+    };
+    const persisted = { ...DEFAULT_DESKTOP_SETTINGS, browser: { target: "custom", custom } };
+    service.invoke.mockResolvedValueOnce(persisted);
+    expect((await loadDesktopSettings()).browser).toEqual(persisted.browser);
+    service.invoke.mockResolvedValueOnce(persisted);
+    expect((await updatePersistedDesktopSettings({ browser: { custom } })).browser).toEqual(
+      persisted.browser,
+    );
+    expect(service.invoke).toHaveBeenLastCalledWith("patch_desktop_settings", {
+      browser: { custom },
+    });
+  });
+
+  it("sends a target-only patch without replacing the saved custom configuration", async () => {
+    const custom = { executable: "/opt/browser", args: ["--private", "{url}", ""] };
+    const persisted = {
+      ...DEFAULT_DESKTOP_SETTINGS,
+      browser: { target: "system", custom },
+    };
+    service.invoke.mockResolvedValueOnce(persisted);
+    expect(
+      (await updatePersistedDesktopSettings({ browser: { target: "system" } })).browser,
+    ).toEqual(persisted.browser);
+    expect(service.invoke).toHaveBeenLastCalledWith("patch_desktop_settings", {
+      browser: { target: "system" },
+    });
+  });
 });
 
 describe("native desktop pet settings", () => {

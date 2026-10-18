@@ -19,6 +19,10 @@ export interface DesktopSettings {
   releaseChannel: ReleaseChannel;
   browser: {
     target: DesktopBrowserTargetId;
+    custom: {
+      executable: string;
+      args: string[];
+    };
   };
   notifications: {
     playSound: boolean;
@@ -42,6 +46,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   releaseChannel: "stable",
   browser: {
     target: "system",
+    custom: { executable: "", args: ["{url}"] },
   },
   notifications: {
     playSound: true,
@@ -223,6 +228,7 @@ function parseDesktopSettings(raw: unknown): DesktopSettings {
   const notifications = isRecord(record.notifications) ? record.notifications : {};
   const daemon = isRecord(record.daemon) ? record.daemon : {};
   const browser = isRecord(record.browser) ? record.browser : {};
+  const customBrowser = isRecord(browser.custom) ? browser.custom : {};
 
   return {
     releaseChannel: record.releaseChannel === "beta" ? "beta" : "stable",
@@ -230,6 +236,14 @@ function parseDesktopSettings(raw: unknown): DesktopSettings {
       target: isDesktopBrowserTargetId(browser.target)
         ? browser.target
         : DEFAULT_DESKTOP_SETTINGS.browser.target,
+      custom: {
+        executable: typeof customBrowser.executable === "string" ? customBrowser.executable : "",
+        args:
+          Array.isArray(customBrowser.args) &&
+          customBrowser.args.every((arg): arg is string => typeof arg === "string")
+            ? customBrowser.args
+            : ["{url}"],
+      },
     },
     notifications: {
       playSound:
@@ -291,7 +305,8 @@ function isDesktopBrowserTargetId(value: unknown): value is DesktopBrowserTarget
     value === "firefox" ||
     value === "brave" ||
     value === "chromium" ||
-    value === "safari"
+    value === "safari" ||
+    value === "custom"
   );
 }
 

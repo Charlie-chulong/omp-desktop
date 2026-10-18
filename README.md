@@ -875,6 +875,23 @@ On desktop, right-click an HTTP(S) conversation link to open it in the selected 
 
 Choose the external browser under **Settings → General → Browser**. **System default** follows the operating system; installed Chrome, Edge, Firefox, Brave, Chromium, and Safari targets appear where supported. If a selected browser is later removed, OMP Desktop reports the unavailable browser instead of silently opening a different one.
 
+Choose **Custom executable** to use an absolute browser or launcher path and an
+ordered argument list, then select **Save custom browser**. Each editable argument
+is passed literally, including spaces, quotes, backslashes, newlines, and empty
+values. Include exactly one argument equal to `{url}`; OMP replaces that entire
+argument with the original HTTP(S) URL. Do not add shell quotes around paths or
+embed `{url}` in another argument. For example, select
+`C:\Program Files\Google\Chrome\Application\chrome.exe` with separate arguments
+`--profile-directory=OMP Profile` and `{url}`.
+
+Windows custom launchers must be native `.exe` or `.com` files; `.cmd` and `.bat`
+are rejected because they require command-shell interpretation. On macOS, use
+the executable inside an application bundle rather than its `.app` directory.
+Custom launch failures are reported without falling back to another browser.
+Saved custom arguments survive switching browser targets and restarting Desktop.
+This preference affects only OMP's external HTTP(S) links: it does not change the
+OS default browser, other applications, or assistant browser relay/CDP settings.
+
 On the local desktop host, right-click a resolvable workspace file link to reveal it in the system file manager (Explorer on Windows), without opening or executing it. Relative paths, URL-encoded names, and line suffixes use the same resolution as left-click. Remote-host links do not offer local reveal; missing targets and paths outside the workspace, including symlink escapes, are rejected with an error. Left-click behavior is unchanged.
 
 ## Assistant message math

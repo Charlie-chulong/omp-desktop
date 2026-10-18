@@ -2131,6 +2131,24 @@ export const ko: TranslationResources = {
       selectedUnavailable: "{{browser}}이(가) 설치되어 있지 않습니다. 다른 브라우저를 선택하세요.",
       accessibilityLabel: "{{browser}}로 링크 열기",
       loadFailed: "사용 가능한 브라우저를 불러올 수 없습니다.",
+      custom: "사용자 지정 실행 파일",
+      executable: "실행 파일 경로",
+      executableHint:
+        "셸 따옴표 없이 실행 파일의 절대 경로를 입력하세요. Windows에서는 네이티브 .exe 또는 .com 파일을 사용하세요.",
+      arguments: "인수",
+      argumentsHint:
+        "각 행은 빈 행, 따옴표, 역슬래시, 줄바꿈을 포함하여 하나의 인수로 그대로 전달됩니다. {url}만 포함하는 행을 정확히 하나 지정하세요. 셸 구문 분석은 수행하지 않습니다.",
+      argument: "인수 {{index}}",
+      addArgument: "인수 추가",
+      remove: "삭제",
+      removeArgument: "인수 {{index}} 삭제",
+      save: "사용자 지정 브라우저 저장",
+      executableError: "실행 파일의 절대 경로를 입력하세요.",
+      urlArgumentError:
+        "{url}과 정확히 일치하는 인수를 하나만 포함하세요. 다른 인수 안에 {url}을 넣지 마세요.",
+      nulError: "실행 파일 경로와 인수에는 NUL 문자를 포함할 수 없습니다.",
+      customSaveFailed:
+        "사용자 지정 브라우저를 저장할 수 없습니다. 편집 내용은 유지됩니다. 실행 파일과 인수를 확인한 후 다시 시도하세요.",
     },
     general: {
       title: "일반",
