@@ -41,6 +41,7 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
+import { QueuedConversationOrder } from "@/composer/queued-conversation-order";
 import { resolveModelBrowserProviderNamespaceId } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpAccountFeatureSelection } from "@/components/omp-provider-accounts";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
@@ -379,71 +380,29 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
 
 interface RenderQueueTrackArgs {
   queuedMessages: readonly QueuedMessage[];
-  queuePosition: number;
-  queueCount: number;
   handleEditQueuedMessage: (id: string) => void;
   handleSendQueuedNow: (id: string) => Promise<void>;
   handleMoveQueuedMessage: (id: string, offset: -1 | 1) => void;
-  handleMoveQueuedAgentEarlier: () => void;
-  handleMoveQueuedAgentLater: () => void;
   editLabel: string;
   sendNowLabel: string;
   moveMessageEarlierLabel: string;
   moveMessageLaterLabel: string;
-  positionLabel: string;
-  moveEarlierLabel: string;
-  moveLaterLabel: string;
 }
 
 function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
   const {
     queuedMessages,
-    queuePosition,
-    queueCount,
     handleEditQueuedMessage,
     handleSendQueuedNow,
     handleMoveQueuedMessage,
-    handleMoveQueuedAgentEarlier,
-    handleMoveQueuedAgentLater,
     editLabel,
     sendNowLabel,
     moveMessageEarlierLabel,
     moveMessageLaterLabel,
-    positionLabel,
-    moveEarlierLabel,
-    moveLaterLabel,
   } = args;
   if (queuedMessages.length === 0) return null;
   return (
     <View style={styles.queueTrack}>
-      {queueCount > 1 ? (
-        <View style={styles.queueOrder}>
-          <Text style={styles.queueOrderText}>{positionLabel}</Text>
-          <View style={styles.queueActions}>
-            <Pressable
-              onPress={handleMoveQueuedAgentEarlier}
-              disabled={queuePosition <= 1}
-              style={[styles.queueOrderButton, queuePosition <= 1 && styles.buttonDisabled]}
-              accessibilityLabel={moveEarlierLabel}
-              accessibilityRole="button"
-            >
-              <ThemedChevronUp size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-            </Pressable>
-            <Pressable
-              onPress={handleMoveQueuedAgentLater}
-              disabled={queuePosition >= queueCount}
-              style={[
-                styles.queueOrderButton,
-                queuePosition >= queueCount && styles.buttonDisabled,
-              ]}
-              accessibilityLabel={moveLaterLabel}
-              accessibilityRole="button"
-            >
-              <ThemedChevronDown size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
       {queuedMessages.map((item, index) => (
         <QueuedMessageRow
           key={item.id}
@@ -1271,20 +1230,6 @@ function ComposerContentImpl({
   const queuedMessages = queuedMessagesRaw ?? EMPTY_ARRAY;
 
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
-  const { queuePosition, queueCount } = useSessionStore(
-    useShallow((state) => {
-      const session = state.sessions[serverId];
-      let position = 0;
-      let count = 0;
-      for (const queuedAgentId of session?.queuedAgentOrder ?? []) {
-        if ((session?.queuedMessages.get(queuedAgentId)?.length ?? 0) === 0) continue;
-        count += 1;
-        if (queuedAgentId === agentId) position = count;
-      }
-      return { queuePosition: position, queueCount: count };
-    }),
-  );
-  const moveQueuedAgent = useSessionStore((state) => state.moveQueuedAgent);
 
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
@@ -1982,16 +1927,6 @@ function ComposerContentImpl({
     [agentId, queueWriter],
   );
 
-  const handleMoveQueuedAgentEarlier = useCallback(() => {
-    moveQueuedAgent(serverId, agentId, -1);
-    getHostRuntimeStore().reevaluateQueuedAgentMessages(serverId);
-  }, [agentId, moveQueuedAgent, serverId]);
-
-  const handleMoveQueuedAgentLater = useCallback(() => {
-    moveQueuedAgent(serverId, agentId, 1);
-    getHostRuntimeStore().reevaluateQueuedAgentMessages(serverId);
-  }, [agentId, moveQueuedAgent, serverId]);
-
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
@@ -2377,35 +2312,15 @@ function ComposerContentImpl({
     () =>
       renderQueueTrack({
         queuedMessages,
-        queuePosition,
-        queueCount,
         handleEditQueuedMessage,
         handleSendQueuedNow,
         handleMoveQueuedMessage,
-        handleMoveQueuedAgentEarlier,
-        handleMoveQueuedAgentLater,
         editLabel: t("composer.attachments.editQueuedMessage"),
         sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
         moveMessageEarlierLabel: t("composer.attachments.moveQueuedMessageEarlier"),
         moveMessageLaterLabel: t("composer.attachments.moveQueuedMessageLater"),
-        positionLabel: t("composer.attachments.queuedConversationPosition", {
-          position: queuePosition,
-          count: queueCount,
-        }),
-        moveEarlierLabel: t("composer.attachments.moveQueuedConversationEarlier"),
-        moveLaterLabel: t("composer.attachments.moveQueuedConversationLater"),
       }),
-    [
-      handleEditQueuedMessage,
-      handleMoveQueuedAgentEarlier,
-      handleMoveQueuedMessage,
-      handleMoveQueuedAgentLater,
-      handleSendQueuedNow,
-      queueCount,
-      queuedMessages,
-      queuePosition,
-      t,
-    ],
+    [handleEditQueuedMessage, handleMoveQueuedMessage, handleSendQueuedNow, queuedMessages, t],
   );
 
   const messageInputContainerRef = useRef<View>(null);
@@ -2460,6 +2375,7 @@ function ComposerContentImpl({
         >
           <ComposerFileDropRegistration sink={fileDropSink} />
           <View style={styles.inputAreaContent}>
+            <QueuedConversationOrder serverId={serverId} />
             {queueList}
             {sendErrorNode}
 
@@ -2638,24 +2554,6 @@ const styles = StyleSheet.create((theme: Theme) => ({
   queueTrack: {
     flexDirection: "column",
     gap: theme.spacing[2],
-  },
-  queueOrder: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing[1],
-  },
-  queueOrderText: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  queueOrderButton: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.borderRadius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.surface2,
   },
   queueItem: {
     flexDirection: "row",

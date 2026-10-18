@@ -2669,6 +2669,77 @@ describe("HostRuntimeStore", () => {
     useSessionStore.getState().clearSession(host.serverId);
   });
 
+  it("dispatches a dragged queue order without interrupting a running conversation", async () => {
+    const host = makeHost({ serverId: "srv_dragged_queue" });
+    const fakeClient = new FakeDaemonClient();
+    const store = new HostRuntimeStore();
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    const entries = ["first", "second", "third"].map((id) =>
+      makeFetchAgentsEntry({ id, cwd: "/repo", updatedAt: "2026-07-12T10:00:00.000Z" }),
+    );
+    sessionStore.setAgents(
+      host.serverId,
+      new Map(
+        entries.map((entry) => [
+          entry.agent.id,
+          {
+            ...replicaAgent(entry.agent, host.serverId),
+            status: entry.agent.id === "first" ? ("running" as const) : ("idle" as const),
+          },
+        ]),
+      ),
+    );
+    sessionStore.setQueuedMessages(
+      host.serverId,
+      new Map(
+        entries.map((entry) => [
+          entry.agent.id,
+          [{ id: `message-${entry.agent.id}`, text: `run ${entry.agent.id}`, attachments: [] }],
+        ]),
+      ),
+    );
+    sessionStore.reorderQueuedAgents(host.serverId, ["third", "second", "first"]);
+
+    store.reevaluateQueuedAgentMessages(host.serverId);
+    await fakeClient.waitForSentMessages(1);
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third"]);
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("third")).toBe(
+        false,
+      );
+    });
+
+    store.drainQueuedAgentMessage(host.serverId, "third");
+    await fakeClient.waitForSentMessages(2);
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third", "second"]);
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("second")).toBe(
+        false,
+      );
+    });
+
+    store.drainQueuedAgentMessage(host.serverId, "second");
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third", "second"]);
+    sessionStore.setAgents(
+      host.serverId,
+      new Map(
+        entries.map((entry) => [
+          entry.agent.id,
+          { ...replicaAgent(entry.agent, host.serverId), status: "idle" as const },
+        ]),
+      ),
+    );
+    store.drainQueuedAgentMessage(host.serverId, "first");
+    await fakeClient.waitForSentMessages(3);
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual([
+      "third",
+      "second",
+      "first",
+    ]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
   it("drains a reordered conversation in visible order without interrupting its active turn", async () => {
     const host = makeHost({ serverId: "srv_reordered_messages" });
     const fakeClient = new FakeDaemonClient();

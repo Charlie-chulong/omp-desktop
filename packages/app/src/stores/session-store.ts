@@ -663,6 +663,7 @@ interface SessionStoreActions {
       | ((prev: Map<string, QueuedMessageState[]>) => Map<string, QueuedMessageState[]>),
   ) => void;
   moveQueuedAgent: (serverId: string, agentId: string, offset: -1 | 1) => void;
+  reorderQueuedAgents: (serverId: string, agentIds: readonly string[]) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -2043,6 +2044,38 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, queuedAgentOrder },
+            },
+          };
+        });
+      },
+
+      reorderQueuedAgents: (serverId, agentIds) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) return prev;
+
+          if (
+            agentIds.length === session.queuedAgentOrder.length &&
+            agentIds.every((agentId, index) => session.queuedAgentOrder[index] === agentId)
+          ) {
+            return prev;
+          }
+
+          const activeAgentIds = new Set<string>();
+          for (const [agentId, queue] of session.queuedMessages) {
+            if (queue.length > 0) activeAgentIds.add(agentId);
+          }
+          // A drag may finish after a conversation drained or joined the queue.
+          if (agentIds.length !== activeAgentIds.size) return prev;
+          for (const agentId of agentIds) {
+            if (!activeAgentIds.delete(agentId)) return prev;
+          }
+
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, queuedAgentOrder: [...agentIds] },
             },
           };
         });

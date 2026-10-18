@@ -126,6 +126,13 @@ export const ru: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Диалоги в очереди",
+      hint: "Удерживайте и перетаскивайте маркер или используйте стрелки. Текущие ходы продолжатся.",
+      dragConversation: "Изменить порядок: {{title}}",
+      messageCount: "Сообщения в очереди: {{count}}",
+      untitledConversation: "Диалог без названия · {{id}}",
+    },
     placeholders: {
       desktop: "Напишите агенту сообщение, отметьте @files или используйте /commands и /skills.",
       mobile: "Сообщение,@files,/commands",

@@ -140,6 +140,13 @@ export const en = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Queued conversations",
+      hint: "Hold and drag a handle or use arrows. Running turns continue.",
+      dragConversation: "Reorder {{title}}",
+      messageCount: "Queued messages: {{count}}",
+      untitledConversation: "Untitled conversation · {{id}}",
+    },
     placeholders: {
       desktop: "Message the agent, tag @files, or use /commands and /skills",
       mobile: "Message, @files, /commands",

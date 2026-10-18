@@ -85,6 +85,273 @@ function taskTexts(tasks: ReadonlyArray<{ text: string }>): string[] {
   return tasks.map((task) => task.text);
 }
 
+describe("queued conversation ordering", () => {
+  function queuedMessages(...ids: string[]) {
+    return ids.map((id) => ({ id, text: id, attachments: [] }));
+  }
+
+  function initializeQueues(agentIds: readonly string[] = ["a", "b", "c"]) {
+    initializeTestSession();
+    const store = useSessionStore.getState();
+    store.setQueuedMessages(
+      "test-server",
+      new Map(agentIds.map((agentId) => [agentId, queuedMessages(`${agentId}-1`)])),
+    );
+    return store;
+  }
+
+  afterEach(() => {
+    useSessionStore.getState().clearSession("other-server");
+  });
+
+  it("moves the last conversation to the front without changing its messages or session state", () => {
+    const store = initializeQueues(["a", "b", "c", "d", "e"]);
+    store.setQueuedMessages("test-server", (current) => {
+      const next = new Map(current);
+      next.set("e", queuedMessages("e-1", "e-2"));
+      return next;
+    });
+    const before = useSessionStore.getState().sessions["test-server"]!;
+    const order = ["e", "a", "b", "c", "d"] as const;
+
+    store.reorderQueuedAgents("test-server", order);
+
+    const after = useSessionStore.getState().sessions["test-server"]!;
+    expect(after.queuedAgentOrder).toEqual(order);
+    expect(after.queuedAgentOrder).not.toBe(order);
+    expect(after).toEqual({ ...before, queuedAgentOrder: [...order] });
+    expect(after.queuedMessages).toBe(before.queuedMessages);
+    expect(after.queuedMessages.get("e")).toBe(before.queuedMessages.get("e"));
+    expect(after.queuedMessages.get("e")?.map((message) => message.id)).toEqual(["e-1", "e-2"]);
+    expect(before.queuedAgentOrder).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("preserves state identity for the same order or a missing host", () => {
+    const store = initializeQueues();
+    const before = useSessionStore.getState();
+
+    store.reorderQueuedAgents("test-server", ["a", "b", "c"]);
+    expect(useSessionStore.getState()).toBe(before);
+
+    store.reorderQueuedAgents("missing-server", ["c", "a", "b"]);
+    expect(useSessionStore.getState()).toBe(before);
+  });
+
+  it("preserves state identity for empty and single-conversation queues", () => {
+    const store = initializeQueues([]);
+    const empty = useSessionStore.getState();
+    store.reorderQueuedAgents("test-server", []);
+    expect(useSessionStore.getState()).toBe(empty);
+
+    store.setQueuedMessages("test-server", new Map([["a", queuedMessages("a-1")]]));
+    const single = useSessionStore.getState();
+    store.reorderQueuedAgents("test-server", ["a"]);
+    expect(useSessionStore.getState()).toBe(single);
+  });
+
+  it.each([
+    { reason: "duplicate IDs", order: ["c", "a", "a"] },
+    { reason: "unknown IDs", order: ["c", "unknown", "a"] },
+    { reason: "missing IDs", order: ["c", "a"] },
+    { reason: "extra IDs", order: ["d", "c", "a", "b"] },
+    { reason: "an empty result", order: [] },
+  ])("rejects $reason without publishing any state change", ({ order }) => {
+    const store = initializeQueues();
+    const before = useSessionStore.getState();
+
+    store.reorderQueuedAgents("test-server", order);
+
+    expect(useSessionStore.getState()).toBe(before);
+    expect(before.sessions["test-server"]?.queuedAgentOrder).toEqual(["a", "b", "c"]);
+  });
+
+  it.each(["removed", "empty"] as const)(
+    "rejects a drag result when a conversation has drained and its queue is %s",
+    (drainedState) => {
+      const store = initializeQueues();
+      const draggedOrder = ["c", "a", "b"];
+      store.setQueuedMessages("test-server", (current) => {
+        const next = new Map(current);
+        if (drainedState === "removed") next.delete("b");
+        else next.set("b", []);
+        return next;
+      });
+      const before = useSessionStore.getState();
+
+      store.reorderQueuedAgents("test-server", draggedOrder);
+
+      expect(useSessionStore.getState()).toBe(before);
+      expect(before.sessions["test-server"]?.queuedMessages.get("b")).toEqual(
+        drainedState === "removed" ? undefined : [],
+      );
+    },
+  );
+
+  it("rejects a drag result when another conversation was enqueued", () => {
+    const store = initializeQueues();
+    const draggedOrder = ["c", "a", "b"];
+    store.setQueuedMessages("test-server", (current) => {
+      const next = new Map(current);
+      next.set("d", queuedMessages("d-1"));
+      return next;
+    });
+    const before = useSessionStore.getState();
+
+    store.reorderQueuedAgents("test-server", draggedOrder);
+
+    expect(useSessionStore.getState()).toBe(before);
+    expect(before.sessions["test-server"]?.queuedAgentOrder).toEqual(["a", "b", "c", "d"]);
+    expect(before.sessions["test-server"]?.queuedMessages.get("d")?.[0]?.id).toBe("d-1");
+  });
+
+  it("rejects an equally sized stale order after a drained conversation was replaced", () => {
+    const store = initializeQueues();
+    const draggedOrder = ["c", "a", "b"];
+    store.setQueuedMessages("test-server", (current) => {
+      const next = new Map(current);
+      next.delete("b");
+      next.set("d", queuedMessages("d-1"));
+      return next;
+    });
+    const before = useSessionStore.getState();
+
+    store.reorderQueuedAgents("test-server", draggedOrder);
+
+    expect(useSessionStore.getState()).toBe(before);
+    expect(before.sessions["test-server"]?.queuedAgentOrder).toEqual(["a", "c", "d"]);
+    expect(before.sessions["test-server"]?.queuedMessages.has("b")).toBe(false);
+  });
+
+  it("uses the latest messages when the active conversation set is unchanged", () => {
+    const store = initializeQueues();
+    const draggedOrder = ["c", "a", "b"];
+    store.setQueuedMessages("test-server", (current) => {
+      const next = new Map(current);
+      next.set("a", queuedMessages("a-1", "a-2"));
+      return next;
+    });
+    const before = useSessionStore.getState().sessions["test-server"]!;
+
+    store.reorderQueuedAgents("test-server", draggedOrder);
+
+    const after = useSessionStore.getState().sessions["test-server"]!;
+    expect(after.queuedAgentOrder).toEqual(draggedOrder);
+    expect(after.queuedMessages).toBe(before.queuedMessages);
+    expect(after.queuedMessages.get("a")?.map((message) => message.id)).toEqual(["a-1", "a-2"]);
+  });
+
+  it("validates against nonempty queues rather than retained empty map entries", () => {
+    const store = initializeQueues();
+    store.setQueuedMessages("test-server", (current) => {
+      const next = new Map(current);
+      next.set("b", []);
+      return next;
+    });
+    const before = useSessionStore.getState();
+
+    store.reorderQueuedAgents("test-server", ["c", "b"]);
+    expect(useSessionStore.getState()).toBe(before);
+
+    store.reorderQueuedAgents("test-server", ["c", "a"]);
+    const after = useSessionStore.getState().sessions["test-server"]!;
+    expect(after.queuedAgentOrder).toEqual(["c", "a"]);
+    expect(after.queuedMessages).toBe(before.sessions["test-server"]?.queuedMessages);
+    expect(after.queuedMessages.get("b")).toEqual([]);
+  });
+
+  it("preserves the selected order while queue updates append newly active conversations", () => {
+    const store = initializeQueues();
+    store.reorderQueuedAgents("test-server", ["c", "a", "b"]);
+
+    store.setQueuedMessages(
+      "test-server",
+      new Map([
+        ["b", queuedMessages("b-1", "b-2")],
+        ["d", queuedMessages("d-1")],
+        ["a", queuedMessages("a-1")],
+        ["c", queuedMessages("c-1")],
+      ]),
+    );
+
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedAgentOrder).toEqual([
+      "c",
+      "a",
+      "b",
+      "d",
+    ]);
+  });
+
+  it("keeps hosts isolated even when they share conversation IDs", () => {
+    const store = initializeQueues();
+    store.initializeSession("other-server", null);
+    store.setQueuedMessages(
+      "other-server",
+      new Map([
+        ["a", queuedMessages("other-a-1")],
+        ["b", queuedMessages("other-b-1")],
+        ["other-only", queuedMessages("other-only-1")],
+      ]),
+    );
+    const before = useSessionStore.getState();
+
+    store.reorderQueuedAgents("test-server", ["c", "other-only", "a"]);
+    expect(useSessionStore.getState()).toBe(before);
+
+    store.reorderQueuedAgents("test-server", ["c", "a", "b"]);
+    const reordered = useSessionStore.getState();
+    expect(reordered.sessions["test-server"]?.queuedAgentOrder).toEqual(["c", "a", "b"]);
+    expect(reordered.sessions["other-server"]).toBe(before.sessions["other-server"]);
+    expect(reordered.sessions["test-server"]?.queuedMessages).toBe(
+      before.sessions["test-server"]?.queuedMessages,
+    );
+
+    store.reorderQueuedAgents("other-server", ["other-only", "b", "a"]);
+    const after = useSessionStore.getState();
+    expect(after.sessions["test-server"]).toBe(reordered.sessions["test-server"]);
+    expect(after.sessions["other-server"]?.queuedAgentOrder).toEqual(["other-only", "b", "a"]);
+    expect(after.sessions["other-server"]?.queuedMessages).toBe(
+      before.sessions["other-server"]?.queuedMessages,
+    );
+  });
+
+  it("retains one-position arrow moves after drag reordering without changing messages", () => {
+    const store = initializeQueues(["a", "b", "c", "d"]);
+    store.reorderQueuedAgents("test-server", ["d", "a", "b", "c"]);
+    const messages = useSessionStore.getState().sessions["test-server"]?.queuedMessages;
+
+    store.moveQueuedAgent("test-server", "b", -1);
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedAgentOrder).toEqual([
+      "d",
+      "b",
+      "a",
+      "c",
+    ]);
+
+    store.moveQueuedAgent("test-server", "b", 1);
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedAgentOrder).toEqual([
+      "d",
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(useSessionStore.getState().sessions["test-server"]?.queuedMessages).toBe(messages);
+  });
+
+  it("retains arrow boundary, missing-conversation, and missing-host no-ops", () => {
+    const store = initializeQueues();
+    const before = useSessionStore.getState();
+
+    store.moveQueuedAgent("test-server", "a", -1);
+    expect(useSessionStore.getState()).toBe(before);
+    store.moveQueuedAgent("test-server", "c", 1);
+    expect(useSessionStore.getState()).toBe(before);
+    store.moveQueuedAgent("test-server", "missing", 1);
+    expect(useSessionStore.getState()).toBe(before);
+    store.moveQueuedAgent("missing-server", "a", 1);
+    expect(useSessionStore.getState()).toBe(before);
+  });
+});
+
 describe("agent task state", () => {
   it("notifies the task subscriber only when its task snapshot changes", () => {
     initializeTestSession();

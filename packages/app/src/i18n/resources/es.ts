@@ -126,6 +126,13 @@ export const es: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Conversaciones en cola",
+      hint: "Mantén pulsado y arrastra un asa o usa las flechas. Los turnos en curso continúan.",
+      dragConversation: "Reordenar {{title}}",
+      messageCount: "Mensajes en cola: {{count}}",
+      untitledConversation: "Conversación sin título · {{id}}",
+    },
     placeholders: {
       desktop: "Envíe un mensaje al agente, etiquete@fileso use/commandsy/skills",
       mobile: "Mensaje,@files,/commands",
