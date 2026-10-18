@@ -96,6 +96,20 @@ before readiness use the latest pet settings; disabling it prevents a startup fl
   Dragging does not trigger petting. Click the status bubble to restore OMP and
   open the task that needs attention, or open the app when there is no pending task.
 - The status bubble stays close to the kitten's upper left and follows its size.
+  The corner nearest the pet stays anchored when captions or task counts change;
+  longer captions expand left and are ellipsized within the available space.
+  Main-window zoom does not change the companion's scale. Layout and pointer hit
+  bounds refresh when the companion's viewport changes.
+- Only main conversations contribute to the pet's status, task count, menu, and
+  click target. Subagents are excluded even when their parent is missing or they
+  use a separate workspace. Independent main conversations in the same workspace
+  remain separate tasks.
+- Task names follow workspace-tab names: the primary conversation uses the renamed
+  workspace title, while other independent conversations keep their own names.
+  Renames refresh these labels without waiting for new task activity.
+- The native context menu shortens long task names after 20 displayed characters
+  and adds an ellipsis, without splitting composed characters or changing the
+  full task title or conversation selected by a click.
 - Connected hosts supply real task state. Permissions take priority over errors,
   unread completions, and running work. No task or animation triggers a model call.
 - On daemons with directory revisions, completed directory reads determine freshness,
@@ -218,11 +232,28 @@ resolve blob URLs. Non-image attachments retain revocable blob previews.
 
 ## Desktop wallpaper
 
-In **Settings → Appearance**, enable **Wallpaper** and choose either a local folder or an
-HTTP(S) image/video URL. Local previews are limited to the first 48 supported regular files
-(`jpg`, `jpeg`, `png`, `gif`, `webp`, `bmp`, `avif`, `mp4`, `m4v`, `webm`, `mov`, or `ogv`);
-expand the preview grid to see all returned entries. URL media type detection uses the URL
-pathname, so signed video URLs with query strings are supported.
+In **Settings → Appearance**, enable **Wallpaper**, choose **File**, and use
+**Add files** to select images and videos with the system file picker. Ctrl/Shift
+multi-selection and files from different folders are supported. Candidates are saved
+across restarts; the originals stay in their existing locations.
+
+The candidate grid scrolls continuously inside Settings. It is virtualized rather
+than paginated or limited to the first 48 files. Covers are static images, including
+video covers. Adding candidates does not change the background: click a card to apply
+it manually. There is no automatic rotation.
+
+Use **Manage** to select and remove multiple candidates, including items scrolled out
+of view. Removal only deletes candidate records, never the source files. Removing the
+current candidate restores the theme background without selecting another wallpaper.
+Re-adding the same file creates a new candidate and does not reactivate the old selection.
+Missing or undecodable files remain in the list; restore the file and retry, or remove
+its record.
+
+Supported extensions are `jpg`, `jpeg`, `png`, `gif`, `webp`, `bmp`, `avif`, `mp4`,
+`m4v`, `webm`, `mov`, and `ogv`. Actual playback depends on the media codec; the app
+does not transcode files. The **URL** source still accepts HTTP(S) image/video URLs.
+Media type detection uses the URL pathname, so signed video URLs with query strings
+are supported.
 
 The **Interface transparency** slider covers 0–100% and previews changes without
 writing every intermediate value. Increasing it reveals the media and fades regular
@@ -246,6 +277,31 @@ is restored or maximized.
 Desktop model pickers keep an opaque, theme-matched panel behind the model list and its
 **Thinking**, **Fast**, and **Context window** settings, so wallpaper and conversation text
 cannot show through the footer.
+
+### Isolated Windows wallpaper trial
+
+For a prepared `packages/desktop/release/wallpaper-trial/win-unpacked/` build, use
+`packages/desktop/scripts/launch-wallpaper-trial.cmd`. Do not launch the unpacked EXE directly:
+the launcher supplies an isolated OMP profile. Open **Settings → Appearance → Wallpaper**,
+select **File**, and use **Add files**. No model configuration is needed for local wallpaper testing.
+
+The launcher retains trial settings in `%LOCALAPPDATA%\OMP-Desktop-Wallpaper-Trial`,
+with separate Electron storage, agent configuration and loopback daemon. It does not
+copy the installed app's conversations, model credentials or provider environment.
+Existing trial data is preserved; an existing non-trial directory is refused.
+The native window title identifies the trial, and reopening it foregrounds the
+existing window without stopping its daemon.
+
+Windows `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA` and `LOCALAPPDATA` retain
+their system values, so the native file picker can reuse your existing Quick Access
+folders. Only `HOME` and the explicit OMP/Electron/daemon directories are isolated.
+The launcher does not copy, reset or recreate Windows Quick Access data. Restart
+the trial after launcher changes; existing wallpaper records and trial settings stay.
+
+Application updates are disabled with `PASEO_DISABLE_APP_UPDATES=1`, including
+manual installation and install-on-quit. This is a wallpaper-only trial, not a
+Windows sandbox: do not enable launch-at-login or install CLI/system integrations
+from the trial. Those OS-level actions are outside the trial's scope.
 
 ## Stopping conversations and subagents
 
@@ -1211,6 +1267,18 @@ npm run typecheck
 ```
 
 Run only targeted Vitest files; do not run the full test suite locally.
+
+After building the workspace dependencies, run the companion's native regression:
+
+```bash
+npm run build:main --workspace=@omp-desktop/desktop
+node packages/desktop/e2e/pet-layout-smoke.js
+```
+
+The smoke briefly opens a non-focusing companion with an isolated temporary profile.
+It covers changing captions and task counts, all three sizes, main-window zoom,
+viewport changes, and opaque/transparent pointer targets without calling a model.
+Set `ELECTRON_PATH` to use an existing Electron executable instead of the npm binary.
 
 ## License
 

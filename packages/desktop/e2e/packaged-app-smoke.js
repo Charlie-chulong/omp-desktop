@@ -169,9 +169,11 @@ function createDefaultDaemonEnv(extraEnv) {
 function createIsolatedDesktopEnv({ home, listen, userData, cdpPort }) {
   return {
     ...process.env,
+    OMP_DESKTOP_HOME: home,
     PASEO_HOME: home,
     PASEO_LISTEN: listen,
     PASEO_ELECTRON_USER_DATA_DIR: userData,
+    PASEO_DISABLE_APP_UPDATES: "1",
     PASEO_ELECTRON_FLAGS: `--remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
   };
 }
@@ -223,9 +225,10 @@ function assertDarwinDockVisibility(rootPid, guiPid = null) {
   if (listing.error || listing.status !== 0) {
     throw new Error(`Cannot inspect Dock process tree: ${listing.error || listing.stderr}`);
   }
-  const processes = listing.stdout.trim().split(/\r?\n/).map((line) =>
-    line.trim().split(/\s+/).map(Number),
-  );
+  const processes = listing.stdout
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/).map(Number));
   if (!processes.some(([pid]) => pid === rootPid)) {
     throw new Error(`Dock visibility check lost process ${rootPid}`);
   }
@@ -939,6 +942,25 @@ async function smokePackagedDesktopApp({ appPath, executableName }) {
     });
     console.log("Packaged desktop smoke: renderer-started desktop daemon reported running");
     assertDarwinDockVisibility(child.pid, child.pid);
+    await runShellCommand({
+      script:
+        process.platform === "win32"
+          ? `start "" /wait ${shellQuoteCliArg(executablePath)}`
+          : [launch.command, ...launch.args].map(shellQuoteCliArg).join(" "),
+      env,
+      label: "Second desktop instance",
+    });
+    const statusAfterRelaunch = await page.evaluate(() =>
+      window.paseoDesktop.invoke("desktop_daemon_status"),
+    );
+    if (
+      statusAfterRelaunch.status !== "running" ||
+      statusAfterRelaunch.pid !== status.pid ||
+      statusAfterRelaunch.serverId !== status.serverId
+    ) {
+      throw new Error("A second desktop instance stopped or replaced the primary daemon");
+    }
+    console.log("Packaged desktop smoke: second instance preserved the primary daemon");
     await smokeCliShim({ appPath, env });
     await smokeBundledOmpRuntime({ appPath, env });
     await smokeCliTerminal({ appPath, env });
