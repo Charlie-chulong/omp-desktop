@@ -1,13 +1,40 @@
-import React, { act } from "react";
+import React, { act, type ReactNode } from "react";
+import type { StyleProp, View as NativeView, ViewStyle } from "react-native";
 import { createRoot, type Root } from "react-dom/client";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QuotedSelectionContextMenu } from "./quoted-selection-context-menu";
 
+interface StaticFloatingSurfaceProps {
+  children?: ReactNode;
+  frameStyle?: StyleProp<ViewStyle>;
+  nativeID?: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}
+
 vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/hooks/use-fine-pointer", () => ({ useShowPersistentActions: () => true }));
-vi.mock("@/components/quick-ask-popover", () => ({ QuickAskPopover: () => null }));
+// Vitest hoists this platform-module mock before static imports; dynamically
+// load its rendering dependencies only inside the mock factory.
+// Keep the real menu overlay and focus, replacing only the animated frame.
+vi.mock("@/components/ui/floating", async () => {
+  const { forwardRef } = await import("react");
+  const { ScrollView, View } = await import("react-native");
+  return {
+    FloatingSurface: forwardRef<NativeView, StaticFloatingSurfaceProps>(
+      function StaticFloatingSurface({ children, frameStyle, nativeID, style, testID }, ref) {
+        return (
+          <View ref={ref} nativeID={nativeID} style={[style, frameStyle]} testID={testID}>
+            {children}
+          </View>
+        );
+      },
+    ),
+    FloatingScrollView: ScrollView,
+  };
+});
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -64,6 +91,30 @@ function getElement(selector: string): HTMLElement {
   if (!(element instanceof HTMLElement)) throw new Error(`Missing ${selector}`);
   return element;
 }
+async function openSelectionContextMenu(): Promise<void> {
+  const transcript = getElement('[data-testid="transcript-text"]');
+  await selectText(transcript);
+  const event = new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    button: 2,
+    clientX: 120,
+    clientY: 120,
+  });
+  await act(async () => transcript.dispatchEvent(event));
+  expect(event.defaultPrevented).toBe(true);
+  await vi.waitFor(() => {
+    expect(
+      document.querySelector('[data-testid="quoted-selection-context-menu-quote"]'),
+    ).not.toBeNull();
+  });
+}
+
+function menuElement(testId: string): HTMLElement {
+  const node = document.querySelector(`[data-testid="${testId}"]`);
+  if (!(node instanceof HTMLElement)) throw new Error(`Missing context menu item ${testId}`);
+  return node;
+}
 
 describe("explicit transcript selection actions", () => {
   it("quotes a native text selection without hover or right click", async () => {
@@ -72,9 +123,39 @@ describe("explicit transcript selection actions", () => {
     expect(window.getSelection()?.toString()).toBe("Selected transcript text");
     const quote = getElement('[data-testid="quoted-selection-action-quote"]');
     expect(quote.textContent).toBe("composer.attachments.quoteSelection");
-    await userEvent.click(quote);
+    await act(async () => userEvent.click(quote));
     expect(onQuote).toHaveBeenCalledExactlyOnceWith("Selected transcript text");
     expect(window.getSelection()?.toString()).toBe("");
+  });
+
+  it("quotes the captured transcript selection from a mouse right-click menu", async () => {
+    const onQuote = await mountTranscript();
+    await openSelectionContextMenu();
+    // Focusing a native menu item may clear the DOM range before its click arrives.
+    await act(async () => {
+      menuElement("quoted-selection-context-menu-quote").focus();
+      window.getSelection()?.removeAllRanges();
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(window.getSelection()?.toString()).toBe("");
+    await act(async () => userEvent.click(menuElement("quoted-selection-context-menu-quote")));
+    expect(onQuote).toHaveBeenCalledExactlyOnceWith("Selected transcript text");
+    expect(window.getSelection()?.toString()).toBe("");
+  });
+
+  it("opens Quick Ask with the captured transcript selection from a mouse right-click menu", async () => {
+    await mountTranscript();
+    await openSelectionContextMenu();
+    await act(async () => {
+      menuElement("quoted-selection-context-menu-ask").focus();
+      window.getSelection()?.removeAllRanges();
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    expect(window.getSelection()?.toString()).toBe("");
+    await act(async () => userEvent.click(menuElement("quoted-selection-context-menu-ask")));
+    await vi.waitFor(() => {
+      expect(menuElement("quick-ask-popover").textContent).toContain("Selected transcript text");
+    });
   });
 
   it("invalidates the action when selection collapses or moves outside the transcript", async () => {

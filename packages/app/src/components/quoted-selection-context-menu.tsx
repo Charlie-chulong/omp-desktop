@@ -49,6 +49,13 @@ function SelectionContextTarget({
   const contextMenu = useContextMenu();
   const updateSelection = useCallback(() => {
     if (!isWeb || !rootRef.current) return null;
+    // Focusing a context-menu item must not invalidate the transcript selection it acts on.
+    if (
+      contextMenu.open &&
+      document.activeElement?.closest('[data-testid="quoted-selection-context-menu"]')
+    ) {
+      return null;
+    }
     const selection = window.getSelection();
     const text = getQuotedSelectionText(
       rootRef.current as unknown as HTMLElement,
@@ -63,7 +70,7 @@ function SelectionContextTarget({
       range?.cloneRange() ?? null,
     );
     return text;
-  }, [onSelection, rootRef]);
+  }, [contextMenu.open, onSelection, rootRef]);
 
   useEffect(() => {
     if (!isWeb) return;
@@ -169,6 +176,16 @@ export function QuotedSelectionContextMenu({
     );
     const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
     if (text !== selectedText || !isSameQuotedSelectionRange(selectionRangeRef.current, range)) {
+      // Browser focus can collapse a text range while a context-menu item is activated.
+      // Only the menu may use its captured selection; toolbar actions still require a live range.
+      if (
+        selectedText &&
+        selectionRangeRef.current &&
+        !selection?.toString().trim() &&
+        document.activeElement?.closest('[data-testid="quoted-selection-context-menu"]')
+      ) {
+        return selectedText;
+      }
       setSelectedText(null);
       selectionRangeRef.current = null;
       return null;
@@ -232,14 +249,16 @@ export function QuotedSelectionContextMenu({
           {children}
         </SelectionContextTarget>
         <ContextMenuContent align="start" width={200} testID="quoted-selection-context-menu">
-          <ContextMenuItem onSelect={handleQuote} testID="quoted-selection-context-menu-quote">
-            {t("composer.attachments.quoteSelection")}
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={handleAsk} testID="quoted-selection-context-menu-ask">
-            {t("quickAsk.menuLabel")}
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={handleCopy}>{t("common.actions.copy")}</ContextMenuItem>
+          <View onPointerDown={preserveSelection}>
+            <ContextMenuItem onSelect={handleQuote} testID="quoted-selection-context-menu-quote">
+              {t("composer.attachments.quoteSelection")}
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={handleAsk} testID="quoted-selection-context-menu-ask">
+              {t("quickAsk.menuLabel")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={handleCopy}>{t("common.actions.copy")}</ContextMenuItem>
+          </View>
         </ContextMenuContent>
       </ContextMenu>
       <QuickAskPopover
