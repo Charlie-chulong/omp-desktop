@@ -17,6 +17,7 @@ interface SidebarResizeHandleProps {
 }
 
 const HIGHLIGHT_DELAY_MS = 150;
+const RESIZE_HANDLE_DATASET = isWeb ? { windowChromeInteractive: "true" } : undefined;
 
 const webResizeCursorStyle = isWeb
   ? ({
@@ -73,6 +74,7 @@ function PointerResizeHandle({ edge, gesture, testID }: SidebarResizeHandleProps
     <GestureDetector gesture={gesture}>
       <Pressable
         testID={testID}
+        dataSet={RESIZE_HANDLE_DATASET}
         style={hitAreaStyle}
         onHoverIn={handleHoverIn}
         onHoverOut={handleHoverOut}
