@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import { app } from "electron";
 import log from "electron-log/main";
-import { loadPersistedConfig, resolvePaseoHome } from "@omp-desktop/server";
+import { loadPersistedConfig } from "@omp-desktop/server/persisted-config";
+import { resolvePaseoHome } from "@omp-desktop/server/paseo-home";
 import { resolveOmpProxyUrl, type OmpProxyConfig } from "@omp-desktop/protocol/provider-config";
 import { resolveCliInstallSourcePath } from "./path.js";
 import {

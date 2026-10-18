@@ -4,6 +4,7 @@ import type {
   DaemonStartResult,
   StartDaemonIfEnabledInput,
 } from "@/runtime/daemon-start-service";
+import type { HostRuntimeSnapshot } from "@/runtime/host-runtime";
 import type { Href } from "expo-router";
 import {
   buildHostRootRoute,
@@ -25,9 +26,11 @@ export interface StartHostRuntimeBootstrapInput {
   shouldStartDaemon: DaemonStartCondition;
 }
 
-export function startHostRuntimeBootstrap(input: StartHostRuntimeBootstrapInput): void {
+export function startHostRuntimeBootstrap(
+  input: StartHostRuntimeBootstrapInput,
+): Promise<DaemonStartResult> {
   const registryReady = input.store.boot();
-  void input.daemonStartService.startIfEnabled({
+  return input.daemonStartService.startIfEnabled({
     shouldStart: async () => {
       await registryReady;
       return typeof input.shouldStartDaemon === "boolean"
@@ -73,6 +76,54 @@ export function resolveStartupBlocker(input: ResolveStartupBlockerInput): Startu
 
 export function resolveStartupNavigationReady(input: { startupBlocker: StartupBlocker }): boolean {
   return input.startupBlocker.kind !== "managed-daemon-starting";
+}
+
+const HOST_ROOT_ROUTE_PATTERN = /^\/h\/[^/]+\/?$/;
+
+function isDesktopShellRoute(pathname: string): boolean {
+  return pathname === "/" || pathname === "" || HOST_ROOT_ROUTE_PATTERN.test(pathname);
+}
+
+export function isDesktopStartupReady(input: {
+  startupSettled: boolean;
+  startupBlocker: StartupBlocker;
+  pathname: string;
+  registryLoaded: boolean;
+  selectionHydrated: boolean;
+  layoutHydrated: boolean;
+  settingsLoaded: boolean;
+  host: Pick<
+    HostRuntimeSnapshot,
+    "connectionStatus" | "agentDirectoryStatus" | "activeConnectionId" | "probeByConnectionId"
+  > | null;
+}): boolean {
+  if (
+    !input.startupSettled ||
+    !input.registryLoaded ||
+    !input.selectionHydrated ||
+    !input.layoutHydrated ||
+    !input.settingsLoaded
+  ) {
+    return false;
+  }
+  if (input.startupBlocker.kind === "managed-daemon-starting") return false;
+  if (input.startupBlocker.kind === "managed-daemon-error") return true;
+  if (isDesktopShellRoute(input.pathname)) {
+    return false;
+  }
+  if (input.host?.connectionStatus === "connecting") {
+    if (input.host.activeConnectionId || input.host.probeByConnectionId.size === 0) return false;
+    for (const probe of input.host.probeByConnectionId.values()) {
+      if (probe.status !== "unavailable") return false;
+    }
+    return true;
+  }
+  if (input.host?.connectionStatus !== "online") return true;
+  return (
+    input.host.agentDirectoryStatus === "ready" ||
+    input.host.agentDirectoryStatus === "error_before_first_success" ||
+    input.host.agentDirectoryStatus === "error_after_ready"
+  );
 }
 
 export function shouldRunStartupGiveUpTimer(input: {

@@ -18,6 +18,21 @@
       "source": "./src/server/exports.ts",
       "default": "./dist/server/server/exports.js"
     },
+    "./paseo-home": {
+      "types": "./dist/server/server/paseo-home.d.ts",
+      "source": "./src/server/paseo-home.ts",
+      "default": "./dist/server/server/paseo-home.js"
+    },
+    "./persisted-config": {
+      "types": "./dist/server/server/persisted-config.d.ts",
+      "source": "./src/server/persisted-config.ts",
+      "default": "./dist/server/server/persisted-config.js"
+    },
+    "./utils/spawn": {
+      "types": "./dist/server/utils/spawn.d.ts",
+      "source": "./src/utils/spawn.ts",
+      "default": "./dist/server/utils/spawn.js"
+    },
     "./utils/tool-call-parsers": {
       "types": "./dist/server/utils/tool-call-parsers.d.ts",
       "source": "./src/utils/tool-call-parsers.ts",

@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { app, ipcMain, powerMonitor } from "electron";
 import log from "electron-log/main";
-import { resolvePaseoHome, spawnProcess } from "@omp-desktop/server";
+import { resolvePaseoHome } from "@omp-desktop/server/paseo-home";
+import { spawnProcess } from "@omp-desktop/server/utils/spawn";
 import {
   copyAttachmentFileToManagedStorage,
   deleteManagedAttachmentFile,
@@ -13,20 +14,8 @@ import {
   writeAttachmentBase64,
   writeAttachmentBytes,
 } from "../features/attachments.js";
-import {
-  checkForAppUpdate,
-  downloadAndInstallUpdate,
-  type AppUpdateCheckIntent,
-  type AppReleaseChannel,
-} from "../features/auto-updater.js";
-import {
-  getBundledCliShimPath,
-  getCliInstallStatus,
-  getOmpShortcutInstallStatus,
-  installCli,
-  installOmpShortcut,
-  uninstallOmpShortcut,
-} from "../integrations/cli-install/index.js";
+import type { AppUpdateCheckIntent, AppReleaseChannel } from "../features/auto-updater.js";
+import { getBundledCliShimPath } from "../integrations/cli-install/paths.js";
 import {
   openLocalTransportSession,
   sendLocalTransportMessage,
@@ -603,6 +592,8 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     },
     check_app_update: async (args) => {
       const currentVersion = resolveDesktopAppVersion();
+      // Static imports load the updater's heavy graph during GUI startup.
+      const { checkForAppUpdate } = await import("../features/auto-updater.js");
       return checkForAppUpdate({
         currentVersion,
         releaseChannel: await resolveRequestedReleaseChannel(args),
@@ -611,6 +602,8 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     },
     install_app_update: async (args) => {
       const currentVersion = resolveDesktopAppVersion();
+      // Static imports load the updater's heavy graph during GUI startup.
+      const { downloadAndInstallUpdate } = await import("../features/auto-updater.js");
       return downloadAndInstallUpdate(
         { currentVersion, releaseChannel: await resolveRequestedReleaseChannel(args) },
         async () => {
@@ -619,11 +612,28 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
       );
     },
     get_local_daemon_version: () => getLocalDaemonVersion(),
-    install_cli: () => installCli(),
-    get_cli_install_status: () => getCliInstallStatus(),
-    get_omp_shortcut_install_status: () => getOmpShortcutInstallStatus(),
-    install_omp_shortcut: () => installOmpShortcut(),
-    uninstall_omp_shortcut: () => uninstallOmpShortcut(),
+    // Load CLI installation dependencies only on invocation, not during GUI startup.
+    install_cli: async () => {
+      const { installCli } = await import("../integrations/cli-install/install.js");
+      return installCli();
+    },
+    get_cli_install_status: async () => {
+      const { getCliInstallStatus } = await import("../integrations/cli-install/install.js");
+      return getCliInstallStatus();
+    },
+    get_omp_shortcut_install_status: async () => {
+      const { getOmpShortcutInstallStatus } =
+        await import("../integrations/cli-install/install.js");
+      return getOmpShortcutInstallStatus();
+    },
+    install_omp_shortcut: async () => {
+      const { installOmpShortcut } = await import("../integrations/cli-install/install.js");
+      return installOmpShortcut();
+    },
+    uninstall_omp_shortcut: async () => {
+      const { uninstallOmpShortcut } = await import("../integrations/cli-install/install.js");
+      return uninstallOmpShortcut();
+    },
     read_legacy_skill_selection: () => readLegacySkillSelection(),
     delete_legacy_skill_selection: () => deleteLegacySkillSelection(),
     "paseo:wallpaper:scanDir": (args) =>

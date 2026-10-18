@@ -15,6 +15,7 @@ const mock = vi.hoisted(() => ({
     showInactive: Mock;
   }[],
   settings: {} as DesktopSettings,
+  get: vi.fn(),
   getSelected: vi.fn(),
   report: vi.fn(),
   patch: vi.fn(),
@@ -22,7 +23,7 @@ const mock = vi.hoisted(() => ({
 
 vi.mock("electron-log/main", () => ({ default: { error: vi.fn() } }));
 vi.mock("../settings/desktop-settings-electron.js", () => ({
-  getDesktopSettingsStore: () => ({ get: async () => mock.settings, patch: mock.patch }),
+  getDesktopSettingsStore: () => ({ get: mock.get, patch: mock.patch }),
   subscribeDesktopSettingsChanges: (listener: (settings: DesktopSettings) => void) => {
     mock.subscribers.add(listener);
     return () => mock.subscribers.delete(listener);
@@ -111,6 +112,7 @@ beforeEach(() => {
   mock.subscribers.clear();
   mock.windows.length = 0;
   mock.settings = { ...DEFAULT_DESKTOP_SETTINGS, pet: { ...DEFAULT_DESKTOP_SETTINGS.pet } };
+  mock.get.mockReset().mockImplementation(async () => mock.settings);
   mock.getSelected.mockReset().mockResolvedValue(descriptor);
   mock.report.mockReset();
   mock.patch.mockReset();
@@ -136,10 +138,140 @@ async function changeSettings(pet: Partial<DesktopSettings["pet"]>) {
 }
 
 describe("native companion controller", () => {
+  it("defers enabled startup and renders the latest preferences once explicitly started", async () => {
+    mock.settings.pet.enabled = true;
+    const { instance } = controller();
+    await instance.initialize();
+
+    expect(mock.getSelected).not.toHaveBeenCalled();
+    expect(mock.windows).toHaveLength(0);
+    await changeSettings({ selectedId: "latest", size: "large" });
+    expect(mock.getSelected).not.toHaveBeenCalled();
+    expect(mock.windows).toHaveLength(0);
+
+    const selected = { ...descriptor, id: "latest", name: "Latest" };
+    mock.getSelected.mockResolvedValue(selected);
+    await instance.start();
+
+    expect(mock.getSelected).toHaveBeenCalledOnce();
+    expect(mock.getSelected).toHaveBeenCalledWith("latest");
+    expect(mock.windows).toHaveLength(1);
+    const window = mock.windows[0];
+    expect(window.showInactive).toHaveBeenCalledOnce();
+    expect(window.webContents.send).toHaveBeenCalledWith("paseo:pet:state", {
+      descriptor: selected,
+      size: "large",
+      activity: DEFAULT_PET_ACTIVITY,
+    });
+  });
+
+  it("does not let the initial settings read replace a newer pre-start update", async () => {
+    const initial = {
+      ...mock.settings,
+      pet: { ...mock.settings.pet, enabled: true, selectedId: "initial" },
+    };
+    let resolveSettings!: (settings: DesktopSettings) => void;
+    mock.get.mockReturnValue(
+      new Promise<DesktopSettings>((resolve) => (resolveSettings = resolve)),
+    );
+    const { instance } = controller();
+    const initializing = instance.initialize();
+    await changeSettings({ enabled: true, selectedId: "latest", size: "large" });
+    resolveSettings(initial);
+    await initializing;
+
+    expect(mock.getSelected).not.toHaveBeenCalled();
+    expect(mock.windows).toHaveLength(0);
+    const selected = { ...descriptor, id: "latest", name: "Latest" };
+    mock.getSelected.mockResolvedValue(selected);
+    await instance.start();
+
+    expect(mock.getSelected).toHaveBeenCalledOnce();
+    expect(mock.getSelected).toHaveBeenCalledWith("latest");
+    expect(mock.windows[0].webContents.send).toHaveBeenCalledWith(
+      "paseo:pet:state",
+      expect.objectContaining({ descriptor: selected, size: "large" }),
+    );
+    expect(mock.windows[0].showInactive).toHaveBeenCalledOnce();
+  });
+
+  it("keeps settings disabled before readiness from flashing a companion", async () => {
+    mock.settings.pet.enabled = true;
+    const { instance } = controller();
+    await instance.initialize();
+    await changeSettings({ enabled: false });
+    await instance.start();
+
+    expect(mock.getSelected).not.toHaveBeenCalled();
+    expect(mock.windows).toHaveLength(0);
+    await changeSettings({ enabled: true });
+    expect(mock.windows).toHaveLength(1);
+    expect(mock.windows[0].showInactive).toHaveBeenCalledOnce();
+    expect(mock.windows[0].webContents.send).toHaveBeenCalledWith(
+      "paseo:pet:state",
+      expect.objectContaining({ descriptor }),
+    );
+  });
+
+  it("shares concurrent starts and never replays startup after settings change", async () => {
+    mock.settings.pet.enabled = true;
+    let resolveSelection!: (selected: PetDescriptor) => void;
+    mock.getSelected.mockReturnValue(
+      new Promise<PetDescriptor>((resolve) => (resolveSelection = resolve)),
+    );
+    const { instance } = controller();
+    await instance.initialize();
+
+    const firstStart = instance.start();
+    const secondStart = instance.start();
+    await Promise.resolve();
+    expect(mock.windows).toHaveLength(0);
+    resolveSelection(descriptor);
+    await Promise.all([firstStart, secondStart]);
+
+    expect(mock.getSelected).toHaveBeenCalledOnce();
+    expect(mock.windows).toHaveLength(1);
+    const window = mock.windows[0];
+    expect(window.showInactive).toHaveBeenCalledOnce();
+    await changeSettings({ size: "large" });
+    window.webContents.send.mockClear();
+    await instance.start();
+    expect(mock.windows).toHaveLength(1);
+    expect(window.showInactive).toHaveBeenCalledOnce();
+    expect(
+      window.webContents.send.mock.calls.some(([channel]) => channel === "paseo:pet:state"),
+    ).toBe(false);
+    expect(
+      mock.handlers.get("paseo:pet:ready")!({
+        sender: window.webContents,
+        senderFrame: window.webContents.mainFrame,
+      }),
+    ).toMatchObject({ descriptor, size: "large" });
+  });
+
+  it.each(["beginShutdown", "dispose"] as const)(
+    "keeps startup inert after %s before readiness",
+    async (shutdown) => {
+      mock.settings.pet.enabled = true;
+      const { instance } = controller();
+      await instance.initialize();
+      instance[shutdown]();
+      await instance.start();
+      await changeSettings({ enabled: true });
+      await instance.start();
+
+      expect(mock.getSelected).not.toHaveBeenCalled();
+      expect(mock.windows).toHaveLength(0);
+      expect(mock.report).not.toHaveBeenCalled();
+      expect(mock.patch).not.toHaveBeenCalled();
+    },
+  );
+
   it("creates no disabled window and exactly one enabled non-focusing sandboxed overlay", async () => {
     const { instance } = controller();
     await instance.initialize();
     expect(mock.windows).toHaveLength(0);
+    await instance.start();
     await changeSettings({ enabled: true });
     await changeSettings({ size: "large" });
     expect(mock.windows).toHaveLength(1);
@@ -187,8 +319,14 @@ describe("native companion controller", () => {
       revisions: { local: { generation: "g1", seq: 1 }, remote: { generation: "g1", seq: 1 } },
       tasks,
     });
+    expect(mock.windows).toHaveLength(0);
+    await instance.start();
     const window = mock.windows[0];
     const overlayEvent = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+    expect(mock.handlers.get("paseo:pet:ready")!(overlayEvent)).toMatchObject({
+      descriptor,
+      activity: { connected: true, tasks: expect.arrayContaining(tasks) },
+    });
     mock.handlers.get("paseo:pet:open")!(overlayEvent);
     expect(openTask).toHaveBeenCalledWith(tasks[1]);
     publish(event, {
@@ -208,6 +346,7 @@ describe("native companion controller", () => {
     mock.getSelected.mockRejectedValue(new Error("Invalid selected spritesheet"));
     const { instance } = controller();
     await instance.initialize();
+    await instance.start();
     expect(mock.windows).toHaveLength(0);
     expect(mock.report).toHaveBeenCalledWith("Desktop companion", "Invalid selected spritesheet");
   });
@@ -216,6 +355,7 @@ describe("native companion controller", () => {
     mock.settings.pet.enabled = true;
     const { instance } = controller();
     await instance.initialize();
+    await instance.start();
     const destroy = vi.spyOn(mock.windows[0], "destroy");
 
     instance.beginShutdown();
@@ -238,6 +378,7 @@ describe("native companion controller", () => {
     mock.settings.pet.enabled = true;
     const { instance } = controller();
     await instance.initialize();
+    await instance.start();
     const destroy = vi.spyOn(mock.windows[0], "destroy");
     instance.dispose();
     expect(destroy).toHaveBeenCalledOnce();
