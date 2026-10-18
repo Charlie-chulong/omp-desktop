@@ -179,6 +179,9 @@ export const en = {
       sendQueuedMessageNow: "Send queued message now",
       moveQueuedMessageEarlier: "Move queued message earlier",
       moveQueuedMessageLater: "Move queued message later",
+      dragQueuedMessage: "Drag queued message to reorder",
+      dragQueuedMessageHint:
+        "Press Space to pick up, use arrow keys to move, Space to drop, or Escape to cancel.",
       queuedConversationPosition: "Queued conversation {{position}} of {{count}}",
       moveQueuedConversationEarlier: "Move queued conversation earlier",
       moveQueuedConversationLater: "Move queued conversation later",

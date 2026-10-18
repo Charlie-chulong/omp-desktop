@@ -166,6 +166,9 @@ export const fr: TranslationResources = {
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
       moveQueuedMessageEarlier: "Avancer le message en file d’attente",
       moveQueuedMessageLater: "Reculer le message en file d’attente",
+      dragQueuedMessage: "Faire glisser pour réordonner le message en file d’attente",
+      dragQueuedMessageHint:
+        "Appuyez sur Espace pour saisir, les flèches pour déplacer, Espace pour déposer ou Échap pour annuler.",
       queuedConversationPosition: "Conversation en file d’attente {{position}} sur {{count}}",
       moveQueuedConversationEarlier: "Avancer la conversation en file d’attente",
       moveQueuedConversationLater: "Reculer la conversation en file d’attente",

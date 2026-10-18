@@ -1346,7 +1346,7 @@ export class HostRuntimeStore {
   private directoryBootstrapInFlight = new Map<string, Promise<void>>();
   private queuedAgentActiveByServer = new Map<
     string,
-    { agentId: string; messageId: string; dispatchAccepted: boolean }
+    { agentId: string; messageId: string; dispatchAccepted: boolean; stoppedRunning: boolean }
   >();
   private directorySyncByServer = new Map<string, DirectorySync>();
   private projectLayoutMigrationByServer = new Map<
@@ -2212,8 +2212,11 @@ export class HostRuntimeStore {
 
   drainQueuedAgentMessage(serverId: string, agentId: string): void {
     const active = this.queuedAgentActiveByServer.get(serverId);
-    if (active?.agentId === agentId && active.dispatchAccepted) {
-      this.queuedAgentActiveByServer.delete(serverId);
+    if (active?.agentId === agentId) {
+      active.stoppedRunning = true;
+      if (active.dispatchAccepted) {
+        this.queuedAgentActiveByServer.delete(serverId);
+      }
     }
     this.reevaluateQueuedAgentMessages(serverId);
   }
@@ -2240,7 +2243,12 @@ export class HostRuntimeStore {
       return;
     }
 
-    const active = { agentId, messageId: next.id, dispatchAccepted: false };
+    const active = {
+      agentId,
+      messageId: next.id,
+      dispatchAccepted: false,
+      stoppedRunning: false,
+    };
     this.queuedAgentActiveByServer.set(serverId, active);
     void sendQueuedComposerMessageNow({
       agentId,
@@ -2269,6 +2277,11 @@ export class HostRuntimeStore {
       if (result.status === "submitted") {
         if (this.queuedAgentActiveByServer.get(serverId) === active) {
           active.dispatchAccepted = true;
+          // A short turn can finish before the submission ACK. Replay that completion
+          // only after acceptance, through the normal current-session readiness gate.
+          if (active.stoppedRunning) {
+            this.drainQueuedAgentMessage(serverId, agentId);
+          }
         }
       } else {
         if (this.queuedAgentActiveByServer.get(serverId) === active) {

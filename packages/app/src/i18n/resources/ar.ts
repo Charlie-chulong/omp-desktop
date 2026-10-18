@@ -165,6 +165,9 @@ export const ar: TranslationResources = {
       sendQueuedMessageNow: "إرسال رسالة في قائمة الانتظار الآن",
       moveQueuedMessageEarlier: "تقديم الرسالة في قائمة الانتظار",
       moveQueuedMessageLater: "تأخير الرسالة في قائمة الانتظار",
+      dragQueuedMessage: "اسحب لإعادة ترتيب الرسالة في قائمة الانتظار",
+      dragQueuedMessageHint:
+        "اضغط مسافة للإمساك، ومفاتيح الأسهم للتحريك، ومسافة للإفلات، أو Escape للإلغاء.",
       queuedConversationPosition: "المحادثة في قائمة الانتظار {{position}} من {{count}}",
       moveQueuedConversationEarlier: "تقديم المحادثة في قائمة الانتظار",
       moveQueuedConversationLater: "تأخير المحادثة في قائمة الانتظار",

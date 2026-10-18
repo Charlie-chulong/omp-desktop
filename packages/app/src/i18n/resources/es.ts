@@ -165,6 +165,9 @@ export const es: TranslationResources = {
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
       moveQueuedMessageEarlier: "Adelantar el mensaje en cola",
       moveQueuedMessageLater: "Retrasar el mensaje en cola",
+      dragQueuedMessage: "Arrastrar para reordenar el mensaje en cola",
+      dragQueuedMessageHint:
+        "Pulsa Espacio para seleccionar, las flechas para mover, Espacio para soltar o Escape para cancelar.",
       queuedConversationPosition: "Conversación en cola {{position}} de {{count}}",
       moveQueuedConversationEarlier: "Adelantar la conversación en cola",
       moveQueuedConversationLater: "Retrasar la conversación en cola",

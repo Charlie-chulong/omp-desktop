@@ -19,12 +19,14 @@ export function useDragReorderState<T>({
   data,
   keyExtractor,
   onDragEnd,
+  onReorder,
   onDragBegin,
   disabled = false,
 }: {
   data: T[];
   keyExtractor: (item: T, index: number) => string;
   onDragEnd?: (items: T[]) => void;
+  onReorder?: (activeId: string, overId: string) => void;
   onDragBegin?: () => void;
   disabled?: boolean;
 }): DragReorderState<T> {
@@ -46,9 +48,22 @@ export function useDragReorderState<T>({
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-      const items = state.dragItems ?? data;
+      const items = onReorder ? data : (state.dragItems ?? data);
       dispatch({ type: "clear" });
       if (disabled) return;
+      if (onReorder) {
+        const activeId = String(active.id);
+        const overId = over ? String(over.id) : null;
+        if (
+          overId &&
+          activeId !== overId &&
+          data.some((item, index) => keyExtractor(item, index) === activeId) &&
+          data.some((item, index) => keyExtractor(item, index) === overId)
+        ) {
+          onReorder(activeId, overId);
+        }
+        return;
+      }
 
       const reordered = reorderItemsOnDragEnd({
         items,
@@ -58,12 +73,12 @@ export function useDragReorderState<T>({
       });
       if (reordered) onDragEnd?.(reordered);
     },
-    [data, disabled, keyExtractor, onDragEnd, state.dragItems],
+    [data, disabled, keyExtractor, onDragEnd, onReorder, state.dragItems],
   );
 
   return {
     activeId: state.activeId,
-    items: state.dragItems ?? data,
+    items: onReorder ? data : (state.dragItems ?? data),
     handlers: {
       onDragStart: handleDragStart,
       onDragCancel: clearDragState,
