@@ -2,7 +2,7 @@
 
 An Electron and Web client for [Oh My Pi](https://github.com/can1357/oh-my-pi). It runs a private daemon on your machine and talks to `omp --mode rpc-ui` through OMP's native JSONL RPC protocol. Web clients can control a remote daemon through a self-hosted, end-to-end encrypted relay.
 
-Current source version: **0.5.1**.
+Current source version: **0.5.2**.
 
 ## Requirements
 
@@ -14,6 +14,24 @@ Standard macOS, Linux, and Windows packages include OMP and do not require a sys
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
 
+The desktop development and packaging runtime is `@iriscat/mini-electron@0.1.5`. Main-process
+code keeps Electron-compatible `electron` imports; the stock `electron` package is retained
+only for its TypeScript declarations and its binary download is not used by project scripts.
+mini-electron currently supports Windows x64 and Apple Silicon macOS.
+
+Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
+avoiding repeated small-file-read overhead. The main window stays native-hidden until
+the renderer has painted a branded startup surface and the runtime has copied that
+frame into the AppKit backing store, avoiding an unpainted first reveal. Mermaid,
+WebSocket response validation, and terminal emulation load on first use instead of
+inflating the startup entry. Desktop daemon setup imports only its configuration/runtime
+helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell
+environment inheritance and daemon readiness checks are unchanged.
+
+**Settings → General → Language → System** selects the first supported system
+language; a manually selected language takes precedence. The macOS runtime
+reads the actual OS language preference order rather than a fixed browser locale.
+Restart Desktop after changing macOS language preferences.
 **Host Settings → Agents** reports the version, source, and path of the exact OMP executable used
 for Agent sessions. Update checks and installs target that same executable. Packaged applications
 label their bundled runtime separately from standalone, configured, and `PATH` installations.
