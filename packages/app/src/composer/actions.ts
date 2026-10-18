@@ -265,29 +265,23 @@ export function queueComposerMessage(input: QueueComposerMessageInput): QueueCom
   return { queued: item };
 }
 
-export function reorderQueuedComposerMessages(input: {
+export function moveQueuedComposerMessageTo(input: {
   agentId: string;
-  originalMessageIds: readonly string[];
-  orderedMessageIds: readonly string[];
+  messageId: string;
+  targetMessageId: string;
   queue: QueueWriter;
 }): void {
   input.queue.write((prev) => {
     const messages = prev.get(input.agentId);
-    if (!messages || messages.length !== input.originalMessageIds.length) return prev;
-    if (messages.some((message, index) => message.id !== input.originalMessageIds[index])) {
-      return prev;
-    }
-    if (input.orderedMessageIds.length !== messages.length) return prev;
-    if (input.orderedMessageIds.every((id, index) => id === messages[index]?.id)) return prev;
+    if (!messages || input.messageId === input.targetMessageId) return prev;
+    const index = messages.findIndex((message) => message.id === input.messageId);
+    const target = messages.findIndex((message) => message.id === input.targetMessageId);
+    // A drag may outlive dispatch/removal of either endpoint. Never restore its snapshot.
+    if (index < 0 || target < 0) return prev;
 
-    const byId = new Map(messages.map((message) => [message.id, message]));
-    const reordered: QueuedComposerMessage[] = [];
-    for (const id of input.orderedMessageIds) {
-      const message = byId.get(id);
-      if (!message) return prev;
-      reordered.push(message);
-      byId.delete(id);
-    }
+    const reordered = [...messages];
+    const [message] = reordered.splice(index, 1);
+    reordered.splice(target, 0, message!);
     const next = new Map(prev);
     next.set(input.agentId, reordered);
     return next;

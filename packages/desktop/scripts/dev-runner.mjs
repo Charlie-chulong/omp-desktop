@@ -17,7 +17,7 @@ const desktopDir = path.resolve(scriptDir, "..");
 const rootDir = path.resolve(desktopDir, "../..");
 const appDir = path.resolve(desktopDir, "../app");
 const require = createRequire(import.meta.url);
-const electron = require("electron");
+const electron = require("@iriscat/mini-electron");
 
 const expoPort = Number(process.env.EXPO_PORT);
 if (!Number.isInteger(expoPort) || expoPort <= 0) {

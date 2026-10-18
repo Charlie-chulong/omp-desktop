@@ -180,6 +180,7 @@ export interface DesktopWindowBridge {
 }
 
 export interface DesktopWindowModuleBridge {
+  contentReady?: () => Promise<void>;
   openNew?: (options?: { pendingOpenProjectPath?: string | null }) => Promise<void>;
   closeChoice?: DesktopCloseChoiceBridge;
   getCurrentWindow?: () => DesktopWindowBridge;
@@ -259,6 +260,7 @@ export interface DesktopInvokeBridge {
 }
 
 export interface DesktopPetBridge {
+  startupReady?: () => Promise<void>;
   publishActivity?: (activity: DesktopPetActivity) => Promise<DesktopPetActivityResult>;
 }
 

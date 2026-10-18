@@ -1314,7 +1314,7 @@ const OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER = {
 
 function isOmpRpcMissingModelError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /no models available/i.test(message);
+  return /no models available|no default model selected/i.test(message);
 }
 
 export function mergeOmpDesktopRpcBootstrapIntoModelsYaml(configYaml: string): string {
@@ -4260,6 +4260,7 @@ export class OmpAgentClient implements AgentClient {
   private readonly noTurnScheduler?: OmpNoTurnScheduler;
   private readonly usagePollScheduler?: OmpUsagePollScheduler;
   private readonly automaticCredentialScheduler?: OmpAutomaticCredentialScheduler;
+  private readonly proxyFetch: typeof fetch;
   private readonly quotaFetch: typeof fetch;
   private readonly quotaNow: () => number;
   private readonly runtime: OmpRuntime;
@@ -4298,11 +4299,10 @@ export class OmpAgentClient implements AgentClient {
     this.noTurnScheduler = options.noTurnScheduler;
     this.usagePollScheduler = options.usagePollScheduler;
     this.automaticCredentialScheduler = options.automaticCredentialScheduler;
-    this.quotaFetch =
-      options.quotaFetch ??
-      createProxyFetch({
-        getProxyUrl: () => runtimeSettings?.env?.PI_PROXY,
-      });
+    this.proxyFetch = createProxyFetch({
+      getProxyUrl: () => runtimeSettings?.env?.PI_PROXY,
+    });
+    this.quotaFetch = options.quotaFetch ?? this.proxyFetch;
     this.quotaNow = options.quotaNow ?? Date.now;
     this.claudeQuotaState = new ClaudeQuotaState(this.quotaNow);
     this.runtime =
@@ -5290,11 +5290,11 @@ export class OmpAgentClient implements AgentClient {
   async getOmpInstallationStatus(options?: {
     checkForUpdates?: boolean;
   }): Promise<OmpInstallationStatus> {
-    return await getOmpInstallationStatus(options);
+    return await getOmpInstallationStatus({ ...options, fetch: this.proxyFetch });
   }
 
   async installOmp(options?: { defer?: boolean }): Promise<OmpInstallationStatus> {
-    return await installOmp(options);
+    return await installOmp({ ...options, fetch: this.proxyFetch });
   }
 
   async cancelOmpInstall(): Promise<OmpInstallationStatus> {

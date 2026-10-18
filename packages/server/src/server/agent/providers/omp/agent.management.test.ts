@@ -126,7 +126,10 @@ providers:
 `);
   });
 
-  test("merges a keyless bootstrap model after OMP RPC fails with no models", async () => {
+  test.each([
+    "No models available. Use /login or set an API key environment variable.",
+    "No default model selected. Use /login, set an API key environment variable, or select a local model with /model or --model.",
+  ])("merges a keyless bootstrap model after OMP RPC fails: %s", async (message) => {
     const { agentDir, client, runtime } = await createClient();
     const configPath = path.join(agentDir, "models.yml");
     await writeFile(
@@ -141,16 +144,20 @@ providers:
       "utf8",
     );
     runtime.failNextStart(
-      new Error(
-        "OMP RPC process exited with code 1 and signal null\nNo models available. Use /login or set an API key environment variable.",
-      ),
+      new Error(`OMP RPC process exited with code 1 and signal null\n${message}`),
     );
-    runtime.queueModels([]);
+    runtime.queueModels([
+      { provider: "omp-desktop-bootstrap", id: "bootstrap", name: "bootstrap" },
+    ]);
     runtime.queueLoginProviders([
       { id: "anthropic", name: "Anthropic", available: true, authenticated: false },
     ]);
 
     const management = await client.getOmpProviderManagement();
+    expect(management.runtimeError).toBeUndefined();
+    expect(management.providerModels).toEqual([
+      { id: "mintcat", modelCount: 0, source: "custom", models: [] },
+    ]);
     expect(management.configYaml).toContain("# Keep this comment");
     expect(management.configYaml).toContain("mintcat");
     expect(management.configYaml).not.toContain("omp-desktop-bootstrap");

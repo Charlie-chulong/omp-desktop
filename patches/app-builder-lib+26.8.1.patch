@@ -1,0 +1,24 @@
+diff --git a/node_modules/app-builder-lib/out/electron/electronMac.js b/node_modules/app-builder-lib/out/electron/electronMac.js
+index e5551f8..6056107 100644
+--- a/node_modules/app-builder-lib/out/electron/electronMac.js
++++ b/node_modules/app-builder-lib/out/electron/electronMac.js
+@@ -18,8 +18,8 @@ function moveHelpers(helperSuffixes, frameworksPath, appName, prefix) {
+         return doRename(executableBasePath, `${prefix}${suffix}`, appName + suffix).then(() => doRename(frameworksPath, `${prefix}${suffix}.app`, `${appName}${suffix}.app`));
+     }));
+ }
+-function getAvailableHelperSuffixes(helperEHPlist, helperNPPlist, helperRendererPlist, helperPluginPlist, helperGPUPlist) {
+-    const result = [" Helper"];
++function getAvailableHelperSuffixes(helperPlist, helperEHPlist, helperNPPlist, helperRendererPlist, helperPluginPlist, helperGPUPlist) {
++    const result = helperPlist == null ? [] : [" Helper"];
+     if (helperEHPlist != null) {
+         result.push(" Helper EH");
+     }
+@@ -219,7 +219,7 @@ async function createMacApp(packager, appOutDir, asarIntegrity, isMas) {
+         (0, builder_util_1.unlinkIfExists)(path.join(appOutDir, "LICENSE")),
+         (0, builder_util_1.unlinkIfExists)(path.join(appOutDir, "LICENSES.chromium.html")),
+     ]);
+-    await moveHelpers(getAvailableHelperSuffixes(helperEHPlist, helperNPPlist, helperRendererPlist, helperPluginPlist, helperGPUPlist), frameworksPath, appFilename, electronBranding.productName);
++    await moveHelpers(getAvailableHelperSuffixes(helperPlist, helperEHPlist, helperNPPlist, helperRendererPlist, helperPluginPlist, helperGPUPlist), frameworksPath, appFilename, electronBranding.productName);
+     if (helperLoginPlist != null) {
+         const prefix = electronBranding.productName;
+         const suffix = " Login Helper";

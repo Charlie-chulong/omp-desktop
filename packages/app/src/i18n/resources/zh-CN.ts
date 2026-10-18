@@ -186,6 +186,7 @@ export const zhCN: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "编辑排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
+      dragQueuedMessageHint: "按空格键拾起，使用方向键移动，再按空格键放下，或按 Escape 取消。",
       queuedConversationPosition: "排队会话第 {{position}} 个，共 {{count}} 个",
       openImage: "打开图片附件",
       removeImage: "移除图片附件",

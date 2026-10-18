@@ -22,7 +22,7 @@ import {
   type HostRuntimeStorage,
 } from "./host-runtime";
 import { ReplicaCache } from "./replica-cache";
-import { reorderQueuedComposerMessages, type QueueWriter } from "@/composer/actions";
+import { moveQueuedComposerMessageTo, type QueueWriter } from "@/composer/actions";
 
 class FakeDaemonClient {
   private state: ConnectionState = { status: "idle" };
@@ -2599,6 +2599,155 @@ describe("HostRuntimeStore", () => {
     useSessionStore.getState().clearSession(host.serverId);
   });
 
+  it.each([
+    ["before", false],
+    ["after", false],
+    ["after", true],
+  ] as const)(
+    "continues queued messages after normal completion with the submission ACK %s completion (new active turn: %s)",
+    async (ackOrder, interveningTurn) => {
+      const host = makeHost({
+        serverId: `srv_queue_completion_${ackOrder}_${interveningTurn}`,
+        connections: [{ id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" }],
+      });
+      const fakeClient = new FakeDaemonClient();
+      fakeClient.setConnectionState({ status: "connected" });
+      const firstSend = new Deferred<void>();
+      fakeClient.sendAgentMessageResponses.push(firstSend.promise);
+      const entry = makeFetchAgentsEntry({
+        id: "agent",
+        cwd: "/repo",
+        updatedAt: "2026-07-12T10:00:00.000Z",
+      });
+      const originalTurn = { turnId: "original-turn", startedAt: "2026-07-12T10:00:00.000Z" };
+      fakeClient.fetchAgentsResponses.push(
+        makeFetchAgentsPayload({
+          entries: [
+            { ...entry, agent: { ...entry.agent, status: "running", activeTurn: originalTurn } },
+          ],
+        }),
+      );
+      const store = new HostRuntimeStore({
+        deps: {
+          createClient: () => fakeClient as unknown as DaemonClient,
+          connectToDaemon: async () => ({
+            client: fakeClient as unknown as DaemonClient,
+            serverId: host.serverId,
+            hostname: null,
+          }),
+          getClientId: async () => `cid_queue_completion_${ackOrder}`,
+        },
+      });
+      useSessionStore
+        .getState()
+        .initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+      useSessionStore.getState().updateSessionServerInfo(host.serverId, {
+        serverId: host.serverId,
+        hostname: null,
+        version: null,
+        features: { canonicalSubmittedPrompts: true },
+      });
+      store.syncHosts([host]);
+      await vi.waitFor(() => {
+        expect(store.getSnapshot(host.serverId)?.agentDirectoryStatus).toBe("ready");
+        expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("online");
+      });
+      const messages = [
+        { id: "B", text: "run B", attachments: [] },
+        {
+          id: "C",
+          text: "run C",
+          attachments: [
+            {
+              kind: "file" as const,
+              attachment: {
+                type: "uploaded_file" as const,
+                id: "queued-file",
+                fileName: "evidence.txt",
+                mimeType: "text/plain",
+                size: 42,
+                path: "/uploads/evidence.txt",
+              },
+            },
+          ],
+        },
+      ];
+      useSessionStore.getState().setQueuedMessages(host.serverId, new Map([["agent", messages]]));
+      expect(fakeClient.sentAgentMessages).toEqual([]);
+      expect(
+        useSessionStore.getState().sessions[host.serverId]?.agents.get("agent")?.activeTurn?.turnId,
+      ).toBe("original-turn");
+
+      let revision = 0;
+      const update = (status: "running" | "idle", turnId: string | null) => {
+        fakeClient.agentUpdate({
+          kind: "upsert",
+          agent: {
+            ...entry.agent,
+            status,
+            updatedAt: new Date(Date.parse(entry.agent.updatedAt) + ++revision).toISOString(),
+            activeTurn: turnId ? { turnId, startedAt: originalTurn.startedAt } : null,
+          },
+          project: entry.project,
+        });
+      };
+      try {
+        // Only production directory events drive the scheduler; no manual drain or reevaluation.
+        update("idle", null);
+        await vi.waitFor(() => expect(fakeClient.sentAgentMessages).toHaveLength(1));
+        expect(fakeClient.sentAgentMessages[0]?.[1]).toBe("run B");
+        update("running", "B-turn");
+        if (ackOrder === "before") {
+          firstSend.resolve();
+          await vi.waitFor(() => {
+            expect(
+              useSessionStore
+                .getState()
+                .sessions[host.serverId]?.messageSubmissions.get("agent")?.[0]?.rpcSettled,
+            ).toBe(true);
+          });
+        }
+        expect(fakeClient.sentAgentMessages).toHaveLength(1);
+        update("idle", null);
+        update("idle", null);
+        if (ackOrder === "after") {
+          expect(fakeClient.sentAgentMessages).toHaveLength(1);
+          if (interveningTurn) update("running", "intervening-turn");
+          firstSend.resolve();
+          if (interveningTurn) {
+            await vi.waitFor(() => {
+              expect(
+                useSessionStore
+                  .getState()
+                  .sessions[host.serverId]?.messageSubmissions.get("agent")?.[0]?.rpcSettled,
+              ).toBe(true);
+            });
+            expect(fakeClient.sentAgentMessages).toHaveLength(1);
+            update("idle", null);
+          }
+        }
+        await vi.waitFor(() => expect(fakeClient.sentAgentMessages).toHaveLength(2));
+        update("running", "C-turn");
+        update("idle", null);
+        update("idle", null);
+        await vi.waitFor(() => {
+          expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.size).toBe(0);
+        });
+        expect(fakeClient.sentAgentMessages.map(([, text]) => text)).toEqual(["run B", "run C"]);
+        expect(fakeClient.sentAgentMessages[1]?.[2]?.attachments).toEqual([
+          messages[1]!.attachments[0]!.attachment,
+        ]);
+        expect(
+          fakeClient.sentAgentMessages.every(([, , options]) => !options?.activeTurnBehavior),
+        ).toBe(true);
+      } finally {
+        firstSend.resolve();
+        store.syncHosts([]);
+        useSessionStore.getState().clearSession(host.serverId);
+      }
+    },
+  );
+
   it("starts ready queued conversations in the user-selected order", async () => {
     const host = makeHost({ serverId: "srv_reordered_queue" });
     const fakeClient = new FakeDaemonClient();
@@ -2785,10 +2934,10 @@ describe("HostRuntimeStore", () => {
         useSessionStore.getState().sessions[host.serverId]!.queuedMessages.get(id) ?? [],
       write: (update) => sessionStore.setQueuedMessages(host.serverId, update),
     };
-    reorderQueuedComposerMessages({
+    moveQueuedComposerMessageTo({
       agentId: "agent",
-      originalMessageIds: ["A", "B", "C"],
-      orderedMessageIds: ["C", "A", "B"],
+      messageId: "C",
+      targetMessageId: "A",
       queue,
     });
     store.reevaluateQueuedAgentMessages(host.serverId);
@@ -2820,10 +2969,10 @@ describe("HostRuntimeStore", () => {
       messages[2]!.attachments[0]!.attachment,
     ]);
     expect(queue.read("agent")).toEqual([]);
-    reorderQueuedComposerMessages({
+    moveQueuedComposerMessageTo({
       agentId: "agent",
-      originalMessageIds: ["A", "B", "C"],
-      orderedMessageIds: ["B", "C", "A"],
+      messageId: "B",
+      targetMessageId: "C",
       queue,
     });
     store.reevaluateQueuedAgentMessages(host.serverId);
@@ -2898,10 +3047,26 @@ describe("HostRuntimeStore", () => {
     useSessionStore.getState().clearSession(host.serverId);
   });
 
-  it("restores an automatically drained message when sending fails", async () => {
-    const host = makeHost({ serverId: "srv_failed_queue_drain" });
+  it("retains the original queued message and attachments when completion precedes a failed ACK", async () => {
+    const host = makeHost({
+      serverId: "srv_failed_queue_drain",
+      connections: [{ id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" }],
+    });
     const fakeClient = new FakeDaemonClient();
+    fakeClient.setConnectionState({ status: "connected" });
+    const send = new Deferred<void>();
+    fakeClient.sendAgentMessageResponses.push(send.promise);
     fakeClient.sendAgentMessageFailures.push(new Error("connection lost"));
+    const entry = makeFetchAgentsEntry({
+      id: "agent",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    fakeClient.fetchAgentsResponses.push(
+      makeFetchAgentsPayload({
+        entries: [{ ...entry, agent: { ...entry.agent, status: "running" } }],
+      }),
+    );
     const store = new HostRuntimeStore({
       deps: {
         createClient: () => fakeClient as unknown as DaemonClient,
@@ -2913,34 +3078,60 @@ describe("HostRuntimeStore", () => {
         getClientId: async () => "cid_failed_queue_drain",
       },
     });
-    const sessionStore = useSessionStore.getState();
-    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
-    sessionStore.setQueuedMessages(
-      host.serverId,
-      new Map([
-        [
-          "agent",
-          [
-            { id: "first", text: "retry me", attachments: [] },
-            { id: "second", text: "keep me behind", attachments: [] },
-          ],
-        ],
-      ]),
-    );
-
-    store.drainQueuedAgentMessage(host.serverId, "agent");
-
+    useSessionStore
+      .getState()
+      .initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    store.syncHosts([host]);
     await vi.waitFor(() => {
-      expect(fakeClient.sentAgentMessages).toHaveLength(1);
-      expect(
-        useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("agent"),
-      ).toEqual([
-        { id: "first", text: "retry me", attachments: [] },
-        { id: "second", text: "keep me behind", attachments: [] },
-      ]);
+      expect(store.getSnapshot(host.serverId)?.agentDirectoryStatus).toBe("ready");
+      expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("online");
     });
-
-    useSessionStore.getState().clearSession(host.serverId);
+    const messages = [
+      {
+        id: "first",
+        text: "retry me",
+        attachments: [
+          {
+            kind: "workspace_file" as const,
+            path: "src/main.ts",
+            selection: { kind: "whole_file" as const },
+          },
+        ],
+      },
+      { id: "second", text: "keep me behind", attachments: [] },
+    ];
+    useSessionStore.getState().setQueuedMessages(host.serverId, new Map([["agent", messages]]));
+    const update = (status: "idle" | "running", revision: number) => {
+      fakeClient.agentUpdate({
+        kind: "upsert",
+        agent: {
+          ...entry.agent,
+          status,
+          updatedAt: new Date(Date.parse(entry.agent.updatedAt) + revision).toISOString(),
+        },
+        project: entry.project,
+      });
+    };
+    try {
+      update("idle", 1);
+      await vi.waitFor(() => expect(fakeClient.sentAgentMessages).toHaveLength(1));
+      update("running", 2);
+      update("idle", 3);
+      send.resolve();
+      await vi.waitFor(() => {
+        const queue = useSessionStore
+          .getState()
+          .sessions[host.serverId]?.queuedMessages.get("agent");
+        expect(queue).toEqual(messages);
+        expect(queue?.[0]).toBe(messages[0]);
+        expect(queue?.[0]?.attachments).toBe(messages[0]!.attachments);
+      });
+      expect(fakeClient.sentAgentMessages).toHaveLength(1);
+    } finally {
+      send.resolve();
+      store.syncHosts([]);
+      useSessionStore.getState().clearSession(host.serverId);
+    }
   });
 
   it("serializes queued-message drains for the same agent", async () => {

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       } | null>,
   },
   pet: {
+    startupReady: () => ipcRenderer.invoke("paseo:pet:startup-ready") as Promise<void>,
     publishActivity: (activity: DesktopPetActivity): Promise<DesktopPetActivityResult> =>
       ipcRenderer.invoke("paseo:pet:publishActivity", activity),
   },
@@ -51,6 +52,7 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     },
   },
   window: {
+    contentReady: () => ipcRenderer.invoke("paseo:window:content-ready") as Promise<void>,
     openNew: (options?: { pendingOpenProjectPath?: string | null }) =>
       ipcRenderer.invoke("paseo:window:openNew", options),
     closeChoice: {

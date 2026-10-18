@@ -71,10 +71,6 @@ function getBundledOmpPath(appPath) {
   return path.join(appPath, "resources", "bin", process.platform === "win32" ? "omp.exe" : "omp");
 }
 
-function getMacMainExecutablePath(appPath) {
-  return path.join(appPath, "Contents", "MacOS", EXECUTABLE_NAME);
-}
-
 function ensureLinuxSandboxPermissions(appPath) {
   if (process.platform !== "linux") {
     return;
@@ -219,83 +215,52 @@ function reserveLocalTcpPort() {
   });
 }
 
-async function waitForFile(filePath, label) {
-  const deadline = Date.now() + SMOKE_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (fs.existsSync(filePath)) {
-      return fs.readFileSync(filePath, "utf8");
-    }
-    await delay(250);
+function assertDarwinDockVisibility(rootPid, guiPid = null) {
+  if (process.platform !== "darwin") return;
+  const listing = spawnSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" });
+  if (listing.error || listing.status !== 0) {
+    throw new Error(`Cannot inspect Dock process tree: ${listing.error || listing.stderr}`);
   }
-  throw new Error(`Timed out waiting for ${label}: ${filePath}`);
-}
-
-async function waitForChildPids(parentPid) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    const childPids = listChildPids(parentPid);
-    if (childPids.length > 0) {
-      return childPids;
-    }
-    await delay(250);
-  }
-  throw new Error(`Timed out waiting for daemon worker child of supervisor PID ${parentPid}`);
-}
-
-function listChildPids(parentPid) {
-  const result = spawnSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`ps failed while listing child processes: ${result.stderr.trim()}`);
-  }
-
-  const children = [];
-  for (const line of result.stdout.split(/\r?\n/)) {
-    const [pidText, ppidText] = line.trim().split(/\s+/);
-    const pid = Number(pidText);
-    const ppid = Number(ppidText);
-    if (Number.isInteger(pid) && ppid === parentPid) {
-      children.push(pid);
-    }
-  }
-  return children;
-}
-
-function listDarwinTextExecutables(pid) {
-  const result = spawnSync("lsof", ["-a", "-p", String(pid), "-d", "txt", "-Fn"], {
-    encoding: "utf8",
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `lsof failed while inspecting PID ${pid}: ${
-        result.stderr.trim() || result.stdout.trim() || "<empty>"
-      }`,
-    );
-  }
-
-  return result.stdout
+  const processes = listing.stdout
+    .trim()
     .split(/\r?\n/)
-    .filter((line) => line.startsWith("n"))
-    .map((line) => line.slice(1));
-}
-
-function assertDarwinProcessDoesNotUseMainAppExecutable({ appPath, pid, label }) {
-  const mainExecutablePath = getMacMainExecutablePath(appPath);
-  assertExecutable(mainExecutablePath, "Packaged app executable");
-
-  const textExecutables = listDarwinTextExecutables(pid);
-  if (textExecutables.includes(mainExecutablePath)) {
-    throw new Error(
-      `${label} PID ${pid} launched through the main app executable ${mainExecutablePath}.\nText executables:\n${textExecutables.join(
-        "\n",
-      )}`,
-    );
+    .map((line) => line.trim().split(/\s+/).map(Number));
+  if (!processes.some(([pid]) => pid === rootPid)) {
+    throw new Error(`Dock visibility check lost process ${rootPid}`);
   }
+  const pids = new Set([rootPid]);
+  let previousSize;
+  do {
+    previousSize = pids.size;
+    for (const [pid, parentPid] of processes) {
+      if (pids.has(parentPid)) pids.add(pid);
+    }
+  } while (pids.size !== previousSize);
+  const script = `
+    ObjC.import('AppKit');
+    function run(argv) {
+      return JSON.stringify(JSON.parse(argv[0]).map(pid => {
+        const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
+        return { pid, policy: app.isNil() ? null : Number(app.activationPolicy) };
+      }));
+    }
+  `;
+  const result = spawnSync(
+    "/usr/bin/osascript",
+    ["-l", "JavaScript", "-e", script, JSON.stringify([...pids])],
+    { encoding: "utf8" },
+  );
+  if (result.error || result.status !== 0) {
+    throw new Error(`Cannot inspect Dock visibility: ${result.error || result.stderr}`);
+  }
+  const policies = JSON.parse(result.stdout);
+  const incorrect = policies.filter(({ pid, policy }) =>
+    pid === guiPid ? policy !== 0 : policy === 0,
+  );
+  if (incorrect.length) {
+    throw new Error(`Only the GUI process may appear in the Dock: ${JSON.stringify(policies)}`);
+  }
+  console.log(`Packaged desktop smoke: Dock visibility passed ${JSON.stringify(policies)}`);
 }
 
 function readIfExists(filePath) {
@@ -711,25 +676,13 @@ async function smokeColdCliDaemonStart({ appPath }) {
       label: "Bundled CLI shim cold daemon start",
     });
 
-    const pidInfo = JSON.parse(await waitForFile(pidPath, "cold CLI daemon pid file"));
-    if (!pidInfo || typeof pidInfo.pid !== "number") {
-      throw new Error(`Cold CLI daemon wrote invalid pid file: ${JSON.stringify(pidInfo)}`);
-    }
-
+    await smokeCliShim({
+      appPath,
+      env: { ...env, PASEO_HOME: home, PASEO_LISTEN: listen },
+    });
     if (process.platform === "darwin") {
-      assertDarwinProcessDoesNotUseMainAppExecutable({
-        appPath,
-        pid: pidInfo.pid,
-        label: "Cold CLI daemon supervisor",
-      });
-      const childPids = await waitForChildPids(pidInfo.pid);
-      for (const childPid of childPids) {
-        assertDarwinProcessDoesNotUseMainAppExecutable({
-          appPath,
-          pid: childPid,
-          label: "Cold CLI daemon worker",
-        });
-      }
+      const { pid } = JSON.parse(fs.readFileSync(pidPath, "utf8"));
+      assertDarwinDockVisibility(pid);
     }
   } finally {
     if (fs.existsSync(pidPath)) {
@@ -984,6 +937,7 @@ async function smokePackagedDesktopApp({ appPath, executableName }) {
       deadline,
     });
     console.log("Packaged desktop smoke: renderer-started desktop daemon reported running");
+    assertDarwinDockVisibility(child.pid, child.pid);
     await runShellCommand({
       script:
         process.platform === "win32"

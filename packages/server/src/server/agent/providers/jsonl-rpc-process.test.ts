@@ -143,6 +143,69 @@ describe("JsonlRpcProcess", () => {
     }
   });
 
+  test("preserves UTF-8 messages at every stdout byte boundary", async () => {
+    const child = createInMemoryChildProcess();
+    const transport = startProcess({ child });
+    const message = { type: "notice", text: "原生 café 🐱🌍" };
+    const bytes = Buffer.from(`${JSON.stringify(message)}\n`, "utf8");
+    const messages: Record<string, unknown>[] = [];
+    transport.onMessage((frame) => messages.push(frame));
+
+    try {
+      for (let split = 1; split < bytes.length; split += 1) {
+        child.stdout.write(bytes.subarray(0, split));
+        child.stdout.write(bytes.subarray(split));
+
+        expect(messages, `stdout byte boundary ${split}`).toEqual([message]);
+        messages.length = 0;
+      }
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test("preserves bytewise UTF-8 across multiple lines and interleaved stderr", async () => {
+    const child = createInMemoryChildProcess();
+    const transport = startProcess({ child });
+    const messages: Record<string, unknown>[] = [];
+    transport.onMessage((message) => messages.push(message));
+    const first = { type: "notice", text: "原生 🐱" };
+    const second = { type: "notice", text: "café 🌍" };
+    const stdout = Buffer.from(
+      `\n${JSON.stringify(first)}\r\n\n${JSON.stringify(second)}\n`,
+      "utf8",
+    );
+    const diagnostic = "诊断：原生 café 🐱🌍";
+    const stderr = Buffer.from(diagnostic, "utf8");
+
+    try {
+      for (let index = 0; index < Math.max(stdout.length, stderr.length); index += 1) {
+        child.stdout.write(stdout.subarray(index, index + 1));
+        child.stderr.write(stderr.subarray(index, index + 1));
+      }
+      child.stdout.end();
+      child.stderr.end();
+
+      expect(messages).toEqual([first, second]);
+      const exit = nextExit(transport);
+      const request = transport.request({ type: "hang" }, null);
+      const rejection = expect(request).rejects.toThrow(
+        `JSONL RPC process exited with code 7 and signal null\n${diagnostic}`,
+      );
+      child.emit("exit", 7, null);
+
+      await rejection;
+      await expect(exit).resolves.toMatchObject({
+        code: 7,
+        error: expect.objectContaining({
+          message: `JSONL RPC process exited with code 7 and signal null\n${diagnostic}`,
+        }),
+      });
+    } finally {
+      await transport.close();
+    }
+  });
+
   test("rejects unsuccessful responses", async () => {
     const transport = startProcess();
 
@@ -239,7 +302,7 @@ describe("JsonlRpcProcess", () => {
       const command = await sentRequest;
 
       // Emit a logical response split into protocol v2 chunk frames.
-      const value = "x".repeat(1024 * 1024);
+      const value = "原生🐱".repeat(128 * 1024);
       const logical = JSON.stringify({
         id: command.id,
         type: "response",

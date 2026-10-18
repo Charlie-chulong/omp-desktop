@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ReactElement } from "react";
+import { useCallback, type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -7,7 +7,7 @@ import { DraggableList, type DraggableRenderItemInfo } from "@/components/dragga
 import { isWeb } from "@/constants/platform";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import {
-  reorderQueuedComposerMessages,
+  moveQueuedComposerMessageTo,
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
@@ -32,21 +32,9 @@ export function QueuedMessageTrack({
   onEdit: (id: string) => void;
   onSendNow: (id: string) => void;
 }) {
-  const dragStartRef = useRef<{ agentId: string; messageIds: string[] } | null>(null);
-  const onDragBegin = useCallback(() => {
-    dragStartRef.current = { agentId, messageIds: queue.read(agentId).map((item) => item.id) };
-  }, [agentId, queue]);
-  const onDragEnd = useCallback(
-    (orderedMessages: QueuedComposerMessage[]) => {
-      const dragStart = dragStartRef.current;
-      dragStartRef.current = null;
-      if (!dragStart || dragStart.agentId !== agentId) return;
-      reorderQueuedComposerMessages({
-        agentId,
-        originalMessageIds: dragStart.messageIds,
-        orderedMessageIds: orderedMessages.map((item) => item.id),
-        queue,
-      });
+  const onReorder = useCallback(
+    (messageId: string, targetMessageId: string) => {
+      moveQueuedComposerMessageTo({ agentId, messageId, targetMessageId, queue });
     },
     [agentId, queue],
   );
@@ -65,11 +53,11 @@ export function QueuedMessageTrack({
   if (messages.length === 0) return null;
   return (
     <DraggableList
+      key={agentId}
       data={messages}
       keyExtractor={queuedMessageKey}
       renderItem={renderMessage}
-      onDragBegin={onDragBegin}
-      onDragEnd={onDragEnd}
+      onReorder={onReorder}
       useDragHandle
       scrollEnabled={false}
       containerStyle={styles.queueTrack}
@@ -109,6 +97,7 @@ function QueuedMessageRow({
         style={[styles.dragHandle, DRAG_HANDLE_WEB_STYLE]}
         accessibilityRole="button"
         accessibilityLabel={dragLabel}
+        accessibilityHint={t("composer.attachments.dragQueuedMessageHint")}
         testID={`queued-message-drag-${item.id}`}
       >
         {handleIcon}

@@ -6,41 +6,11 @@ import {
   resolveStartupRoute,
   shouldRunStartupGiveUpTimer,
   startHostRuntimeBootstrap,
+  isDesktopStartupReady,
 } from "./host-runtime-bootstrap";
 import type { DaemonStartResult, StartDaemonIfEnabledInput } from "@/runtime/daemon-start-service";
 
 describe("startHostRuntimeBootstrap", () => {
-  it("boots the host registry and starts the managed-daemon decision as one operation", async () => {
-    const events: string[] = [];
-    const shouldStartDaemon = async () => true;
-    const store = {
-      boot: async () => {
-        events.push("boot");
-      },
-    };
-    const receivedDecisions: Array<Promise<boolean>> = [];
-    const daemonStartService = {
-      startIfEnabled: async (input: StartDaemonIfEnabledInput) => {
-        receivedDecisions.push(
-          Promise.resolve(
-            typeof input.shouldStart === "boolean" ? input.shouldStart : input.shouldStart(),
-          ),
-        );
-        events.push("daemon-start-decision");
-        return { ok: true as const };
-      },
-    };
-
-    startHostRuntimeBootstrap({
-      store,
-      daemonStartService,
-      shouldStartDaemon,
-    });
-
-    expect(events).toEqual(["boot", "daemon-start-decision"]);
-    expect(await receivedDecisions[0]).toBe(true);
-  });
-
   it("waits for the host registry to load before evaluating managed-daemon startup", async () => {
     const events: string[] = [];
     let resolveBoot!: () => void;
@@ -67,7 +37,7 @@ describe("startHostRuntimeBootstrap", () => {
       },
     };
 
-    startHostRuntimeBootstrap({
+    const startup = startHostRuntimeBootstrap({
       store,
       daemonStartService,
       shouldStartDaemon: () => {
@@ -80,13 +50,104 @@ describe("startHostRuntimeBootstrap", () => {
     expect(events).toEqual(["boot", "daemon-start-service"]);
 
     resolveBoot();
-    await startFinished;
+    await expect(startup).resolves.toEqual({ ok: true });
     expect(events).toEqual([
       "boot",
       "daemon-start-service",
       "evaluate-daemon-setting",
       "decision:true",
     ]);
+  });
+});
+
+describe("desktop startup completion", () => {
+  const ready = {
+    startupSettled: true,
+    startupBlocker: { kind: "none" as const },
+    pathname: "/open-project",
+    registryLoaded: true,
+    selectionHydrated: true,
+    layoutHydrated: true,
+    settingsLoaded: true,
+    host: {
+      connectionStatus: "online" as const,
+      agentDirectoryStatus: "ready" as const,
+      activeConnectionId: "local",
+      probeByConnectionId: new Map(),
+    },
+  };
+
+  it("waits for initial startup and persisted UI restoration before starting the companion", () => {
+    expect(isDesktopStartupReady({ ...ready, startupSettled: false })).toBe(false);
+    expect(isDesktopStartupReady({ ...ready, registryLoaded: false })).toBe(false);
+    expect(isDesktopStartupReady({ ...ready, selectionHydrated: false })).toBe(false);
+    expect(isDesktopStartupReady({ ...ready, layoutHydrated: false })).toBe(false);
+    expect(isDesktopStartupReady({ ...ready, settingsLoaded: false })).toBe(false);
+    expect(isDesktopStartupReady(ready)).toBe(true);
+  });
+
+  it("does not finish on redirects or while the active host connects or loads its directory", () => {
+    expect(isDesktopStartupReady({ ...ready, pathname: "/" })).toBe(false);
+    expect(isDesktopStartupReady({ ...ready, pathname: "/h/server-a" })).toBe(false);
+    expect(
+      isDesktopStartupReady({
+        ...ready,
+        host: { ...ready.host, connectionStatus: "connecting" },
+      }),
+    ).toBe(false);
+    expect(
+      isDesktopStartupReady({
+        ...ready,
+        host: { ...ready.host, agentDirectoryStatus: "initial_loading" },
+      }),
+    ).toBe(false);
+  });
+
+  it("finishes on settled offline, disabled-management and startup-error surfaces", () => {
+    expect(isDesktopStartupReady({ ...ready, host: null, pathname: "/welcome" })).toBe(true);
+    expect(
+      isDesktopStartupReady({
+        ...ready,
+        host: { ...ready.host, connectionStatus: "offline", agentDirectoryStatus: "idle" },
+      }),
+    ).toBe(true);
+    expect(
+      isDesktopStartupReady({
+        ...ready,
+        host: { ...ready.host, agentDirectoryStatus: "error_before_first_success" },
+      }),
+    ).toBe(true);
+    expect(
+      isDesktopStartupReady({
+        ...ready,
+        pathname: "/",
+        startupBlocker: { kind: "managed-daemon-error", message: "unavailable" },
+      }),
+    ).toBe(true);
+  });
+
+  it("finishes after all saved-host probes fail, but not during probing or active connection", () => {
+    const host = {
+      ...ready.host,
+      activeConnectionId: null,
+      connectionStatus: "connecting" as const,
+      probeByConnectionId: new Map([
+        ["saved", { status: "unavailable" as const, latencyMs: null }],
+      ]),
+    };
+    expect(isDesktopStartupReady({ ...ready, host })).toBe(true);
+    expect(
+      isDesktopStartupReady({ ...ready, host: { ...host, activeConnectionId: "saved" } }),
+    ).toBe(false);
+    expect(
+      isDesktopStartupReady({
+        ...ready,
+        host: {
+          ...host,
+          probeByConnectionId: new Map([["saved", { status: "pending", latencyMs: null }]]),
+        },
+      }),
+    ).toBe(false);
   });
 });
 

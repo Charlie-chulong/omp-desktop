@@ -1991,6 +1991,8 @@ const workspacesSectionHeaderElement = <WorkspacesSectionHeader />;
 const staticStyles = RNStyleSheet.create({
   desktopSidebar: {
     position: "relative" as const,
+    // Let the resize strip overlap the adjacent workspace's stacking context.
+    zIndex: 1,
   },
   desktopSidebarHidden: {
     display: "none",
