@@ -7,7 +7,7 @@ import {
   endWindowDragActivity,
   type WindowDragActivityToken,
 } from "@/desktop/window-drag-activity";
-import { getIsElectronRuntime } from "@/constants/layout";
+import { getIsElectronRuntime, getIsElectronRuntimeMac } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
 import { useIsDesktopWindowMaximized } from "@/utils/desktop-window";
 
@@ -63,7 +63,7 @@ export function useTitlebarWindowDragSurface() {
   const activeActivityRef = useRef<WindowDragActivityToken | null>(null);
   const pendingMoveRef = useRef<WindowDragPoint | null>(null);
   const moveFrameRef = useRef<number | null>(null);
-  const manualMode = isMaximized || manualDragActive;
+  const manualMode = (isMaximized && !getIsElectronRuntimeMac()) || manualDragActive;
 
   const resetActiveDrag = useCallback((pointerId: number, flushLastMove: boolean) => {
     if (activePointerRef.current !== pointerId) return;

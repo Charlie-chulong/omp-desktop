@@ -2,6 +2,9 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { View, type PointerEvent as RNPointerEvent } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { startResizeHandleDrag, type ResizeHandleDrag } from "@/components/resize-handle-drag";
+import { isWeb } from "@/constants/platform";
+
+const RESIZE_HANDLE_DATASET = isWeb ? { windowChromeInteractive: "true" } : undefined;
 
 export interface ResizeHandleProps {
   testID?: string;
@@ -196,6 +199,7 @@ export function ResizeHandle({
       )}
       <View
         role="separator"
+        dataSet={RESIZE_HANDLE_DATASET}
         aria-orientation={direction === "horizontal" ? "vertical" : "horizontal"}
         style={hitAreaStyle}
         onPointerDown={handlePointerDown}
@@ -210,6 +214,8 @@ const styles = StyleSheet.create((_theme) => ({
   handle: {
     position: "relative",
     flexShrink: 0,
+    // Keep the overhanging hit target and highlight above both adjacent panes.
+    zIndex: 1,
   },
   handleHorizontal: {
     width: 1,

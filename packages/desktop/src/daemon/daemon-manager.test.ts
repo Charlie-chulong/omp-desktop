@@ -52,8 +52,11 @@ vi.mock("electron-log/main", () => ({
   },
 }));
 
-vi.mock("@omp-desktop/server", () => ({
+vi.mock("@omp-desktop/server/paseo-home", () => ({
   resolvePaseoHome: vi.fn(() => mocks.paseoHome),
+}));
+
+vi.mock("@omp-desktop/server/utils/spawn", () => ({
   spawnProcess: mocks.spawnProcess,
 }));
 

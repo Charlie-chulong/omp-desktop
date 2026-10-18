@@ -6,7 +6,7 @@ import type { NodeEntrypointSpec } from "../node-entrypoint-launcher.js";
 import {
   assertPathExists,
   findPackageRootFromResolvedPath,
-  resolvePackagedAsarPath,
+  resolvePackagedAppPath,
 } from "../package-paths.js";
 
 const CLI_PACKAGE_NAME = "@omp-desktop/cli";
@@ -28,7 +28,7 @@ export function resolveExternalCliEntrypoint(): NodeEntrypointSpec {
       entryPath: assertPathExists({
         label: "Bundled external CLI entrypoint",
         filePath: path.join(
-          resolvePackagedAsarPath(),
+          resolvePackagedAppPath(),
           "node_modules",
           "@omp-desktop",
           "cli",
@@ -63,7 +63,7 @@ export function resolvePassthroughCliEntrypoint(): string {
     return assertPathExists({
       label: "Bundled passthrough CLI entrypoint",
       filePath: path.join(
-        resolvePackagedAsarPath(),
+        resolvePackagedAppPath(),
         "node_modules",
         "@omp-desktop",
         "cli",

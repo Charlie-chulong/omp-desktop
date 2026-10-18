@@ -11,6 +11,14 @@ interface MountedPreview {
 }
 
 const mountedPreviews: MountedPreview[] = [];
+const STATUS_BADGE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="142" height="20"></svg>',
+)}`;
+const UE_BADGE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="75" height="20"></svg>',
+)}`;
+const EMPTY_IMAGE_STYLE = {};
+const BADGE_ROW_STYLE = { flexDirection: "row" } as const;
 
 function mountPreview(node: ReactNode): HTMLDivElement {
   const container = document.createElement("div");
@@ -31,13 +39,9 @@ afterEach(() => {
 });
 
 describe("Markdown preview images", () => {
-  it("renders linked Shields.io badges at their intrinsic dimensions", async () => {
+  it("renders linked badges at their intrinsic dimensions", async () => {
     const preview = mountPreview(
-      <MarkdownBlockImage
-        src="https://img.shields.io/badge/status-In%20Development-yellow.svg"
-        alt="Status"
-        style={{}}
-      />,
+      <MarkdownBlockImage src={STATUS_BADGE} alt="Status" style={EMPTY_IMAGE_STYLE} />,
     );
     const image = preview.querySelector("img");
     if (!(image instanceof HTMLImageElement)) {
@@ -50,20 +54,12 @@ describe("Markdown preview images", () => {
 
   it("keeps consecutive linked badges next to each other", async () => {
     const preview = mountPreview(
-      <View style={{ flexDirection: "row" }}>
+      <View style={BADGE_ROW_STYLE}>
         <MarkdownBlockImageLink href="">
-          <MarkdownBlockImage
-            src="https://img.shields.io/badge/UE-4.22-orange.svg"
-            alt="UE Version"
-            style={{}}
-          />
+          <MarkdownBlockImage src={UE_BADGE} alt="UE Version" style={EMPTY_IMAGE_STYLE} />
         </MarkdownBlockImageLink>
         <MarkdownBlockImageLink href="">
-          <MarkdownBlockImage
-            src="https://img.shields.io/badge/status-In%20Development-yellow.svg"
-            alt="Status"
-            style={{}}
-          />
+          <MarkdownBlockImage src={STATUS_BADGE} alt="Status" style={EMPTY_IMAGE_STYLE} />
         </MarkdownBlockImageLink>
       </View>,
     );
