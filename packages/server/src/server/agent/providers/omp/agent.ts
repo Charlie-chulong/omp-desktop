@@ -1314,7 +1314,7 @@ const OMP_DESKTOP_RPC_BOOTSTRAP_PROVIDER = {
 
 function isOmpRpcMissingModelError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /no models available/i.test(message);
+  return /no models available|no default model selected/i.test(message);
 }
 
 export function mergeOmpDesktopRpcBootstrapIntoModelsYaml(configYaml: string): string {
