@@ -1081,6 +1081,12 @@ the target platform's native bindings. The early OMP catalog hook is loaded thro
 module URL, so installation directories containing spaces remain valid. Windows ConPTY files are
 loaded from the matching node-pty prebuild, not its duplicate `third_party` directory.
 
+Daemon command execution collects `execFile` callback stdout and stderr explicitly. The
+mini-electron runtime does not expose Node's custom `promisify(execFile)` result shape;
+using it can misreport a supported bundled OMP as older than the required version.
+The packaged smoke checks native image launch preparation inside the shipped runtime,
+in addition to invoking the OMP binary directly. The actual minimum remains OMP 18.8.7.
+
 The Electron language allowlists retain all nine application languages and common regional
 variants. macOS also retains each selected language's grammatical-gender `.lproj` variants.
 Update both platform allowlists in `packages/desktop/electron-builder.yml` when adding a language.

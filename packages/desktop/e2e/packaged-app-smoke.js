@@ -616,7 +616,7 @@ async function runCliShimJsonCommand({ appPath, env, args, label }) {
   }
 }
 
-async function smokeBundledOmpRuntime({ appPath, env }) {
+async function smokeBundledOmpRuntime({ appPath, env, executableName }) {
   const binaryPath = getBundledOmpPath(appPath);
   assertExecutable(binaryPath, "Bundled OMP executable");
 
@@ -628,6 +628,54 @@ async function smokeBundledOmpRuntime({ appPath, env }) {
     throw new Error(
       `Bundled OMP version check failed (status ${version.status}): ${
         version.error || version.stderr?.trim() || version.stdout?.trim() || "<empty>"
+      }`,
+    );
+  }
+
+  // Run Desktop's version probe inside the shipped runtime, not host Node.
+  // A plain --version spawn misses child_process/promisify incompatibilities.
+  const resourcesDir = path.dirname(path.dirname(binaryPath));
+  const imageSettingsUrl = require("node:url").pathToFileURL(
+    path.join(
+      resourcesDir,
+      "app",
+      "node_modules",
+      "@omp-desktop",
+      "server",
+      "dist",
+      "server",
+      "server",
+      "agent",
+      "providers",
+      "omp",
+      "image-settings.js",
+    ),
+  ).href;
+  const imageSettingsProbe = spawnSync(
+    getExecutablePath(appPath, executableName),
+    [
+      "--input-type=module",
+      "-e",
+      `const { prepareOmpImageSettingsLaunch } = await import(${JSON.stringify(imageSettingsUrl)});
+const launch = await prepareOmpImageSettingsLaunch(
+  [${JSON.stringify(binaryPath)}], ${JSON.stringify(appPath)}, process.env,
+);
+await launch.cleanup();
+console.log("native-image-launch-ready");`,
+    ],
+    { encoding: "utf8", env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, timeout: SMOKE_TIMEOUT_MS },
+  );
+  if (
+    imageSettingsProbe.error ||
+    imageSettingsProbe.status !== 0 ||
+    !imageSettingsProbe.stdout?.includes("native-image-launch-ready")
+  ) {
+    throw new Error(
+      `Packaged native image launch preparation failed: ${
+        imageSettingsProbe.error ||
+        imageSettingsProbe.stderr ||
+        imageSettingsProbe.stdout ||
+        "<empty>"
       }`,
     );
   }
@@ -962,7 +1010,7 @@ async function smokePackagedDesktopApp({ appPath, executableName }) {
     }
     console.log("Packaged desktop smoke: second instance preserved the primary daemon");
     await smokeCliShim({ appPath, env });
-    await smokeBundledOmpRuntime({ appPath, env });
+    await smokeBundledOmpRuntime({ appPath, env, executableName });
     await smokeCliTerminal({ appPath, env });
     await smokePetCreationHelper({ page, appPath, env });
     await stopDaemonForCleanup();

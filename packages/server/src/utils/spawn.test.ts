@@ -34,11 +34,26 @@ describe("execCommand", () => {
     tempDirs.length = 0;
   });
 
-  test("returns stdout and stderr for a successful command", async () => {
-    const result = await execCommand("echo", ["hello"]);
+  test("returns stdout and stderr separately for a successful command", async () => {
+    const result = await execCommand(process.execPath, [
+      "-e",
+      'process.stdout.write("command output"); process.stderr.write("command warning");',
+    ]);
 
-    expect(result.stdout.trim()).toBe("hello");
-    expect(result.stderr).toBe("");
+    expect(result).toEqual({ stdout: "command output", stderr: "command warning" });
+  });
+
+  test("preserves exit status and both outputs on command failure", async () => {
+    await expect(
+      execCommand(process.execPath, [
+        "-e",
+        'process.stdout.write("partial output"); process.stderr.write("command failed"); process.exitCode = 7;',
+      ]),
+    ).rejects.toMatchObject({
+      code: 7,
+      stdout: "partial output",
+      stderr: "command failed",
+    });
   });
 
   test("rejects when the command times out", async () => {
