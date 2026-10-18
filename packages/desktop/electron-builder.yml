@@ -1,3 +1,4 @@
+electronVersion: 41.2.0
 npmRebuild: false
 asar: false
 appId: sh.omp.desktop
@@ -34,6 +35,13 @@ files:
   - "!node_modules/@omp-desktop/*/.tasks/**"
   - "!node_modules/@omp-desktop/*/conversations/**"
   - "!node_modules/@omp-desktop/*/test-results/**"
+  # electron-builder's workspace dependency walk omits this directory even
+  # though the bundled CLI imports it at startup. Include the compiled source
+  # explicitly so the packaged CLI remains self-contained.
+  - from: ../cli/dist/output
+    to: node_modules/@omp-desktop/cli/dist/output
+    filter:
+      - "**/*.js"
 extraResources:
   - from: ../app/dist
     to: app-dist

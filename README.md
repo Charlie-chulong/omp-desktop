@@ -70,6 +70,11 @@ On macOS, titlebar dragging and double-click zoom/restore use native AppKit
 handling, including while maximized; the Windows/Linux manual restore-and-drag
 fallback is not used. Titlebar buttons remain excluded from drag regions.
 Double-click follows the macOS titlebar action preference.
+On Windows, a maximized titlebar single click leaves the window maximized;
+double-click restores it, and only actual drag motion starts the restore-and-drag
+fallback. Interactive titlebar controls remain excluded from these gestures.
+The web document's `color-scheme` follows the resolved application theme, keeping
+native selection and form-control colors aligned with light/dark appearance.
 Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
 vertical workspace splitters use matching two-pixel accent highlights on hover, without
 narrowing their invisible drag targets.
@@ -78,6 +83,8 @@ contexts, keeping the full drag target reachable on both sides of the visible
 line, including horizontal terminal splits.
 Their full hit areas opt out of native window dragging, so grabbing an
 overhanging edge resizes the pane instead of dragging the window underneath.
+Dragging a workspace divider follows the pointer distance even when adjacent groups
+contain hidden panes; hidden panes retain their stored size for later restoration.
 
 Sidebar conversations always use their conversation title, with only the last-activity time
 beside it (for example, `2h` or `2d`). Rows without an activity timestamp leave that space empty.
@@ -806,8 +813,8 @@ does not change the conversation's owning workspace.
 ## File drag and drop
 
 - Drop files onto the message input to add attachments without sending a message.
-- Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina displays use the same visible drop target as ordinary displays.
-- Paste a clipboard image into the message input to add it as an attachment. The draft is not sent automatically.
+- Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina and Windows high-DPI displays use the same visible drop target as ordinary displays. Windows uses native OLE file drops; reparse-point path components are not granted access.
+- Paste a clipboard image into the message input to add it as an attachment, including native PNG and DIB/DIBV5 images on Windows. The draft is not sent automatically.
 - Drop external UTF-8 text files onto the conversation history or other ordinary areas to open local, read-only file tabs, not a dialog. Each tab offers **Preview / Source** modes; Markdown and HTML render in Preview mode. Files are not uploaded.
   - Outside a workspace, files open on a dedicated preview page with file tabs.
   - Preview tabs and their contents are session-only. Switching tabs retains the selected mode; closing a tab releases its content, and reloading removes local preview tabs.
@@ -834,9 +841,11 @@ refresh remains available for filesystem changes made outside a conversation.
 
 Desktop inputs retain standard native editing shortcuts: **Cmd+A/C/X/V/Z** and
 **Cmd+Shift+Z** on macOS (select all, copy, cut, paste, undo, and redo).
+Windows uses **Ctrl+A/C/X/V/Z** and **Ctrl+Y** for redo.
 Use **Cmd+=** or **Cmd+Shift+=** to zoom in, **Cmd+-** to zoom out, and **Cmd+0**
-to restore actual size. Windows and Linux use **Ctrl** in place of **Cmd**.
+to restore actual size. Windows and Linux use **Ctrl** for the zoom shortcuts.
 Zoom shortcuts are suspended while recording a custom shortcut in settings.
+On Windows, **Ctrl+K** opens the command palette and **Ctrl+,** opens Settings.
 
 In an editable source tab, press **Ctrl+/** to comment or uncomment the selected lines. **Cmd+/**
 continues to work on macOS. The editor uses the comment syntax of the current file type.
@@ -1112,14 +1121,31 @@ certificate (or `CSC_LINK`) and one of electron-builder's notarization credentia
 When those credentials are present, the script verifies the application's code signature, stapled
 notarization ticket, and Gatekeeper assessment after packaging.
 
-Windows installers are produced in separate electron-builder invocations. Build one architecture with:
+Windows mini-electron packages currently support x64 only. Git for Windows Bash must be on
+`PATH`; the npm scripts use `cross-env` and invoke Bash explicitly, including when npm uses
+the default Windows `cmd.exe` shell:
 
 ```bash
+npm run build:windows
+# Equivalent explicit target:
 npm run build:windows:x64
-npm run build:windows:arm64
 ```
 
-Run `npm run build:windows` to build both sequentially. Publish the resulting `OMP-Desktop-Setup-<version>-x64.exe` and `OMP-Desktop-Setup-<version>-arm64.exe`; no combined installer is produced.
+Windows packages use `@iriscat/mini-electron` 0.1.7 or newer, including native SQLite,
+IPC frame identity, native clipboard/keyboard/OLE input, selection colors, and IME
+handling. To package an unpublished local runtime instead, build its checkout with
+`python build.py --package-dist` and select that distribution explicitly (Git Bash):
+
+```bash
+MINI_ELECTRON_DIST_PATH=D:/Project/mini-electron/out/windows-x64/runtime-dist \
+  npm run build:windows
+```
+
+The output includes `OMP-Desktop-Setup-<version>-x64.exe`, its `.blockmap`, a `.zip`, and
+`latest.yml` (or the prerelease channel's metadata) in `packages/desktop/release`.
+Windows runtime builds disable Inspector/CDP, so the CDP-based
+`PASEO_DESKTOP_SMOKE=1` check is not supported there. Verify the real native window and
+bundled CLI/daemon instead; do not enable Inspector or bypass IPC frame checks to pass a smoke.
 
 Windows daemon and CLI process-tree cleanup launch `taskkill.exe /T /F` directly with a hidden
 console, avoiding transient `cmd.exe` windows during provider refresh and process shutdown.
@@ -1135,22 +1161,20 @@ Every release must upload the updater metadata and payloads generated from the s
 
 - macOS: `OMP-Desktop-<version>-<arch>.dmg`, the matching `.zip`, and the channel metadata
   (`latest-mac.yml` for Stable or `beta-mac.yml` for Beta);
-- Windows: both architecture-specific `.exe` installers, their `.blockmap` files, and the merged
-  channel metadata (`latest.yml` for Stable or `beta.yml` for Beta);
+- Windows: the x64 `.exe` installer, its `.blockmap`, and the channel metadata
+  (`latest.yml` for Stable or `beta.yml` for Beta);
 - Linux AppImage releases: the AppImage, its blockmap, and the matching `*-linux.yml` metadata.
 
-`build-windows.sh` merges the x64 and arm64 metadata so `electron-updater` selects the installer
-matching `process.arch`. A GitHub Release that only contains DMG or EXE files remains available for
-manual download but cannot be installed by the in-app updater. Publish the generated files only
-after every target for that release is complete; do not use `--publish always` during the individual
-Windows architecture builds because it can publish incomplete channel metadata.
+`build-windows.sh` writes the updater metadata for its supported x64 target. A GitHub Release
+that only contains DMG or EXE files remains available for manual download but cannot be installed
+by the in-app updater. Publish the generated files only after every target for that release is
+complete; local Windows builds use `--publish never`.
 
 To build Windows packages without shipping a new OMP executable, run:
 
 ```bash
 npm run build:windows:no-omp
 npm run build:windows:no-omp:x64
-npm run build:windows:no-omp:arm64
 ```
 
 These artifacts use `OMP-Desktop-No-OMP-Setup-<version>-<arch>.exe` names so they do not overwrite

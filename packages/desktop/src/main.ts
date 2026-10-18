@@ -476,8 +476,6 @@ async function createWindow(
 
   try {
     if (!app.isPackaged) {
-      const { loadReactDevTools } = await import("./features/react-devtools.js");
-      await loadReactDevTools();
       const initialUrl = options.initialRoute
         ? new URL(options.initialRoute, `${DEV_SERVER_URL}/`).toString()
         : DEV_SERVER_URL;
