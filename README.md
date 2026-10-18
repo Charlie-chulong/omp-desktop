@@ -57,6 +57,11 @@ Double-click follows the macOS titlebar action preference.
 Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
 vertical workspace splitters use matching two-pixel accent highlights on hover, without
 narrowing their invisible drag targets.
+Sidebar and workspace divider hit areas stay above neighboring pane stacking
+contexts, keeping the full drag target reachable on both sides of the visible
+line, including horizontal terminal splits.
+Their full hit areas opt out of native window dragging, so grabbing an
+overhanging edge resizes the pane instead of dragging the window underneath.
 
 Sidebar conversations always use their conversation title, with only the last-activity time
 beside it (for example, `2h` or `2d`). Rows without an activity timestamp leave that space empty.
