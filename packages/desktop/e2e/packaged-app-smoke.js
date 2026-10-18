@@ -137,10 +137,6 @@ function shellQuoteCliArg(value) {
 }
 
 function getTerminalHookSmokeCommand(marker) {
-  if (process.platform === "win32") {
-    return `Write-Output '${marker}'`;
-  }
-
   return `echo ${marker}`;
 }
 
