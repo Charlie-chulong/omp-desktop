@@ -17,6 +17,7 @@ type Account = NonNullable<OmpProviderManagement["loginProviders"][number]["acco
 type Client = Pick<DaemonClient, "getOmpProviderManagement" | "consumeOmpCodexResetCredit">;
 const runtime = vi.hoisted(() => ({
   client: null as Client | null,
+  language: "en" as keyof typeof codexQuotaStrings,
   confirm: vi.fn<() => Promise<boolean>>(),
 }));
 vi.mock("@/runtime/host-runtime", () => ({ useHostRuntimeClient: () => runtime.client }));
@@ -31,10 +32,12 @@ vi.mock("@/stores/session-store", () => ({
 vi.mock("@/utils/confirm-dialog", () => ({ confirmDialog: runtime.confirm }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    i18n: { language: "en" },
+    i18n: { language: runtime.language },
     t: (key: string, args?: Record<string, unknown>) => {
       const value =
-        codexQuotaStrings.en[key.split(".").at(-1) as keyof typeof codexQuotaStrings.en] ?? key;
+        codexQuotaStrings[runtime.language][
+          key.split(".").at(-1) as keyof typeof codexQuotaStrings.en
+        ] ?? key;
       return value.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) =>
         String(args?.[name] ?? ""),
       );
@@ -100,6 +103,7 @@ function button(value: Account) {
 }
 beforeEach(() => {
   vi.stubGlobal("React", React);
+  runtime.language = "en";
   runtime.confirm.mockResolvedValue(true);
 });
 afterEach(async () => {
@@ -304,5 +308,59 @@ describe("subscription expiry display", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("remaining Codex credits", () => {
+  it.each([
+    [undefined, "Credit balance unavailable"],
+    [null, "Credit balance unavailable"],
+    [{ hasCredits: true, unlimited: false, balance: null }, "Credit balance unavailable"],
+    [{ hasCredits: true, unlimited: false }, "Credit balance unavailable"],
+    [{ hasCredits: false, unlimited: false, balance: null }, "No credits available"],
+    [{ hasCredits: false, unlimited: false, balance: "0" }, "Remaining: 0 credits"],
+    [
+      { hasCredits: true, unlimited: false, balance: "9007199254740993.000001" },
+      "Remaining: 9007199254740993.000001 credits",
+    ],
+    [{ hasCredits: true, unlimited: true, balance: null }, "Unlimited credits"],
+    [{ hasCredits: true, unlimited: true, balance: "0" }, "Unlimited credits"],
+  ] as const)("displays the exact balance state %j", (credits, expected) => {
+    const value = account();
+    value.quota!.credits = credits;
+    const consume = vi.fn<Client["consumeOmpCodexResetCredit"]>();
+    mount(value, {
+      consumeOmpCodexResetCredit: consume,
+      getOmpProviderManagement: async () => management(value),
+    });
+    expect(screen.getByText("Codex credits")).toBeTruthy();
+    expect(screen.getByText(expected)).toBeTruthy();
+    expect(screen.getByText("Reset cards")).toBeTruthy();
+    expect(screen.getByText("Available: 1")).toBeTruthy();
+    expect(consume).not.toHaveBeenCalled();
+  });
+
+  it("does not use reset-card inventory as the balance when there is no quota data", () => {
+    const value: Account = { credentialId: nextId++ };
+    mount(value, {
+      consumeOmpCodexResetCredit: vi.fn(),
+      getOmpProviderManagement: async () => management(value),
+    });
+    expect(screen.getByText("Credit balance unavailable")).toBeTruthy();
+    expect(screen.queryByText("Remaining: 0 credits")).toBeNull();
+    expect(screen.queryByText("Unlimited credits")).toBeNull();
+  });
+
+  it("localizes the balance label without rounding the reported decimal", () => {
+    runtime.language = "zh-CN";
+    const value = account();
+    value.quota!.credits = { hasCredits: true, unlimited: false, balance: "123.4500" };
+    mount(value, {
+      consumeOmpCodexResetCredit: vi.fn(),
+      getOmpProviderManagement: async () => management(value),
+    });
+    expect(screen.getByText("Codex 点数")).toBeTruthy();
+    expect(screen.getByText("剩余：123.4500 点数")).toBeTruthy();
+    expect(screen.getByText("重置卡")).toBeTruthy();
   });
 });

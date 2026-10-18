@@ -22,6 +22,7 @@ import { redirectIfArchivingActiveWorkspace } from "@/utils/sidebar-workspace-ar
 import { requireWorkspaceDirectory } from "@/utils/workspace-directory";
 import { isNative as platformIsNative } from "@/constants/platform";
 import { SIDEBAR_LIST_INSET, useIsCompactFormFactor } from "@/constants/layout";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { useLongPressDragInteraction } from "@/components/sidebar/use-long-press-drag-interaction";
 import {
@@ -390,6 +391,8 @@ function WorkspaceRowBody({
                   onArchive={onArchive}
                   onCopyBranchName={onCopyBranchName}
                   onCopyPath={onCopyPath}
+                  onReferenceContent={onReferenceContent}
+                  referenceContentStatus={referenceContentStatus}
                   onRename={onRename}
                   onMarkAsRead={onMarkAsRead}
                 />
@@ -418,6 +421,8 @@ function WorkspaceRowTrailingActions({
   onMarkAsRead,
   onCopyBranchName,
   onCopyPath,
+  onReferenceContent,
+  referenceContentStatus,
   onRename,
 }: {
   workspace: SidebarWorkspaceEntry;
@@ -435,9 +440,12 @@ function WorkspaceRowTrailingActions({
   onMarkAsRead?: () => void;
   onCopyBranchName?: () => void;
   onCopyPath?: () => void;
+  onReferenceContent?: () => void;
+  referenceContentStatus?: "idle" | "pending" | "success";
   onRename?: () => void;
 }) {
   const { t } = useTranslation();
+  const showPersistentActions = useShowPersistentActions();
   const showShortcut = showShortcutBadge && shortcutNumber !== null;
   const {
     showTrailing,
@@ -450,6 +458,7 @@ function WorkspaceRowTrailingActions({
     hasArchiveAction: Boolean(onArchive),
     isHovered,
     isTouchPlatform,
+    showPersistentActions,
     showShortcut,
   });
   const kebab = useOpenKebabMenuVisibility(showKebabInSlot);
@@ -478,6 +487,9 @@ function WorkspaceRowTrailingActions({
                 rootAgents={workspace.rootAgents}
                 onCopyPath={onCopyPath}
                 onCopyBranchName={onCopyBranchName}
+                onReferenceContent={onReferenceContent}
+                referenceContentStatus={referenceContentStatus}
+                openInFileManagerPath={workspace.workspaceDirectory}
                 onRename={onRename}
                 onMarkAsRead={onMarkAsRead}
                 onArchive={onArchive}

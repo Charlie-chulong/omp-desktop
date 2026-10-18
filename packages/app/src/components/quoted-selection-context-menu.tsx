@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
@@ -9,56 +9,81 @@ import {
   ContextMenuSeparator,
   useContextMenu,
 } from "@/components/ui/context-menu";
+import { Button } from "@/components/ui/button";
 import type { Rect } from "@/components/ui/menu";
 import { isWeb } from "@/constants/platform";
 import { useTranslation } from "react-i18next";
-import { getQuotedSelectionText } from "@/components/quoted-selection";
+import { getQuotedSelectionText, isSameQuotedSelectionRange } from "@/components/quoted-selection";
 import { QuickAskPopover } from "@/components/quick-ask-popover";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 
 interface WebContextMenuEvent {
-  nativeEvent: { pageX: number; pageY: number };
+  nativeEvent: { pageX: number; pageY: number; pointerType?: string };
   preventDefault(): void;
   stopPropagation(): void;
 }
 
 function SelectionContextTarget({
   children,
+  rootRef,
   onSelection,
+  showSelectionActions,
+  onQuote,
+  onAsk,
+  onPreserveSelection,
+  onSelectionKeyDown,
+  quoteLabel,
+  askLabel,
 }: {
   children: ReactNode;
-  onSelection: (text: string, anchorRect: Rect) => void;
+  rootRef: RefObject<View | null>;
+  onSelection: (text: string | null, anchorRect: Rect | null, range: Range | null) => void;
+  showSelectionActions: boolean;
+  onQuote: () => void;
+  onAsk: () => void;
+  onPreserveSelection: (event: { preventDefault(): void }) => void;
+  onSelectionKeyDown: (event: { key: string }) => void;
+  quoteLabel: string;
+  askLabel: string;
 }) {
   const contextMenu = useContextMenu();
-  const rootRef = useRef<View | null>(null);
+  const updateSelection = useCallback(() => {
+    if (!isWeb || !rootRef.current) return null;
+    const selection = window.getSelection();
+    const text = getQuotedSelectionText(
+      rootRef.current as unknown as HTMLElement,
+      selection,
+      document.activeElement,
+    );
+    const range = text && selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const rect = range?.getBoundingClientRect();
+    onSelection(
+      text,
+      rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+      range?.cloneRange() ?? null,
+    );
+    return text;
+  }, [onSelection, rootRef]);
+
+  useEffect(() => {
+    if (!isWeb) return;
+    const clearSelection = () => onSelection(null, null, null);
+    document.addEventListener("selectionchange", updateSelection);
+    document.addEventListener("focusin", updateSelection);
+    window.addEventListener("blur", clearSelection);
+    return () => {
+      document.removeEventListener("selectionchange", updateSelection);
+      document.removeEventListener("focusin", updateSelection);
+      window.removeEventListener("blur", clearSelection);
+    };
+  }, [onSelection, updateSelection]);
+
   const handleContextMenu = useCallback(
     (event: WebContextMenuEvent) => {
-      if (!isWeb || !rootRef.current) return;
-      const selection = window.getSelection();
-      const text = getQuotedSelectionText(rootRef.current as unknown as HTMLElement, selection);
-      if (!text) return;
-
+      // Keep the browser's touch selection handles and native Copy menu intact.
+      if (event.nativeEvent.pointerType === "touch" || !updateSelection()) return;
       event.preventDefault();
       event.stopPropagation();
-      const rangeRect =
-        selection && selection.rangeCount > 0
-          ? selection.getRangeAt(0).getBoundingClientRect()
-          : null;
-      onSelection(
-        text,
-        rangeRect && (rangeRect.width > 0 || rangeRect.height > 0)
-          ? {
-              x: rangeRect.x,
-              y: rangeRect.y,
-              width: rangeRect.width,
-              height: rangeRect.height,
-            }
-          : {
-              x: event.nativeEvent.pageX,
-              y: event.nativeEvent.pageY,
-              width: 0,
-              height: 0,
-            },
-      );
       contextMenu.setAnchorRect({
         x: event.nativeEvent.pageX,
         y: event.nativeEvent.pageY,
@@ -67,7 +92,7 @@ function SelectionContextTarget({
       });
       contextMenu.setOpen(true);
     },
-    [contextMenu, onSelection],
+    [contextMenu, updateSelection],
   );
 
   return (
@@ -79,6 +104,22 @@ function SelectionContextTarget({
       testID="quoted-selection-context-target"
     >
       {children}
+      {showSelectionActions ? (
+        <View
+          style={styles.selectionActions}
+          onPointerDown={onPreserveSelection}
+          // @ts-expect-error onKeyDown is available on React Native Web.
+          onKeyDown={onSelectionKeyDown}
+          testID="quoted-selection-actions"
+        >
+          <Button size="sm" onPress={onQuote} testID="quoted-selection-action-quote">
+            {quoteLabel}
+          </Button>
+          <Button size="sm" onPress={onAsk} testID="quoted-selection-action-ask">
+            {askLabel}
+          </Button>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -93,33 +134,60 @@ export function QuotedSelectionContextMenu({
   onAsk: (selectedText: string, question: string, includeContext: boolean) => Promise<string>;
 }) {
   const { t } = useTranslation();
+  const showPersistentActions = useShowPersistentActions();
+  const rootRef = useRef<View | null>(null);
+  const selectionRangeRef = useRef<Range | null>(null);
   const [selectedText, setSelectedText] = useState<string | null>(null);
   const [selectionAnchorRect, setSelectionAnchorRect] = useState<Rect | null>(null);
   const [askText, setAskText] = useState<string | null>(null);
   const [askAnchorRect, setAskAnchorRect] = useState<Rect | null>(null);
   const handleOpenChange = useCallback((open: boolean) => {
-    if (!open) setSelectedText(null);
+    if (!open) {
+      setSelectedText(null);
+    }
   }, []);
-  const handleSelection = useCallback((text: string, anchorRect: Rect) => {
-    setSelectedText(text);
-    setSelectionAnchorRect(anchorRect);
-  }, []);
+  const handleSelection = useCallback(
+    (text: string | null, anchorRect: Rect | null, range: Range | null) => {
+      setSelectedText(text);
+      setSelectionAnchorRect(anchorRect);
+      selectionRangeRef.current = range;
+    },
+    [],
+  );
   const clearBrowserSelection = useCallback(() => {
     if (isWeb) window.getSelection()?.removeAllRanges();
-  }, []);
-  const handleQuote = useCallback(() => {
-    if (!selectedText) return;
-    onQuote(selectedText);
-    clearBrowserSelection();
+    selectionRangeRef.current = null;
     setSelectedText(null);
-  }, [clearBrowserSelection, onQuote, selectedText]);
+  }, []);
+  const getCurrentText = useCallback(() => {
+    if (!isWeb || !rootRef.current) return null;
+    const selection = window.getSelection();
+    const text = getQuotedSelectionText(
+      rootRef.current as unknown as HTMLElement,
+      selection,
+      document.activeElement,
+    );
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (text !== selectedText || !isSameQuotedSelectionRange(selectionRangeRef.current, range)) {
+      setSelectedText(null);
+      selectionRangeRef.current = null;
+      return null;
+    }
+    return text;
+  }, [selectedText]);
+  const handleQuote = useCallback(() => {
+    const text = getCurrentText();
+    if (!text) return;
+    onQuote(text);
+    clearBrowserSelection();
+  }, [clearBrowserSelection, getCurrentText, onQuote]);
   const handleAsk = useCallback(() => {
-    if (!selectedText) return;
-    setAskText(selectedText);
+    const text = getCurrentText();
+    if (!text) return;
+    setAskText(text);
     setAskAnchorRect(selectionAnchorRect);
     clearBrowserSelection();
-    setSelectedText(null);
-  }, [clearBrowserSelection, selectedText, selectionAnchorRect]);
+  }, [clearBrowserSelection, getCurrentText, selectionAnchorRect]);
   const handleCloseAsk = useCallback(() => {
     setAskText(null);
     setAskAnchorRect(null);
@@ -132,14 +200,37 @@ export function QuotedSelectionContextMenu({
     [askText, onAsk, t],
   );
   const handleCopy = useCallback(() => {
-    if (!selectedText) return;
-    void Clipboard.setStringAsync(selectedText);
-  }, [selectedText]);
+    const text = getCurrentText();
+    if (text) void Clipboard.setStringAsync(text);
+  }, [getCurrentText]);
+  // Do not collapse the native selection before a pointer activates Quote/Ask.
+  const preserveSelection = useCallback(
+    (event: { preventDefault(): void }) => event.preventDefault(),
+    [],
+  );
+  const handleSelectionKeyDown = useCallback(
+    (event: { key: string }) => {
+      if (event.key === "Escape") clearBrowserSelection();
+    },
+    [clearBrowserSelection],
+  );
 
   return (
     <>
       <ContextMenu onOpenChange={handleOpenChange}>
-        <SelectionContextTarget onSelection={handleSelection}>{children}</SelectionContextTarget>
+        <SelectionContextTarget
+          rootRef={rootRef}
+          onSelection={handleSelection}
+          showSelectionActions={isWeb && showPersistentActions && Boolean(selectedText)}
+          onQuote={handleQuote}
+          onAsk={handleAsk}
+          onPreserveSelection={preserveSelection}
+          onSelectionKeyDown={handleSelectionKeyDown}
+          quoteLabel={t("composer.attachments.quoteSelection")}
+          askLabel={t("quickAsk.menuLabel")}
+        >
+          {children}
+        </SelectionContextTarget>
         <ContextMenuContent align="start" width={200} testID="quoted-selection-context-menu">
           <ContextMenuItem onSelect={handleQuote} testID="quoted-selection-context-menu-quote">
             {t("composer.attachments.quoteSelection")}
@@ -162,9 +253,21 @@ export function QuotedSelectionContextMenu({
   );
 }
 
-const styles = StyleSheet.create(() => ({
+const styles = StyleSheet.create((theme) => ({
   target: {
     flex: 1,
     minHeight: 0,
+    position: "relative",
+  },
+  selectionActions: {
+    position: "absolute",
+    bottom: theme.spacing[3],
+    right: theme.spacing[3],
+    left: theme.spacing[3],
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: theme.spacing[2],
+    pointerEvents: "box-none",
   },
 }));

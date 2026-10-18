@@ -471,6 +471,7 @@ export function resolveKnownHostRoute(input: {
 
 export const SETTINGS_SECTION_SLUGS = [
   "general",
+  "chat-behavior",
   "connections",
   "appearance",
   "editor",

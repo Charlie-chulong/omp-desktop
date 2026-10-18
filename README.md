@@ -452,6 +452,11 @@ namespace alone. Settings and the sidebar show live compact reset countdowns suc
 `3d21h` and `2h12min`. At the deadline, Desktop refreshes server usage and shows an
 awaiting-refresh state rather than assuming the quota reset.
 
+Codex **Credits** shows the exact balance reported by the signed-in account's authenticated
+usage response, or its reported unlimited/disabled state. A missing balance is shown as
+unavailable, not zero. Credits are separate from five-hour/weekly quota and from the banked
+reset cards below; Desktop does not infer a currency or scrape ChatGPT browser cookies.
+
 Each account lists its banked Codex reset cards, server-reported available count, status,
 and grant/expiry timestamps with a timezone. **Use reset card** asks you to confirm the selected
 account, card, and applicable quota windows. Only available, unexpired `codex_rate_limits` cards
@@ -550,6 +555,14 @@ Account numbers are separate from OMP's globally increasing credential IDs. Desk
 the number mapping in `agent.db` without renumbering credentials or changing existing notes,
 provider configuration, or session references. OMP's disabled credential records remain
 disabled; releasing a display number does not reactivate or reuse an old credential.
+
+## Codex credit balance
+
+**Host Settings → Usage** shows each signed-in Codex account's remaining credit balance
+alongside its quota windows. The provider account details show the same value. Desktop
+preserves the authenticated Codex API's decimal string without rounding or treating
+credits as a currency amount; when the API does not report a balance, it says so rather
+than showing zero. Credits and quota-reset cards are separate balances.
 
 ## Model catalog refresh
 
@@ -788,6 +801,24 @@ messages do not block local diff viewing or mode switching.
 Git operation names, comparison labels, and action feedback follow
 **Settings → General → Language** in every supported language. **Archive workspace**
 and **Open Changes tab** are not part of this menu.
+
+## Tablet and hybrid input
+
+On a touch-enabled browser or a compact layout, project, conversation, tab, and file actions
+stay visible without hovering or right-clicking. Tap the workspace header **+** to add an
+Agent, terminal, changes, or files tab; tap a tab's **More** control for its close actions.
+Project and conversation menus retain the same actions as their desktop context menus.
+Mouse hover, right-click, drag, and keyboard shortcuts remain available when peripherals
+are connected.
+
+The file explorer offers **Select files** for selecting several entries without modifier keys,
+then **Move selected items** and an explicit **Move here** destination (including the workspace
+root). Touch actions also expose code copying, quote/ask for selected message text, and
+panning a full-screen diagram. Tap the context meter to open its details without hover.
+
+App-level **Settings → Chat behavior** contains conversation defaults; **Settings → Host
+connections** contains relay/pairing controls. Per-host projects and provider settings remain
+under the selected host rather than being moved into app-wide settings.
 
 ## Assistant message links
 
@@ -1069,11 +1100,10 @@ The Web export is `packages/app/dist`. These commands build artifacts; they do n
 ### Cloudflare Pages
 
 ```bash
-./deploy.sh
-# or: npm run deploy:web
+npm run deploy:web
 ```
 
-`deploy.sh` builds the Web export and runs `wrangler pages deploy` against project `omp-desktop` on branch `main`. Override with `CF_PAGES_PROJECT` / `CF_PAGES_BRANCH` if needed. SPA routes fall back through `packages/app/public/_redirects`. Pairing links should use the Pages origin as `app.baseUrl`.
+`scripts/deploy-webui.sh` builds the Web export and runs `wrangler pages deploy` against project `omp-desktop` on branch `main`. Authenticate Wrangler to the account that owns the Pages project before deploying; merging the fork does not update the hosted mobile site. Override with `CF_PAGES_PROJECT` / `CF_PAGES_BRANCH` if needed. SPA routes fall back through `packages/app/public/_redirects`. Pairing links should use the Pages origin as `app.baseUrl`.
 
 Deploy the `paseo-relay` repository using its `deployment/self-hosted/compose.yaml`, `Caddyfile`, and `.env.example`. That deployment serves both your WSS relay and the Web export on your own domains, with automatic HTTPS and SPA route fallback. The relay machine does not need OMP or access to the daemon's private listening port.
 

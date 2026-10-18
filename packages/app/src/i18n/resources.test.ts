@@ -128,6 +128,17 @@ describe("translation resources", () => {
     expect(countMatchingEnglishStrings(zhCN)).toBeLessThan(maxFallbackStrings);
   });
 
+  it("distinguishes app host connections and exposes translated chat behavior settings", () => {
+    expect(en.settings.sections.connections).toBe("Host connections");
+    expect(zhCN.settings.sections.connections).toBe("主机连接");
+    expect(en.settings.sections.chatBehavior).toBe("Chat behavior");
+    expect(zhCN.settings.sections.chatBehavior).toBe("聊天行为");
+    for (const resource of [ar, es, fr, ja, ko, ptBR, ru, zhCN]) {
+      expect(resource.settings.sections.chatBehavior).not.toBe(en.settings.sections.chatBehavior);
+      expect(resource.settings.sections.connections).not.toBe(en.settings.sections.connections);
+    }
+  });
+
   it("localizes the pull request empty state in every supported language", () => {
     for (const resource of [ar, es, fr, ja, ko, ptBR, ru, zhCN]) {
       expect(resource.panels.pullRequest.emptyTitle).not.toBe(en.panels.pullRequest.emptyTitle);

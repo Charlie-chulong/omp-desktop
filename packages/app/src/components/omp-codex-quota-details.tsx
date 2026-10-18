@@ -17,6 +17,7 @@ import {
 import {
   formatOmpQuotaCountdown,
   formatOmpQuotaResetTime,
+  formatOmpCodexCreditBalance,
   isOmpCodexResetCreditUsable,
   shouldShowOmpFiveHourQuota,
 } from "./omp-provider-quota";
@@ -116,6 +117,17 @@ function OmpCodexSubscriptionDetails({
           </Text>
         </>
       ) : null}
+    </>
+  );
+}
+
+function OmpCodexCreditsDetails({ credits }: { credits: Quota["credits"] }) {
+  const { t } = useTranslation();
+  const summary = formatOmpCodexCreditBalance(credits, t);
+  return (
+    <>
+      <Text style={styles.title}>{t("settings.providers.omp.codexQuota.credits")}</Text>
+      <Text style={styles.muted}>{summary}</Text>
     </>
   );
 }
@@ -423,6 +435,7 @@ export function OmpCodexQuotaDetails({
   return (
     <View style={styles.details}>
       <OmpCodexSubscriptionDetails subscription={account.quota?.subscription} now={now} />
+      <OmpCodexCreditsDetails credits={account.quota?.credits} />
       <OmpCodexResetCreditsDetails
         account={account}
         accountLabel={accountLabel}

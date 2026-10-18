@@ -51,8 +51,9 @@ import {
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
-import { proseLineHeight } from "@/styles/markdown-styles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { proseLineHeight } from "@/styles/markdown-styles";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -442,7 +443,10 @@ export const UserMessage = memo(function UserMessage({
   isPending = false,
   disableOuterSpacing,
 }: UserMessageProps) {
-  const isCompact = useIsCompactFormFactor();
+  const showPersistentActions = useShowPersistentActions();
+  const [isFocusWithin, setIsFocusWithin] = useState(false);
+  const handleFocus = useCallback(() => setIsFocusWithin(true), []);
+  const handleBlur = useCallback(() => setIsFocusWithin(false), []);
   const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const [lightboxMetadata, setLightboxMetadata] = useState<UserMessageImageAttachment | null>(null);
@@ -451,7 +455,8 @@ export const UserMessage = memo(function UserMessage({
   const hasText = message.trim().length > 0;
   const hasImages = images.length > 0;
   const hasAttachments = attachments.length > 0;
-  const showTrailingRow = !isPending && hasText && (isCompact || isNative || isHovered);
+  const showTrailingRow =
+    !isPending && hasText && (showPersistentActions || isNative || isHovered || isFocusWithin);
   const formattedTimestamp = useMemo(
     () => formatMessageTimestamp(new Date(timestamp)),
     [timestamp],
@@ -525,6 +530,8 @@ export const UserMessage = memo(function UserMessage({
         style={userMessageStylesheet.content}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
       >
         <View style={userMessageStylesheet.bubble}>
           {hasImages ? (
@@ -2260,18 +2267,22 @@ export const SystemNotice = memo(function SystemNotice({
   thinkingOptionId,
 }: Pick<SystemNoticeItem, "notice" | "modelId" | "thinkingOptionId">) {
   const { t } = useTranslation();
-  const message =
-    notice === "model_changed"
-      ? t("message.systemNotice.modelChanged", { model: modelId })
-      : notice === "thinking_changed"
-        ? t("message.systemNotice.thinkingChanged", {
-            thinking: thinkingOptionId && formatThinkingOptionLabel({ id: thinkingOptionId }),
-          })
-        : t(
-            notice === "fast_mode_enabled"
-              ? "message.systemNotice.fastModeEnabled"
-              : "message.systemNotice.fastModeDisabled",
-          );
+  let message: string;
+  switch (notice) {
+    case "model_changed":
+      message = t("message.systemNotice.modelChanged", { model: modelId });
+      break;
+    case "thinking_changed":
+      message = t("message.systemNotice.thinkingChanged", {
+        thinking: thinkingOptionId && formatThinkingOptionLabel({ id: thinkingOptionId }),
+      });
+      break;
+    case "fast_mode_enabled":
+      message = t("message.systemNotice.fastModeEnabled");
+      break;
+    default:
+      message = t("message.systemNotice.fastModeDisabled");
+  }
 
   return (
     <View style={compactionStylesheet.container} testID="system-notice">
@@ -2739,6 +2750,15 @@ function buildShimmerTextStyle(input: {
   });
 }
 
+function shouldShowOpenFileAction(
+  onOpenFile: (() => void) | undefined,
+  persistent: boolean,
+  hovered: boolean,
+  focused: boolean,
+): boolean {
+  return Boolean(onOpenFile && (persistent || isNative || hovered || focused));
+}
+
 export const ExpandableBadge = memo(function ExpandableBadge({
   label,
   style,
@@ -2758,7 +2778,10 @@ export const ExpandableBadge = memo(function ExpandableBadge({
   testID,
 }: ExpandableBadgeProps) {
   const resolvedDisableOuterSpacing = useDisableOuterSpacing(disableOuterSpacing);
-  const isCompact = useIsCompactFormFactor();
+  const showPersistentActions = useShowPersistentActions();
+  const [isFocusWithin, setIsFocusWithin] = useState(false);
+  const handleFocus = useCallback(() => setIsFocusWithin(true), []);
+  const handleBlur = useCallback(() => setIsFocusWithin(false), []);
   const [isHovered, setIsHovered] = useState(false);
   const [isOpenFileHovered, setIsOpenFileHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
@@ -3016,6 +3039,8 @@ export const ExpandableBadge = memo(function ExpandableBadge({
       testID={testID}
       onPointerEnter={isWeb ? handleHoverIn : undefined}
       onPointerLeave={isWeb ? handleHoverOut : undefined}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
     >
       <Pressable
         {...pressHandlers}
@@ -3045,7 +3070,12 @@ export const ExpandableBadge = memo(function ExpandableBadge({
             onLabelRowLayout={handleLabelRowLayout}
             onLabelLayout={handleLabelLayout}
             onSecondaryLayout={handleSecondaryLayout}
-            showOpenFileButton={Boolean(onOpenFile && (isCompact || isHovered))}
+            showOpenFileButton={shouldShowOpenFileAction(
+              onOpenFile,
+              showPersistentActions,
+              isHovered,
+              isFocusWithin,
+            )}
             isOpenFileHovered={isOpenFileHovered}
             onOpenFilePress={handleOpenFilePress}
             onOpenFileHoverIn={handleOpenFileHoverIn}

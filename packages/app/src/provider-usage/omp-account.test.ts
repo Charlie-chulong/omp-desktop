@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { OmpProviderManagement } from "@omp-desktop/protocol/messages";
-import { buildOmpAccountProviderUsage, mergeOmpAccountProviderUsage } from "./omp-account";
+import {
+  buildOmpAccountProviderUsage,
+  mergeOmpAccountProviderUsage,
+  type OmpAccountUsageCopy,
+} from "./omp-account";
 import { deriveRemainingTone } from "./tone";
 import type { ProviderUsageView } from "./types";
 
@@ -13,7 +17,9 @@ const copy = {
   fiveHour: "5-hour limit",
   weekly: "Weekly limit",
   modelWeekly: (model: string) => `${model} weekly`,
-};
+  codexCreditsLabel: "Credits",
+  codexCreditsSummary: (credits) => credits?.balance ?? "Balance unavailable",
+} satisfies OmpAccountUsageCopy;
 
 function codexProvider(accounts: NonNullable<OmpLoginProvider["accounts"]>): OmpLoginProvider {
   return {
@@ -132,6 +138,28 @@ describe("buildOmpAccountProviderUsage", () => {
         ],
       }),
     ]);
+  });
+
+  test("shows each Codex account's exact credit balance or unavailable state in Usage", () => {
+    const accounts: NonNullable<OmpLoginProvider["accounts"]> = [
+      {
+        credentialId: 41,
+        quota: {
+          status: "available",
+          credits: { hasCredits: true, unlimited: false, balance: "9007199254740993.000001" },
+        },
+      },
+      { credentialId: 42, quota: { status: "available", credits: null } },
+    ];
+    const source = { provider: codexProvider(accounts), accounts, error: null, updatedAt: null };
+    const usage = buildOmpAccountProviderUsage(source, copy);
+    expect(usage.map((account) => account.details)).toEqual([
+      [{ id: "codex_credits", label: "Credits", value: "9007199254740993.000001" }],
+      [{ id: "codex_credits", label: "Credits", value: "Balance unavailable" }],
+    ]);
+    expect(
+      buildOmpAccountProviderUsage(source, { ...copy, providerId: "anthropic" })[0]?.details,
+    ).toEqual([]);
   });
 
   test("only creates reported windows and never treats unknown usage as 100% remaining", () => {

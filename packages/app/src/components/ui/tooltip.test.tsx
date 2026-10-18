@@ -113,4 +113,22 @@ describe("TooltipTrigger", () => {
 
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it("opens and closes a wide-layout tooltip on a direct press", () => {
+    const onOpenChange = vi.fn();
+    act(() => {
+      root?.render(
+        <Tooltip openOnPress onOpenChange={onOpenChange}>
+          <TooltipTrigger testID="trigger">
+            <Text>Context window</Text>
+          </TooltipTrigger>
+        </Tooltip>,
+      );
+    });
+
+    pressTrigger();
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    pressTrigger();
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
 });

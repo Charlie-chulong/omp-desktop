@@ -6461,6 +6461,12 @@ export const OmpClaudeLimitResetConsumeResultSchema = z.object({
   weeklyResetsAt: z.string().nullable(),
   cooldownUntil: z.string().nullable(),
 });
+export const OmpCodexCreditsSchema = z.object({
+  hasCredits: z.boolean(),
+  unlimited: z.boolean(),
+  // Keep the upstream decimal string intact; converting to a number can lose precision.
+  balance: z.string().nullable().optional(),
+});
 export const OmpProviderAccountQuotaSchema = z.object({
   status: z.enum(["available", "unavailable", "error"]),
   planLabel: z.string().nullable().optional(),
@@ -6509,6 +6515,7 @@ export const OmpProviderAccountQuotaSchema = z.object({
       observedAt: z.string(),
     })
     .optional(),
+  credits: OmpCodexCreditsSchema.nullable().optional(),
   resetCredits: OmpCodexResetCreditsSchema.optional(),
   limitResets: OmpClaudeLimitResetsSchema.optional(),
   subscription: OmpCodexSubscriptionSchema.optional(),
@@ -7716,6 +7723,7 @@ export type ProviderDiagnosticResponseMessage = z.infer<
 >;
 export type OmpProviderManagement = z.infer<typeof OmpProviderManagementSchema>;
 export type OmpProviderAccountQuota = z.infer<typeof OmpProviderAccountQuotaSchema>;
+export type OmpCodexCredits = z.infer<typeof OmpCodexCreditsSchema>;
 export type OmpCodexResetCredits = z.infer<typeof OmpCodexResetCreditsSchema>;
 export type OmpCodexSubscription = z.infer<typeof OmpCodexSubscriptionSchema>;
 export type OmpClaudeLimitResetGrant = z.infer<typeof OmpClaudeLimitResetGrantSchema>;

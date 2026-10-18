@@ -7,7 +7,7 @@ import { Check, Copy } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import type { HighlightToken } from "@omp-desktop/highlight";
 import { isNative, isWeb } from "@/constants/platform";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import { syntaxTokenStyleFor } from "@/styles/syntax-token-styles";
 import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { highlightToKeyedLines, type KeyedLine } from "@/utils/highlight-cache";
@@ -78,11 +78,11 @@ export const HighlightedCodeBlock = React.memo(function HighlightedCodeBlock({
     [renderedCode, language],
   );
 
-  const isCompact = useIsCompactFormFactor();
+  const showPersistentActions = useShowPersistentActions();
   const [isHovered, setIsHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
-  const controlsVisible = isHovered || isNative || isCompact;
+  const controlsVisible = isHovered || isNative || showPersistentActions;
   // Copy the code without its trailing blank lines. A fence body ends in a newline,
   // and ends in more than one when the author left a blank line before the closing
   // fence; pasting any of them into a terminal runs the last line.
@@ -174,6 +174,9 @@ const COPIED_RESET_MS = 1500;
 const CopyButton = React.memo(function CopyButton({ getCode, visible }: CopyButtonProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
   const resetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -195,7 +198,8 @@ const CopyButton = React.memo(function CopyButton({ getCode, visible }: CopyButt
     }, COPIED_RESET_MS);
   }, [getCode]);
 
-  const visibilityStyle = visible
+  const showControl = visible || isFocused;
+  const visibilityStyle = showControl
     ? copyButtonStyles.containerVisible
     : copyButtonStyles.containerHidden;
   const wrapperStyle = useMemo(
@@ -207,7 +211,9 @@ const CopyButton = React.memo(function CopyButton({ getCode, visible }: CopyButt
     <Pressable
       onPress={handlePress}
       style={wrapperStyle}
-      pointerEvents={visible ? "auto" : "none"}
+      pointerEvents={showControl ? "auto" : "none"}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
       accessibilityRole="button"
       accessibilityLabel={copied ? t("message.actions.copied") : t("message.actions.copyCode")}
       hitSlop={8}

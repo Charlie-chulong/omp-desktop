@@ -31,6 +31,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getProviderIcon } from "@/components/provider-icons";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isNative, isWeb } from "@/constants/platform";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import {
   buildProviderQualifiedDescription,
   buildSelectedTriggerLabel,
@@ -561,8 +562,11 @@ function ModelRowProfileAction({
   testID: string;
   children: React.ReactNode;
 }) {
-  const isCompact = useIsCompactFormFactor();
-  const visible = hovered || isNative || isCompact;
+  const showPersistentActions = useShowPersistentActions();
+  const [isFocused, setIsFocused] = useState(false);
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
+  const visible = hovered || isNative || showPersistentActions || isFocused;
   const handlePress = useCallback(
     (event: GestureResponderEvent) => {
       event.stopPropagation();
@@ -587,6 +591,8 @@ function ModelRowProfileAction({
           hitSlop={8}
           style={pressableStyle}
           pointerEvents={visible ? "auto" : "none"}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           accessibilityRole="button"
           accessibilityLabel={label}
           testID={testID}
@@ -720,7 +726,7 @@ function ModelRow({
       Boolean(hovered) && styles.browserRowHovered,
       pressed && styles.browserRowPressed,
     ],
-    [],
+    [isSelected],
   );
 
   return (

@@ -31,10 +31,13 @@ import { isWeb } from "@/constants/platform";
 import * as Clipboard from "expo-clipboard";
 import {
   ChevronDown,
+  CheckSquare,
   Eye,
   EyeOff,
   FilePlus,
   FolderPlus,
+  ListChecks,
+  Square,
   RotateCw,
   Search,
 } from "lucide-react-native";
@@ -66,11 +69,15 @@ import type {
   ExplorerEntry,
 } from "@/stores/session-store";
 import { useSessionStore } from "@/stores/session-store";
-import { FileActionsContextMenuContent } from "@/components/file-actions-menu";
+import {
+  FileActionsContextMenuContent,
+  FileActionsMenuButton,
+} from "@/components/file-actions-menu";
 import { ContextMenu, ContextMenuTrigger, useContextMenu } from "@/components/ui/context-menu";
 import { useFileDownload } from "@/hooks/use-file-download";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import { buildWorkspaceExplorerStateKey } from "@/file-explorer/state-key";
 import { usePanelStore, type ExpandedPathsUpdate, type SortOption } from "@/stores/panel-store";
 import { formatTimeAgo } from "@/utils/time";
@@ -90,11 +97,13 @@ import { openDesktopTarget, useDesktopOpenTargets } from "@/workspace/desktop-op
 import type { WorkspaceFileLocation } from "@/workspace/file-open";
 import {
   resolveExplorerDragEntries,
+  resolveExplorerEntryMoves,
   type ExplorerEntryDragItem,
   type ExplorerEntryMoveRequest,
 } from "@/file-explorer/entry-drag";
 import { deleteExplorerSelectionPaths, resolveExplorerSelection } from "@/file-explorer/selection";
 import { useExplorerEntryDrag } from "@/file-explorer/use-entry-drag";
+import { moveExplorerSelection } from "@/file-explorer/move-selection";
 
 const FILE_EXPLORER_ROW_SELECTOR = '[data-testid^="file-explorer-row-"]';
 const FILE_EXPLORER_ROOT_DROP_BLOCKED_SELECTOR = '[data-testid="file-explorer-root-drop-blocker"]';
@@ -123,6 +132,7 @@ const SORT_OPTIONS: { value: SortOption }[] = [
 ];
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
+const ThemedListChecks = withUnistyles(ListChecks);
 const foregroundMutedColorMapping = (theme: Theme) => ({
   color: theme.colors.foregroundMuted,
 });
@@ -149,6 +159,14 @@ function formatFileSize({ size }: { size: number }): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+interface ExplorerTouchControls {
+  selectionMode: boolean;
+  onToggleSelection: (entry: ExplorerEntry) => void;
+  onMoveToDirectory?: (path: string) => void;
+  canMoveToDirectory: (path: string) => boolean;
+  moving: boolean;
+}
+
 interface TreeRowItemProps {
   serverId: string;
   workspaceId?: string | null;
@@ -173,6 +191,7 @@ interface TreeRowItemProps {
   onDeleteEntry?: (entry: ExplorerEntry) => void;
   onMoveEntry?: (requests: ExplorerEntryMoveRequest[]) => void;
   selectedEntries?: readonly ExplorerEntryDragItem[];
+  touchControls: ExplorerTouchControls;
   testID?: string;
 }
 
@@ -282,6 +301,205 @@ function EntryNameInputRow({
   );
 }
 
+function stopExplorerActionPropagation(event: { stopPropagation(): void }) {
+  event.stopPropagation();
+}
+
+const explorerSelectionPointerBlockers = {
+  onPointerDown: stopExplorerActionPropagation,
+  onMouseDown: stopExplorerActionPropagation,
+};
+
+type TreeRowTouchActionProps = Pick<TreeRowItemProps, "entry" | "touchControls" | "testID">;
+
+function TreeRowSelectionCheckbox({
+  entry,
+  touchControls,
+  testID,
+  isSelected,
+}: TreeRowTouchActionProps & { isSelected: boolean }) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const accessibilityState = useMemo(() => ({ checked: isSelected }), [isSelected]);
+  const handleToggleSelection = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      touchControls.onToggleSelection(entry);
+    },
+    [entry, touchControls],
+  );
+
+  if (!touchControls.selectionMode || touchControls.onMoveToDirectory) return null;
+
+  return (
+    <Pressable
+      {...explorerSelectionPointerBlockers}
+      onPress={handleToggleSelection}
+      onPressIn={stopExplorerActionPropagation}
+      style={styles.rowAction}
+      accessibilityRole="checkbox"
+      accessibilityState={accessibilityState}
+      aria-checked={isSelected}
+      accessibilityLabel={t("workspace.fileExplorer.actions.selectEntry", { name: entry.name })}
+      testID={testID ? `${testID}-select` : undefined}
+    >
+      {isSelected ? (
+        <CheckSquare size={18} color={theme.colors.foreground} />
+      ) : (
+        <Square size={18} color={theme.colors.foregroundMuted} />
+      )}
+    </Pressable>
+  );
+}
+
+function TreeRowMoveButton({ entry, touchControls, testID }: TreeRowTouchActionProps) {
+  const { t } = useTranslation();
+  const handleMoveHere = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      touchControls.onMoveToDirectory?.(entry.path);
+    },
+    [entry.path, touchControls],
+  );
+
+  if (entry.kind !== "directory" || !touchControls.onMoveToDirectory) return null;
+
+  const disabled = touchControls.moving || !touchControls.canMoveToDirectory(entry.path);
+  return (
+    <Pressable
+      onPress={handleMoveHere}
+      onPressIn={stopExplorerActionPropagation}
+      disabled={disabled}
+      accessibilityRole="button"
+      style={[styles.rowAction, disabled && styles.disabledAction]}
+      testID={testID ? `${testID}-move-here` : undefined}
+    >
+      <Text style={styles.retryButtonText}>{t("workspace.fileExplorer.actions.moveHere")}</Text>
+    </Pressable>
+  );
+}
+
+type TreeRowMenuProps = Pick<
+  TreeRowItemProps,
+  | "entry"
+  | "isExpanded"
+  | "onCopyPath"
+  | "onCopyRelativePath"
+  | "onRevealEntry"
+  | "revealTargetName"
+  | "onDownloadEntry"
+  | "onAddToChat"
+  | "onAddDirectoryToChat"
+  | "onNewEntry"
+  | "onCollapseDirectory"
+  | "onRenameEntry"
+  | "onDuplicateEntry"
+  | "onDeleteEntry"
+  | "testID"
+>;
+
+function TreeRowMenu({
+  entry,
+  isExpanded,
+  onCopyPath,
+  onCopyRelativePath,
+  onRevealEntry,
+  revealTargetName,
+  onDownloadEntry,
+  onAddToChat,
+  onAddDirectoryToChat,
+  onNewEntry,
+  onCollapseDirectory,
+  onRenameEntry,
+  onDuplicateEntry,
+  onDeleteEntry,
+  testID,
+}: TreeRowMenuProps) {
+  const { t } = useTranslation();
+  const isDirectory = entry.kind === "directory";
+  const canAddToChat = isDirectory ? Boolean(onAddDirectoryToChat) : Boolean(onAddToChat);
+  const handleCopy = useCallback(() => {
+    onCopyPath(entry.path);
+  }, [onCopyPath, entry.path]);
+  const handleCopyRelativePath = useCallback(() => {
+    onCopyRelativePath(entry.path);
+  }, [onCopyRelativePath, entry.path]);
+  const handleReveal = useCallback(() => {
+    onRevealEntry?.(entry);
+  }, [onRevealEntry, entry]);
+  const handleDownload = useCallback(() => {
+    onDownloadEntry(entry);
+  }, [onDownloadEntry, entry]);
+  const handleAddToChat = useCallback(() => {
+    if (isDirectory) {
+      onAddDirectoryToChat?.(entry.path);
+      return;
+    }
+    onAddToChat?.(entry.path);
+  }, [entry.path, isDirectory, onAddDirectoryToChat, onAddToChat]);
+  const handleNewFile = useCallback(() => {
+    onNewEntry?.(entry.path, "file");
+  }, [onNewEntry, entry.path]);
+  const handleNewFolder = useCallback(() => {
+    onNewEntry?.(entry.path, "directory");
+  }, [onNewEntry, entry.path]);
+  const handleCollapseDirectory = useCallback(() => {
+    onCollapseDirectory?.(entry.path);
+  }, [entry.path, onCollapseDirectory]);
+  const handleRename = useCallback(() => {
+    onRenameEntry?.(entry);
+  }, [onRenameEntry, entry]);
+  const handleDuplicate = useCallback(() => {
+    onDuplicateEntry?.(entry);
+  }, [entry, onDuplicateEntry]);
+  const handleDelete = useCallback(() => {
+    onDeleteEntry?.(entry);
+  }, [onDeleteEntry, entry]);
+  const metaHeader = useMemo(
+    () => (
+      <View style={styles.contextMetaBlock}>
+        <View style={styles.contextMetaRow}>
+          <Text style={styles.contextMetaLabel} numberOfLines={1}>
+            {t("workspace.fileExplorer.context.size")}
+          </Text>
+          <Text style={styles.contextMetaValue} numberOfLines={1} ellipsizeMode="tail">
+            {formatFileSize({ size: entry.size })}
+          </Text>
+        </View>
+        <View style={styles.contextMetaRow}>
+          <Text style={styles.contextMetaLabel} numberOfLines={1}>
+            {t("workspace.fileExplorer.context.modified")}
+          </Text>
+          <Text style={styles.contextMetaValue} numberOfLines={1} ellipsizeMode="tail">
+            {formatTimeAgo(new Date(entry.modifiedAt))}
+          </Text>
+        </View>
+      </View>
+    ),
+    [entry.modifiedAt, entry.size, t],
+  );
+
+  return (
+    <FileActionsContextMenuContent
+      fileKind={entry.kind}
+      onCopyPath={handleCopy}
+      onCopyRelativePath={handleCopyRelativePath}
+      onReveal={onRevealEntry ? handleReveal : undefined}
+      revealTargetName={revealTargetName}
+      onDownload={handleDownload}
+      onAddToChat={canAddToChat ? handleAddToChat : undefined}
+      onNewFile={onNewEntry ? handleNewFile : undefined}
+      onNewFolder={onNewEntry ? handleNewFolder : undefined}
+      onCollapseFolder={isDirectory && isExpanded ? handleCollapseDirectory : undefined}
+      onRename={onRenameEntry ? handleRename : undefined}
+      onDuplicate={onDuplicateEntry ? handleDuplicate : undefined}
+      onDelete={onDeleteEntry ? handleDelete : undefined}
+      header={metaHeader}
+      testIDPrefix={testID}
+    />
+  );
+}
+
 function TreeRowItem({
   serverId,
   workspaceId,
@@ -306,15 +524,18 @@ function TreeRowItem({
   onDeleteEntry,
   onMoveEntry,
   selectedEntries,
+  touchControls,
   testID,
 }: TreeRowItemProps) {
-  const { t } = useTranslation();
+  const showPersistentActions = useShowPersistentActions();
   const [isHovered, setIsHovered] = useState(false);
+  const [isPressed, setIsPressed] = useState(false);
   const showNameHover = useCallback(() => setIsHovered(true), []);
   const hideNameHover = useCallback(() => setIsHovered(false), []);
+  const handlePressIn = useCallback(() => setIsPressed(true), []);
+  const handlePressOut = useCallback(() => setIsPressed(false), []);
   const isDirectory = entry.kind === "directory";
   const blocksRootDrop = isDirectory || parentExplorerPath(entry.path) !== ".";
-  const canAddToChat = isDirectory ? Boolean(onAddDirectoryToChat) : Boolean(onAddToChat);
   const dragSource = useMemo(
     () =>
       workspaceId
@@ -367,142 +588,84 @@ function TreeRowItem({
   }, [entry, onSelectEntry]);
   const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
 
-  const pressableStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
-      workspaceTreeRowStyles.row,
-      { paddingLeft: treeRowPaddingLeft(depth) },
-      (Boolean(hovered) || pressed || isSelected) && workspaceTreeRowStyles.active,
-      isDropTarget && styles.entryDropTarget,
-    ],
-    [depth, isDropTarget, isSelected],
-  );
-
-  const handleCopy = useCallback(() => {
-    onCopyPath(entry.path);
-  }, [onCopyPath, entry.path]);
-
-  const handleCopyRelativePath = useCallback(() => {
-    onCopyRelativePath(entry.path);
-  }, [onCopyRelativePath, entry.path]);
-
-  const handleReveal = useCallback(() => {
-    onRevealEntry?.(entry);
-  }, [onRevealEntry, entry]);
-
-  const handleDownload = useCallback(() => {
-    onDownloadEntry(entry);
-  }, [onDownloadEntry, entry]);
-
-  const handleAddToChat = useCallback(() => {
-    if (isDirectory) {
-      onAddDirectoryToChat?.(entry.path);
-      return;
-    }
-    onAddToChat?.(entry.path);
-  }, [entry.path, isDirectory, onAddDirectoryToChat, onAddToChat]);
-
-  const handleNewFile = useCallback(() => {
-    onNewEntry?.(entry.path, "file");
-  }, [onNewEntry, entry.path]);
-
-  const handleNewFolder = useCallback(() => {
-    onNewEntry?.(entry.path, "directory");
-  }, [onNewEntry, entry.path]);
-
-  const handleCollapseDirectory = useCallback(() => {
-    onCollapseDirectory?.(entry.path);
-  }, [entry.path, onCollapseDirectory]);
-
-  const handleRename = useCallback(() => {
-    onRenameEntry?.(entry);
-  }, [onRenameEntry, entry]);
-
-  const handleDuplicate = useCallback(() => {
-    onDuplicateEntry?.(entry);
-  }, [entry, onDuplicateEntry]);
-
-  const handleDelete = useCallback(() => {
-    onDeleteEntry?.(entry);
-  }, [onDeleteEntry, entry]);
-
-  const metaHeader = useMemo(
-    () => (
-      <View style={styles.contextMetaBlock}>
-        <View style={styles.contextMetaRow}>
-          <Text style={styles.contextMetaLabel} numberOfLines={1}>
-            {t("workspace.fileExplorer.context.size")}
-          </Text>
-          <Text style={styles.contextMetaValue} numberOfLines={1} ellipsizeMode="tail">
-            {formatFileSize({ size: entry.size })}
-          </Text>
-        </View>
-        <View style={styles.contextMetaRow}>
-          <Text style={styles.contextMetaLabel} numberOfLines={1}>
-            {t("workspace.fileExplorer.context.modified")}
-          </Text>
-          <Text style={styles.contextMetaValue} numberOfLines={1} ellipsizeMode="tail">
-            {formatTimeAgo(new Date(entry.modifiedAt))}
-          </Text>
-        </View>
-      </View>
-    ),
-    [entry.modifiedAt, entry.size, t],
-  );
+  const rowStyle = [
+    workspaceTreeRowStyles.row,
+    { paddingLeft: treeRowPaddingLeft(depth) },
+    (isHovered || isPressed || isSelected) && workspaceTreeRowStyles.active,
+    isDropTarget && styles.entryDropTarget,
+  ];
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger
-        onPress={handlePress}
-        onLongPress={handleSelect}
-        onContextMenu={handleSelect}
-        style={pressableStyle}
-        onHoverIn={showNameHover}
-        onHoverOut={hideNameHover}
-        accessibilityState={accessibilityState}
-        aria-selected={isSelected}
-        testID={testID}
-      >
-        <View
-          ref={entryDragRef}
-          style={styles.entryInfo}
-          testID={isWeb && blocksRootDrop ? "file-explorer-root-drop-blocker" : undefined}
+      <View style={rowStyle} onPointerEnter={showNameHover} onPointerLeave={hideNameHover}>
+        <TreeRowSelectionCheckbox
+          entry={entry}
+          touchControls={touchControls}
+          isSelected={isSelected}
+          testID={testID}
+        />
+        <ContextMenuTrigger
+          onPress={handlePress}
+          onLongPress={handleSelect}
+          onContextMenu={handleSelect}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          style={styles.entryPressTarget}
+          accessibilityRole="button"
+          accessibilityLabel={entry.name}
+          accessibilityState={accessibilityState}
+          aria-selected={isSelected}
+          testID={testID}
         >
-          <View style={styles.entryIcon}>
-            {isDirectory ? (
-              <DirectoryChevronIcon loading={loading} expanded={isExpanded} />
-            ) : (
-              <MaterialFileIcon fileName={entry.name} size={WORKSPACE_TREE_ICON_SIZE} />
-            )}
-          </View>
-          <Text
-            style={[
-              styles.entryName,
-              workspaceTreeRowStyles.name,
-              isHovered && workspaceTreeRowStyles.nameHovered,
-            ]}
-            numberOfLines={1}
-            testID={testID ? `${testID}-name` : undefined}
+          <View
+            ref={entryDragRef}
+            style={styles.entryInfo}
+            testID={isWeb && blocksRootDrop ? "file-explorer-root-drop-blocker" : undefined}
           >
-            {entry.name}
-          </Text>
-        </View>
-      </ContextMenuTrigger>
-      <FileActionsContextMenuContent
-        fileKind={entry.kind}
-        onCopyPath={handleCopy}
-        onCopyRelativePath={handleCopyRelativePath}
-        onReveal={onRevealEntry ? handleReveal : undefined}
+            <View style={styles.entryIcon}>
+              {isDirectory ? (
+                <DirectoryChevronIcon loading={loading} expanded={isExpanded} />
+              ) : (
+                <MaterialFileIcon fileName={entry.name} size={WORKSPACE_TREE_ICON_SIZE} />
+              )}
+            </View>
+            <Text
+              style={[
+                styles.entryName,
+                workspaceTreeRowStyles.name,
+                isHovered && workspaceTreeRowStyles.nameHovered,
+              ]}
+              numberOfLines={1}
+              testID={testID ? `${testID}-name` : undefined}
+            >
+              {entry.name}
+            </Text>
+          </View>
+        </ContextMenuTrigger>
+        <TreeRowMoveButton entry={entry} touchControls={touchControls} testID={testID} />
+        {showPersistentActions && !touchControls.onMoveToDirectory ? (
+          <FileActionsMenuButton
+            onSelect={handleSelect}
+            testID={testID ? `${testID}-more` : undefined}
+          />
+        ) : null}
+      </View>
+      <TreeRowMenu
+        entry={entry}
+        isExpanded={isExpanded}
+        onCopyPath={onCopyPath}
+        onCopyRelativePath={onCopyRelativePath}
+        onRevealEntry={onRevealEntry}
         revealTargetName={revealTargetName}
-        onDownload={handleDownload}
-        onAddToChat={canAddToChat ? handleAddToChat : undefined}
-        onNewFile={onNewEntry ? handleNewFile : undefined}
-        onNewFolder={onNewEntry ? handleNewFolder : undefined}
-        onCollapseFolder={isDirectory && isExpanded ? handleCollapseDirectory : undefined}
-        onRename={onRenameEntry ? handleRename : undefined}
-        onDuplicate={onDuplicateEntry ? handleDuplicate : undefined}
-        onDelete={onDeleteEntry ? handleDelete : undefined}
-        header={metaHeader}
-        testIDPrefix={testID}
+        onDownloadEntry={onDownloadEntry}
+        onAddToChat={onAddToChat}
+        onAddDirectoryToChat={onAddDirectoryToChat}
+        onNewEntry={onNewEntry}
+        onCollapseDirectory={onCollapseDirectory}
+        onRenameEntry={onRenameEntry}
+        onDuplicateEntry={onDuplicateEntry}
+        onDeleteEntry={onDeleteEntry}
+        testID={testID}
       />
     </ContextMenu>
   );
@@ -518,6 +681,119 @@ interface FileExplorerPaneProps {
   revealRequests?: boolean;
 }
 
+function removeMovedExplorerEntries(
+  entries: ExplorerEntryDragItem[] | null,
+  movedPaths: readonly string[],
+): ExplorerEntryDragItem[] | null {
+  const remaining = (entries ?? []).filter(
+    (entry) => !movedPaths.some((path) => isExplorerPathWithin(entry.path, path)),
+  );
+  return remaining.length > 0 ? remaining : null;
+}
+
+interface ExplorerSelectionToolbarProps {
+  showPersistentActions: boolean;
+  selectionMode: boolean;
+  selectedCount: number;
+  selectedDragEntryCount: number;
+  moveEntries: readonly ExplorerEntryDragItem[] | null;
+  moveEnabled: boolean;
+  moving: boolean;
+  canMoveToRoot: boolean;
+  onToggleSelectionMode: () => void;
+  onStartMove: () => void;
+  onMoveToRoot: () => void;
+  onCancelMove: () => void;
+}
+
+function ExplorerSelectionToolbar({
+  showPersistentActions,
+  selectionMode,
+  selectedCount,
+  selectedDragEntryCount,
+  moveEntries,
+  moveEnabled,
+  moving,
+  canMoveToRoot,
+  onToggleSelectionMode,
+  onStartMove,
+  onMoveToRoot,
+  onCancelMove,
+}: ExplorerSelectionToolbarProps) {
+  const { t } = useTranslation();
+  if (!showPersistentActions && !selectionMode && selectedCount <= 1) return null;
+
+  const rootMoveDisabled = moving || !canMoveToRoot;
+  return (
+    <View style={styles.selectionToolbar}>
+      <Pressable
+        onPress={onToggleSelectionMode}
+        disabled={moving}
+        style={styles.selectionAction}
+        accessibilityRole="button"
+        testID="files-toggle-selection"
+      >
+        <ThemedListChecks size={18} uniProps={foregroundMutedColorMapping} />
+        <Text style={styles.retryButtonText}>
+          {t(
+            selectionMode
+              ? "workspace.fileExplorer.actions.finishSelection"
+              : "workspace.fileExplorer.actions.selectEntries",
+          )}
+        </Text>
+      </Pressable>
+      {selectionMode ? (
+        <Text style={styles.retryButtonText}>
+          {t("workspace.fileExplorer.actions.selectedCount", {
+            count: moveEntries?.length ?? selectedCount,
+          })}
+        </Text>
+      ) : null}
+      {moveEnabled && selectedDragEntryCount > 0 && !moveEntries ? (
+        <Pressable
+          onPress={onStartMove}
+          style={styles.selectionAction}
+          accessibilityRole="button"
+          testID="files-move-selection"
+        >
+          <Text style={styles.retryButtonText}>
+            {t("workspace.fileExplorer.actions.moveSelection")}
+          </Text>
+        </Pressable>
+      ) : null}
+      {moveEntries ? (
+        <>
+          <Text style={styles.retryButtonText}>
+            {t("workspace.fileExplorer.actions.chooseDestination")}
+          </Text>
+          <Pressable
+            onPress={onMoveToRoot}
+            disabled={rootMoveDisabled}
+            accessibilityRole="button"
+            style={[styles.selectionAction, rootMoveDisabled && styles.disabledAction]}
+            testID="files-move-to-root"
+          >
+            <Text style={styles.retryButtonText}>
+              / · {t("workspace.fileExplorer.actions.moveHere")}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={onCancelMove}
+            disabled={moving}
+            accessibilityRole="button"
+            style={styles.selectionAction}
+            testID="files-cancel-move"
+          >
+            <Text style={styles.retryButtonText}>
+              {t("workspace.fileExplorer.actions.cancelMove")}
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 export function FileExplorerPane({
   serverId,
   workspaceId,
@@ -529,6 +805,7 @@ export function FileExplorerPane({
 }: FileExplorerPaneProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
+  const showPersistentActions = useShowPersistentActions();
 
   const normalizedWorkspaceRoot = useMemo(() => workspaceRoot.trim(), [workspaceRoot]);
   const workspaceStateKey = useMemo(
@@ -586,6 +863,10 @@ export function FileExplorerPane({
   const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set());
   const selectedEntryPathsRef = useRef(selectedEntryPaths);
   const selectionAnchorPathRef = useRef<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [moveEntries, setMoveEntries] = useState<ExplorerEntryDragItem[] | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
+  const moveInFlightRef = useRef(false);
   const commitSelectedEntryPaths = useCallback((next: Set<string>) => {
     selectedEntryPathsRef.current = next;
     setSelectedEntryPaths(next);
@@ -637,6 +918,8 @@ export function FileExplorerPane({
 
   useEffect(() => {
     hasInitializedRef.current = false;
+    setSelectionMode(false);
+    setMoveEntries(null);
     setScrollReveal(null);
     const currentPath = selectedEntryPathRef.current;
     const next = currentPath ? new Set([currentPath]) : new Set<string>();
@@ -991,31 +1274,11 @@ export function FileExplorerPane({
   );
   const handleMoveEntry = useCallback(
     async (requests: ExplorerEntryMoveRequest[]) => {
-      let failed = false;
-      let firstError: string | null = null;
-      for (const request of requests) {
-        try {
-          const payload = await moveEntry({
-            path: request.path,
-            parentPath: request.parentPath,
-          });
-          if (!payload) {
-            break;
-          }
-          if (!payload.success || !payload.movedPath) {
-            failed = true;
-            firstError ??= payload.error ?? t("workspace.fileExplorer.errors.moveFailed");
-            continue;
-          }
-          await reconcileRelocatedEntry(request, payload.movedPath);
-        } catch (cause) {
-          failed = true;
-          firstError ??= cause instanceof Error ? cause.message : String(cause);
-        }
+      const result = await moveExplorerSelection(requests, moveEntry, reconcileRelocatedEntry);
+      if (result.failed) {
+        toast.error(result.firstError ?? t("workspace.fileExplorer.errors.moveFailed"));
       }
-      if (failed) {
-        toast.error(firstError ?? t("workspace.fileExplorer.errors.moveFailed"));
-      }
+      return result;
     },
     [moveEntry, reconcileRelocatedEntry, t, toast],
   );
@@ -1223,6 +1486,80 @@ export function FileExplorerPane({
     return entries;
   }, [directories, selectedEntryPaths]);
 
+  const resolveMoveToDirectory = useCallback(
+    (parentPath: string) =>
+      workspaceId && moveEntries
+        ? resolveExplorerEntryMoves({
+            payload: { version: 1, serverId, workspaceId, entries: moveEntries },
+            serverId,
+            workspaceId,
+            parentPath,
+          })
+        : null,
+    [moveEntries, serverId, workspaceId],
+  );
+  const handleMoveToDirectory = useCallback(
+    async (parentPath: string) => {
+      const requests = resolveMoveToDirectory(parentPath);
+      if (!requests || moveInFlightRef.current) return;
+      moveInFlightRef.current = true;
+      setIsMoving(true);
+      try {
+        const result = await handleMoveEntry(requests);
+        setMoveEntries((current) => removeMovedExplorerEntries(current, result.movedPaths));
+      } finally {
+        moveInFlightRef.current = false;
+        setIsMoving(false);
+      }
+    },
+    [handleMoveEntry, resolveMoveToDirectory],
+  );
+  const handleToggleSelectionMode = useCallback(() => {
+    setSelectionMode((current) => !current);
+    setMoveEntries(null);
+  }, []);
+  const handleStartMove = useCallback(() => {
+    setSelectionMode(true);
+    setMoveEntries(selectedDragEntries);
+  }, [selectedDragEntries]);
+  const handleMoveToRoot = useCallback(() => {
+    void handleMoveToDirectory(".");
+  }, [handleMoveToDirectory]);
+  const handleCancelMove = useCallback(() => setMoveEntries(null), []);
+  const handleToggleSelection = useCallback(
+    (entry: ExplorerEntry) => {
+      const result = resolveExplorerSelection({
+        path: entry.path,
+        visiblePaths: visibleEntryPaths,
+        selectedPaths: selectedEntryPathsRef.current,
+        anchorPath: selectionAnchorPathRef.current,
+        additive: true,
+        range: false,
+      });
+      selectionAnchorPathRef.current = result.anchorPath;
+      commitSelectedEntryPaths(result.selectedPaths);
+      selectExplorerEntry(result.activePath);
+    },
+    [commitSelectedEntryPaths, selectExplorerEntry, visibleEntryPaths],
+  );
+  const touchControls = useMemo<ExplorerTouchControls>(
+    () => ({
+      selectionMode,
+      onToggleSelection: handleToggleSelection,
+      onMoveToDirectory: moveEntries ? handleMoveToDirectory : undefined,
+      canMoveToDirectory: (path) => Boolean(resolveMoveToDirectory(path)),
+      moving: isMoving,
+    }),
+    [
+      handleMoveToDirectory,
+      handleToggleSelection,
+      isMoving,
+      moveEntries,
+      resolveMoveToDirectory,
+      selectionMode,
+    ],
+  );
+
   const handleSelectEntry = useCallback(
     (entry: ExplorerEntry) => {
       if (!hasWorkspaceScope) return;
@@ -1242,6 +1579,11 @@ export function FileExplorerPane({
   const handleEntryPress = useCallback(
     (entry: ExplorerEntry, event: GestureResponderEvent) => {
       if (!hasWorkspaceScope) return;
+      if (moveEntries || selectionMode) {
+        if (entry.kind === "directory") handleToggleDirectory(entry);
+        else if (!moveEntries) handleToggleSelection(entry);
+        return;
+      }
       const modifiers = getExplorerPressModifiers(event);
       const result = resolveExplorerSelection({
         path: entry.path,
@@ -1264,6 +1606,9 @@ export function FileExplorerPane({
     },
     [
       commitSelectedEntryPaths,
+      moveEntries,
+      selectionMode,
+      handleToggleSelection,
       handleOpenFile,
       handleToggleDirectory,
       hasWorkspaceScope,
@@ -1353,6 +1698,7 @@ export function FileExplorerPane({
           onRenameEntry={fsEntryOpsEnabled ? handleRenameEntry : undefined}
           onMoveEntry={fsEntryMoveEnabled ? handleMoveEntry : undefined}
           selectedEntries={selectedDragEntries}
+          touchControls={touchControls}
           onDuplicateEntry={fsEntryDuplicateEnabled ? handleDuplicateEntry : undefined}
           onDeleteEntry={fsEntryOpsEnabled ? handleDeleteEntry : undefined}
         />
@@ -1378,6 +1724,7 @@ export function FileExplorerPane({
       handleMoveEntry,
       handleRenameEntry,
       selectedDragEntries,
+      touchControls,
       handleRevealEntry,
       handleSelectEntry,
       isDirectoryLoading,
@@ -1428,6 +1775,20 @@ export function FileExplorerPane({
       }}
       style={styles.container}
     >
+      <ExplorerSelectionToolbar
+        showPersistentActions={showPersistentActions}
+        selectionMode={selectionMode}
+        selectedCount={selectedEntryPaths.size}
+        selectedDragEntryCount={selectedDragEntries.length}
+        moveEntries={moveEntries}
+        moveEnabled={Boolean(fsEntryMoveEnabled && workspaceId)}
+        moving={isMoving}
+        canMoveToRoot={Boolean(resolveMoveToDirectory("."))}
+        onToggleSelectionMode={handleToggleSelectionMode}
+        onStartMove={handleStartMove}
+        onMoveToRoot={handleMoveToRoot}
+        onCancelMove={handleCancelMove}
+      />
       <FileExplorerPaneContent
         serverId={serverId}
         workspaceRoot={normalizedWorkspaceRoot}
@@ -1438,6 +1799,7 @@ export function FileExplorerPane({
         showInitialLoading={showInitialLoading}
         showBackFromError={showBackFromError}
         listRows={listRows}
+        selectedEntryPaths={selectedEntryPaths}
         onNewEntryAtRoot={fsEntryOpsEnabled ? handleNewEntry : undefined}
         rootDropTargetRef={rootDrag.ref}
         isRootDropTarget={rootDrag.isDropTarget}
@@ -1520,6 +1882,7 @@ interface FileExplorerPaneContentProps {
   showInitialLoading: boolean;
   showBackFromError: boolean;
   listRows: ExplorerListRow[];
+  selectedEntryPaths: ReadonlySet<string>;
   onNewEntryAtRoot?: (parentPath: string, kind: "file" | "directory") => void;
   rootDropTargetRef?: RefCallback<View>;
   isRootDropTarget: boolean;
@@ -1551,6 +1914,7 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
     showInitialLoading,
     showBackFromError,
     listRows,
+    selectedEntryPaths,
     onNewEntryAtRoot,
     rootDropTargetRef,
     isRootDropTarget,
@@ -1873,6 +2237,7 @@ function FileExplorerPaneContent(props: FileExplorerPaneContentProps) {
               onViewableItemsChanged={handleRevealViewableItemsChanged}
               style={styles.treeList}
               data={listRows}
+              extraData={selectedEntryPaths}
               renderItem={renderTreeRow}
               keyExtractor={listRowKeyExtractor}
               testID="file-explorer-tree-scroll"
@@ -2012,6 +2377,7 @@ function TreeRowDispatcher({
   onDeleteEntry,
   onMoveEntry,
   selectedEntries,
+  touchControls,
 }: {
   serverId: string;
   workspaceId?: string | null;
@@ -2036,6 +2402,7 @@ function TreeRowDispatcher({
   onDeleteEntry?: (entry: ExplorerEntry) => void;
   onMoveEntry?: (requests: ExplorerEntryMoveRequest[]) => void;
   selectedEntries?: readonly ExplorerEntryDragItem[];
+  touchControls: ExplorerTouchControls;
 }) {
   const entry = row.entry;
   const depth = row.depth;
@@ -2069,6 +2436,7 @@ function TreeRowDispatcher({
       onDeleteEntry={onDeleteEntry}
       onMoveEntry={onMoveEntry}
       selectedEntries={selectedEntries}
+      touchControls={touchControls}
       testID={`file-explorer-row-${index}`}
     />
   );
@@ -2194,6 +2562,32 @@ function getErrorRecoveryPath(state: AgentFileExplorerState | undefined): string
 }
 
 const styles = StyleSheet.create((theme) => ({
+  selectionToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  selectionAction: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[1],
+    paddingHorizontal: theme.spacing[1],
+  },
+  rowAction: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing[1],
+  },
+  disabledAction: {
+    opacity: 0.4,
+  },
   container: {
     flex: 1,
   },
@@ -2317,6 +2711,13 @@ const styles = StyleSheet.create((theme) => ({
   binaryMetaText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
+  },
+  entryPressTarget: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: "stretch",
+    alignItems: "center",
+    flexDirection: "row",
   },
   entryInfo: {
     flex: 1,
