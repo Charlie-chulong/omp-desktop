@@ -181,7 +181,7 @@ export function ScheduleRow({
   const productName = scheduleProductLabel(schedule, t);
   const badge = stateBadge(state, t);
   const meta = buildMeta(schedule, state, serverName, singleHost ?? false, t);
-  const canRun = schedule.target.type === "new-agent" && (state === "active" || state === "paused");
+  const canRun = state === "active" || state === "paused";
 
   const rowStyle = useCallback(
     ({ pressed }: PressableStateCallbackType) => [
@@ -221,6 +221,9 @@ export function ScheduleRow({
             <Text style={settingsStyles.rowHint} numberOfLines={1}>
               {meta}
             </Text>
+            {canRun ? (
+              <Text style={settingsStyles.rowHint}>{t("schedules.meta.pauseHint")}</Text>
+            ) : null}
           </View>
         </View>
 
@@ -260,9 +263,6 @@ function ScheduleExecutionMenuItems({
 }): ReactElement | null {
   const { t } = useTranslation();
   const productName = scheduleProductLabel(schedule, t);
-  if (schedule.target.type === "agent") {
-    return null;
-  }
 
   let cadenceAction: ReactElement;
   if (schedule.status === "paused") {
@@ -296,16 +296,18 @@ function ScheduleExecutionMenuItems({
   return (
     <>
       {cadenceAction}
-      <DropdownMenuItem
-        leading={runLeading}
-        disabled={!canRun}
-        status={pending?.runNow ? "pending" : "idle"}
-        pendingLabel={t("schedules.actions.starting")}
-        onSelect={onRunNow}
-        testID={`schedule-menu-run-${schedule.id}`}
-      >
-        {t("schedules.actions.runNow")}
-      </DropdownMenuItem>
+      {schedule.target.type === "new-agent" ? (
+        <DropdownMenuItem
+          leading={runLeading}
+          disabled={!canRun}
+          status={pending?.runNow ? "pending" : "idle"}
+          pendingLabel={t("schedules.actions.starting")}
+          onSelect={onRunNow}
+          testID={`schedule-menu-run-${schedule.id}`}
+        >
+          {t("schedules.actions.runNow")}
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
 }

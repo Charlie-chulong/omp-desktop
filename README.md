@@ -88,6 +88,18 @@ Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
 These tips follow the interface language in all nine supported locales.
 
+## Schedules
+
+Open a task's **⋮** menu on **Schedules** to **Pause** or **Resume** it, including
+heartbeats that send prompts to an existing Agent. Paused tasks display **Paused**
+and keep their cadence, prompt, target, and limits. Pausing prevents future
+triggers without interrupting executions that have already started; resuming
+computes the next trigger from the original cadence without replaying missed runs.
+
+The agent tools `list_schedules`, `pause_schedule`, and `resume_schedule` manage
+new-Agent schedules only; existing-Agent heartbeats are managed from the Schedules
+page. A heartbeat missing from those tools is not a different task ID.
+
 ## Desktop pet
 
 In **Settings → Appearance**, the **Desktop pet** section follows **Wallpaper**. Enable

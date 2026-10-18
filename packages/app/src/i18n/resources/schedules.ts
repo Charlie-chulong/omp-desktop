@@ -32,6 +32,7 @@ const en = {
     neverRun: "Never run",
     nextRun: "Next run {{time}}",
     justNow: "just now",
+    pauseHint: "Pausing stops future triggers; executions already started will continue.",
     timeAgo: "{{value}} ago",
   },
   next: {
@@ -188,6 +189,7 @@ export const schedules = {
       neverRun: "从未运行",
       nextRun: "下次运行 {{time}}",
       justNow: "刚刚",
+      pauseHint: "暂停仅停止后续触发，不会中断已开始的执行。",
       timeAgo: "{{value}}前",
     },
     next: {
@@ -341,6 +343,7 @@ export const schedules = {
       neverRun: "未実行",
       nextRun: "次回の実行 {{time}}",
       justNow: "たった今",
+      pauseHint: "一時停止は今後の実行のみを停止します。開始済みの処理は継続します。",
       timeAgo: "{{value}}前",
     },
     next: {
@@ -494,6 +497,7 @@ export const schedules = {
       neverRun: "실행한 적 없음",
       nextRun: "다음 실행 {{time}}",
       justNow: "방금",
+      pauseHint: "일시 중지는 이후 실행만 멈추며, 이미 시작된 실행은 계속됩니다.",
       timeAgo: "{{value}} 전",
     },
     next: {
@@ -647,6 +651,7 @@ export const schedules = {
       neverRun: "Nunca ejecutada",
       nextRun: "Próxima ejecución {{time}}",
       justNow: "ahora mismo",
+      pauseHint: "La pausa detiene futuras activaciones; las ejecuciones ya iniciadas continúan.",
       timeAgo: "hace {{value}}",
     },
     next: {
@@ -800,6 +805,8 @@ export const schedules = {
       neverRun: "Jamais exécutée",
       nextRun: "Prochaine exécution {{time}}",
       justNow: "à l'instant",
+      pauseHint:
+        "La pause arrête les déclenchements futurs ; les exécutions déjà lancées continuent.",
       timeAgo: "il y a {{value}}",
     },
     next: {
@@ -953,6 +960,7 @@ export const schedules = {
       neverRun: "Nunca executado",
       nextRun: "Próxima execução {{time}}",
       justNow: "agora mesmo",
+      pauseHint: "A pausa impede novos disparos; as execuções já iniciadas continuam.",
       timeAgo: "há {{value}}",
     },
     next: {
@@ -1106,6 +1114,7 @@ export const schedules = {
       neverRun: "Ещё не запускалось",
       nextRun: "Следующий запуск {{time}}",
       justNow: "только что",
+      pauseHint: "Пауза останавливает будущие запуски; уже начатые выполнения продолжаются.",
       timeAgo: "{{value}} назад",
     },
     next: {
@@ -1259,6 +1268,7 @@ export const schedules = {
       neverRun: "لم تُشغَّل بعد",
       nextRun: "التشغيل التالي {{time}}",
       justNow: "الآن",
+      pauseHint: "يوقف الإيقاف المؤقت التشغيلات المستقبلية؛ وتستمر التنفيذات التي بدأت بالفعل.",
       timeAgo: "منذ {{value}}",
     },
     next: {
