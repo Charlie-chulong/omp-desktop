@@ -40,6 +40,11 @@ Restart Desktop after changing macOS language preferences.
 **Host Settings → Agents** reports the version, source, and path of the exact OMP executable used
 for Agent sessions. Update checks and installs target that same executable. Packaged applications
 label their bundled runtime separately from standalone, configured, and `PATH` installations.
+Runtime update checks, checksum requests, and binary downloads (including release-asset
+redirects) use the configured OMP `PI_PROXY` when the proxy is enabled, including
+authenticated HTTP CONNECT proxies. An unset or disabled proxy leaves downloads direct.
+No system routing or DNS changes are required. Download timeouts, cancellation, progress,
+SHA-256 verification, and staged runtime replacement are unchanged.
 
 Select **Configure models** on the home screen to open **Host Settings → Model providers**
 directly. The shortcut targets the local host when available, otherwise the first configured

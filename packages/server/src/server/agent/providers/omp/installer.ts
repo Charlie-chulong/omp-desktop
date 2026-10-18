@@ -37,6 +37,7 @@ interface ActiveOmpInstall {
 
 export interface OmpInstallOptions {
   defer?: boolean;
+  fetch?: typeof fetch;
 }
 
 export interface OmpBinaryFileSystem {
@@ -213,8 +214,11 @@ function requestSignal(signal: AbortSignal | undefined, timeoutMs: number): Abor
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-async function fetchLatestOmpRelease(signal?: AbortSignal): Promise<LatestOmpRelease> {
-  const response = await fetch(LATEST_RELEASE_URL, {
+async function fetchLatestOmpRelease(
+  fetchApi: typeof fetch,
+  signal?: AbortSignal,
+): Promise<LatestOmpRelease> {
+  const response = await fetchApi(LATEST_RELEASE_URL, {
     method: "HEAD",
     redirect: "follow",
     headers: { "User-Agent": "OMP-Desktop" },
@@ -244,9 +248,10 @@ async function fetchReleaseChecksum(
   release: LatestOmpRelease,
   assetName: string,
   signal: AbortSignal,
+  fetchApi: typeof fetch,
 ): Promise<string> {
   const checksumUrl = `https://github.com/${OMP_REPOSITORY}/releases/download/${release.tag}/SHA256SUMS.txt`;
-  const response = await fetch(checksumUrl, { signal: requestSignal(signal, 60_000) });
+  const response = await fetchApi(checksumUrl, { signal: requestSignal(signal, 60_000) });
   if (!response.ok) {
     throw new Error(`Failed to download OMP checksums: HTTP ${response.status}`);
   }
@@ -401,7 +406,7 @@ function runtimeUpdateFields(
 }
 
 async function detectOmpInstallationStatus(
-  options: { checkForUpdates?: boolean } = {},
+  options: { checkForUpdates?: boolean; fetch?: typeof fetch } = {},
 ): Promise<OmpInstallationStatus> {
   const platform = process.platform;
   const arch = process.arch;
@@ -436,7 +441,7 @@ async function detectOmpInstallationStatus(
     if (!options.checkForUpdates) return status;
 
     try {
-      const latestRelease = await fetchLatestOmpRelease();
+      const latestRelease = await fetchLatestOmpRelease(options.fetch ?? fetch);
       const comparison = compareOmpVersions(version, latestRelease.version);
       if (comparison === null) {
         throw new Error(
@@ -469,7 +474,7 @@ async function detectOmpInstallationStatus(
 }
 
 export async function getOmpInstallationStatus(
-  options: { checkForUpdates?: boolean } = {},
+  options: { checkForUpdates?: boolean; fetch?: typeof fetch } = {},
 ): Promise<OmpInstallationStatus> {
   const status = await detectOmpInstallationStatus(options);
   return { ...status, ...runtimeUpdateFields(status.installPath) };
@@ -541,7 +546,8 @@ async function runOmpInstall(
 
   const installPath = status.installPath;
   const { stagedPath, checksumPath, previousPath } = resolveOmpUpdatePaths(installPath);
-  const release = await fetchLatestOmpRelease(controller.signal);
+  const fetchApi = options.fetch ?? fetch;
+  const release = await fetchLatestOmpRelease(fetchApi, controller.signal);
   const assetName = await resolveReleaseAssetName(process.platform, process.arch);
   const downloadUrl = `https://github.com/${OMP_REPOSITORY}/releases/download/${release.tag}/${assetName}`;
   const temporaryPath = `${stagedPath}.${process.pid}.${randomUUID()}.download${process.platform === "win32" ? ".exe" : ""}`;
@@ -549,8 +555,13 @@ async function runOmpInstall(
 
   try {
     state.phase = "downloading";
-    const expectedChecksum = await fetchReleaseChecksum(release, assetName, controller.signal);
-    const response = await fetch(downloadUrl, {
+    const expectedChecksum = await fetchReleaseChecksum(
+      release,
+      assetName,
+      controller.signal,
+      fetchApi,
+    );
+    const response = await fetchApi(downloadUrl, {
       signal: requestSignal(controller.signal, DOWNLOAD_TIMEOUT_MS),
     });
     if (!response.ok) {
