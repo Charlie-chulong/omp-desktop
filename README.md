@@ -45,11 +45,6 @@ Select **Configure models** on the home screen to open **Host Settings → Model
 directly. The shortcut targets the local host when available, otherwise the first configured
 host; if no host is configured, it opens the add-host flow.
 
-Desktop windows use a full-width title bar above the sidebar and workspace tabs.
-The desktop sidebar shares the title bar's background, and its toggle stays in
-the title bar when collapsed. Workspace panel toggles, script controls, and the
-new-tab launcher occupy the title bar's right side; only the focused workspace
-contributes these controls when navigation keeps other workspaces mounted.
 Fresh configurations can list built-in sign-in providers without API keys or custom
 providers. If OMP exits with `No models available` or `No default model selected`,
 Desktop retries RPC startup with an internal keyless bootstrap model, preserving
@@ -57,6 +52,11 @@ existing provider settings and YAML comments. This bootstrap entry is hidden fro
 provider settings, the YAML editor, and selectable model catalogs; it is not a
 usable conversation model.
 
+Desktop windows use a full-width title bar above the sidebar and workspace tabs.
+The desktop sidebar shares the title bar's background, and its toggle stays in
+the title bar when collapsed. Workspace panel toggles, script controls, and the
+new-tab launcher occupy the title bar's right side; only the focused workspace
+contributes these controls when navigation keeps other workspaces mounted.
 Workspace tabs sit directly below the title bar without a second workspace header.
 Native window buttons retain their reserved space. Tabs sit edge-to-edge with
 square corners and thin separators; the active tab shares the content background,
