@@ -1,7 +1,13 @@
+import { EventEmitter } from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
 
-import { listBrowserTargets, openBrowserTarget } from "./browser-targets";
-import type { ExternalAppRuntime } from "./external-app-runtime";
+import { listBrowserTargets, openBrowserTarget, type CustomBrowserConfig } from "./browser-targets";
+import {
+  createExternalAppRuntime,
+  type ExternalAppRuntime,
+  type ExternalSpawnedProcess,
+} from "./external-app-runtime";
 
 class FakeBrowserRuntime implements ExternalAppRuntime {
   public readonly env: NodeJS.ProcessEnv;
@@ -62,6 +68,7 @@ describe("browser targets", () => {
       { id: "firefox", label: "Firefox", available: false },
       { id: "brave", label: "Brave", available: false },
       { id: "chromium", label: "Chromium", available: false },
+      { id: "custom", label: "Custom executable", available: true },
     ]);
   });
 
@@ -105,4 +112,135 @@ describe("browser targets", () => {
     expect(openSystemUrl).toHaveBeenCalledTimes(1);
     expect(openSystemUrl).toHaveBeenCalledWith("https://example.com/system");
   });
+
+  it.each(["linux", "darwin", "win32"] as const)(
+    "offers custom configuration before an executable is configured on %s",
+    async (platform) => {
+      const targets = await listBrowserTargets(new FakeBrowserRuntime(platform));
+      expect(targets).toContainEqual({
+        id: "custom",
+        label: "Custom executable",
+        available: true,
+      });
+    },
+  );
+
+  it.each([
+    ["linux", "/opt/My Browser/browser"],
+    ["darwin", "/Applications/My Browser.app/Contents/MacOS/browser"],
+    ["win32", "C:\\Program Files\\My Browser\\browser.EXE"],
+    ["win32", "C:\\Program Files\\My Browser\\browser.CoM"],
+  ] as const)(
+    "launches custom %s executables through the runtime without a shell",
+    async (platform, executable) => {
+      const spawn = vi.fn(() => {
+        const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
+        child.unref = vi.fn();
+        queueMicrotask(() => child.emit("spawn"));
+        return child;
+      });
+      const runtime = createExternalAppRuntime({ platform, env: {}, spawn });
+      const openSystemUrl = vi.fn(async () => {});
+      const url = 'https://example.com/a b?q="quoted"&other=中文#é';
+      const args = ["", "--profile", 'profile "one" & 中文', "{url}", "", "--last='two words'"];
+
+      await openBrowserTarget("custom", url, runtime, openSystemUrl, { executable, args });
+
+      expect(spawn).toHaveBeenCalledWith(
+        executable,
+        ["", "--profile", 'profile "one" & 中文', url, "", "--last='two words'"],
+        expect.objectContaining({ shell: false, detached: true, stdio: "ignore" }),
+      );
+      expect(args).toEqual([
+        "",
+        "--profile",
+        'profile "one" & 中文',
+        "{url}",
+        "",
+        "--last='two words'",
+      ]);
+      expect(openSystemUrl).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { executable: "", args: ["{url}"] },
+    { executable: "browser", args: ["{url}"] },
+    { executable: "./browser", args: ["{url}"] },
+    { executable: "/opt/browser\0", args: ["{url}"] },
+    { executable: "/opt/browser", args: [] },
+    { executable: "/opt/browser", args: ["{url}", "{url}"] },
+    { executable: "/opt/browser", args: ["--url={url}"] },
+    { executable: "/opt/browser", args: ["{url}", "prefix{url}suffix"] },
+    { executable: "/opt/browser", args: ["{url}", "bad\0argument"] },
+    { executable: "/opt/browser", args: ["{url}", 42] },
+    { executable: "/opt/browser", args: "{url}" },
+    undefined,
+  ])("rejects malformed custom configuration before launching: %j", async (custom) => {
+    const runtime = new FakeBrowserRuntime("linux");
+    const openSystemUrl = vi.fn(async () => {});
+
+    await expect(
+      openBrowserTarget(
+        "custom",
+        "https://example.com",
+        runtime,
+        openSystemUrl,
+        custom as CustomBrowserConfig,
+      ),
+    ).rejects.toThrow(/custom browser/i);
+    expect(runtime.launches).toEqual([]);
+    expect(runtime.macLaunches).toEqual([]);
+    expect(openSystemUrl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "C:\\browser.cmd",
+    "C:\\browser.BAT",
+    "C:\\browser.ps1",
+    "C:\\browser",
+    "C:browser.exe",
+    "\\browser.exe",
+    "/opt/browser.exe",
+  ])("rejects Windows scripts and non-absolute executable paths: %s", async (executable) => {
+    const spawn = vi.fn();
+    const runtime = createExternalAppRuntime({ platform: "win32", env: {}, spawn });
+    const openSystemUrl = vi.fn(async () => {});
+
+    await expect(
+      openBrowserTarget("custom", "https://example.com", runtime, openSystemUrl, {
+        executable,
+        args: ["{url}"],
+      }),
+    ).rejects.toThrow("Custom browser executable");
+    expect(spawn).not.toHaveBeenCalled();
+    expect(openSystemUrl).not.toHaveBeenCalled();
+  });
+
+  it.each(["throw", "error"] as const)(
+    "propagates a custom process %s failure without system fallback",
+    async (failure) => {
+      const error = new Error("Executable could not be launched");
+      const runtime = createExternalAppRuntime({
+        platform: "linux",
+        env: {},
+        spawn: () => {
+          if (failure === "throw") throw error;
+          const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
+          child.unref = vi.fn();
+          queueMicrotask(() => child.emit("error", error));
+          return child;
+        },
+      });
+      const openSystemUrl = vi.fn(async () => {});
+
+      await expect(
+        openBrowserTarget("custom", "https://example.com", runtime, openSystemUrl, {
+          executable: "/missing/browser",
+          args: ["{url}"],
+        }),
+      ).rejects.toBe(error);
+      expect(openSystemUrl).not.toHaveBeenCalled();
+    },
+  );
 });

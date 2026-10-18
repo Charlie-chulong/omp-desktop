@@ -2291,6 +2291,24 @@ export const en = {
       selectedUnavailable: "{{browser}} is not installed. Choose another browser.",
       accessibilityLabel: "Open links with {{browser}}",
       loadFailed: "Unable to load available browsers.",
+      custom: "Custom executable",
+      executable: "Executable path",
+      executableHint:
+        "Enter an absolute executable path without shell quotes. On Windows, use a native .exe or .com file.",
+      arguments: "Arguments",
+      argumentsHint:
+        "Each row is one literal argument, including empty rows, quotes, backslashes, and line breaks. Use exactly one row containing only {url}. No shell parsing is performed.",
+      argument: "Argument {{index}}",
+      addArgument: "Add argument",
+      remove: "Remove",
+      removeArgument: "Remove argument {{index}}",
+      save: "Save custom browser",
+      executableError: "Enter an absolute executable path.",
+      urlArgumentError:
+        "Include exactly one argument equal to {url}; do not embed {url} in another argument.",
+      nulError: "The executable path and arguments cannot contain NUL characters.",
+      customSaveFailed:
+        "Unable to save the custom browser. Your edits have been kept; check the executable and arguments and try again.",
     },
     general: {
       title: "General",

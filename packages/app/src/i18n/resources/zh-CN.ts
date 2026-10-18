@@ -2203,6 +2203,22 @@ export const zhCN: TranslationResources = {
       selectedUnavailable: "未安装 {{browser}}，请选择其他浏览器。",
       accessibilityLabel: "使用 {{browser}} 打开链接",
       loadFailed: "无法加载可用浏览器。",
+      custom: "自定义可执行文件",
+      executable: "可执行文件路径",
+      executableHint:
+        "输入可执行文件的绝对路径，不要添加 Shell 引号。Windows 上请使用原生 .exe 或 .com 文件。",
+      arguments: "参数",
+      argumentsHint:
+        "每行作为一个原样传递的参数，包括空行、引号、反斜杠和换行符。必须有且仅有一行只包含 {url}。不会进行 Shell 命令解析。",
+      argument: "参数 {{index}}",
+      addArgument: "添加参数",
+      remove: "移除",
+      removeArgument: "移除参数 {{index}}",
+      save: "保存自定义浏览器",
+      executableError: "请输入可执行文件的绝对路径。",
+      urlArgumentError: "必须有且仅有一个参数等于 {url}；不能将 {url} 嵌入其他参数。",
+      nulError: "可执行文件路径和参数不能包含 NUL 字符。",
+      customSaveFailed: "无法保存自定义浏览器。已保留你的编辑内容；请检查可执行文件和参数后重试。",
     },
     general: {
       title: "通用",

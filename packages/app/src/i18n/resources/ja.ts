@@ -2139,6 +2139,24 @@ export const ja: TranslationResources = {
         "{{browser}} はインストールされていません。別のブラウザを選択してください。",
       accessibilityLabel: "{{browser}} でリンクを開く",
       loadFailed: "利用可能なブラウザを読み込めませんでした。",
+      custom: "カスタム実行ファイル",
+      executable: "実行ファイルのパス",
+      executableHint:
+        "シェル用の引用符を付けずに絶対パスを入力してください。Windows ではネイティブの .exe または .com ファイルを使用してください。",
+      arguments: "引数",
+      argumentsHint:
+        "各行は、空の行、引用符、バックスラッシュ、改行を含め、そのまま1つの引数になります。{url} だけを含む行を必ず1つ指定してください。シェルによる解析は行いません。",
+      argument: "引数 {{index}}",
+      addArgument: "引数を追加",
+      remove: "削除",
+      removeArgument: "引数 {{index}} を削除",
+      save: "カスタムブラウザを保存",
+      executableError: "実行ファイルの絶対パスを入力してください。",
+      urlArgumentError:
+        "{url} だけの引数を必ず1つ指定してください。他の引数の一部に {url} を含めないでください。",
+      nulError: "実行ファイルのパスと引数に NUL 文字は使用できません。",
+      customSaveFailed:
+        "カスタムブラウザを保存できませんでした。編集内容は保持されています。実行ファイルと引数を確認して、もう一度お試しください。",
     },
     general: {
       title: "一般",

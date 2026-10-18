@@ -1,3 +1,5 @@
+import { posix, win32 } from "node:path";
+
 import type { ExternalAppRuntime } from "./external-app-runtime.js";
 
 export const BROWSER_TARGET_IDS = [
@@ -8,9 +10,63 @@ export const BROWSER_TARGET_IDS = [
   "brave",
   "chromium",
   "safari",
+  "custom",
 ] as const;
 
 export type BrowserTargetId = (typeof BROWSER_TARGET_IDS)[number];
+
+export interface CustomBrowserConfig {
+  executable: string;
+  args: string[];
+}
+
+function validateCustomExecutable(executable: unknown, platform: NodeJS.Platform): void {
+  if (typeof executable !== "string" || executable.includes("\0")) {
+    throw new Error("Custom browser executable must be an absolute path without NUL characters");
+  }
+  const absolute =
+    platform === "win32"
+      ? win32.isAbsolute(executable) &&
+        (/^[a-zA-Z]:[\\/]/.test(executable) || /^\\\\[^\\]+\\[^\\]+/.test(executable))
+      : posix.isAbsolute(executable);
+  if (!absolute) {
+    throw new Error("Custom browser executable must be an absolute path");
+  }
+  if (platform === "win32") {
+    const extension = win32.extname(executable).toLowerCase();
+    if (extension !== ".exe" && extension !== ".com") {
+      throw new Error("Custom browser executable must be a native .exe or .com file on Windows");
+    }
+  }
+}
+
+export function validateCustomBrowserConfig(
+  value: unknown,
+  platform: NodeJS.Platform = process.platform,
+): asserts value is CustomBrowserConfig {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Invalid custom browser configuration");
+  }
+  const { executable, args } = value as Record<string, unknown>;
+  validateCustomExecutable(executable, platform);
+  if (!Array.isArray(args)) {
+    throw new Error("Custom browser arguments must be an array of strings");
+  }
+  let placeholders = 0;
+  for (const argument of args) {
+    if (
+      typeof argument !== "string" ||
+      argument.includes("\0") ||
+      (argument !== "{url}" && argument.includes("{url}"))
+    ) {
+      throw new Error("Custom browser arguments must not contain embedded {url} or NUL characters");
+    }
+    if (argument === "{url}") placeholders += 1;
+  }
+  if (placeholders !== 1) {
+    throw new Error("Custom browser arguments must contain exactly one standalone {url}");
+  }
+}
 
 export interface BrowserTargetDescriptor {
   id: BrowserTargetId;
@@ -19,7 +75,7 @@ export interface BrowserTargetDescriptor {
 }
 
 interface BrowserTargetDefinition {
-  id: Exclude<BrowserTargetId, "system">;
+  id: Exclude<BrowserTargetId, "system" | "custom">;
   label: string;
   platforms: readonly NodeJS.Platform[];
   macApplication?: string;
@@ -139,6 +195,7 @@ export async function listBrowserTargets(
       label: target.label,
       available: availability[index] === true,
     })),
+    { id: "custom", label: "Custom executable", available: true },
   ];
 }
 
@@ -147,9 +204,19 @@ export async function openBrowserTarget(
   url: string,
   runtime: ExternalAppRuntime,
   openSystemUrl: (url: string) => Promise<void>,
+  custom?: CustomBrowserConfig,
 ): Promise<void> {
   if (id === "system") {
     await openSystemUrl(url);
+    return;
+  }
+
+  if (id === "custom") {
+    validateCustomBrowserConfig(custom, runtime.platform);
+    await runtime.spawnDetached({
+      command: custom.executable,
+      args: custom.args.map((argument) => (argument === "{url}" ? url : argument)),
+    });
     return;
   }
 
