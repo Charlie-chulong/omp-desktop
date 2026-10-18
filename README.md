@@ -815,8 +815,10 @@ are connected.
 
 The file explorer offers **Select files** for selecting several entries without modifier keys,
 then **Move selected items** and an explicit **Move here** destination (including the workspace
-root). Touch actions also expose code copying, quote/ask for selected message text, and
-panning a full-screen diagram. Tap the context meter to open its details without hover.
+root). Touch actions also expose code copying and panning a full-screen diagram. On touch
+or compact browser layouts, selecting transcript text exposes **Quote** and **Ask** without
+hover; OMP Desktop keeps those actions in the mouse right-click menu instead. Tap the
+context meter to open its details without hover.
 
 App-level **Settings → Chat behavior** contains conversation defaults; **Settings → Host
 connections** contains relay/pairing controls. Per-host projects and provider settings remain

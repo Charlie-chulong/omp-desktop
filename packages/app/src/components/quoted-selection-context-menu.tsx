@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Button } from "@/components/ui/button";
 import type { Rect } from "@/components/ui/menu";
-import { isWeb } from "@/constants/platform";
+import { getIsElectron, isWeb } from "@/constants/platform";
 import { useTranslation } from "react-i18next";
 import { getQuotedSelectionText, isSameQuotedSelectionRange } from "@/components/quoted-selection";
 import { QuickAskPopover } from "@/components/quick-ask-popover";
@@ -238,7 +238,9 @@ export function QuotedSelectionContextMenu({
         <SelectionContextTarget
           rootRef={rootRef}
           onSelection={handleSelection}
-          showSelectionActions={isWeb && showPersistentActions && Boolean(selectedText)}
+          showSelectionActions={
+            isWeb && !getIsElectron() && showPersistentActions && Boolean(selectedText)
+          }
           onQuote={handleQuote}
           onAsk={handleAsk}
           onPreserveSelection={preserveSelection}
