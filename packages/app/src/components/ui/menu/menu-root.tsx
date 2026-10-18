@@ -84,6 +84,13 @@ export const MenuTrigger = forwardRef<View, MenuTriggerProps>(function MenuTrigg
 
   const handlePress = useCallback(() => {
     if (disabled) return;
+    if (!ctx.open && isWeb) {
+      const trigger = ctx.triggerRef.current as (View & HTMLElement) | null;
+      const rect = trigger?.getBoundingClientRect?.();
+      if (rect) {
+        ctx.setAnchorRect({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+      }
+    }
     ctx.setOpen(!ctx.open);
   }, [disabled, ctx]);
 

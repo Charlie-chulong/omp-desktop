@@ -37,6 +37,7 @@ import {
   Code2,
   Sparkles,
   Globe2,
+  MessageSquare,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
@@ -49,6 +50,7 @@ import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { AddRemoteHostSection } from "@/screens/settings/add-remote-host-section";
 import { AppearanceSection } from "@/screens/settings/appearance/appearance-section";
+import { ChatDetailsSection } from "@/screens/settings/chat-details-section";
 import {
   useAppSettings,
   parseTerminalScrollbackLines,
@@ -116,7 +118,11 @@ import {
   type SettingsSectionSlug,
 } from "@/utils/host-routes";
 import { useLastWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
-import { returnFromSettings, type SettingsView } from "@/navigation/settings-navigation";
+import {
+  getSettingsHostSwitchRoute,
+  returnFromSettings,
+  type SettingsView,
+} from "@/navigation/settings-navigation";
 import { isNative, isWeb } from "@/constants/platform";
 
 // ---------------------------------------------------------------------------
@@ -133,6 +139,7 @@ interface SidebarSectionItem {
 
 const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "general", labelKey: "settings.sections.general", icon: Settings },
+  { id: "chat-behavior", labelKey: "settings.sections.chatBehavior", icon: MessageSquare },
   { id: "connections", labelKey: "settings.sections.connections", icon: Network },
   { id: "appearance", labelKey: "settings.sections.appearance", icon: Palette },
   { id: "editor", labelKey: "settings.sections.editor", icon: Code2, webOnly: true },
@@ -248,7 +255,6 @@ let retainedDesktopSidebarScrollOffset = 0;
 
 interface GeneralSectionProps {
   settings: AppSettings;
-  handleSendBehaviorChange: (behavior: SendBehavior) => void;
   handleLanguageChange: (language: AppLanguage) => void;
   handleTerminalScrollbackLinesChange: (lines: number) => void;
 }
@@ -295,19 +301,64 @@ function LanguageMenuItem({ value, activeLocale, selected, onChange }: LanguageM
   );
 }
 
-function GeneralSection({
+function ChatBehaviorSection({
   settings,
   handleSendBehaviorChange,
-  handleLanguageChange,
-  handleTerminalScrollbackLinesChange,
-}: GeneralSectionProps) {
-  const { t, i18n } = useTranslation();
-  const activeLocale = getActiveLocale(i18n.language);
+}: {
+  settings: AppSettings;
+  handleSendBehaviorChange: (behavior: SendBehavior) => void;
+}) {
+  const { t } = useTranslation();
   const sendBehaviorOptions = useMemo(() => getSendBehaviorOptions(t), [t]);
   const selectedSendBehaviorLabel =
     sendBehaviorOptions.find((option) => option.value === settings.sendBehavior)?.label ??
     settings.sendBehavior;
   const sendBehaviorDescriptionKey = `settings.general.defaultSend.descriptions.${settings.sendBehavior}`;
+
+  return (
+    <>
+      <SettingsSection title={t("settings.sections.chatBehavior")}>
+        <View style={settingsStyles.card}>
+          <View style={settingsStyles.row}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>{t("settings.general.defaultSend.label")}</Text>
+              <Text style={settingsStyles.rowHint}>{t(sendBehaviorDescriptionKey)}</Text>
+            </View>
+            <DropdownMenu>
+              <DropdownTrigger
+                accessibilityRole="button"
+                accessibilityLabel={`${t("settings.general.defaultSend.label")}: ${selectedSendBehaviorLabel}`}
+                style={themeTriggerStyle}
+              >
+                <Text style={styles.themeTriggerText}>{selectedSendBehaviorLabel}</Text>
+              </DropdownTrigger>
+              <DropdownMenuContent side="bottom" align="end" width={200}>
+                {sendBehaviorOptions.map((option) => (
+                  <SendBehaviorMenuItem
+                    key={option.value}
+                    value={option.value}
+                    label={option.label}
+                    selected={settings.sendBehavior === option.value}
+                    onChange={handleSendBehaviorChange}
+                  />
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </View>
+        </View>
+      </SettingsSection>
+      <ChatDetailsSection />
+    </>
+  );
+}
+
+function GeneralSection({
+  settings,
+  handleLanguageChange,
+  handleTerminalScrollbackLinesChange,
+}: GeneralSectionProps) {
+  const { t, i18n } = useTranslation();
+  const activeLocale = getActiveLocale(i18n.language);
   const selectedLanguageOption = LANGUAGE_OPTIONS.find(
     (option) => option.value === settings.language,
   );
@@ -347,32 +398,6 @@ function GeneralSection({
     <SettingsSection title={t("settings.general.title")}>
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
-          <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>{t("settings.general.defaultSend.label")}</Text>
-            <Text style={settingsStyles.rowHint}>{t(sendBehaviorDescriptionKey)}</Text>
-          </View>
-          <DropdownMenu>
-            <DropdownTrigger
-              accessibilityRole="button"
-              accessibilityLabel={`${t("settings.general.defaultSend.label")}: ${selectedSendBehaviorLabel}`}
-              style={themeTriggerStyle}
-            >
-              <Text style={styles.themeTriggerText}>{selectedSendBehaviorLabel}</Text>
-            </DropdownTrigger>
-            <DropdownMenuContent side="bottom" align="end" width={200}>
-              {sendBehaviorOptions.map((option) => (
-                <SendBehaviorMenuItem
-                  key={option.value}
-                  value={option.value}
-                  label={option.label}
-                  selected={settings.sendBehavior === option.value}
-                  onChange={handleSendBehaviorChange}
-                />
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </View>
-        <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>{t("settings.general.language.label")}</Text>
             <Text style={settingsStyles.rowHint}>{t("settings.general.language.description")}</Text>
@@ -1060,19 +1085,8 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   const handleSelectHost = useCallback(
     (serverId: string) => {
       setSelectedSettingsHostServerId(serverId);
-      if (view.kind === "project") {
-        const target = buildSettingsHostSectionRoute(serverId, "projects");
-        if (isCompactLayout) {
-          router.push(target);
-        } else {
-          router.replace(target);
-        }
-        return;
-      }
-      if (view.kind !== "host") {
-        return;
-      }
-      const target = buildSettingsHostSectionRoute(serverId, view.section);
+      const target = getSettingsHostSwitchRoute(view, serverId);
+      if (!target) return;
       if (isCompactLayout) {
         router.push(target);
       } else {
@@ -1154,13 +1168,19 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
             <>
               <GeneralSection
                 settings={settings}
-                handleSendBehaviorChange={handleSendBehaviorChange}
                 handleLanguageChange={handleLanguageChange}
                 handleTerminalScrollbackLinesChange={handleTerminalScrollbackLinesChange}
               />
               {isDesktopApp ? <DesktopBrowserSection /> : null}
               {isDesktopApp ? <DesktopStartupSection /> : null}
             </>
+          );
+        case "chat-behavior":
+          return (
+            <ChatBehaviorSection
+              settings={settings}
+              handleSendBehaviorChange={handleSendBehaviorChange}
+            />
           );
         case "connections":
           return <AddRemoteHostSection />;

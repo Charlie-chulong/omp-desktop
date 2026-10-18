@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { useOmpProviderAccountQuota } from "@/hooks/use-omp-account-quota";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import {
   buildOmpAccountProviderUsage,
   createOmpAccountUsageCopy,
@@ -116,6 +117,7 @@ function TokenContextWindowMeter({
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+  const showPersistentActions = useShowPersistentActions();
   const quotaProviderId = provider === "openai-codex" || provider === "anthropic" ? provider : null;
   const { view: baseUsageView, refresh: refreshProviderUsage } = useProviderUsage(
     serverId ?? null,
@@ -200,6 +202,7 @@ function TokenContextWindowMeter({
       open={isTooltipOpen}
       onOpenChange={handleTooltipOpenChange}
       delayDuration={0}
+      openOnPress={showPersistentActions}
       enabledOnDesktop
       enabledOnMobile
     >
@@ -207,10 +210,12 @@ function TokenContextWindowMeter({
         <Pressable
           style={containerStyle}
           testID="context-window-meter"
-          accessibilityRole="image"
+          accessibilityRole="button"
           accessibilityLabel={t("contextWindow.accessibility", {
             percentage: roundedPercentage,
           })}
+          accessibilityHint={t("contextWindow.title")}
+          hitSlop={showPersistentActions ? 6 : undefined}
         >
           <Svg
             width={svgSize}

@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, type PointerEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { BottomSheetBackdrop, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { ChevronLeft } from "lucide-react-native";
@@ -81,10 +81,10 @@ export interface MenuPageDefinition {
   hoverIntent?: boolean;
 }
 
-interface MenuSurfaceContextValue {
+export interface MenuSurfaceContextValue {
   registerSubAnchor: (id: string, ref: React.RefObject<View | null>) => void;
-  hoverOpen: (sub: { id: string; depth: number }) => void;
-  hoverClose: (depth: number) => void;
+  hoverOpen: (sub: { id: string; depth: number }, pointerType: string) => void;
+  hoverClose: (depth: number, pointerType: string) => void;
   cancelHoverClose: () => void;
 }
 
@@ -155,7 +155,8 @@ function useSubAnchors(): {
   }, []);
 
   const hoverOpen = useCallback(
-    (sub: { id: string; depth: number }) => {
+    (sub: { id: string; depth: number }, pointerType: string) => {
+      if (pointerType !== "mouse") return;
       clearTimers();
       openTimer.current = setTimeout(() => openSub(sub), HOVER_OPEN_DELAY_MS);
     },
@@ -163,7 +164,8 @@ function useSubAnchors(): {
   );
 
   const hoverClose = useCallback(
-    (depth: number) => {
+    (depth: number, pointerType: string) => {
+      if (pointerType !== "mouse") return;
       if (openTimer.current) clearTimeout(openTimer.current);
       openTimer.current = null;
       if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -172,10 +174,8 @@ function useSubAnchors(): {
     [closeSub],
   );
 
-  const cancelHoverClose = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  }, []);
+  // Explicit selections must cancel both timers, including a sibling's delayed hover-open.
+  const cancelHoverClose = clearTimers;
 
   const value = useMemo(
     () => ({ registerSubAnchor, hoverOpen, hoverClose, cancelHoverClose }),
@@ -226,13 +226,13 @@ function MenuPopoverSurface({
     const locked = openPages.some(({ page }) => page.hoverIntent === false);
     return {
       ...surfaceValue,
-      hoverOpen: (sub) => {
+      hoverOpen: (sub, pointerType) => {
         if (pages.find((page) => page.id === sub.id)?.hoverIntent === false) return;
-        surfaceValue.hoverOpen(sub);
+        surfaceValue.hoverOpen(sub, pointerType);
       },
-      hoverClose: (depth) => {
+      hoverClose: (depth, pointerType) => {
         if (locked) return;
-        surfaceValue.hoverClose(depth);
+        surfaceValue.hoverClose(depth, pointerType);
       },
     };
   }, [openPages, pages, surfaceValue]);
@@ -304,7 +304,13 @@ function MenuFlyout({
   const menu = useMenuContext("MenuFlyout");
   const { hoverClose, cancelHoverClose } = useMenuSurface("MenuFlyout");
   const handleClose = useCallback(() => menu.setOpen(false), [menu]);
-  const handleHoverOut = useCallback(() => hoverClose(depth), [hoverClose, depth]);
+  const handleHoverIn = cancelHoverClose;
+  const handleHoverOut = useCallback(
+    (event?: PointerEvent) => {
+      hoverClose(depth, event?.nativeEvent.pointerType ?? "");
+    },
+    [hoverClose, depth],
+  );
 
   if (!anchorRef) return null;
 
@@ -322,7 +328,7 @@ function MenuFlyout({
       scrollable={scrollable}
       backdrop={false}
       revision={page.id}
-      onPointerEnter={cancelHoverClose}
+      onPointerEnter={handleHoverIn}
       onPointerLeave={handleHoverOut}
       testID={testID}
     >

@@ -16,6 +16,17 @@ export type SettingsView =
   | { kind: "host"; serverId: string; section: HostSectionSlug }
   | { kind: "project"; serverId: string; projectId: string };
 
+export function getSettingsHostSwitchRoute(view: SettingsView, serverId: string) {
+  if (view.kind === "project") {
+    // Project IDs belong to their host and cannot be carried across hosts.
+    return buildProjectsSettingsRoute(serverId);
+  }
+  if (view.kind === "host") {
+    return buildSettingsHostSectionRoute(serverId, view.section);
+  }
+  return null;
+}
+
 export function openHostOverview(serverId: string): void {
   router.push(buildSettingsHostSectionRoute(serverId, "host"));
 }
