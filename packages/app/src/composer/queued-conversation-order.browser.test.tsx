@@ -136,7 +136,7 @@ describe("queued conversation order on a touch-sized screen", () => {
 
     act(() => sendTouch(handle, "touchstart", x, startY));
     await new Promise((resolve) => setTimeout(resolve, 230));
-    act(() => useSessionStore.getState().moveQueuedAgent(serverId, "alpha", 1));
+    act(() => useSessionStore.getState().reorderQueuedAgents(serverId, ["beta", "alpha", "gamma"]));
     expect(useSessionStore.getState().sessions[serverId]?.queuedAgentOrder).toEqual([
       "beta",
       "alpha",
@@ -156,20 +156,15 @@ describe("queued conversation order on a touch-sized screen", () => {
     });
   });
 
-  it("allows tap-only adjacent moves and hides the board when only one conversation remains", async () => {
+  it("offers keyboard drag instead of order buttons and hides the board when only one conversation remains", async () => {
     act(() => queue("alpha"));
     expect(container.querySelector('[data-testid="queued-conversation-order"]')).toBeNull();
 
     act(() => queue("alpha", "beta"));
     expect(orderedRows()).toEqual(["alpha", "beta"]);
-    expect(element("queued-conversation-earlier-alpha").getAttribute("aria-disabled")).toBe("true");
-    await userEvent.click(element("queued-conversation-earlier-beta"));
-    await vi.waitFor(() => expect(orderedRows()).toEqual(["beta", "alpha"]));
-    expect(useSessionStore.getState().sessions[serverId]?.queuedAgentOrder).toEqual([
-      "beta",
-      "alpha",
-    ]);
-    const keyboardHandle = element("queued-conversation-drag-alpha");
+    expect(container.querySelector('[data-testid^="queued-conversation-earlier-"]')).toBeNull();
+    expect(container.querySelector('[data-testid^="queued-conversation-later-"]')).toBeNull();
+    const keyboardHandle = element("queued-conversation-drag-beta");
     keyboardHandle.focus();
     await act(async () => {
       await userEvent.keyboard("[Space]");
@@ -183,10 +178,10 @@ describe("queued conversation order on a touch-sized screen", () => {
     await act(async () => {
       await userEvent.keyboard("[Space]");
     });
-    await vi.waitFor(() => expect(orderedRows()).toEqual(["alpha", "beta"]));
+    await vi.waitFor(() => expect(orderedRows()).toEqual(["beta", "alpha"]));
     expect(useSessionStore.getState().sessions[serverId]?.queuedAgentOrder).toEqual([
-      "alpha",
       "beta",
+      "alpha",
     ]);
 
     act(() => queue("alpha"));

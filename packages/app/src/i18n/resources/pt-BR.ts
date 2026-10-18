@@ -128,8 +128,9 @@ export const ptBR: TranslationResources = {
   composer: {
     queueOrder: {
       title: "Conversas na fila",
-      hint: "Mantenha a alça pressionada e arraste ou use as setas. Os turnos em andamento continuam.",
+      hint: "Mantenha a alça pressionada e arraste. Os turnos em andamento continuam.",
       dragConversation: "Reordenar {{title}}",
+      dragMessage: "Reordenar mensagem na fila: {{text}}",
       messageCount: "Mensagens na fila: {{count}}",
       untitledConversation: "Conversa sem título · {{id}}",
     },
@@ -170,11 +171,7 @@ export const ptBR: TranslationResources = {
       dropFilesHere: "Solte arquivos aqui",
       editQueuedMessage: "Editar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
-      moveQueuedMessageEarlier: "Adiantar a mensagem na fila",
-      moveQueuedMessageLater: "Atrasar a mensagem na fila",
       queuedConversationPosition: "Conversa na fila {{position}} de {{count}}",
-      moveQueuedConversationEarlier: "Adiantar a conversa na fila",
-      moveQueuedConversationLater: "Atrasar a conversa na fila",
       openImage: "Abrir anexo de imagem",
       removeImage: "Remover anexo de imagem",
       removeFile: "Remover anexo de arquivo",

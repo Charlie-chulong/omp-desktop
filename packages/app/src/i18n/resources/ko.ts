@@ -128,8 +128,9 @@ export const ko: TranslationResources = {
   composer: {
     queueOrder: {
       title: "대기 중인 대화",
-      hint: "핸들을 길게 눌러 드래그하거나 화살표로 순서를 바꾸세요. 실행 중인 턴은 계속됩니다.",
+      hint: "핸들을 길게 눌러 드래그하세요. 실행 중인 턴은 계속됩니다.",
       dragConversation: "{{title}} 순서 변경",
+      dragMessage: "대기 중인 메시지 순서 변경: {{text}}",
       messageCount: "대기 중인 메시지: {{count}}",
       untitledConversation: "제목 없는 대화 · {{id}}",
     },
@@ -170,11 +171,7 @@ export const ko: TranslationResources = {
       dropFilesHere: "여기에 파일을 끌어다 놓으세요",
       editQueuedMessage: "대기 중인 메시지 편집",
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
-      moveQueuedMessageEarlier: "대기 중인 메시지를 앞으로 이동",
-      moveQueuedMessageLater: "대기 중인 메시지를 뒤로 이동",
       queuedConversationPosition: "대기 중인 대화 {{count}}개 중 {{position}}번째",
-      moveQueuedConversationEarlier: "대기 중인 대화를 앞으로 이동",
-      moveQueuedConversationLater: "대기 중인 대화를 뒤로 이동",
       openImage: "이미지 첨부 열기",
       removeImage: "이미지 첨부 제거",
       removeFile: "파일 첨부 제거",

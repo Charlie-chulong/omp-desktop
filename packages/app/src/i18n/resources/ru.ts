@@ -128,8 +128,9 @@ export const ru: TranslationResources = {
   composer: {
     queueOrder: {
       title: "Диалоги в очереди",
-      hint: "Удерживайте и перетаскивайте маркер или используйте стрелки. Текущие ходы продолжатся.",
+      hint: "Удерживайте и перетаскивайте маркер. Текущие ходы продолжатся.",
       dragConversation: "Изменить порядок: {{title}}",
+      dragMessage: "Изменить порядок сообщения: {{text}}",
       messageCount: "Сообщения в очереди: {{count}}",
       untitledConversation: "Диалог без названия · {{id}}",
     },
@@ -170,11 +171,7 @@ export const ru: TranslationResources = {
       dropFilesHere: "Переместите файлы сюда",
       editQueuedMessage: "Изменить сообщение из очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
-      moveQueuedMessageEarlier: "Переместить сообщение вперёд в очереди",
-      moveQueuedMessageLater: "Переместить сообщение назад в очереди",
       queuedConversationPosition: "Разговор в очереди: {{position}} из {{count}}",
-      moveQueuedConversationEarlier: "Переместить разговор вперёд в очереди",
-      moveQueuedConversationLater: "Переместить разговор назад в очереди",
       openImage: "Открыть прикрепленное изображение",
       removeImage: "Удалить прикрепленное изображение",
       removeFile: "Удалить прикрепленный файл",

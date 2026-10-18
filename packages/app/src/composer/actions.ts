@@ -265,21 +265,29 @@ export function queueComposerMessage(input: QueueComposerMessageInput): QueueCom
   return { queued: item };
 }
 
-export function moveQueuedComposerMessage(input: {
+export function reorderQueuedComposerMessages(input: {
   agentId: string;
-  messageId: string;
-  offset: -1 | 1;
+  originalMessageIds: readonly string[];
+  orderedMessageIds: readonly string[];
   queue: QueueWriter;
 }): void {
   input.queue.write((prev) => {
     const messages = prev.get(input.agentId);
-    if (!messages) return prev;
-    const index = messages.findIndex((message) => message.id === input.messageId);
-    const target = index + input.offset;
-    if (index < 0 || target < 0 || target >= messages.length) return prev;
+    if (!messages || messages.length !== input.originalMessageIds.length) return prev;
+    if (messages.some((message, index) => message.id !== input.originalMessageIds[index])) {
+      return prev;
+    }
+    if (input.orderedMessageIds.length !== messages.length) return prev;
+    if (input.orderedMessageIds.every((id, index) => id === messages[index]?.id)) return prev;
 
-    const reordered = [...messages];
-    [reordered[index], reordered[target]] = [reordered[target]!, reordered[index]!];
+    const byId = new Map(messages.map((message) => [message.id, message]));
+    const reordered: QueuedComposerMessage[] = [];
+    for (const id of input.orderedMessageIds) {
+      const message = byId.get(id);
+      if (!message) return prev;
+      reordered.push(message);
+      byId.delete(id);
+    }
     const next = new Map(prev);
     next.set(input.agentId, reordered);
     return next;

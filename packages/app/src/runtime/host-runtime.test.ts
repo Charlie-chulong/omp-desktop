@@ -22,7 +22,7 @@ import {
   type HostRuntimeStorage,
 } from "./host-runtime";
 import { ReplicaCache } from "./replica-cache";
-import { moveQueuedComposerMessage, type QueueWriter } from "@/composer/actions";
+import { reorderQueuedComposerMessages, type QueueWriter } from "@/composer/actions";
 
 class FakeDaemonClient {
   private state: ConnectionState = { status: "idle" };
@@ -2639,7 +2639,7 @@ describe("HostRuntimeStore", () => {
         ["second", [{ id: "message-second", text: "run second", attachments: [] }]],
       ]),
     );
-    sessionStore.moveQueuedAgent(host.serverId, "second", -1);
+    sessionStore.reorderQueuedAgents(host.serverId, ["second", "first"]);
 
     store.drainQueuedAgentMessage(host.serverId, "first");
     expect(fakeClient.sentAgentMessages).toEqual([]);
@@ -2785,8 +2785,12 @@ describe("HostRuntimeStore", () => {
         useSessionStore.getState().sessions[host.serverId]!.queuedMessages.get(id) ?? [],
       write: (update) => sessionStore.setQueuedMessages(host.serverId, update),
     };
-    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: -1, queue });
-    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: -1, queue });
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      originalMessageIds: ["A", "B", "C"],
+      orderedMessageIds: ["C", "A", "B"],
+      queue,
+    });
     store.reevaluateQueuedAgentMessages(host.serverId);
 
     expect(queue.read("agent")).toEqual([messages[2], messages[0], messages[1]]);
@@ -2816,7 +2820,12 @@ describe("HostRuntimeStore", () => {
       messages[2]!.attachments[0]!.attachment,
     ]);
     expect(queue.read("agent")).toEqual([]);
-    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: 1, queue });
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      originalMessageIds: ["A", "B", "C"],
+      orderedMessageIds: ["B", "C", "A"],
+      queue,
+    });
     store.reevaluateQueuedAgentMessages(host.serverId);
     expect(fakeClient.sentAgentMessages).toHaveLength(3);
     expect(queue.read("agent")).toEqual([]);

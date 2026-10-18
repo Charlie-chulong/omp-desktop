@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef } from "react";
-import { Pressable, Text, View, type PressableStateCallbackType } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { ChevronDown, ChevronUp, GripVertical } from "lucide-react-native";
+import { GripVertical } from "lucide-react-native";
 import { useShallow } from "zustand/shallow";
 import { DraggableList, type DraggableRenderItemInfo } from "@/components/draggable-list";
 import { isWeb } from "@/constants/platform";
@@ -103,24 +103,11 @@ export function QueuedConversationOrder({ serverId }: { serverId: string }) {
     },
     [serverId],
   );
-  const handleMove = useCallback(
-    (agentId: string, offset: -1 | 1) => {
-      const store = useSessionStore.getState();
-      if ((store.sessions[serverId]?.queuedMessages.get(agentId)?.length ?? 0) === 0) return;
-      store.moveQueuedAgent(serverId, agentId, offset);
-      getHostRuntimeStore().reevaluateQueuedAgentMessages(serverId);
-    },
-    [serverId],
-  );
   const renderConversation = useCallback(
     (info: DraggableRenderItemInfo<QueuedConversation>) => (
-      <QueuedConversationRow
-        {...info}
-        conversationCount={conversations.length}
-        onMove={handleMove}
-      />
+      <QueuedConversationRow {...info} conversationCount={conversations.length} />
     ),
-    [conversations.length, handleMove],
+    [conversations.length],
   );
 
   if (conversations.length <= 1) return null;
@@ -158,38 +145,9 @@ function QueuedConversationRow({
   isActive,
   dragHandleProps,
   conversationCount,
-  onMove,
-}: DraggableRenderItemInfo<QueuedConversation> & {
-  conversationCount: number;
-  onMove: (agentId: string, offset: -1 | 1) => void;
-}) {
+}: DraggableRenderItemInfo<QueuedConversation> & { conversationCount: number }) {
   const { t } = useTranslation();
-  const canMoveEarlier = index > 0;
-  const canMoveLater = index < conversationCount - 1;
   const dragLabel = t("composer.queueOrder.dragConversation", { title: item.title });
-  const earlierAccessibilityState = useMemo(
-    () => ({ disabled: !canMoveEarlier }),
-    [canMoveEarlier],
-  );
-  const laterAccessibilityState = useMemo(() => ({ disabled: !canMoveLater }), [canMoveLater]);
-  const handleMoveEarlier = useCallback(() => onMove(item.agentId, -1), [item.agentId, onMove]);
-  const handleMoveLater = useCallback(() => onMove(item.agentId, 1), [item.agentId, onMove]);
-  const earlierButtonStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType) => [
-      styles.moveButton,
-      (hovered || pressed) && canMoveEarlier && styles.moveButtonActive,
-      !canMoveEarlier && styles.buttonDisabled,
-    ],
-    [canMoveEarlier],
-  );
-  const laterButtonStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType) => [
-      styles.moveButton,
-      (hovered || pressed) && canMoveLater && styles.moveButtonActive,
-      !canMoveLater && styles.buttonDisabled,
-    ],
-    [canMoveLater],
-  );
   const handleIcon = (
     <ThemedGripVertical size={ICON_SIZE.md} uniProps={iconForegroundMutedMapping} />
   );
@@ -239,30 +197,6 @@ function QueuedConversationRow({
         <Text style={styles.messageCount} numberOfLines={1}>
           {t("composer.queueOrder.messageCount", { count: item.messageCount })}
         </Text>
-      </View>
-      <View style={styles.actions}>
-        <Pressable
-          onPress={handleMoveEarlier}
-          disabled={!canMoveEarlier}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.title}: ${t("composer.attachments.moveQueuedConversationEarlier")}`}
-          accessibilityState={earlierAccessibilityState}
-          style={earlierButtonStyle}
-          testID={`queued-conversation-earlier-${item.agentId}`}
-        >
-          <ThemedChevronUp size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-        </Pressable>
-        <Pressable
-          onPress={handleMoveLater}
-          disabled={!canMoveLater}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.title}: ${t("composer.attachments.moveQueuedConversationLater")}`}
-          accessibilityState={laterAccessibilityState}
-          style={laterButtonStyle}
-          testID={`queued-conversation-later-${item.agentId}`}
-        >
-          <ThemedChevronDown size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-        </Pressable>
       </View>
     </View>
   );
@@ -338,28 +272,7 @@ const styles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.ui,
     fontSize: theme.fontSize.sm,
   },
-  actions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[1],
-  },
-  moveButton: {
-    width: 32,
-    height: 36,
-    borderRadius: theme.borderRadius.full,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moveButtonActive: {
-    backgroundColor: theme.colors.surface2,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
 }));
 
 const ThemedGripVertical = withUnistyles(GripVertical);
-const ThemedChevronUp = withUnistyles(ChevronUp);
-const ThemedChevronDown = withUnistyles(ChevronDown);
-const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });

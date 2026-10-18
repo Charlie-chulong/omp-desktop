@@ -142,8 +142,9 @@ export const en = {
   composer: {
     queueOrder: {
       title: "Queued conversations",
-      hint: "Hold and drag a handle or use arrows. Running turns continue.",
+      hint: "Hold and drag a handle. Running turns continue.",
       dragConversation: "Reorder {{title}}",
+      dragMessage: "Reorder queued message: {{text}}",
       messageCount: "Queued messages: {{count}}",
       untitledConversation: "Untitled conversation · {{id}}",
     },
@@ -184,11 +185,7 @@ export const en = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Edit queued message",
       sendQueuedMessageNow: "Send queued message now",
-      moveQueuedMessageEarlier: "Move queued message earlier",
-      moveQueuedMessageLater: "Move queued message later",
       queuedConversationPosition: "Queued conversation {{position}} of {{count}}",
-      moveQueuedConversationEarlier: "Move queued conversation earlier",
-      moveQueuedConversationLater: "Move queued conversation later",
       openImage: "Open image attachment",
       removeImage: "Remove image attachment",
       removeFile: "Remove file attachment",

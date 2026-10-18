@@ -24,7 +24,7 @@ import {
   editQueuedComposerMessage,
   findGithubItemByOption,
   isAttachmentSelectedForGithubItem,
-  moveQueuedComposerMessage,
+  reorderQueuedComposerMessages,
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
@@ -787,20 +787,22 @@ describe("queueComposerMessage", () => {
   });
 });
 
-describe("moveQueuedComposerMessage", () => {
-  it("moves pending messages in both directions without changing their contents or other queues", () => {
-    const messages: QueuedComposerMessage[] = [
-      { id: "A", text: "做 A", attachments: [] },
-      { id: "B", text: "做 B", attachments: [] },
-      {
-        id: "C",
-        text: "  做 C\nKeep exact text.  ",
-        attachments: [
-          { kind: "image", metadata: imageWithId("queued-image") },
-          reviewWorkspaceAttachment("Keep the queued review snapshot."),
-        ],
-      },
-    ];
+describe("reorderQueuedComposerMessages", () => {
+  const messages: QueuedComposerMessage[] = [
+    { id: "A", text: "做 A", attachments: [] },
+    { id: "B", text: "做 B", attachments: [] },
+    {
+      id: "C",
+      text: "  做 C\nKeep exact text.  ",
+      attachments: [
+        { kind: "image", metadata: imageWithId("queued-image") },
+        reviewWorkspaceAttachment("Keep the queued review snapshot."),
+      ],
+    },
+  ];
+  const originalMessageIds = ["A", "B", "C"];
+
+  it("moves a message directly across the queue, keeping its contents and other agents untouched", () => {
     const other = [{ id: "other", text: "another conversation", attachments: [] }];
     const queue = createFakeQueue(
       new Map([
@@ -808,38 +810,60 @@ describe("moveQueuedComposerMessage", () => {
         ["other", other],
       ]),
     );
-    const move = (offset: -1 | 1) =>
-      moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset, queue });
 
-    move(-1);
-    move(-1);
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      originalMessageIds,
+      orderedMessageIds: ["C", "A", "B"],
+      queue,
+    });
+
     expect(queue.state.get("agent")).toEqual([messages[2], messages[0], messages[1]]);
     expect(queue.state.get("agent")?.[0]).toBe(messages[2]);
     expect(queue.state.get("agent")?.[0]?.attachments).toBe(messages[2]!.attachments);
-    expect(messages.map((message) => message.id)).toEqual(["A", "B", "C"]);
+    expect(messages.map((message) => message.id)).toEqual(originalMessageIds);
     expect(queue.state.get("other")).toBe(other);
-
-    move(1);
-    expect(queue.state.get("agent")).toEqual([messages[0], messages[2], messages[1]]);
   });
 
   it.each([
-    { agentId: "agent", messageId: "A", offset: -1 as const },
-    { agentId: "agent", messageId: "B", offset: 1 as const },
-    { agentId: "agent", messageId: "already-submitted", offset: -1 as const },
-    { agentId: "missing", messageId: "A", offset: 1 as const },
-  ])("ignores an unavailable move: $agentId/$messageId/$offset", (input) => {
-    const messages = [
-      { id: "A", text: "first pending", attachments: [] },
-      { id: "B", text: "last pending", attachments: [] },
-    ];
+    { agentId: "agent", originalMessageIds, orderedMessageIds: originalMessageIds },
+    { agentId: "agent", originalMessageIds, orderedMessageIds: ["C", "A"] },
+    { agentId: "agent", originalMessageIds, orderedMessageIds: ["C", "A", "C"] },
+    { agentId: "agent", originalMessageIds, orderedMessageIds: ["C", "A", "missing"] },
+    { agentId: "agent", originalMessageIds: ["B", "A", "C"], orderedMessageIds: ["C", "A", "B"] },
+    { agentId: "missing", originalMessageIds, orderedMessageIds: ["C", "A", "B"] },
+  ])("ignores unchanged, stale, or invalid drop: $agentId/$orderedMessageIds", (input) => {
     const queue = createFakeQueue(new Map([["agent", messages]]));
     const before = queue.state;
 
-    moveQueuedComposerMessage({ ...input, queue });
+    reorderQueuedComposerMessages({ ...input, queue });
 
     expect(queue.state).toBe(before);
-    expect(queue.state.get("agent")).toEqual(messages);
+    expect(queue.state.get("agent")).toBe(messages);
+  });
+
+  it("does not restore a message sent or appended while the drag is in progress", () => {
+    const queue = createFakeQueue(new Map([["agent", messages.slice(1)]]));
+    const before = queue.state;
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      originalMessageIds,
+      orderedMessageIds: ["C", "A", "B"],
+      queue,
+    });
+    expect(queue.state).toBe(before);
+
+    const added = createFakeQueue(
+      new Map([["agent", [...messages, { id: "D", text: "new", attachments: [] }]]]),
+    );
+    const beforeAdded = added.state;
+    reorderQueuedComposerMessages({
+      agentId: "agent",
+      originalMessageIds,
+      orderedMessageIds: ["C", "A", "B"],
+      queue: added,
+    });
+    expect(added.state).toBe(beforeAdded);
   });
 });
 

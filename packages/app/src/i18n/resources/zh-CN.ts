@@ -143,8 +143,9 @@ export const zhCN: TranslationResources = {
   composer: {
     queueOrder: {
       title: "排队会话",
-      hint: "按住手柄拖动或点击箭头调整顺序，不会中断正在运行的对话。",
+      hint: "按住手柄拖动调整顺序，不会中断正在运行的对话。",
       dragConversation: "调整「{{title}}」的排队顺序",
+      dragMessage: "调整排队消息顺序：{{text}}",
       messageCount: "排队消息：{{count}}",
       untitledConversation: "未命名会话 · {{id}}",
     },
@@ -185,11 +186,7 @@ export const zhCN: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "编辑排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
-      moveQueuedMessageEarlier: "将排队消息前移",
-      moveQueuedMessageLater: "将排队消息后移",
       queuedConversationPosition: "排队会话第 {{position}} 个，共 {{count}} 个",
-      moveQueuedConversationEarlier: "将排队会话前移",
-      moveQueuedConversationLater: "将排队会话后移",
       openImage: "打开图片附件",
       removeImage: "移除图片附件",
       removeFile: "Remove file attachment",

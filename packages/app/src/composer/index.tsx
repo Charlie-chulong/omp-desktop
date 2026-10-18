@@ -1,5 +1,5 @@
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { View, Pressable, Text, StyleSheet as RNStyleSheet } from "react-native";
+import { View, Text, StyleSheet as RNStyleSheet } from "react-native";
 import type { TFunction } from "i18next";
 import {
   useState,
@@ -16,11 +16,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useShallow } from "zustand/shallow";
 import {
-  ArrowUp,
-  ChevronDown,
-  ChevronUp,
   Square,
-  Pencil,
   CircleDot,
   FileText,
   Folder,
@@ -42,6 +38,7 @@ import {
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
 import { QueuedConversationOrder } from "@/composer/queued-conversation-order";
+import { QueuedMessageTrack } from "@/composer/queued-message-track";
 import { resolveModelBrowserProviderNamespaceId } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpAccountFeatureSelection } from "@/components/omp-provider-accounts";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
@@ -67,7 +64,6 @@ import {
   editQueuedComposerMessage,
   findGithubItemByOption,
   isAttachmentSelectedForGithubItem,
-  moveQueuedComposerMessage,
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
@@ -378,50 +374,6 @@ function renderAttachmentTray(args: RenderAttachmentTrayArgs): ReactElement | nu
   );
 }
 
-interface RenderQueueTrackArgs {
-  queuedMessages: readonly QueuedMessage[];
-  handleEditQueuedMessage: (id: string) => void;
-  handleSendQueuedNow: (id: string) => Promise<void>;
-  handleMoveQueuedMessage: (id: string, offset: -1 | 1) => void;
-  editLabel: string;
-  sendNowLabel: string;
-  moveMessageEarlierLabel: string;
-  moveMessageLaterLabel: string;
-}
-
-function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
-  const {
-    queuedMessages,
-    handleEditQueuedMessage,
-    handleSendQueuedNow,
-    handleMoveQueuedMessage,
-    editLabel,
-    sendNowLabel,
-    moveMessageEarlierLabel,
-    moveMessageLaterLabel,
-  } = args;
-  if (queuedMessages.length === 0) return null;
-  return (
-    <View style={styles.queueTrack}>
-      {queuedMessages.map((item, index) => (
-        <QueuedMessageRow
-          key={item.id}
-          item={item}
-          onEdit={handleEditQueuedMessage}
-          onSendNow={handleSendQueuedNow}
-          onMove={handleMoveQueuedMessage}
-          canMoveEarlier={index > 0}
-          canMoveLater={index < queuedMessages.length - 1}
-          editLabel={editLabel}
-          sendNowLabel={sendNowLabel}
-          moveEarlierLabel={moveMessageEarlierLabel}
-          moveLaterLabel={moveMessageLaterLabel}
-        />
-      ))}
-    </View>
-  );
-}
-
 interface RenderComposerAttachmentPillArgs {
   attachment: ComposerAttachment;
   index: number;
@@ -643,92 +595,6 @@ function resolveMessageInputPassthroughAction(
     return "send";
   }
   return null;
-}
-
-interface QueuedMessageRowProps {
-  item: QueuedMessage;
-  onEdit: (id: string) => void;
-  onSendNow: (id: string) => void;
-  onMove: (id: string, offset: -1 | 1) => void;
-  canMoveEarlier: boolean;
-  canMoveLater: boolean;
-  editLabel: string;
-  sendNowLabel: string;
-  moveEarlierLabel: string;
-  moveLaterLabel: string;
-}
-
-function QueuedMessageRow({
-  item,
-  onEdit,
-  onSendNow,
-  onMove,
-  canMoveEarlier,
-  canMoveLater,
-  editLabel,
-  sendNowLabel,
-  moveEarlierLabel,
-  moveLaterLabel,
-}: QueuedMessageRowProps) {
-  const handleEdit = useCallback(() => {
-    onEdit(item.id);
-  }, [onEdit, item.id]);
-  const handleSendNow = useCallback(() => {
-    onSendNow(item.id);
-  }, [onSendNow, item.id]);
-  const handleMoveEarlier = useCallback(() => {
-    onMove(item.id, -1);
-  }, [onMove, item.id]);
-  const handleMoveLater = useCallback(() => {
-    onMove(item.id, 1);
-  }, [onMove, item.id]);
-  return (
-    <View style={styles.queueItem}>
-      <Text style={styles.queueText} numberOfLines={2} ellipsizeMode="tail">
-        {item.text}
-      </Text>
-      <View style={styles.queueActions}>
-        {canMoveEarlier || canMoveLater ? (
-          <>
-            <Pressable
-              onPress={handleMoveEarlier}
-              disabled={!canMoveEarlier}
-              style={[styles.queueActionButton, !canMoveEarlier && styles.buttonDisabled]}
-              accessibilityLabel={moveEarlierLabel}
-              accessibilityRole="button"
-            >
-              <ThemedChevronUp size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-            </Pressable>
-            <Pressable
-              onPress={handleMoveLater}
-              disabled={!canMoveLater}
-              style={[styles.queueActionButton, !canMoveLater && styles.buttonDisabled]}
-              accessibilityLabel={moveLaterLabel}
-              accessibilityRole="button"
-            >
-              <ThemedChevronDown size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-            </Pressable>
-          </>
-        ) : null}
-        <Pressable
-          onPress={handleEdit}
-          style={styles.queueActionButton}
-          accessibilityLabel={editLabel}
-          accessibilityRole="button"
-        >
-          <ThemedPencil size={ICON_SIZE.sm} uniProps={iconForegroundMapping} />
-        </Pressable>
-        <Pressable
-          onPress={handleSendNow}
-          style={[styles.queueActionButton, styles.queueSendButton]}
-          accessibilityLabel={sendNowLabel}
-          accessibilityRole="button"
-        >
-          <ThemedArrowUp size={ICON_SIZE.sm} uniProps={iconAccentForegroundMapping} />
-        </Pressable>
-      </View>
-    </View>
-  );
 }
 
 interface ImageAttachmentPillProps {
@@ -1084,7 +950,7 @@ const OMP_BROWSER_USE_COMMAND = "/browser visible";
 const OMP_COMPUTER_USE_COMMAND = "/computer on";
 type OmpToolUseCommand = typeof OMP_BROWSER_USE_COMMAND | typeof OMP_COMPUTER_USE_COMMAND;
 
-const EMPTY_ARRAY: readonly QueuedMessage[] = [];
+const EMPTY_ARRAY: QueuedMessage[] = [];
 const StableMessageInput = memo(MessageInput);
 
 function resolveContextWindowValues(
@@ -1920,13 +1786,6 @@ function ComposerContentImpl({
     [agentId, queueWriter, replaceUserInput, serverId, setSelectedAttachments],
   );
 
-  const handleMoveQueuedMessage = useCallback(
-    (id: string, offset: -1 | 1) => {
-      moveQueuedComposerMessage({ agentId, messageId: id, offset, queue: queueWriter });
-    },
-    [agentId, queueWriter],
-  );
-
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
@@ -2308,21 +2167,6 @@ function ComposerContentImpl({
     [handleOpenAttachment, handleRemoveAttachment, isComposerLocked, selectedAttachments, t],
   );
 
-  const queueList = useMemo(
-    () =>
-      renderQueueTrack({
-        queuedMessages,
-        handleEditQueuedMessage,
-        handleSendQueuedNow,
-        handleMoveQueuedMessage,
-        editLabel: t("composer.attachments.editQueuedMessage"),
-        sendNowLabel: t("composer.attachments.sendQueuedMessageNow"),
-        moveMessageEarlierLabel: t("composer.attachments.moveQueuedMessageEarlier"),
-        moveMessageLaterLabel: t("composer.attachments.moveQueuedMessageLater"),
-      }),
-    [handleEditQueuedMessage, handleMoveQueuedMessage, handleSendQueuedNow, queuedMessages, t],
-  );
-
   const messageInputContainerRef = useRef<View>(null);
 
   const isSubmitLoadingVisible =
@@ -2376,7 +2220,13 @@ function ComposerContentImpl({
           <ComposerFileDropRegistration sink={fileDropSink} />
           <View style={styles.inputAreaContent}>
             <QueuedConversationOrder serverId={serverId} />
-            {queueList}
+            <QueuedMessageTrack
+              agentId={agentId}
+              messages={queuedMessages}
+              queue={queueWriter}
+              onEdit={handleEditQueuedMessage}
+              onSendNow={handleSendQueuedNow}
+            />
             {sendErrorNode}
 
             <View ref={messageInputContainerRef} style={styles.messageInputContainer}>
@@ -2551,53 +2401,12 @@ const styles = StyleSheet.create((theme: Theme) => ({
   buttonDisabled: {
     opacity: 0.5,
   },
-  queueTrack: {
-    flexDirection: "column",
-    gap: theme.spacing[2],
-  },
-  queueItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing[3],
-    paddingVertical: theme.spacing[2],
-    backgroundColor: theme.colors.surface1,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: theme.borderWidth[1],
-    borderColor: theme.colors.border,
-    gap: theme.spacing[2],
-  },
-  queueText: {
-    flex: 1,
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-  },
-  queueActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-  },
-  queueActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.borderRadius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.surface2,
-  },
-  queueSendButton: {
-    backgroundColor: theme.colors.accent,
-  },
   sendErrorText: {
     color: theme.colors.palette.red[500],
     fontSize: theme.fontSize.base,
   },
 })) as unknown as Record<string, object>;
 
-const ThemedPencil = withUnistyles(Pencil);
-const ThemedArrowUp = withUnistyles(ArrowUp);
-const ThemedChevronUp = withUnistyles(ChevronUp);
-const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedSquare = withUnistyles(Square);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedGitPullRequest = withUnistyles(GitPullRequest);
@@ -2612,7 +2421,6 @@ const ThemedFolder = withUnistyles(Folder);
 const ThemedQuote = withUnistyles(Quote);
 const iconForegroundMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const iconForegroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const iconAccentForegroundMapping = (theme: Theme) => ({ color: theme.colors.accentForeground });
 const filledIconForegroundMapping = (theme: Theme) => ({
   color: theme.colors.foreground,
   fill: theme.colors.foreground,

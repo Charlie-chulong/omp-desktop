@@ -129,8 +129,9 @@ export const fr: TranslationResources = {
   composer: {
     queueOrder: {
       title: "Conversations en attente",
-      hint: "Maintenez une poignée et faites-la glisser ou utilisez les flèches. Les tours en cours continuent.",
+      hint: "Maintenez une poignée et faites-la glisser. Les tours en cours continuent.",
       dragConversation: "Réordonner {{title}}",
+      dragMessage: "Réordonner le message en attente : {{text}}",
       messageCount: "Messages en attente : {{count}}",
       untitledConversation: "Conversation sans titre · {{id}}",
     },
@@ -171,11 +172,7 @@ export const fr: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Modifier le message en file d'attente",
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
-      moveQueuedMessageEarlier: "Avancer le message en file d’attente",
-      moveQueuedMessageLater: "Reculer le message en file d’attente",
       queuedConversationPosition: "Conversation en file d’attente {{position}} sur {{count}}",
-      moveQueuedConversationEarlier: "Avancer la conversation en file d’attente",
-      moveQueuedConversationLater: "Reculer la conversation en file d’attente",
       openImage: "Ouvrir la pièce jointe de l'image",
       removeImage: "Supprimer l'image jointe",
       removeFile: "Remove file attachment",

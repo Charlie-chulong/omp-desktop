@@ -662,7 +662,6 @@ interface SessionStoreActions {
       | Map<string, QueuedMessageState[]>
       | ((prev: Map<string, QueuedMessageState[]>) => Map<string, QueuedMessageState[]>),
   ) => void;
-  moveQueuedAgent: (serverId: string, agentId: string, offset: -1 | 1) => void;
   reorderQueuedAgents: (serverId: string, agentIds: readonly string[]) => void;
 
   // Hydration
@@ -2020,30 +2019,6 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, queuedMessages: nextValue, queuedAgentOrder },
-            },
-          };
-        });
-      },
-
-      moveQueuedAgent: (serverId, agentId, offset) => {
-        set((prev) => {
-          const session = prev.sessions[serverId];
-          if (!session) return prev;
-          const index = session.queuedAgentOrder.indexOf(agentId);
-          const target = index + offset;
-          if (index < 0 || target < 0 || target >= session.queuedAgentOrder.length) {
-            return prev;
-          }
-          const queuedAgentOrder = [...session.queuedAgentOrder];
-          [queuedAgentOrder[index], queuedAgentOrder[target]] = [
-            queuedAgentOrder[target]!,
-            queuedAgentOrder[index]!,
-          ];
-          return {
-            ...prev,
-            sessions: {
-              ...prev.sessions,
-              [serverId]: { ...session, queuedAgentOrder },
             },
           };
         });
