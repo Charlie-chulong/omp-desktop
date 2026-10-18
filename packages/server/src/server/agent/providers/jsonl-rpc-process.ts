@@ -123,11 +123,11 @@ export class JsonlRpcProcess {
   constructor(private readonly options: JsonlRpcProcessOptions) {
     this.diagnosticName = options.diagnosticName ?? "JSONL RPC";
     this.child = (options.spawn ?? spawnJsonlRpcProcess)(options.launch);
-    this.child.stdout.on("data", (chunk) => {
-      this.handleStdoutChunk(chunk.toString());
+    this.child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      this.handleStdoutChunk(chunk);
     });
-    this.child.stderr.on("data", (chunk) => {
-      this.stderrBuffer += chunk.toString();
+    this.child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      this.stderrBuffer += chunk;
       if (this.stderrBuffer.length > STDERR_BUFFER_LIMIT) {
         this.stderrBuffer = this.stderrBuffer.slice(-STDERR_BUFFER_LIMIT);
       }
