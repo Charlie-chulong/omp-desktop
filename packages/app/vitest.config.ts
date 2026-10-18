@@ -86,7 +86,13 @@ export default defineConfig({
   // so the resolver selects the .web entries. Expo's clipboard entry also contains
   // JSX and pulls native core modules into the scan; browser tests mock that boundary.
   optimizeDeps: {
-    include: ["react/jsx-runtime", "@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities"],
+    include: [
+      "react/jsx-runtime",
+      "@tanstack/react-query",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
+      "@dnd-kit/utilities",
+    ],
     exclude: ["react-native-reanimated", "expo-image", "expo-clipboard", "expo-modules-core"],
   },
   // The globals a React Native bundler defines, which esbuild is no longer there to supply for

@@ -418,9 +418,11 @@ function OmpCodexResetCreditsDetails({
 export function OmpCodexQuotaDetails({
   account,
   accountLabel,
+  showCreditBalance = true,
 }: {
   account: Account;
   accountLabel: string;
+  showCreditBalance?: boolean;
 }) {
   const serverId = useContext(OmpQuotaServerContext);
   const now = useOmpQuotaClock(Boolean(serverId));
@@ -435,7 +437,7 @@ export function OmpCodexQuotaDetails({
   return (
     <View style={styles.details}>
       <OmpCodexSubscriptionDetails subscription={account.quota?.subscription} now={now} />
-      <OmpCodexCreditsDetails credits={account.quota?.credits} />
+      {showCreditBalance ? <OmpCodexCreditsDetails credits={account.quota?.credits} /> : null}
       <OmpCodexResetCreditsDetails
         account={account}
         accountLabel={accountLabel}

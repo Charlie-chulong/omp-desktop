@@ -824,6 +824,12 @@ App-level **Settings → Chat behavior** contains conversation defaults; **Setti
 connections** contains relay/pairing controls. Per-host projects and provider settings remain
 under the selected host rather than being moved into app-wide settings.
 
+For a selected host, **Settings → Providers** manages models, sign-in accounts, and their
+connection state. **Settings → Usage** shows provider quotas and balances, Codex subscription
+and reset cards, and Claude limit-reset controls alongside each affected account. Reset actions
+still require their existing confirmation; changing an account's login or order remains in
+Providers.
+
 ## Assistant message links
 
 HTTP(S) links open externally. Text/source links open in the workspace file panel. On the local desktop host, links to existing images, documents, archives, and directories inside the workspace open with the operating system; executable files are shown in the file manager rather than launched. Web conversation headings support native `#heading` navigation.
