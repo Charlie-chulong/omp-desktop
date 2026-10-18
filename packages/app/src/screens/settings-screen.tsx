@@ -96,9 +96,9 @@ import {
   HostProvidersPage,
   HostProxyPage,
   HostImageGenerationPage,
-  HostUsagePage,
   HostTerminalsPage,
 } from "@/screens/settings/host-page";
+import { HostUsagePage } from "@/screens/settings/host-usage-page";
 import { HostMemoryPage } from "@/screens/settings/omp-memory-page";
 import { MetadataGenerationPage } from "@/screens/settings/metadata-generation-page";
 import { OmpPluginsPage } from "@/screens/settings/omp-plugins-page";

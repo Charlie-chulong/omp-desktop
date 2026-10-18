@@ -49,7 +49,6 @@ import { loadDesktopSettings, useDesktopSettings } from "@/desktop/settings/desk
 import { getDesktopHost, type DesktopRemoteSshProfile } from "@/desktop/host";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
-import { useOmpProviderAccountQuota } from "@/hooks/use-omp-account-quota";
 import {
   getHostRuntimeStore,
   isHostRuntimeConnected,
@@ -59,13 +58,6 @@ import {
   useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
-import {
-  buildOmpAccountProviderUsage,
-  createOmpAccountUsageCopy,
-  mergeOmpAccountProviderUsage,
-} from "@/provider-usage/omp-account";
-import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section";
-import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { HostAppearanceSection } from "@/screens/settings/host-appearance-section";
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { PairDeviceSection } from "@/screens/settings/pair-device-section";
@@ -649,45 +641,6 @@ export function HostImageGenerationPage({ serverId }: { serverId: string }) {
   }
 
   return <ImageGenerationSettingsSection serverId={serverId} />;
-}
-
-export function HostUsagePage({ serverId }: { serverId: string }) {
-  const { t } = useTranslation();
-  const host = useHostProfile(serverId);
-  const { view: baseUsageView, refresh: refreshProviderUsage } = useProviderUsage(serverId);
-  const codex = useOmpProviderAccountQuota(serverId, "openai-codex");
-  const claude = useOmpProviderAccountQuota(serverId, "anthropic");
-  const accountUsage = useMemo(
-    () => [
-      ...buildOmpAccountProviderUsage(codex, createOmpAccountUsageCopy("openai-codex", t)),
-      ...buildOmpAccountProviderUsage(claude, createOmpAccountUsageCopy("anthropic", t)),
-    ],
-    [claude, codex, t],
-  );
-  const usageView = useMemo(
-    () =>
-      mergeOmpAccountProviderUsage(
-        baseUsageView,
-        accountUsage,
-        codex.loading || claude.loading,
-        codex.updatedAt ?? claude.updatedAt,
-      ),
-    [accountUsage, baseUsageView, claude.loading, claude.updatedAt, codex.loading, codex.updatedAt],
-  );
-  const refreshAccountUsage = codex.refresh;
-  const handleRefresh = useCallback(() => {
-    void Promise.all([refreshProviderUsage(), refreshAccountUsage()]);
-  }, [refreshAccountUsage, refreshProviderUsage]);
-
-  if (!host) {
-    return <HostNotFound />;
-  }
-
-  return (
-    <View>
-      <ProviderUsageSettingsSection view={usageView} onRefresh={handleRefresh} />
-    </View>
-  );
 }
 
 export function HostSettingsPage({
