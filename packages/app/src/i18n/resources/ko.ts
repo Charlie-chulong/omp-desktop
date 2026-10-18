@@ -171,6 +171,8 @@ export const ko: TranslationResources = {
       dropFilesHere: "여기에 파일을 끌어다 놓으세요",
       editQueuedMessage: "대기 중인 메시지 편집",
       sendQueuedMessageNow: "대기 중인 메시지 지금 보내기",
+      dragQueuedMessageHint:
+        "스페이스 키로 선택하고 방향키로 이동한 뒤 스페이스 키로 놓거나 Escape 키로 취소하세요.",
       queuedConversationPosition: "대기 중인 대화 {{count}}개 중 {{position}}번째",
       openImage: "이미지 첨부 열기",
       removeImage: "이미지 첨부 제거",

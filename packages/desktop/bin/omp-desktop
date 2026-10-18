@@ -20,18 +20,8 @@ done
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
 RESOURCES_DIR=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
 
-MACOS_DIR="${RESOURCES_DIR}/../MacOS"
-MACOS_HELPER_EXECUTABLE="${RESOURCES_DIR}/../Frameworks/OMP Desktop Helper.app/Contents/MacOS/OMP Desktop Helper"
-
-# macOS CLI invocations must enter Electron through the agent Helper. Launching
-# the main APPL executable here makes later daemon supervision inherit app UI
-# lifecycle behavior.
-if [ -d "${MACOS_DIR}" ]; then
-  if [ ! -x "${MACOS_HELPER_EXECUTABLE}" ]; then
-    echo "Bundled OMP Desktop Helper executable not found at ${MACOS_HELPER_EXECUTABLE}" >&2
-    exit 1
-  fi
-  APP_EXECUTABLE="${MACOS_HELPER_EXECUTABLE}"
+if [ -x "${RESOURCES_DIR}/../MacOS/OMP Desktop" ]; then
+  APP_EXECUTABLE="${RESOURCES_DIR}/../MacOS/OMP Desktop"
 elif [ -x "${RESOURCES_DIR}/../OMP Desktop.bin" ]; then
   APP_EXECUTABLE="${RESOURCES_DIR}/../OMP Desktop.bin"
 elif [ -x "${RESOURCES_DIR}/../OMP Desktop" ]; then
@@ -41,8 +31,8 @@ else
   exit 1
 fi
 
-RUNNER_PATH="${RESOURCES_DIR}/app.asar.unpacked/dist/daemon/node-entrypoint-runner.js"
-CLI_ENTRYPOINT="${RESOURCES_DIR}/app.asar/node_modules/@omp-desktop/cli/dist/index.js"
+RUNNER_PATH="${RESOURCES_DIR}/app/dist/daemon/node-entrypoint-runner.js"
+CLI_ENTRYPOINT="${RESOURCES_DIR}/app/node_modules/@omp-desktop/cli/dist/index.js"
 
 # PASEO_DESKTOP_MANAGED marks daemons started through this bundled CLI as
 # desktop-managed, so the desktop app restarts them when it upgrades.

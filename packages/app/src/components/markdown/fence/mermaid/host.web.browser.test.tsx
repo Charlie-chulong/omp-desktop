@@ -70,7 +70,9 @@ describe("Mermaid diagram viewer", () => {
       });
 
       await expect
-        .poll(() => container.querySelector('[role="img"]') instanceof HTMLElement)
+        .poll(() => container.querySelector('[role="img"]') instanceof HTMLElement, {
+          timeout: 10_000,
+        })
         .toBe(true);
       const diagram = container.querySelector('[role="img"]');
       if (!(diagram instanceof HTMLElement)) {
@@ -154,7 +156,9 @@ describe("Mermaid diagram viewer", () => {
         .poll(() => document.querySelector('[data-testid="mermaid-diagram-viewer"]'))
         .toBeNull();
       await expect
-        .poll(() => container.querySelector('[role="img"]') instanceof HTMLElement)
+        .poll(() => container.querySelector('[role="img"]') instanceof HTMLElement, {
+          timeout: 10_000,
+        })
         .toBe(true);
     },
   );

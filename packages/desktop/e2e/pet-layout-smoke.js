@@ -104,6 +104,7 @@ async function runNativeSmoke() {
   const controller = new DesktopPetController({ openApp() {}, openTask() {} });
   try {
     await controller.initialize();
+    await controller.start();
     const pet = BrowserWindow.getAllWindows().find(
       (window) => new URL(window.webContents.getURL()).pathname === "/desktop-pet",
     );

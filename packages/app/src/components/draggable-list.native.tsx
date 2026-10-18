@@ -16,6 +16,7 @@ export function DraggableList<T>({
   keyExtractor,
   renderItem,
   onDragEnd,
+  onReorder,
   style,
   containerStyle,
   contentContainerStyle,
@@ -65,11 +66,21 @@ export function DraggableList<T>({
   );
 
   const handleDragEnd = useCallback(
-    ({ data: newData }: { data: T[] }) => {
+    ({ data: newData, from, to }: { data: T[]; from: number; to: number }) => {
       setIsDragging(false);
-      onDragEnd(newData);
+      if (onReorder) {
+        // Recover both endpoints from the gesture result, not possibly updated props.
+        const active = newData[to];
+        const targetIndex = to + (from > to ? 1 : -1);
+        const over = newData[targetIndex];
+        if (active && over && from !== to) {
+          onReorder(keyExtractor(active, to), keyExtractor(over, targetIndex));
+        }
+      } else {
+        onDragEnd?.(newData);
+      }
     },
-    [onDragEnd],
+    [keyExtractor, onDragEnd, onReorder],
   );
 
   const handleDragBegin = useCallback(() => {

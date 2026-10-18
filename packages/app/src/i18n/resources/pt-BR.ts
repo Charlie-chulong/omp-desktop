@@ -171,6 +171,8 @@ export const ptBR: TranslationResources = {
       dropFilesHere: "Solte arquivos aqui",
       editQueuedMessage: "Editar mensagem na fila",
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
+      dragQueuedMessageHint:
+        "Pressione Espaço para selecionar, as setas para mover, Espaço para soltar ou Escape para cancelar.",
       queuedConversationPosition: "Conversa na fila {{position}} de {{count}}",
       openImage: "Abrir anexo de imagem",
       removeImage: "Remover anexo de imagem",

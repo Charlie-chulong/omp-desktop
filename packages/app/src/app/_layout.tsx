@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -70,6 +71,7 @@ import {
   resolveStartupNavigationReady,
   shouldRunStartupGiveUpTimer,
   startHostRuntimeBootstrap,
+  isDesktopStartupReady,
   type StartupBlocker,
 } from "@/navigation/host-runtime-bootstrap";
 import { registerWorkspaceRouteNavigationRef } from "@/navigation/workspace-route-navigation";
@@ -109,6 +111,7 @@ import {
   useHostRegistryLoaded,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
+  useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
 import { getDaemonStartService } from "@/runtime/daemon-start-service";
@@ -119,7 +122,9 @@ import { useSessionStore } from "@/stores/session-store";
 import {
   useActiveProjectSelection,
   useActiveWorkspaceSelection,
+  useIsLastWorkspaceSelectionHydrated,
 } from "@/stores/navigation-active-workspace-store";
+import { useWorkspaceLayoutStoreHydrated } from "@/stores/workspace-layout-store";
 import { installWebScrollbarStyles } from "@/styles/install-web-scrollbar-styles";
 import type { HostProfile } from "@/types/host-connection";
 import { WindowChromeProvider, WindowChromeRegion } from "@/utils/desktop-window";
@@ -145,6 +150,7 @@ export interface HostRuntimeBootstrapState {
   hasGivenUpWaitingForHost: boolean;
   storeReady: boolean;
   startupBlocker: StartupBlocker;
+  startupSettled: boolean;
 }
 
 const HostRuntimeBootstrapContext = createContext<HostRuntimeBootstrapState>({
@@ -153,6 +159,7 @@ const HostRuntimeBootstrapContext = createContext<HostRuntimeBootstrapState>({
   hasGivenUpWaitingForHost: false,
   storeReady: false,
   startupBlocker: { kind: "none" },
+  startupSettled: false,
 });
 
 function PushNotificationRouter() {
@@ -332,14 +339,21 @@ async function shouldStartBuiltInDaemon(): Promise<boolean> {
 }
 
 function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
+  const [startupSettled, setStartupSettled] = useState(false);
   useEffect(() => {
+    let cancelled = false;
     const store = getHostRuntimeStore();
     const daemonStartService = getDaemonStartService({ store });
-    startHostRuntimeBootstrap({
+    void startHostRuntimeBootstrap({
       store,
       daemonStartService,
       shouldStartDaemon: shouldStartBuiltInDaemon,
+    }).finally(() => {
+      if (!cancelled) setStartupSettled(true);
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const anyOnlineHostServerId = useEarliestOnlineHostServerId();
@@ -385,8 +399,15 @@ function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
   const storeReady = resolveStartupNavigationReady({ startupBlocker });
 
   const state = useMemo<HostRuntimeBootstrapState>(
-    () => ({ splashError, retry, hasGivenUpWaitingForHost, storeReady, startupBlocker }),
-    [splashError, retry, hasGivenUpWaitingForHost, storeReady, startupBlocker],
+    () => ({
+      splashError,
+      retry,
+      hasGivenUpWaitingForHost,
+      storeReady,
+      startupBlocker,
+      startupSettled,
+    }),
+    [splashError, retry, hasGivenUpWaitingForHost, storeReady, startupBlocker, startupSettled],
   );
 
   return (
@@ -402,6 +423,94 @@ export function useStoreReady(): boolean {
 
 export function useHostRuntimeBootstrapState(): HostRuntimeBootstrapState {
   return useContext(HostRuntimeBootstrapContext);
+}
+
+function DesktopWindowContentReadySignal() {
+  const { isLoading } = useAppSettings();
+  const notified = useRef(false);
+
+  useEffect(() => {
+    const notify = getDesktopHost()?.window?.contentReady;
+    if (isLoading || !notify || notified.current || !isWeb) return;
+    const signalContentReady = notify;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    let scheduled = false;
+    async function notifyContentReady(): Promise<void> {
+      try {
+        await signalContentReady();
+        notified.current = true;
+      } catch (error) {
+        console.error("[startup] Window presentation failed", error);
+      }
+    }
+    const afterContentPaint = () => {
+      if (scheduled) return;
+      scheduled = true;
+      firstFrame = requestAnimationFrame(() => {
+        secondFrame = requestAnimationFrame(() => void notifyContentReady());
+      });
+    };
+    const observer = new PerformanceObserver((list) => {
+      if (list.getEntries().some((entry) => entry.name === "first-contentful-paint")) {
+        afterContentPaint();
+      }
+    });
+    observer.observe({ type: "paint", buffered: true });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [isLoading]);
+  return null;
+}
+
+function DesktopStartupReadySignal() {
+  const { startupSettled, startupBlocker } = useHostRuntimeBootstrapState();
+  const pathname = usePathname();
+  const onlineHost = useEarliestOnlineHostServerId();
+  const hosts = useHosts();
+  const serverId = parseServerIdFromPathname(pathname) ?? onlineHost ?? hosts[0]?.serverId ?? null;
+  const host = useHostRuntimeSnapshot(serverId ?? "");
+  const registryLoaded = useHostRegistryLoaded();
+  const selectionHydrated = useIsLastWorkspaceSelectionHydrated();
+  const layoutHydrated = useWorkspaceLayoutStoreHydrated();
+  const settingsLoaded = !useAppSettings().isLoading;
+  const notified = useRef(false);
+  const ready = isDesktopStartupReady({
+    startupSettled,
+    startupBlocker,
+    pathname,
+    registryLoaded,
+    selectionHydrated,
+    layoutHydrated,
+    settingsLoaded,
+    host,
+  });
+
+  useEffect(() => {
+    const notify = getDesktopHost()?.pet?.startupReady;
+    if (!ready || !notify || notified.current) return;
+    const signalStartupReady = notify;
+    async function notifyStartupReady(): Promise<void> {
+      notified.current = true;
+      try {
+        await signalStartupReady();
+      } catch (error) {
+        console.error("[startup] Pet readiness failed", error);
+      }
+    }
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => void notifyStartupReady());
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [ready]);
+  return null;
 }
 
 function QueryProvider({ children }: { children: ReactNode }) {
@@ -915,6 +1024,7 @@ function RuntimeProviders({ children }: { children: ReactNode }) {
   return (
     <HostRuntimeBootstrapProvider>
       <PushNotificationRouter />
+      <DesktopStartupReadySignal />
       <DesktopPetActivitySync />
       <SidebarCalloutProvider>
         <DesktopUpdateProvider>
@@ -989,6 +1099,7 @@ export default function RootLayout() {
     <QueryProvider>
       <I18nProvider>
         <SafeAreaProvider>
+          <DesktopWindowContentReadySignal />
           <RootErrorBoundary>
             <RootAppTree />
           </RootErrorBoundary>

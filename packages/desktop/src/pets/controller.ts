@@ -5,7 +5,6 @@ import {
   getDesktopSettingsStore,
   subscribeDesktopSettingsChanges,
 } from "../settings/desktop-settings-electron.js";
-import type { DesktopSettings } from "../settings/desktop-settings.js";
 import { getMainWindows, isMainWindowSender, onMainWindowRemoved } from "../window/main-windows.js";
 import { getPetLibrary } from "./library.js";
 import { clampPetBounds } from "./geometry.js";
@@ -35,6 +34,7 @@ export class DesktopPetController {
   private descriptor: PetDescriptor | null = null;
   private preferences: DesktopPetSettings | null = null;
   private readonly snapshots = new PetActivitySnapshots();
+  private ready = false;
   private stopped = false;
   private applyQueue: Promise<void> = Promise.resolve();
   private unsubscribeSettings: (() => void) | null = null;
@@ -50,7 +50,7 @@ export class DesktopPetController {
     this.unsubscribeSettings = subscribeDesktopSettingsChanges((settings) => {
       for (const window of getMainWindows())
         window.webContents.send("paseo:event:desktop-settings-changed", settings);
-      this.enqueueSettings(settings);
+      this.enqueueSettings(settings.pet);
     });
     this.unsubscribeWindows = onMainWindowRemoved((senderId) => this.clearActivity(senderId));
     ipcMain.handle("paseo:pet:publishActivity", (event, value: unknown) => {
@@ -98,7 +98,17 @@ export class DesktopPetController {
     screen.on("display-added", this.onDisplaysChanged);
     screen.on("display-removed", this.onDisplaysChanged);
     screen.on("display-metrics-changed", this.onDisplaysChanged);
-    this.enqueueSettings(await getDesktopSettingsStore().get());
+    const settings = await getDesktopSettingsStore().get();
+    if (!this.preferences) this.enqueueSettings(settings.pet);
+    await this.applyQueue;
+  }
+
+  async start(): Promise<void> {
+    if (this.stopped) return;
+    if (!this.ready) {
+      this.ready = true;
+      if (this.preferences) this.enqueueSettings(this.preferences);
+    }
     await this.applyQueue;
   }
 
@@ -128,22 +138,27 @@ export class DesktopPetController {
     this.handlers.length = 0;
   }
 
-  private enqueueSettings(settings: DesktopSettings): void {
+  private enqueueSettings(preferences: DesktopPetSettings): void {
+    if (this.stopped) return;
+    if (!this.ready) {
+      this.preferences = preferences;
+      return;
+    }
     this.applyQueue = this.applyQueue
       .then(async () => {
         if (this.stopped) return undefined;
-        this.preferences = settings.pet;
-        if (!settings.pet.enabled) {
+        this.preferences = preferences;
+        if (!preferences.enabled) {
           this.destroyWindow();
           return undefined;
         }
-        if (this.descriptor?.id !== settings.pet.selectedId) {
+        if (this.descriptor?.id !== preferences.selectedId) {
           this.destroyWindow();
-          this.descriptor = await getPetLibrary().getSelected(settings.pet.selectedId);
+          this.descriptor = await getPetLibrary().getSelected(preferences.selectedId);
         }
         if (this.stopped) return undefined;
         if (!this.window) await this.createWindow();
-        this.clampWindow(settings.pet.position);
+        this.clampWindow(preferences.position);
         this.sendState();
         return undefined;
       })

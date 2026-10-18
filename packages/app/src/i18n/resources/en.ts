@@ -185,6 +185,8 @@ export const en = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Edit queued message",
       sendQueuedMessageNow: "Send queued message now",
+      dragQueuedMessageHint:
+        "Press Space to pick up, use arrow keys to move, Space to drop, or Escape to cancel.",
       queuedConversationPosition: "Queued conversation {{position}} of {{count}}",
       openImage: "Open image attachment",
       removeImage: "Remove image attachment",

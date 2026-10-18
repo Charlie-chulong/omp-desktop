@@ -171,6 +171,8 @@ export const ru: TranslationResources = {
       dropFilesHere: "Переместите файлы сюда",
       editQueuedMessage: "Изменить сообщение из очереди",
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
+      dragQueuedMessageHint:
+        "Нажмите пробел для захвата, стрелки для перемещения, пробел для размещения или Escape для отмены.",
       queuedConversationPosition: "Разговор в очереди: {{position}} из {{count}}",
       openImage: "Открыть прикрепленное изображение",
       removeImage: "Удалить прикрепленное изображение",

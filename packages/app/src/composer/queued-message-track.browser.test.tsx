@@ -177,27 +177,66 @@ describe("queued message order on a touch-sized screen", () => {
     });
   });
 
-  it("discards a held drag after a pending message is sent", async () => {
-    act(() => setMessages("A", "B", "C"));
-    const handle = element("queued-message-drag-C");
-    const from = handle.getBoundingClientRect();
-    const to = element("queued-message-A").getBoundingClientRect();
-    const x = from.x + from.width / 2;
-    const startY = from.y + from.height / 2;
-    const endY = to.y + to.height / 2;
+  it.each([
+    {
+      change: "an earlier message is sent",
+      duringDrag: ["B", "C"],
+      targetId: "B",
+      expected: ["B", "C"],
+      removedIds: ["A"],
+    },
+    {
+      change: "another queued message is edited",
+      duringDrag: ["A", "C"],
+      targetId: "A",
+      expected: ["C", "A"],
+      removedIds: ["B"],
+    },
+    {
+      change: "a new message is queued",
+      duringDrag: ["A", "B", "C", "D"],
+      targetId: "A",
+      expected: ["C", "A", "B", "D"],
+      removedIds: [],
+    },
+    {
+      change: "the dragged message is sent",
+      duringDrag: ["A", "B"],
+      targetId: "A",
+      expected: ["A", "B"],
+      removedIds: ["C"],
+    },
+  ])(
+    "uses the live queue after $change during a held drag",
+    async ({ duringDrag, targetId, expected, removedIds }) => {
+      act(() => setMessages("A", "B", "C"));
+      const handle = element("queued-message-drag-C");
+      const from = handle.getBoundingClientRect();
+      const x = from.x + from.width / 2;
+      const startY = from.y + from.height / 2;
 
-    act(() => sendTouch(handle, "touchstart", x, startY));
-    await new Promise((resolve) => setTimeout(resolve, 230));
-    act(() => setMessages("B", "C"));
-    act(() => sendTouch(handle, "touchmove", x, endY));
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-    act(() => sendTouch(handle, "touchend", x, endY));
+      act(() => sendTouch(handle, "touchstart", x, startY));
+      const hold = Promise.withResolvers<void>();
+      setTimeout(hold.resolve, 230);
+      await hold.promise;
+      act(() => setMessages(...duringDrag));
+      await nextFrame();
+      expect(orderedRows()).toEqual(duringDrag);
+      const to = element(`queued-message-${targetId}`).getBoundingClientRect();
+      const endY = to.y + to.height / 2;
+      act(() => sendTouch(handle, "touchmove", x, endY));
+      await nextFrame();
+      act(() => sendTouch(handle, "touchend", x, endY));
 
-    await vi.waitFor(() => {
-      expect(queuedIds()).toEqual(["B", "C"]);
-      expect(orderedRows()).toEqual(["B", "C"]);
-    });
-  });
+      await vi.waitFor(() => {
+        expect(queuedIds()).toEqual(expected);
+        expect(orderedRows()).toEqual(expected);
+      });
+      for (const id of removedIds) {
+        expect(container.querySelector(`[data-testid="queued-message-${id}"]`)).toBeNull();
+      }
+    },
+  );
 
   it("supports keyboard drag and hides the handle when only one message remains", async () => {
     act(() => setMessages("A"));

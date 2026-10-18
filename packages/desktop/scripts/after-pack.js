@@ -64,7 +64,7 @@ function keyringBindingPath(resourcesDir, arch) {
   const bindingName = `win32-${arch}-msvc`;
   return path.join(
     resourcesDir,
-    "app.asar.unpacked",
+    "app",
     "node_modules",
     "@napi-rs",
     `keyring-${bindingName}`,
@@ -92,7 +92,7 @@ function pruneNativeModules(appOutDir, platform, arch) {
       ? path.join(appOutDir, `${PRODUCT_NAME}.app`, "Contents", "Resources")
       : path.join(appOutDir, "resources");
 
-  const nodeModules = path.join(resourcesDir, "app.asar.unpacked", "node_modules");
+  const nodeModules = path.join(resourcesDir, "app", "node_modules");
   if (!fs.existsSync(nodeModules)) return;
 
   const before = dirSizeSync(nodeModules);
@@ -138,7 +138,7 @@ exports.prepareBundledOmp = prepareBundledOmp;
 function assertOmpExtensions(resourcesDir) {
   const extensionsDir = path.join(
     resourcesDir,
-    "app.asar.unpacked",
+    "app",
     "node_modules",
     "@omp-desktop",
     "server",

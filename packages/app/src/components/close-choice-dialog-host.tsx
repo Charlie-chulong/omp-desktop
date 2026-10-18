@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Check, Power } from "lucide-react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,6 +9,19 @@ import {
   type DesktopCloseChoice,
   type DesktopCloseChoiceRequest,
 } from "@/desktop/host";
+import type { Theme } from "@/styles/theme";
+
+const ThemedPower = withUnistyles(Power, (theme: Theme) => ({
+  size: theme.iconSize.md,
+  color: theme.colors.foregroundMuted,
+}));
+const ThemedCheck = withUnistyles(Check, (theme: Theme) => ({
+  color: theme.colors.accentForeground,
+}));
+const CLOSE_CHOICE_HEADER: SheetHeader = {
+  title: "点击关闭时",
+  leading: <ThemedPower />,
+};
 
 const styles = StyleSheet.create((theme) => ({
   message: {
@@ -64,7 +77,6 @@ function readCloseChoiceRequest(input: unknown): DesktopCloseChoiceRequest | nul
 }
 
 export function CloseChoiceDialogHost() {
-  const { theme } = useUnistyles();
   const [request, setRequest] = useState<DesktopCloseChoiceRequest | null>(null);
   const [remember, setRemember] = useState(false);
   const [responding, setResponding] = useState(false);
@@ -90,12 +102,14 @@ export function CloseChoiceDialogHost() {
     void Promise.resolve(listen("close-choice-request", showRequest)).then((cleanup) => {
       if (disposed) {
         cleanup?.();
-        return;
+        return null;
       }
       unlisten = cleanup;
+      return null;
     });
     void closeChoice.ready?.().then((pendingRequest) => {
       if (!disposed && pendingRequest) showRequest(pendingRequest);
+      return null;
     });
 
     return () => {
@@ -129,64 +143,75 @@ export function CloseChoiceDialogHost() {
   const handleQuit = useCallback(() => void respond("quit"), [respond]);
   const handleCancel = useCallback(() => void respond("cancel"), [respond]);
   const handleRemember = useCallback(() => setRemember((current) => !current), []);
-  const header: SheetHeader = {
-    title: "点击关闭时",
-    leading: <Power size={theme.iconSize.md} color={theme.colors.foregroundMuted} />,
-  };
-  const footer = (
-    <View style={styles.footerContent}>
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: remember, disabled: responding }}
-        disabled={responding}
-        onPress={handleRemember}
-        style={styles.rememberRow}
-        testID="close-choice-remember"
-      >
-        <View style={[styles.checkbox, remember ? styles.checkboxChecked : null]}>
-          {remember ? <Check size={13} color={theme.colors.accentForeground} /> : null}
+  const rememberState = useMemo(
+    () => ({ checked: remember, disabled: responding }),
+    [remember, responding],
+  );
+  const footer = useMemo(
+    () => (
+      <View style={styles.footerContent}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={rememberState}
+          disabled={responding}
+          onPress={handleRemember}
+          style={styles.rememberRow}
+          testID="close-choice-remember"
+        >
+          <View style={[styles.checkbox, remember ? styles.checkboxChecked : null]}>
+            {remember ? <ThemedCheck size={13} /> : null}
+          </View>
+          <Text style={styles.rememberLabel}>记住我的选择，不再提醒</Text>
+        </Pressable>
+        <View style={styles.actions}>
+          <Button
+            style={styles.action}
+            size="sm"
+            variant="ghost"
+            disabled={responding}
+            onPress={handleCancel}
+            testID="close-choice-cancel"
+          >
+            取消
+          </Button>
+          <Button
+            style={styles.action}
+            size="sm"
+            variant="outline"
+            disabled={responding}
+            onPress={handleQuit}
+            testID="close-choice-quit"
+          >
+            退出应用
+          </Button>
+          <Button
+            style={styles.action}
+            size="sm"
+            variant="default"
+            disabled={responding}
+            onPress={handleBackground}
+            testID="close-choice-background"
+          >
+            最小化到托盘
+          </Button>
         </View>
-        <Text style={styles.rememberLabel}>记住我的选择，不再提醒</Text>
-      </Pressable>
-      <View style={styles.actions}>
-        <Button
-          style={styles.action}
-          size="sm"
-          variant="ghost"
-          disabled={responding}
-          onPress={handleCancel}
-          testID="close-choice-cancel"
-        >
-          取消
-        </Button>
-        <Button
-          style={styles.action}
-          size="sm"
-          variant="outline"
-          disabled={responding}
-          onPress={handleQuit}
-          testID="close-choice-quit"
-        >
-          退出应用
-        </Button>
-        <Button
-          style={styles.action}
-          size="sm"
-          variant="default"
-          disabled={responding}
-          onPress={handleBackground}
-          testID="close-choice-background"
-        >
-          最小化到托盘
-        </Button>
       </View>
-    </View>
+    ),
+    [
+      remember,
+      responding,
+      rememberState,
+      handleBackground,
+      handleQuit,
+      handleCancel,
+      handleRemember,
+    ],
   );
 
   return (
     <AdaptiveModalSheet
       visible={request !== null}
-      header={header}
+      header={CLOSE_CHOICE_HEADER}
       onClose={handleCancel}
       footer={footer}
       desktopMaxWidth={400}

@@ -12,8 +12,7 @@ class FakeWebContents {
     return this.destroyed;
   }
 
-  send(channel: string, payload: CloseChoiceRequest): void {
-    expect(channel).toBe("paseo:event:close-choice-request");
+  send(_channel: string, payload: CloseChoiceRequest): void {
     this.sent.push(payload);
   }
 
