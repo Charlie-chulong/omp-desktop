@@ -1,6 +1,6 @@
 {
   "name": "@omp-desktop/desktop",
-"version": "0.5.2",
+  "version": "0.5.2",
   "private": true,
   "description": "OMP Desktop mini-electron application",
   "license": "AGPL-3.0-or-later",
@@ -25,14 +25,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@iriscat/mini-electron": "^0.1.5",
+    "@iriscat/mini-electron": "^0.1.7",
     "@types/node": "24.6.0",
     "@types/ws": "^8.5.14",
     "@vscode/ripgrep-universal": "^1.18.0",
     "electron": "^41.2.0",
     "electron-builder": "26.8.1",
     "typescript": "5.9.3",
-    "unzip-crx-3": "^0.2.0",
     "vitest": "^4.1.6",
     "wait-on": "8.0.5"
   }

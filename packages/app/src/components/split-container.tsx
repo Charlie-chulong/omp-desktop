@@ -889,17 +889,20 @@ function SplitGroupChild({
  * hidden pane give its space back instead of just going invisible. The stored `sizes` are never
  * touched, so unhiding restores the width the user dragged to.
  */
-function resolveVisibleGroupFlex(children: SplitNode[], sizes: number[]): number[] {
+function resolveVisibleGroupFlex(children: SplitNode[], sizes: number[]) {
   const visibleTotal = children.reduce(
     (total, child, index) => (isSplitNodeHidden(child) ? total : total + (sizes[index] ?? 1)),
     0,
   );
   if (visibleTotal <= 0) {
-    return children.map(() => 0);
+    return { flex: children.map(() => 0), visibleSizeTotal: 0 };
   }
-  return children.map((child, index) =>
-    isSplitNodeHidden(child) ? 0 : (sizes[index] ?? 1) / visibleTotal,
-  );
+  return {
+    flex: children.map((child, index) =>
+      isSplitNodeHidden(child) ? 0 : (sizes[index] ?? 1) / visibleTotal,
+    ),
+    visibleSizeTotal: visibleTotal,
+  };
 }
 
 function isSplitNodeHidden(node: SplitNode): boolean {
@@ -958,7 +961,7 @@ function SplitNodeView({
   const groupChildren = node.kind === "group" ? node.group.children : EMPTY_SPLIT_NODES;
   const groupSizes =
     storedGroupSizes ?? (node.kind === "group" ? node.group.sizes : EMPTY_SPLIT_SIZES);
-  const visibleFlex = useMemo(
+  const { flex: visibleFlex, visibleSizeTotal } = useMemo(
     () => resolveVisibleGroupFlex(groupChildren, groupSizes),
     [groupChildren, groupSizes],
   );
@@ -968,7 +971,7 @@ function SplitNodeView({
   }, [resizeFlex, visibleFlex]);
   const previewResizeSplit = useCallback(
     (_groupId: string, sizes: number[]) => {
-      resizeFlex.value = resolveVisibleGroupFlex(groupChildren, sizes);
+      resizeFlex.value = resolveVisibleGroupFlex(groupChildren, sizes).flex;
     },
     [groupChildren, resizeFlex],
   );
@@ -1082,6 +1085,7 @@ function SplitNodeView({
               groupId={node.group.id}
               index={index}
               sizes={groupSizes}
+              visibleSizeTotal={visibleSizeTotal}
               onPreviewResizeSplit={previewResizeSplit}
               onResizeSplit={onResizeSplit}
             />

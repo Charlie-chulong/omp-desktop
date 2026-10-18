@@ -12,6 +12,7 @@ export interface ResizeHandleProps {
   groupId: string;
   index: number;
   sizes: number[];
+  visibleSizeTotal: number;
   onPreviewResizeSplit: (groupId: string, sizes: number[]) => void;
   onResizeSplit: (groupId: string, sizes: number[]) => void;
 }
@@ -36,6 +37,7 @@ export function ResizeHandle({
   groupId,
   index,
   sizes,
+  visibleSizeTotal,
   onPreviewResizeSplit,
   onResizeSplit,
 }: ResizeHandleProps) {
@@ -124,8 +126,10 @@ export function ResizeHandle({
         moveEvent.preventDefault();
         resetWindowHorizontalScroll();
         const pointerCurrent = direction === "horizontal" ? moveEvent.clientX : moveEvent.clientY;
+        // Stored weights retain hidden panes; visible weights are normalized by the layout.
         const deltaRatio =
-          (pointerCurrent - pointerState.pointerStart) / pointerState.containerSize;
+          ((pointerCurrent - pointerState.pointerStart) / pointerState.containerSize) *
+          visibleSizeTotal;
 
         pointerState.drag.move(deltaRatio);
       }
@@ -143,7 +147,7 @@ export function ResizeHandle({
       window.addEventListener("pointerup", handlePointerUp);
       window.addEventListener("pointercancel", handlePointerUp);
     },
-    [direction, groupId, index, onPreviewResizeSplit, onResizeSplit, sizes],
+    [direction, groupId, index, onPreviewResizeSplit, onResizeSplit, sizes, visibleSizeTotal],
   );
 
   const handlePointerEnter = useCallback(() => {
