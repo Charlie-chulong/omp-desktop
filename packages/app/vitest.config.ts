@@ -93,7 +93,13 @@ export default defineConfig({
       "@dnd-kit/sortable",
       "@dnd-kit/utilities",
     ],
-    exclude: ["react-native-reanimated", "expo-image", "expo-clipboard", "expo-modules-core"],
+    exclude: [
+      "react-native-reanimated",
+      "expo-image",
+      "expo-clipboard",
+      "expo-modules-core",
+      "expo-router",
+    ],
   },
   // The globals a React Native bundler defines, which esbuild is no longer there to supply for
   // the package excluded above.

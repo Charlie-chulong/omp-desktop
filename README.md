@@ -33,10 +33,11 @@ inflating the startup entry. Desktop daemon setup imports only its configuration
 helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell
 environment inheritance and daemon readiness checks are unchanged.
 
-On Windows, the first window stays hidden until app settings have loaded and the
-renderer reports content readiness. If the hidden runtime provides no paint
-notification, a bounded fallback reveals the committed UI instead of leaving
-the window invisible.
+On Windows, the renderer normally reports content readiness after app settings
+load. If that signal never arrives, a bounded main-process fallback presents the
+successfully loaded first document. Navigation, close, hide, minimize, or normal
+readiness cancels it; the fallback cannot reopen a window hidden to the tray.
+macOS remains gated on its native paint handoff.
 
 **Settings → General → Language → System** selects the first supported system
 language; a manually selected language takes precedence. The macOS runtime
@@ -277,6 +278,11 @@ Wallpaper files, candidate records, and the Desktop selection stay on this
 computer. Pairing a phone or tablet does not copy wallpaper media or settings
 from Desktop. A Web browser may set its own URL wallpaper independently in that
 browser's local settings; this is not synchronization with the Desktop wallpaper.
+
+With Wallpaper enabled, the home screen hides its decorative-motion switch and
+poster overlay so the wallpaper remains visible. Turning Wallpaper off restores
+the switch and its previously selected on/off value; conversation and project
+shortcuts remain available in both states.
 
 The candidate grid scrolls continuously inside Settings. It is virtualized rather
 than paginated or limited to the first 48 files. Covers are static images, including
