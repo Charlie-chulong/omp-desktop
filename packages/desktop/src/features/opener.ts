@@ -131,6 +131,7 @@ export async function openExternalUrl(
     url,
     options.runtime ?? defaultBrowserRuntime,
     options.openSystemUrl ?? defaultSystemUrlOpener,
+    settings.browser.custom,
   );
 }
 

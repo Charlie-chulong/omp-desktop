@@ -34,6 +34,7 @@ const DEFAULT_DESKTOP: DesktopSettings = {
   releaseChannel: "stable",
   browser: {
     target: "system",
+    custom: { executable: "", args: ["{url}"] },
   },
   notifications: {
     playSound: true,

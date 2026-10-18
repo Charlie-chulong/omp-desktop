@@ -14,13 +14,19 @@ import {
 } from "@omp-desktop/protocol/desktop-wallpaper";
 
 import type { AppReleaseChannel } from "../features/auto-updater.js";
-import { isBrowserTargetId, type BrowserTargetId } from "../features/browser-targets.js";
+import {
+  isBrowserTargetId,
+  validateCustomBrowserConfig,
+  type BrowserTargetId,
+  type CustomBrowserConfig,
+} from "../features/browser-targets.js";
 import type { DesktopPetSettings, PetPosition } from "../pets/types.js";
 
 export interface DesktopSettings {
   releaseChannel: AppReleaseChannel;
   browser: {
     target: BrowserTargetId;
+    custom: CustomBrowserConfig;
   };
   notifications: {
     playSound: boolean;
@@ -80,6 +86,7 @@ export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   releaseChannel: "stable",
   browser: {
     target: "system",
+    custom: { executable: "", args: ["{url}"] },
   },
   notifications: {
     playSound: true,
@@ -156,13 +163,20 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
 }
 
+function copyBrowserSettings(browser: DesktopSettings["browser"]): DesktopSettings["browser"] {
+  return {
+    ...browser,
+    custom: { ...browser.custom, args: [...browser.custom.args] },
+  };
+}
+
 function buildDefaultDocument(): PersistedDesktopSettingsDocument {
   return {
     version: 1,
     settings: {
       releaseChannel: DEFAULT_DESKTOP_SETTINGS.releaseChannel,
       notifications: { ...DEFAULT_DESKTOP_SETTINGS.notifications },
-      browser: { ...DEFAULT_DESKTOP_SETTINGS.browser },
+      browser: copyBrowserSettings(DEFAULT_DESKTOP_SETTINGS.browser),
       daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon },
       window: { ...DEFAULT_DESKTOP_SETTINGS.window },
       pet: { ...DEFAULT_DESKTOP_SETTINGS.pet },
@@ -179,7 +193,7 @@ function buildDefaultDocument(): PersistedDesktopSettingsDocument {
 function coerceDesktopSettings(input: unknown): DesktopSettings {
   const result: DesktopSettings = {
     releaseChannel: DEFAULT_DESKTOP_SETTINGS.releaseChannel,
-    browser: { ...DEFAULT_DESKTOP_SETTINGS.browser },
+    browser: copyBrowserSettings(DEFAULT_DESKTOP_SETTINGS.browser),
     notifications: { ...DEFAULT_DESKTOP_SETTINGS.notifications },
     daemon: { ...DEFAULT_DESKTOP_SETTINGS.daemon },
     window: { ...DEFAULT_DESKTOP_SETTINGS.window },
@@ -195,8 +209,19 @@ function coerceDesktopSettings(input: unknown): DesktopSettings {
     result.releaseChannel = releaseChannel;
   }
 
-  if (isRecord(input.browser) && isBrowserTargetId(input.browser.target)) {
-    result.browser.target = input.browser.target;
+  if (isRecord(input.browser)) {
+    if (isBrowserTargetId(input.browser.target)) result.browser.target = input.browser.target;
+    if (Object.hasOwn(input.browser, "custom")) {
+      try {
+        validateCustomBrowserConfig(input.browser.custom);
+        result.browser.custom = {
+          ...input.browser.custom,
+          args: [...input.browser.custom.args],
+        };
+      } catch {
+        // Old or malformed documents retain the unconfigured default; launch validates again.
+      }
+    }
   }
 
   if (isRecord(input.notifications)) {
@@ -241,8 +266,17 @@ function coerceDesktopSettingsPatch(input: unknown): DesktopSettingsPatch {
     patch.releaseChannel = releaseChannel;
   }
 
-  if (isRecord(input.browser) && isBrowserTargetId(input.browser.target)) {
-    patch.browser = { target: input.browser.target };
+  if (isRecord(input.browser)) {
+    const browser: Partial<DesktopSettings["browser"]> = {};
+    if (isBrowserTargetId(input.browser.target)) browser.target = input.browser.target;
+    if (Object.hasOwn(input.browser, "custom")) {
+      validateCustomBrowserConfig(input.browser.custom);
+      browser.custom = {
+        ...input.browser.custom,
+        args: [...input.browser.custom.args],
+      };
+    }
+    patch.browser = browser;
   }
 
   if (isRecord(input.notifications)) {
@@ -305,7 +339,7 @@ function mergeDesktopSettings(
 ): DesktopSettings {
   return {
     releaseChannel: patch.releaseChannel ?? current.releaseChannel,
-    browser: { ...current.browser, ...patch.browser },
+    browser: copyBrowserSettings({ ...current.browser, ...patch.browser }),
     notifications: { ...current.notifications, ...patch.notifications },
     daemon: { ...current.daemon, ...patch.daemon },
     window: { ...current.window, ...patch.window },
@@ -395,7 +429,7 @@ export function createDesktopSettingsStore({
     return {
       ...settings,
       notifications: { ...settings.notifications },
-      browser: { ...settings.browser },
+      browser: copyBrowserSettings(settings.browser),
       daemon: { ...settings.daemon },
       window: { ...settings.window },
       pet: {
@@ -531,8 +565,8 @@ export function createDesktopSettingsStore({
 
     patch(patch: unknown): Promise<DesktopSettings> {
       return serialize(async () => {
-        const current = await loadDocument();
         const coercedPatch = coerceDesktopSettingsPatch(patch);
+        const current = await loadDocument();
         const next = mergeDesktopSettings(current.settings, coercedPatch);
         await persistDocument({
           ...current,

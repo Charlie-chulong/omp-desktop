@@ -56,7 +56,8 @@ export type DesktopBrowserTargetId =
   | "firefox"
   | "brave"
   | "chromium"
-  | "safari";
+  | "safari"
+  | "custom";
 
 export interface DesktopBrowserTargetDescriptor {
   id: DesktopBrowserTargetId;

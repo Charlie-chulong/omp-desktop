@@ -2180,6 +2180,25 @@ export const fr: TranslationResources = {
       selectedUnavailable: "{{browser}} n’est pas installé. Choisissez un autre navigateur.",
       accessibilityLabel: "Ouvrir les liens avec {{browser}}",
       loadFailed: "Impossible de charger les navigateurs disponibles.",
+      custom: "Exécutable personnalisé",
+      executable: "Chemin de l’exécutable",
+      executableHint:
+        "Saisissez un chemin absolu sans guillemets de shell. Sous Windows, utilisez un fichier natif .exe ou .com.",
+      arguments: "Arguments",
+      argumentsHint:
+        "Chaque ligne est un argument littéral, y compris les lignes vides, guillemets, barres obliques inverses et sauts de ligne. Utilisez exactement une ligne contenant uniquement {url}. Aucune interprétation par un shell n’est effectuée.",
+      argument: "Argument {{index}}",
+      addArgument: "Ajouter un argument",
+      remove: "Supprimer",
+      removeArgument: "Supprimer l’argument {{index}}",
+      save: "Enregistrer le navigateur personnalisé",
+      executableError: "Saisissez un chemin absolu vers l’exécutable.",
+      urlArgumentError:
+        "Incluez exactement un argument égal à {url} ; n’intégrez pas {url} dans un autre argument.",
+      nulError:
+        "Le chemin de l’exécutable et les arguments ne peuvent pas contenir de caractères NUL.",
+      customSaveFailed:
+        "Impossible d’enregistrer le navigateur personnalisé. Vos modifications sont conservées ; vérifiez l’exécutable et les arguments, puis réessayez.",
     },
     general: {
       title: "Général",
