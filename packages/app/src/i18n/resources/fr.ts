@@ -127,6 +127,13 @@ export const fr: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Conversations en attente",
+      hint: "Maintenez une poignée et faites-la glisser ou utilisez les flèches. Les tours en cours continuent.",
+      dragConversation: "Réordonner {{title}}",
+      messageCount: "Messages en attente : {{count}}",
+      untitledConversation: "Conversation sans titre · {{id}}",
+    },
     placeholders: {
       desktop: "Envoyez un message à l'agent, marquez@filesou utilisez/commandset/skills",
       mobile: "Message,@files,/commands",

@@ -141,6 +141,13 @@ export const zhCN: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "排队会话",
+      hint: "按住手柄拖动或点击箭头调整顺序，不会中断正在运行的对话。",
+      dragConversation: "调整「{{title}}」的排队顺序",
+      messageCount: "排队消息：{{count}}",
+      untitledConversation: "未命名会话 · {{id}}",
+    },
     placeholders: {
       desktop: "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills",
       mobile: "发消息，@files，/commands",

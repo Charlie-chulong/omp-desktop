@@ -126,6 +126,13 @@ export const ptBR: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Conversas na fila",
+      hint: "Mantenha a alça pressionada e arraste ou use as setas. Os turnos em andamento continuam.",
+      dragConversation: "Reordenar {{title}}",
+      messageCount: "Mensagens na fila: {{count}}",
+      untitledConversation: "Conversa sem título · {{id}}",
+    },
     placeholders: {
       desktop: "Envie uma mensagem ao agente, marque @files ou use /commands e /skills",
       mobile: "Mensagem, @files, /commands",

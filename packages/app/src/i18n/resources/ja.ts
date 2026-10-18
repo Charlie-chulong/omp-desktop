@@ -126,6 +126,13 @@ export const ja: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "待機中の会話",
+      hint: "ハンドルを長押ししてドラッグするか、矢印で順序を変更します。実行中のターンは継続します。",
+      dragConversation: "「{{title}}」の順序を変更",
+      messageCount: "待機中のメッセージ: {{count}}",
+      untitledConversation: "無題の会話 · {{id}}",
+    },
     placeholders: {
       desktop: "エージェントにメッセージ、@ファイル、/コマンドや/スキルを入力",
       mobile: "メッセージ、@ファイル、/コマンド",

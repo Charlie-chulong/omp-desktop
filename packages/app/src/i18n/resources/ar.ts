@@ -126,6 +126,13 @@ export const ar: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "المحادثات في قائمة الانتظار",
+      hint: "اضغط مطولاً على المقبض واسحبه أو استخدم الأسهم. تستمر الأدوار الجارية.",
+      dragConversation: "إعادة ترتيب {{title}}",
+      messageCount: "الرسائل في قائمة الانتظار: {{count}}",
+      untitledConversation: "محادثة بلا عنوان · {{id}}",
+    },
     placeholders: {
       desktop: "أرسل رسالة إلى الوكيل أو ضع علامة على @files أو استخدم /commands و /skills",
       mobile: "الرسالة، @files ، /commands",
