@@ -1,6 +1,5 @@
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { extname } from "node:path";
-import { promisify } from "node:util";
 
 import { createExternalCommandProcessEnv, type ProcessEnvRecord } from "../server/paseo-env.js";
 import {
@@ -8,8 +7,6 @@ import {
   quoteWindowsArgument,
   quoteWindowsCommand,
 } from "./windows-command.js";
-
-const execFileAsync = promisify(execFile);
 
 interface ExternalEnvOptions {
   baseEnv?: ProcessEnvRecord;
@@ -104,14 +101,29 @@ export async function execCommand(
           ...(envOverlay ? [envOverlay] : []),
         );
 
-  return execFileAsync(resolvedCommand, resolvedArgs, {
-    cwd: options?.cwd,
-    env: childEnv,
-    encoding: options?.encoding ?? "utf8",
-    killSignal: options?.killSignal,
-    timeout: options?.timeout,
-    maxBuffer: options?.maxBuffer,
-    shell,
-    windowsHide: true,
-  }) as Promise<ExecCommandResult>;
+  // mini-electron does not provide execFile's Node-specific promisify hook.
+  // Collect both callback outputs explicitly rather than resolving stdout alone.
+  const { promise, resolve, reject } = Promise.withResolvers<ExecCommandResult>();
+  execFile(
+    resolvedCommand,
+    resolvedArgs,
+    {
+      cwd: options?.cwd,
+      env: childEnv,
+      encoding: options?.encoding ?? "utf8",
+      killSignal: options?.killSignal,
+      timeout: options?.timeout,
+      maxBuffer: options?.maxBuffer,
+      shell,
+      windowsHide: true,
+    },
+    (error, stdout, stderr) => {
+      if (error) {
+        reject(Object.assign(error, { stdout, stderr }));
+      } else {
+        resolve({ stdout, stderr });
+      }
+    },
+  );
+  return promise;
 }
