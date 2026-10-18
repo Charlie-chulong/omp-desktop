@@ -2,10 +2,12 @@ import { EventEmitter } from "node:events";
 import { BrowserWindow } from "electron";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getMainWindowDocumentVersion,
   getMainWindows,
   getOrCreateMainWindow,
   isMainWindowSender,
   markMainWindowContentReady,
+  markMainWindowDocumentLoaded,
   markMainWindowLoading,
   onMainWindowRemoved,
   registerMainWindow,
@@ -14,6 +16,7 @@ import {
 } from "./main-windows.js";
 
 vi.mock("electron", () => ({ BrowserWindow: { getFocusedWindow: vi.fn() } }));
+vi.mock("electron-log/main", () => ({ default: { warn: vi.fn() } }));
 
 class WindowFixture extends EventEmitter {
   destroyed = false;
@@ -26,10 +29,10 @@ class WindowFixture extends EventEmitter {
   focusedCount = 0;
   constructor(id: number) {
     super();
-    this.webContents = {
+    this.webContents = Object.assign(new EventEmitter(), {
       id,
       isDestroyed: () => this.destroyed || this.rendererDestroyed,
-    } as Electron.WebContents;
+    }) as Electron.WebContents;
   }
   isDestroyed() {
     return this.destroyed;
@@ -47,11 +50,17 @@ class WindowFixture extends EventEmitter {
   show() {
     this.visible = true;
     this.shownCount += 1;
+    this.emit("show");
+  }
+  hide() {
+    this.visible = false;
+    this.emit("hide");
   }
   focus() {
     this.focusedCount += 1;
   }
   close() {
+    this.emit("close", { preventDefault() {} });
     this.destroyed = true;
     this.emit("closed");
   }
@@ -61,6 +70,7 @@ const fixtures: WindowFixture[] = [];
 afterEach(() => {
   for (const fixture of fixtures) fixture.close();
   fixtures.length = 0;
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -129,6 +139,165 @@ describe("main window registry", () => {
     expect(fixture.focusedCount).toBe(2);
   });
 
+  it("presents a pending Windows window only after a successful load and bounded grace period", () => {
+    vi.useFakeTimers();
+    const fixture = windowFixture(40);
+    fixture.visible = false;
+    const window = fixture as unknown as BrowserWindow;
+    registerMainWindow(window);
+    markMainWindowLoading(window);
+    vi.advanceTimersByTime(10_000);
+    expect(fixture.visible).toBe(false);
+    expect(fixture.shownCount).toBe(0);
+
+    markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+    vi.advanceTimersByTime(1_999);
+    expect(fixture.visible).toBe(false);
+    expect(fixture.focusedCount).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(fixture.visible).toBe(true);
+    expect(fixture.shownCount).toBe(1);
+    expect(fixture.focusedCount).toBe(1);
+
+    markMainWindowContentReady(window);
+    fixture.hide();
+    vi.advanceTimersByTime(10_000);
+    expect(fixture.visible).toBe(false);
+    expect(fixture.shownCount).toBe(1);
+    expect(fixture.focusedCount).toBe(1);
+  });
+
+  it("does not postpone the first presentation on duplicate load notifications", () => {
+    vi.useFakeTimers();
+    const fixture = windowFixture(41);
+    fixture.visible = false;
+    const window = fixture as unknown as BrowserWindow;
+    registerMainWindow(window);
+    const documentVersion = getMainWindowDocumentVersion(window);
+    markMainWindowDocumentLoaded(window, documentVersion, "win32");
+    vi.advanceTimersByTime(1_000);
+    markMainWindowDocumentLoaded(window, documentVersion, "win32");
+    vi.advanceTimersByTime(1_000);
+    expect(fixture.visible).toBe(true);
+    expect(fixture.shownCount).toBe(1);
+  });
+
+  it.each(["before load", "during the grace period"])(
+    "preserves tray hiding when renderer readiness arrives %s",
+    (readiness) => {
+      vi.useFakeTimers();
+      const fixture = windowFixture(43);
+      fixture.visible = false;
+      const window = fixture as unknown as BrowserWindow;
+      registerMainWindow(window);
+      if (readiness === "during the grace period") {
+        markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+        vi.advanceTimersByTime(1_000);
+      }
+      markMainWindowContentReady(window);
+      expect(fixture.visible).toBe(true);
+      fixture.hide();
+      markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+      vi.advanceTimersByTime(10_000);
+      expect(fixture.visible).toBe(false);
+      expect(fixture.shownCount).toBe(1);
+
+      // Reloading a background window cannot turn it back into an initial show.
+      markMainWindowLoading(window);
+      markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+      vi.advanceTimersByTime(10_000);
+      expect(fixture.visible).toBe(false);
+      expect(fixture.focusedCount).toBe(1);
+    },
+  );
+
+  it.each(["close", "hide", "minimize"] as const)(
+    "honors an explicit %s while the first presentation is pending",
+    (event) => {
+      vi.useFakeTimers();
+      const fixture = windowFixture(44);
+      fixture.visible = false;
+      const window = fixture as unknown as BrowserWindow;
+      registerMainWindow(window);
+      markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+      vi.advanceTimersByTime(1_999);
+      // A prevented close leaves a live window, just like close-to-tray does.
+      fixture.emit(event, { preventDefault() {} });
+      vi.advanceTimersByTime(1);
+      expect(fixture.destroyed).toBe(false);
+      expect(fixture.visible).toBe(false);
+      expect(fixture.shownCount).toBe(0);
+
+      markMainWindowLoading(window);
+      markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+      vi.advanceTimersByTime(10_000);
+      expect(fixture.visible).toBe(false);
+      expect(fixture.focusedCount).toBe(0);
+    },
+  );
+
+  it("invalidates the previous document's timer and ignores its late load completion", () => {
+    vi.useFakeTimers();
+    const fixture = windowFixture(45);
+    fixture.visible = false;
+    const window = fixture as unknown as BrowserWindow;
+    registerMainWindow(window);
+    const previousDocument = getMainWindowDocumentVersion(window);
+    markMainWindowDocumentLoaded(window, previousDocument, "win32");
+    vi.advanceTimersByTime(1_000);
+    markMainWindowLoading(window);
+    const nextDocument = getMainWindowDocumentVersion(window);
+    expect(nextDocument).not.toBe(previousDocument);
+    markMainWindowDocumentLoaded(window, previousDocument, "win32");
+    vi.advanceTimersByTime(10_000);
+    expect(fixture.visible).toBe(false);
+    expect(fixture.shownCount).toBe(0);
+
+    markMainWindowDocumentLoaded(window, nextDocument, "win32");
+    vi.advanceTimersByTime(1_999);
+    expect(fixture.visible).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(fixture.visible).toBe(true);
+    expect(fixture.shownCount).toBe(1);
+  });
+
+  it.each(["window", "renderer"])("never presents after %s destruction", (target) => {
+    vi.useFakeTimers();
+    const fixture = windowFixture(46);
+    fixture.visible = false;
+    const window = fixture as unknown as BrowserWindow;
+    registerMainWindow(window);
+    markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), "win32");
+    if (target === "window") {
+      fixture.close();
+    } else {
+      fixture.rendererDestroyed = true;
+      fixture.webContents.emit("destroyed");
+    }
+    vi.advanceTimersByTime(10_000);
+    expect(fixture.visible).toBe(false);
+    expect(fixture.shownCount).toBe(0);
+    expect(fixture.focusedCount).toBe(0);
+  });
+
+  it.each(["darwin", "linux"] as const)(
+    "keeps %s presentation dependent on the normal renderer readiness path",
+    (platform) => {
+      vi.useFakeTimers();
+      const fixture = windowFixture(47);
+      fixture.visible = false;
+      const window = fixture as unknown as BrowserWindow;
+      registerMainWindow(window);
+      markMainWindowDocumentLoaded(window, getMainWindowDocumentVersion(window), platform);
+      vi.advanceTimersByTime(10_000);
+      expect(fixture.visible).toBe(false);
+      expect(fixture.shownCount).toBe(0);
+      markMainWindowContentReady(window);
+      expect(fixture.visible).toBe(true);
+      expect(fixture.shownCount).toBe(1);
+    },
+  );
+
   it("never presents unregistered, destroyed, or renderer-destroyed windows", () => {
     const unregistered = windowFixture(31);
     const destroyed = windowFixture(32);
@@ -147,6 +316,7 @@ describe("main window registry", () => {
   });
 
   it("permanently disables reveals and late readiness once shutdown begins", async () => {
+    vi.useFakeTimers();
     vi.resetModules();
     // Shutdown is permanent; load an isolated module instance so this test
     // cannot disable the registry used by the other behavioral tests.
@@ -159,10 +329,16 @@ describe("main window registry", () => {
     registry.registerMainWindow(pending as unknown as BrowserWindow);
     registry.markMainWindowContentReady(ready as unknown as BrowserWindow);
     ready.visible = false;
+    registry.markMainWindowDocumentLoaded(
+      pending as unknown as BrowserWindow,
+      registry.getMainWindowDocumentVersion(pending as unknown as BrowserWindow),
+      "win32",
+    );
     registry.beginMainWindowShutdown();
     registry.markMainWindowContentReady(pending as unknown as BrowserWindow);
     registry.showMainWindow(ready as unknown as BrowserWindow);
     registry.showMainWindow(pending as unknown as BrowserWindow);
+    vi.advanceTimersByTime(10_000);
     expect(ready.visible).toBe(false);
     expect(ready.focusedCount).toBe(1);
     expect(pending.visible).toBe(false);
