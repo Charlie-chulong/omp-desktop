@@ -12,7 +12,7 @@ JSONL line framing and protocol-v2 chunk reassembly remain unchanged.
 
 - Node.js from `.tool-versions` and npm workspaces for development and source builds
 - `omp >= 18.8.7` on `PATH` for development and standalone daemon runs
-- A configured OMP model provider
+- A configured OMP model provider to run conversations (not required to open provider settings or start sign-in)
 
 Standard Apple Silicon macOS and Windows x64 packages include OMP and do not require a system OMP installation.
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
@@ -50,6 +50,13 @@ The desktop sidebar shares the title bar's background, and its toggle stays in
 the title bar when collapsed. Workspace panel toggles, script controls, and the
 new-tab launcher occupy the title bar's right side; only the focused workspace
 contributes these controls when navigation keeps other workspaces mounted.
+Fresh configurations can list built-in sign-in providers without API keys or custom
+providers. If OMP exits with `No models available` or `No default model selected`,
+Desktop retries RPC startup with an internal keyless bootstrap model, preserving
+existing provider settings and YAML comments. This bootstrap entry is hidden from
+provider settings, the YAML editor, and selectable model catalogs; it is not a
+usable conversation model.
+
 Workspace tabs sit directly below the title bar without a second workspace header.
 Native window buttons retain their reserved space. Tabs sit edge-to-edge with
 square corners and thin separators; the active tab shares the content background,
