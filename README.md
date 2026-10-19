@@ -958,6 +958,8 @@ the formula foreground in light and dark themes, including explicit TeX colors.
 
 Collapsed activity groups show their item count in a compact, theme-aware pill with a layers icon. The count updates as activity arrives; expanding the group hides the pill and reveals the individual items. Read tool file buttons remove line-range selectors before opening the workspace file; for comma-separated ranges, the preview selects the first range.
 
+Expanded tool calls without additional details use a compact, centered hint with regular secondary text and consistent padding in light and dark themes.
+
 ## Background processes
 
 Background work started by the current Agent, including Bash commands and `eval` cells, appears beside the workspace branch above the composer. While work is active, the indicator shows the active count; opening it lists live and recently completed jobs. Select a job to open its read-only terminal output in a bottom pane, or use **Stop** to cancel that job. Stop uses a neutral, borderless square icon with subtle pressed feedback. Closing the output pane does not stop the work.
