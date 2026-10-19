@@ -762,7 +762,11 @@ export function ToolCallDetailsContent({
     if (showLoadingSkeleton) {
       return <LoadingSkeleton containerStyle={ds.loadingContainerStyle} />;
     }
-    return <Text style={styles.emptyStateText}>{t("toolCallDetails.empty")}</Text>;
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyStateText}>{t("toolCallDetails.empty")}</Text>
+      </View>
+    );
   }
 
   return <View style={ds.fullBleedContainerStyle}>{sections}</View>;
@@ -914,10 +918,18 @@ const styles = StyleSheet.create((theme) => {
     errorText: {
       color: theme.colors.destructive,
     },
+    emptyState: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: theme.spacing[3],
+      paddingVertical: theme.spacing[4],
+    },
     emptyStateText: {
       color: theme.colors.foregroundMuted,
-      fontSize: theme.fontSize.base,
-      fontStyle: "italic",
+      fontFamily: theme.fontFamily.ui,
+      fontSize: theme.fontSize.sm,
+      lineHeight: 18,
+      textAlign: "center",
     },
     loadingContainer: {
       gap: theme.spacing[2],
