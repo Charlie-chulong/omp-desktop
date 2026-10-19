@@ -988,6 +988,34 @@ SSH passwords, private-key passphrases, MFA responses, and pairing links are nev
 
 ## Build
 
+Package on either supported host with the same command:
+
+```bash
+npm run build:package
+```
+
+The Node.js launcher selects macOS on a Mac and Windows on Windows. It keeps native
+Windows builds independent of Git Bash. The published mini-electron runtimes support
+**macOS arm64 (Apple Silicon)** and **Windows x64**; Intel Mac and Windows arm64
+packages are not currently supported.
+
+Explicit targets remain available:
+
+```bash
+npm run build:mac           # Run on macOS; DMG + ZIP, arm64
+npm run build:mac:arm64     # Same explicit architecture
+npm run build:windows       # NSIS installer + ZIP, x64
+npm run build:package -- --help
+```
+
+Installer builds default to `--publish never` and write artifacts to
+`packages/desktop/release/`. Additional electron-builder options are forwarded,
+for example `npm run build:package -- mac --config.mac.identity=null`.
+macOS packaging requires a Mac; the launcher rejects it on Windows before starting
+the workspace builds.
+
+For an unpacked application without creating installers, use the lower-level build:
+
 ```bash
 npm run build:desktop -- --dir
 ```
@@ -1069,6 +1097,11 @@ MINI_ELECTRON_DIST_PATH=/absolute/path/to/mini-electron/out/mac-arm64/runtime-di
   npm run build:desktop -- --dir --publish never
 ```
 
+The packager reads the selected runtime's `version.json`, defaults to that runtime's
+architecture (including when Node runs under Rosetta), and rejects a different target
+OS or architecture. `MINI_ELECTRON_DIST_PATH` must point to an extracted distribution
+for the requested target; it cannot reuse the host's runtime for another platform.
+
 The `app-builder-lib` patch applied by `npm install` allows distributions without
 a generic Helper bundle. Packaged smoke checks verify macOS Dock visibility,
 including a cold daemon launch, rather than requiring a separate Helper path.
@@ -1127,24 +1160,41 @@ certificate (or `CSC_LINK`) and one of electron-builder's notarization credentia
 When those credentials are present, the script verifies the application's code signature, stapled
 notarization ticket, and Gatekeeper assessment after packaging.
 
-Windows mini-electron packages currently support x64 only. Git for Windows Bash must be on
-`PATH`; the npm scripts use `cross-env` and invoke Bash explicitly, including when npm uses
-the default Windows `cmd.exe` shell:
+Windows mini-electron packages currently support x64 only. On Windows, the npm scripts
+use the native `build-windows.ps1` script with Windows PowerShell 5.1 or newer; Git Bash
+is not required. Node.js, npm, and Windows' built-in `tar.exe` must be on `PATH`.
+On macOS and Linux, the Windows commands use `build-windows.sh` through Bash.
+Cross-builds require an extracted **win32-x64** mini-electron distribution selected
+with `MINI_ELECTRON_DIST_PATH`, plus electron-builder's Wine toolchain. Apple Silicon
+Macs also require Rosetta 2. For example, on macOS:
 
 ```bash
+MINI_ELECTRON_DIST_PATH=/absolute/path/to/windows-x64/runtime-dist \
+  npm run build:windows
+```
+
+```powershell
 npm run build:windows
 # Equivalent explicit target:
 npm run build:windows:x64
 ```
 
+You can also run the native script directly from PowerShell, forwarding additional
+electron-builder arguments after the script path:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
 Windows packages use `@iriscat/mini-electron` 0.1.7 or newer, including native SQLite,
 IPC frame identity, native clipboard/keyboard/OLE input, selection colors, and IME
 handling. To package an unpublished local runtime instead, build its checkout with
-`python build.py --package-dist` and select that distribution explicitly (Git Bash):
+`python build.py --package-dist` and select that distribution explicitly (PowerShell):
 
-```bash
-MINI_ELECTRON_DIST_PATH=D:/Project/mini-electron/out/windows-x64/runtime-dist \
-  npm run build:windows
+```powershell
+$env:MINI_ELECTRON_DIST_PATH = "D:/Project/mini-electron/out/windows-x64/runtime-dist"
+npm run build:windows
+Remove-Item Env:MINI_ELECTRON_DIST_PATH
 ```
 
 The output includes `OMP-Desktop-Setup-<version>-x64.exe`, its `.blockmap`, a `.zip`, and
@@ -1171,7 +1221,7 @@ Every release must upload the updater metadata and payloads generated from the s
   (`latest.yml` for Stable or `beta.yml` for Beta);
 - Linux AppImage releases: the AppImage, its blockmap, and the matching `*-linux.yml` metadata.
 
-`build-windows.sh` writes the updater metadata for its supported x64 target. A GitHub Release
+Both `build-windows.ps1` and `build-windows.sh` write the updater metadata for the supported x64 target. A GitHub Release
 that only contains DMG or EXE files remains available for manual download but cannot be installed
 by the in-app updater. Publish the generated files only after every target for that release is
 complete; local Windows builds use `--publish never`.
