@@ -3,6 +3,7 @@ import path from "node:path";
 
 const POSIX_SHORTCUT_MARKER = "# Managed by OMP Desktop";
 const WINDOWS_SHORTCUT_MARKER = "rem Managed by OMP Desktop";
+const SHORTCUT_HEADER_BYTES = 1024;
 
 interface OmpShortcutInput {
   targetPath: string;
@@ -74,6 +75,22 @@ export function buildWindowsOmpShortcut(sourcePath: string, proxyUrl?: string): 
   ].join("\r\n");
 }
 
+async function readShortcutPrefix(targetPath: string, maxBytes: number): Promise<string> {
+  const file = await fs.open(targetPath, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const { bytesRead } = await file.read(buffer, offset, buffer.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return buffer.toString("utf8", 0, offset);
+  } finally {
+    await file.close();
+  }
+}
+
 async function isOmpDesktopOwnedShortcut(input: OmpShortcutInput): Promise<boolean> {
   try {
     const stat = await fs.lstat(input.targetPath);
@@ -84,7 +101,8 @@ async function isOmpDesktopOwnedShortcut(input: OmpShortcutInput): Promise<boole
       );
     }
     if (!stat.isFile()) return false;
-    const contents = await fs.readFile(input.targetPath, "utf8");
+    // Ownership lives in the script header, never in an entire standalone binary.
+    const contents = await readShortcutPrefix(input.targetPath, SHORTCUT_HEADER_BYTES);
     const marker = input.platform === "win32" ? WINDOWS_SHORTCUT_MARKER : POSIX_SHORTCUT_MARKER;
     return contents.split(/\r?\n/, 3).includes(marker);
   } catch (error) {
@@ -101,7 +119,9 @@ export async function isManagedOmpShortcut(input: OmpShortcutInput): Promise<boo
       input.platform === "win32"
         ? buildWindowsOmpShortcut(input.sourcePath, input.proxyUrl)
         : buildPosixOmpShortcut(input.sourcePath, input.proxyUrl);
-    return (await fs.readFile(input.targetPath, "utf8")) === expected;
+    const expectedBytes = Buffer.byteLength(expected, "utf8");
+    if (stat.size !== expectedBytes) return false;
+    return (await readShortcutPrefix(input.targetPath, expectedBytes + 1)) === expected;
   } catch (error) {
     if (isMissingPathError(error)) return false;
     throw error;
