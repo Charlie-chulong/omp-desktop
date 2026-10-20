@@ -55,7 +55,6 @@ describe("desktop-permissions", () => {
     expect(snapshot.checkedAt).toBeTypeOf("number");
   });
 
-
   it("requests notification permission via the browser Notification API", async () => {
     const fakeNotification: NotificationConstructorLike = {
       permission: "default",
@@ -83,6 +82,35 @@ describe("desktop-permissions", () => {
     expect(snapshot.notifications.state).toBe("denied");
   });
 
+  it("does not mistake native notification support for OS authorization", async () => {
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: {
+          notification: { isSupported: async () => true },
+        } as DesktopHostBridge,
+        notification: { permission: "granted" },
+      }),
+    );
+    expect((await permissions.getDesktopPermissionSnapshot()).notifications.state).toBe("unknown");
+  });
+
+  it("opens native notification settings instead of requesting unrelated browser permission", async () => {
+    const openSettings = vi.fn(async () => {});
+    const requestPermission = vi.fn(async () => "granted");
+    const permissions = createDesktopPermissions(
+      fakeEnvironment({
+        desktopHost: {
+          notification: { isSupported: async () => true, openSettings },
+        } as DesktopHostBridge,
+        notification: { permission: "default", requestPermission },
+      }),
+    );
+    expect((await permissions.requestDesktopPermission({ kind: "notifications" })).state).toBe(
+      "unknown",
+    );
+    expect(openSettings).toHaveBeenCalledOnce();
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
 
   it("uses the active app language for local status details", async () => {
     await i18n.changeLanguage("zh-CN");

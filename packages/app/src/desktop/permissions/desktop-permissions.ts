@@ -27,7 +27,6 @@ export interface NotificationConstructorLike {
   requestPermission?: () => Promise<string>;
 }
 
-
 export interface DesktopPermissionEnvironment {
   isWeb: boolean;
   getDesktopHost: () => DesktopHostBridge | null;
@@ -46,14 +45,12 @@ function status(input: DesktopPermissionStatus): DesktopPermissionStatus {
   return input;
 }
 
-
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && typeof error.message === "string") {
     return error.message;
   }
   return String(error);
 }
-
 
 function mapNotificationPermissionString(permission: string): DesktopPermissionStatus {
   if (permission === "granted") {
@@ -100,7 +97,7 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
       try {
         const supported = await desktopHost.notification.isSupported();
         return status({
-          state: supported ? "granted" : "unavailable",
+          state: supported ? "unknown" : "unavailable",
           detail: supported
             ? i18n.t("desktop.permissions.notifications.supported")
             : i18n.t("desktop.permissions.notifications.unsupported"),
@@ -121,13 +118,26 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
     });
   }
 
-
   async function requestNotificationPermissionStatus(): Promise<DesktopPermissionStatus> {
     if (!env.isWeb) {
       return status({
         state: "unavailable",
         detail: i18n.t("desktop.permissions.notifications.requestsWebOnly"),
       });
+    }
+    const notificationBridge = env.getDesktopHost()?.notification;
+    if (notificationBridge?.openSettings) {
+      try {
+        await notificationBridge.openSettings();
+        return await getNotificationPermissionStatus();
+      } catch (error) {
+        return status({
+          state: "unknown",
+          detail: i18n.t("desktop.permissions.notifications.requestFailed", {
+            message: getErrorMessage(error),
+          }),
+        });
+      }
     }
 
     const NotificationConstructor = env.getNotification();
@@ -153,7 +163,6 @@ export function createDesktopPermissions(env: DesktopPermissionEnvironment): Des
       detail: i18n.t("desktop.permissions.notifications.requestUnavailable"),
     });
   }
-
 
   async function requestDesktopPermission(_input: {
     kind: DesktopPermissionKind;
@@ -188,7 +197,6 @@ function getRealNotification(): NotificationConstructorLike | null {
   }
   return NotificationConstructor as NotificationConstructorLike;
 }
-
 
 const realDesktopPermissions = createDesktopPermissions({
   isWeb,

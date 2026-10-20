@@ -852,6 +852,16 @@ Conversation notifications follow the same rule: reveal or add the conversation 
 project, preserving that project's other tabs, order, and split panes. Notification navigation
 does not change the conversation's owning workspace.
 
+Desktop **Settings → Notifications** includes localized permission controls,
+sound preferences, and a test notification. Native notification support is not
+proof of OS authorization; use **Notification settings** to open the macOS or
+Windows notification preferences and allow OMP Desktop notifications there.
+Test sends wait for the native `show`/`failed` result instead of reporting
+success immediately. OS rejection, closure before acknowledgement, or no
+acknowledgement within ten seconds reports an undelivered notification. An
+accepted notification may still have its banner suppressed by system Focus
+or presentation settings.
+
 ## File drag and drop
 
 - Drop files onto the message input to add attachments without sending a message.

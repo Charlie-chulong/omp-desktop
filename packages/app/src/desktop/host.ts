@@ -44,6 +44,7 @@ export interface DesktopDialogBridge {
 
 export interface DesktopNotificationBridge {
   isSupported?: () => Promise<boolean>;
+  openSettings?: () => Promise<void>;
   sendNotification?: (
     payload: string | { title: string; body?: string; data?: Record<string, unknown> },
   ) => Promise<boolean>;
