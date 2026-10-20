@@ -62,7 +62,7 @@ vi.mock("@/composer/tracks", () => ({
 vi.stubGlobal("React", React);
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
-import { BackgroundProcessesTrack } from "./track";
+import { BackgroundProcessesTrack, hasVisibleBackgroundProcessState } from "./track";
 
 const process = {
   id: "omp-job:job-1",
@@ -125,6 +125,26 @@ describe("BackgroundProcessesTrack", () => {
     expect(stopProcess).toHaveBeenCalledWith("omp-job:job-1");
     expect(onOpen).not.toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    "hides errors without process content (connected: %s)",
+    async (isConnected) => {
+      const state = {
+        processes: [],
+        error: "Process status unavailable",
+        stopError: null,
+        isConnected,
+        isLoading: false,
+        stoppingProcessIds: new Set<string>(),
+        stopProcess: vi.fn(async () => undefined),
+      };
+      await act(async () => {
+        root.render(React.createElement(BackgroundProcessesTrack, { state, onOpen: vi.fn() }));
+      });
+      expect(container.childElementCount).toBe(0);
+      expect(hasVisibleBackgroundProcessState(state)).toBe(false);
+    },
+  );
 
   it("hides the indicator when no process is active, but keeps errors visible", async () => {
     const state = {

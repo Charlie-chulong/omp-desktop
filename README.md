@@ -75,6 +75,11 @@ double-click restores it, and only actual drag motion starts the restore-and-dra
 fallback. Interactive titlebar controls remain excluded from these gestures.
 The web document's `color-scheme` follows the resolved application theme, keeping
 native selection and form-control colors aligned with light/dark appearance.
+Compact Web headers use a 44px row without additional top padding, retaining
+safe-area insets. Native mobile and desktop-wrapper header spacing is unchanged.
+The composer's background-process pill stays hidden when no process content is
+available, including fetch failures and disconnections. Errors remain visible
+when retained process entries are available.
 Conversation prose uses medium weight with semibold emphasis; the light theme uses
 deeper near-black primary text. Font sizes, line heights, secondary text tones, and
 regular-weight code remain unchanged.
@@ -1140,8 +1145,11 @@ loaded from the matching node-pty prebuild, not its duplicate `third_party` dire
 Daemon command execution collects `execFile` callback stdout and stderr explicitly. The
 mini-electron runtime does not expose Node's custom `promisify(execFile)` result shape;
 using it can misreport a supported bundled OMP as older than the required version.
-The packaged smoke checks native image launch preparation inside the shipped runtime,
-in addition to invoking the OMP binary directly. The actual minimum remains OMP 18.8.7.
+The packaged smoke keeps multiple native image launch configurations alive together
+inside the shipped runtime, in addition to invoking the OMP binary directly.
+Windows runtimes must use system randomness for `mkdtemp`: repeated suffixes can block
+agent history loading before OMP starts, eventually reporting a 60-second message timeout.
+The actual minimum remains OMP 18.8.7.
 
 The Electron language allowlists retain all nine application languages and common regional
 variants. macOS also retains each selected language's grammatical-gender `.lproj` variants.
