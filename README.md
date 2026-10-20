@@ -940,6 +940,10 @@ Git operation names, comparison labels, and action feedback follow
 **Settings → General → Language** in every supported language. **Archive workspace**
 and **Open Changes tab** are not part of this menu.
 
+Diff scrolling preserves transparent wallpaper backgrounds without accumulating
+green/red shading or text trails. Pixel reuse depends on the document and viewport
+heights, not a fixed changed-line count.
+
 ## Assistant message links
 
 HTTP(S) links open externally. Text/source links open in the workspace file panel. On the local desktop host, links to existing images, documents, archives, and directories inside the workspace open with the operating system; executable files are shown in the file manager rather than launched. Web conversation headings support native `#heading` navigation.
