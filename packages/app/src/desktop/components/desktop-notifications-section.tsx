@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { DesktopPermissionRow } from "@/desktop/components/desktop-permission-row";
+import { getDesktopHost } from "@/desktop/host";
 import { useDesktopPermissions } from "@/desktop/permissions/use-desktop-permissions";
 import { useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { SettingsSection } from "@/screens/settings/settings-section";
@@ -65,16 +66,20 @@ export function DesktopNotificationsSection() {
         disabled={isPermissionBusy}
         accessibilityLabel={t("settings.notifications.refreshAccessibility")}
       >
-        {isRefreshing ? t("settings.permissions.refreshing") : t("settings.permissions.refresh")}
+        {isRefreshing
+          ? t("settings.notifications.refreshing")
+          : t("settings.notifications.refresh")}
       </Button>
     ),
     [handleRefreshPress, isPermissionBusy, isRefreshing, refreshIcon, t],
   );
   const permissionLabels = useMemo(
     () => ({
-      granted: t("settings.permissions.actions.granted"),
-      request: t("settings.permissions.actions.request"),
-      requesting: t("settings.permissions.actions.requesting"),
+      granted: t("settings.notifications.actions.granted"),
+      request: getDesktopHost()?.notification?.openSettings
+        ? t("settings.notifications.actions.openSettings")
+        : t("settings.notifications.actions.request"),
+      requesting: t("settings.notifications.actions.requesting"),
     }),
     [t],
   );
@@ -83,7 +88,9 @@ export function DesktopNotificationsSection() {
     return null;
   }
 
-  const notificationsGranted = snapshot?.notifications.state === "granted";
+  const canTestNotifications =
+    snapshot !== null &&
+    (snapshot.notifications.state === "granted" || snapshot.notifications.state === "unknown");
 
   return (
     <SettingsSection title={t("settings.notifications.title")} trailing={refreshButton}>
@@ -112,7 +119,7 @@ export function DesktopNotificationsSection() {
           <View style={settingsStyles.rowContent}>
             <Text style={settingsStyles.rowTitle}>{t("settings.notifications.test")}</Text>
             <Text style={settingsStyles.rowHint}>
-              {notificationsGranted
+              {canTestNotifications
                 ? t("settings.notifications.testHint")
                 : t("settings.notifications.permissionRequired")}
             </Text>
@@ -121,7 +128,7 @@ export function DesktopNotificationsSection() {
             variant="outline"
             size="sm"
             onPress={handleSendTestNotification}
-            disabled={!notificationsGranted || isPermissionBusy || isSendingTestNotification}
+            disabled={!canTestNotifications || isPermissionBusy || isSendingTestNotification}
           >
             {isSendingTestNotification
               ? t("settings.notifications.sending")
