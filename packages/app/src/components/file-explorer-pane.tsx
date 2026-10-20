@@ -642,7 +642,7 @@ export function FileExplorerPane({
     const next = currentPath ? new Set([currentPath]) : new Set<string>();
     selectionAnchorPathRef.current = currentPath;
     commitSelectedEntryPaths(next);
-  }, [commitSelectedEntryPaths, workspaceStateKey]);
+  }, [commitSelectedEntryPaths, normalizedWorkspaceRoot, serverId, workspaceStateKey]);
 
   useEffect(() => {
     if (selectedEntryPath ? selectedEntryPathsRef.current.has(selectedEntryPath) : false) {
@@ -730,17 +730,10 @@ export function FileExplorerPane({
         entry,
         workspaceStateKey,
         expandedPaths,
-        directories,
         requestDirectoryListing,
         setExpandedPathsForWorkspace,
       }),
-    [
-      workspaceStateKey,
-      expandedPaths,
-      directories,
-      requestDirectoryListing,
-      setExpandedPathsForWorkspace,
-    ],
+    [workspaceStateKey, expandedPaths, requestDirectoryListing, setExpandedPathsForWorkspace],
   );
 
   const handleOpenFile = useCallback(
@@ -1170,22 +1163,40 @@ export function FileExplorerPane({
     [expandedPaths, hasWorkspaceScope, requestDirectoryListing],
   );
   const { refetch: refetchExplorer, isFetching: isRefreshFetching } = useQuery({
-    queryKey: ["fileExplorerRefresh", serverId, workspaceStateKey],
+    // A completion during the first in-flight refresh must not reuse its older listing.
+    queryKey: [
+      "fileExplorerRefresh",
+      serverId,
+      workspaceStateKey,
+      normalizedWorkspaceRoot,
+      refreshRevision,
+    ],
     queryFn: refreshExplorer,
     enabled: false,
   });
-  const observedRefreshRef = useRef({ workspaceStateKey, revision: refreshRevision });
+  const observedRefreshRef = useRef({
+    serverId,
+    workspaceStateKey,
+    workspaceRoot: normalizedWorkspaceRoot,
+    revision: refreshRevision,
+  });
   useEffect(() => {
     const observed = observedRefreshRef.current;
-    if (observed.workspaceStateKey !== workspaceStateKey) {
+    if (
+      observed.serverId !== serverId ||
+      observed.workspaceStateKey !== workspaceStateKey ||
+      observed.workspaceRoot !== normalizedWorkspaceRoot
+    ) {
+      observed.serverId = serverId;
       observed.workspaceStateKey = workspaceStateKey;
+      observed.workspaceRoot = normalizedWorkspaceRoot;
       observed.revision = refreshRevision;
       return;
     }
     if (refreshRevision <= observed.revision) return;
     observed.revision = refreshRevision;
     void refetchExplorer();
-  }, [refreshRevision, refetchExplorer, workspaceStateKey]);
+  }, [normalizedWorkspaceRoot, refreshRevision, refetchExplorer, serverId, workspaceStateKey]);
 
   const handleRefresh = useCallback(() => {
     void refetchExplorer();
@@ -1955,14 +1966,12 @@ function toggleDirectory({
   entry,
   workspaceStateKey,
   expandedPaths,
-  directories,
   requestDirectoryListing,
   setExpandedPathsForWorkspace,
 }: {
   entry: ExplorerEntry;
   workspaceStateKey: string | null;
   expandedPaths: Set<string>;
-  directories: Map<string, ExplorerDirectory>;
   requestDirectoryListing: (
     path: string,
     opts?: { recordHistory?: boolean; setCurrentPath?: boolean },
@@ -1980,7 +1989,8 @@ function toggleDirectory({
       expanded: !isExpanded,
     }),
   );
-  if (!isExpanded && !directories.has(entry.path)) {
+  // Cached children may have changed while this directory was collapsed.
+  if (!isExpanded) {
     void requestDirectoryListing(entry.path, {
       recordHistory: false,
       setCurrentPath: false,

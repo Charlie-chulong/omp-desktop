@@ -46,7 +46,7 @@ import {
   createDesktopLocalDaemonTransportFactory,
 } from "@/desktop/daemon/desktop-daemon-transport";
 import { CLIENT_CAPS } from "@omp-desktop/protocol/client-capabilities";
-import { useSessionStore } from "@/stores/session-store";
+import { useSessionStore, type Agent } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { invalidateCheckoutGitQueriesForServer } from "@/git/query-keys";
 import { queryClient } from "@/data/query-client";
@@ -1623,6 +1623,7 @@ export class HostRuntimeStore {
       newServerId,
       {
         onAgentStoppedRunning: (agentId) => this.handleAgentStoppedRunning(newServerId, agentId),
+        onRunningAgentRemoved: (agent) => this.requestAgentWorkspaceRefresh(newServerId, agent),
         markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
         markAgentReady: () => controller.markAgentDirectorySyncReady(),
         markAgentError: (error) => controller.markAgentDirectorySyncError(error),
@@ -2027,6 +2028,8 @@ export class HostRuntimeStore {
           {
             onAgentStoppedRunning: (agentId) =>
               this.handleAgentStoppedRunning(host.serverId, agentId),
+            onRunningAgentRemoved: (agent) =>
+              this.requestAgentWorkspaceRefresh(host.serverId, agent),
             markAgentLoading: () => controller.markAgentDirectorySyncLoading(),
             markAgentReady: () => controller.markAgentDirectorySyncReady(),
             markAgentError: (error) => controller.markAgentDirectorySyncError(error),
@@ -2195,19 +2198,20 @@ export class HostRuntimeStore {
   }
 
   private handleAgentStoppedRunning(serverId: string, agentId: string): void {
-    const store = useSessionStore.getState();
-    const session = store.sessions[serverId];
+    const session = useSessionStore.getState().sessions[serverId];
     const agent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
-    const workspaceStateKey = agent
-      ? buildWorkspaceExplorerStateKey({
-          workspaceId: agent.workspaceId,
-          workspaceRoot: agent.cwd,
-        })
-      : null;
-    if (workspaceStateKey) {
-      store.requestFileExplorerRefresh(serverId, workspaceStateKey);
-    }
+    if (agent) this.requestAgentWorkspaceRefresh(serverId, agent);
     this.drainQueuedAgentMessage(serverId, agentId);
+  }
+
+  private requestAgentWorkspaceRefresh(serverId: string, agent: Agent): void {
+    const workspaceStateKey = buildWorkspaceExplorerStateKey({
+      workspaceId: agent.workspaceId,
+      workspaceRoot: agent.cwd,
+    });
+    if (workspaceStateKey) {
+      useSessionStore.getState().requestFileExplorerRefresh(serverId, workspaceStateKey);
+    }
   }
 
   drainQueuedAgentMessage(serverId: string, agentId: string): void {

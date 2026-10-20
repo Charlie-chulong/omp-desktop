@@ -36,6 +36,8 @@ function pushHistory(history: string[], path: string): string[] {
   return [...normalizedHistory, path];
 }
 
+const latestDirectoryRequestByTarget = new Map<string, object>();
+
 export function useFileExplorerActions(params: { serverId: string } & FileExplorerWorkspaceScope) {
   const { t } = useTranslation();
   const { serverId, workspaceId, workspaceRoot } = params;
@@ -78,6 +80,9 @@ export function useFileExplorerActions(params: { serverId: string } & FileExplor
         return null;
       }
       const normalizedPath = path && path.length > 0 ? path : ".";
+      const requestTarget = JSON.stringify([serverId, workspaceStateKey, normalizedPath]);
+      const requestToken = {};
+      latestDirectoryRequestByTarget.set(requestTarget, requestToken);
       const shouldSetCurrentPath = options?.setCurrentPath ?? true;
       const shouldRecordHistory = options?.recordHistory ?? shouldSetCurrentPath;
 
@@ -97,59 +102,70 @@ export function useFileExplorerActions(params: { serverId: string } & FileExplor
           : {}),
       }));
 
-      if (!normalizedWorkspaceRoot) {
-        updateExplorerState((state) => ({
-          ...state,
-          isLoading: false,
-          lastError: t("workspace.fileExplorer.states.unavailable"),
-          pendingRequest: null,
-        }));
-        return null;
-      }
-
-      if (!client) {
-        updateExplorerState((state) => ({
-          ...state,
-          isLoading: false,
-          lastError: t("workspace.terminal.hostDisconnected"),
-          pendingRequest: null,
-        }));
-        return null;
-      }
-
       try {
-        const directory = await client.listDirectory(normalizedWorkspaceRoot, normalizedPath);
-        updateExplorerState((state) => {
-          const nextState: AgentFileExplorerState = {
+        if (!normalizedWorkspaceRoot) {
+          updateExplorerState((state) => ({
             ...state,
             isLoading: false,
-            lastError: null,
+            lastError: t("workspace.fileExplorer.states.unavailable"),
             pendingRequest: null,
-            directories: state.directories,
-            files: state.files,
-          };
+          }));
+          return null;
+        }
 
+        if (!client) {
+          updateExplorerState((state) => ({
+            ...state,
+            isLoading: false,
+            lastError: t("workspace.terminal.hostDisconnected"),
+            pendingRequest: null,
+          }));
+          return null;
+        }
+
+        const directory = await client.listDirectory(normalizedWorkspaceRoot, normalizedPath);
+        if (latestDirectoryRequestByTarget.get(requestTarget) !== requestToken) {
+          return directory;
+        }
+        updateExplorerState((state) => {
+          const ownsLoadingState =
+            state.pendingRequest?.mode === "list" && state.pendingRequest.path === normalizedPath;
           const directories = new Map(state.directories);
           directories.set(directory.path, directory);
-          nextState.directories = directories;
-
-          return nextState;
+          return {
+            ...state,
+            isLoading: ownsLoadingState ? false : state.isLoading,
+            pendingRequest: ownsLoadingState ? null : state.pendingRequest,
+            directories,
+          };
         });
         return directory;
       } catch (error) {
-        updateExplorerState((state) => ({
-          ...state,
-          isLoading: false,
-          lastError:
-            error instanceof Error
-              ? error.message
-              : t("workspace.fileExplorer.errors.failedToListDirectory"),
-          pendingRequest: null,
-        }));
+        if (latestDirectoryRequestByTarget.get(requestTarget) !== requestToken) {
+          return null;
+        }
+        updateExplorerState((state) => {
+          const ownsLoadingState =
+            state.pendingRequest?.mode === "list" && state.pendingRequest.path === normalizedPath;
+          // A failed root listing must remain visible even when a child is loading.
+          return {
+            ...state,
+            isLoading: ownsLoadingState ? false : state.isLoading,
+            lastError:
+              error instanceof Error
+                ? error.message
+                : t("workspace.fileExplorer.errors.failedToListDirectory"),
+            pendingRequest: ownsLoadingState ? null : state.pendingRequest,
+          };
+        });
         return null;
+      } finally {
+        if (latestDirectoryRequestByTarget.get(requestTarget) === requestToken) {
+          latestDirectoryRequestByTarget.delete(requestTarget);
+        }
       }
     },
-    [client, normalizedWorkspaceRoot, t, updateExplorerState, workspaceStateKey],
+    [client, normalizedWorkspaceRoot, serverId, t, updateExplorerState, workspaceStateKey],
   );
 
   const requestFilePreview = useCallback(
