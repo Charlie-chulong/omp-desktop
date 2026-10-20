@@ -197,7 +197,17 @@ async function runDesktopDaemonStopViaCli({
 export async function stopDesktopDaemonViaCli(
   reason: DesktopDaemonStopReason = DEFAULT_DESKTOP_DAEMON_STOP_REASON,
 ): Promise<void> {
-  await runDesktopDaemonStopViaCli({ reason });
+  let statusBefore: DesktopDaemonStatus | undefined;
+  if (reason === "quit") {
+    statusBefore = await resolveDesktopDaemonStatus();
+    if (!isMatchingManagedDaemon(statusBefore)) {
+      logDesktopDaemonLifecycle("automatic quit preserved an unverified or incompatible daemon", {
+        statusBefore: summarizeDesktopDaemonStatus(statusBefore),
+      });
+      return;
+    }
+  }
+  await runDesktopDaemonStopViaCli({ reason, statusBefore });
 }
 
 function isProcessRunning(pid: number): boolean {
@@ -332,6 +342,14 @@ function assertCompatibleDaemonDistribution(current: DesktopDaemonStatus): void 
   }
 }
 
+function isMatchingManagedDaemon(current: DesktopDaemonStatus): boolean {
+  return (
+    current.status === "running" &&
+    current.desktopManaged &&
+    current.distributionIdentity === DESKTOP_DISTRIBUTION_IDENTITY
+  );
+}
+
 function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
   if (!settings.daemon.manageBuiltInDaemon) {
     throw new Error("Built-in daemon management is disabled.");
@@ -421,6 +439,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     desktopManaged: current.desktopManaged,
   });
   if (current.status === "running") {
+    assertCompatibleDaemonDistribution(current);
     if (shouldRestartForVersion(current)) {
       logDesktopDaemonLifecycle("daemon version mismatch, restarting", {
         appVersion: normalizeVersion(resolveDesktopAppVersion()),
@@ -428,7 +447,6 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
       });
       await stopDesktopDaemon("version_mismatch");
     } else {
-      assertCompatibleDaemonDistribution(current);
       return current;
     }
   }
@@ -530,6 +548,12 @@ export async function stopDesktopDaemon(
       statusBefore: summarizeDesktopDaemonStatus(status),
     });
     return status;
+  }
+  if (reason === "version_mismatch" && !isMatchingManagedDaemon(status)) {
+    throw new Error(
+      "Automatic restart requires a verified daemon from this Desktop distribution. " +
+        "Existing tasks were not stopped.",
+    );
   }
 
   const { statusAfter } = await runDesktopDaemonStopViaCli({

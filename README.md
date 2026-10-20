@@ -714,8 +714,11 @@ the durable seed ledger preserves uninstall choices across restarts and applicat
 Desktop-managed daemons are reused only when their live status reports the matching
 distribution identity. Private identities include the sealed native-host digest;
 an equal application version alone cannot authorize reuse. An incompatible or
-unverified daemon is not stopped automatically for this check: let its tasks finish,
-stop it explicitly, then start the selected distribution again.
+unverified daemon is preserved during startup, automatic version replacement and
+quit cleanup, even when **Keep daemon running after quit** is off. Let its tasks
+finish and stop it explicitly before switching distributions.
+The bundled CLI also checks live identity before using an implicit local target;
+deliberately selected `--host` and `PASEO_HOST` connections retain their existing behavior.
 
 ### Private Windows three-plugin distribution
 
@@ -725,10 +728,11 @@ All three share one patched native OMP 18.12.3; no second plugin SDK or user acc
 is installed. Ordered native patches, compiler/addon provenance and the exact host digest
 are included with the frozen plugin sources in `vendor/omp-plugins`.
 
-Only ChatPro and WorkBuddy are public plugin source releases. The WeChat connector,
-its source history and provenance remain private and are not included in the public
-Desktop repository or PR. Provide all three authorized plugin source/runtime inputs
-under the ignored vendor directory before selecting this opt-in build mode.
+Public plugin source releases are [ChatPro](https://github.com/Charlie-chulong/omp-bridge-chatpro)
+and [WorkBuddy](https://github.com/Charlie-chulong/omp-workbuddy-plugin). The WeChat
+connector, its source history and provenance remain private and are not included in
+the public Desktop repository or PR. Provide all three authorized source/runtime
+inputs under the ignored vendor directory before selecting this opt-in build mode.
 
 The payload includes the plugins' required private runtimes and licences, including
 CPython 3.12/Tk for WeChat. Developer virtual environments, ambient site-packages,
