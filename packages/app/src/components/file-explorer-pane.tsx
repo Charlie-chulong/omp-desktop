@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type ReactElement,
   type ReactNode,
   type RefObject,
@@ -353,8 +354,15 @@ function TreeRowItem({
 
   const handlePress = useCallback(
     (event: GestureResponderEvent) => {
+      const modifiers = getExplorerPressModifiers(event);
       const selection = isWeb ? window.getSelection() : null;
-      if (selection && !selection.isCollapsed && selection.toString().length > 0) {
+      if (
+        !modifiers.additive &&
+        !modifiers.range &&
+        selection &&
+        !selection.isCollapsed &&
+        selection.toString().length > 0
+      ) {
         return;
       }
       onEntryPress(entry, event);
@@ -365,6 +373,28 @@ function TreeRowItem({
   const handleSelect = useCallback(() => {
     onSelectEntry(entry);
   }, [entry, onSelectEntry]);
+
+  const handleContextMenu = useCallback(
+    (event: unknown) => {
+      const mouseEvent = event as GestureResponderEvent & { nativeEvent: MouseEvent };
+      // macOS sends Control+left-click as contextmenu, without a click event.
+      if (mouseEvent.nativeEvent.button === 0 && mouseEvent.nativeEvent.ctrlKey) {
+        mouseEvent.preventDefault();
+        mouseEvent.stopPropagation();
+        onEntryPress(entry, mouseEvent);
+        return;
+      }
+      handleSelect();
+    },
+    [entry, handleSelect, onEntryPress],
+  );
+
+  const handleSelectionMouseDown = useCallback((event: ReactMouseEvent) => {
+    if (event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+      // Range selection belongs to the tree, not the browser's text selection.
+      event.preventDefault();
+    }
+  }, []);
   const accessibilityState = useMemo(() => ({ selected: isSelected }), [isSelected]);
 
   const pressableStyle = useCallback(
@@ -455,7 +485,8 @@ function TreeRowItem({
         triggerRef={entryDragRef}
         onPress={handlePress}
         onLongPress={getIsElectronRuntime() ? undefined : handleSelect}
-        onContextMenu={handleSelect}
+        onContextMenu={handleContextMenu}
+        {...(isWeb ? { onMouseDown: handleSelectionMouseDown } : {})}
         style={pressableStyle}
         onHoverIn={showNameHover}
         onHoverOut={hideNameHover}
