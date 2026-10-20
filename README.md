@@ -46,6 +46,12 @@ authenticated HTTP CONNECT proxies. An unset or disabled proxy leaves downloads 
 No system routing or DNS changes are required. Download timeouts, cancellation, progress,
 SHA-256 verification, and staged runtime replacement are unchanged.
 
+**Settings → General → Integrations → OMP command shortcut** installs a managed launcher
+for the bundled OMP runtime with the current proxy configuration. Status checks compare
+the launcher size before reading its contents; ownership checks read only a bounded script
+header, so an existing standalone OMP binary is not loaded as text. Installing or uninstalling
+the shortcut never overwrites or removes a command Desktop does not own.
+
 Select **Configure models** on the home screen to open **Host Settings → Model providers**
 directly. The shortcut targets the local host when available, otherwise the first configured
 host; if no host is configured, it opens the add-host flow.
