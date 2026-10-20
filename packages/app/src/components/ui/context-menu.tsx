@@ -166,13 +166,16 @@ export function ContextMenuTrigger({
   const handleContextMenu = useCallback(
     (event: unknown) => {
       if (isNative) return;
+      onContextMenu?.(event);
+      if (typeof event === "object" && event !== null && Reflect.get(event, "defaultPrevented")) {
+        return;
+      }
       if (typeof event === "object" && event !== null) {
         const preventDefault = Reflect.get(event, "preventDefault");
         const stopPropagation = Reflect.get(event, "stopPropagation");
         if (isCallable(preventDefault)) preventDefault.call(event);
         if (isCallable(stopPropagation)) stopPropagation.call(event);
       }
-      onContextMenu?.(event);
       openAtEvent(event);
     },
     [onContextMenu, openAtEvent],
