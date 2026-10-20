@@ -293,6 +293,9 @@ OMP tool requests automatically. The daemon sends the native approval response w
 restarting the conversation or changing OMP's immutable launch-time approval flags.
 Automatic approval does not depend on an open client. Questions and plan confirmations
 still require an explicit answer.
+For native prompts that also offer **Approve \<tool\> for this session**, automatic
+approval selects the default **Approve** action for that request only. It does not
+grant a persistent per-tool exemption that would bypass approvals after switching back.
 
 Switching back to the approval mode used when the current OMP process launched stops
 automatic approval and restores its native behavior. Other approval-mode changes still

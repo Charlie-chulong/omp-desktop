@@ -11,7 +11,6 @@ const OMP_PROVIDER = "omp";
 const OMP_RPC_UI_TOOL_APPROVAL_METADATA = "omp_rpc_ui_tool_approval";
 const TOOL_APPROVAL_APPROVE_VALUE = "Approve";
 const TOOL_APPROVAL_DENY_VALUE = "Deny";
-const TOOL_APPROVAL_OPTIONS = [TOOL_APPROVAL_APPROVE_VALUE, TOOL_APPROVAL_DENY_VALUE] as const;
 const TOOL_TITLE_PREFIX = "Allow tool: ";
 
 export type OmpRpcUiPermissionClassification =
@@ -101,7 +100,7 @@ export function buildOmpRpcUiPermissionResponse(
 function parseToolApprovalDescriptor(
   event: ExtensionUiRequestEvent,
 ): ToolApprovalDescriptor | null {
-  if (event.method !== "select" || !hasExactToolApprovalOptions(event.options)) {
+  if (event.method !== "select") {
     return null;
   }
   const title = readString(event.title);
@@ -115,6 +114,9 @@ function parseToolApprovalDescriptor(
     return null;
   }
   const rawToolName = firstLine.slice(TOOL_TITLE_PREFIX.length).trim();
+  if (!hasExactToolApprovalOptions(event.options, rawToolName)) {
+    return null;
+  }
   const body = firstLineBreak < 0 ? "" : title.slice(firstLineBreak).replace(/^\r?\n/, "");
   const bodyLines = body.split(/\r?\n/);
 
@@ -182,11 +184,19 @@ function parseWriteApproval(lines: string[]): ToolApprovalDescriptor | null {
   };
 }
 
-function hasExactToolApprovalOptions(options: unknown): boolean {
+function hasExactToolApprovalOptions(options: unknown, toolName: string): boolean {
+  if (!Array.isArray(options) || options[0] !== TOOL_APPROVAL_APPROVE_VALUE) {
+    return false;
+  }
+  if (options.length === 2) {
+    return options[1] === TOOL_APPROVAL_DENY_VALUE;
+  }
+  // Newer OMP builds also offer a session-wide grant. Automatic approval uses
+  // the one-time default, so restoring the launch mode still requires approval.
   return (
-    Array.isArray(options) &&
-    options.length === TOOL_APPROVAL_OPTIONS.length &&
-    options.every((option, index) => option === TOOL_APPROVAL_OPTIONS[index])
+    options.length === 3 &&
+    options[1] === `Approve ${toolName} for this session` &&
+    options[2] === TOOL_APPROVAL_DENY_VALUE
   );
 }
 

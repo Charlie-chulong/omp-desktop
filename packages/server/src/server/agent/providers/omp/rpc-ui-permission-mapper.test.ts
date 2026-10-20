@@ -136,6 +136,23 @@ describe("OMP rpc-ui permission mapper", () => {
     ).toEqual({ kind: "passthrough" });
   });
 
+  test.each([
+    ["Approve", "Approve edit for this session", "Deny"],
+    ["Approve", "Approve all tools for this session", "Deny"],
+    ["Deny", "Approve bash for this session", "Approve"],
+    ["Approve", "Approve bash for this session", "Deny", "Other"],
+  ])("leaves unrecognized session-grant options for the user: %j", (...options) => {
+    expect(
+      classifyOmpRpcUiPermissionRequest({
+        type: "extension_ui_request",
+        id: "unrecognized-grant",
+        method: "select",
+        title: "Allow tool: bash\nCommand: echo hi",
+        options,
+      }),
+    ).toEqual({ kind: "passthrough" });
+  });
+
   test("responds to tool approvals with exact select values", () => {
     const request = toolApproval("bash");
 
