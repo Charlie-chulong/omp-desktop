@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useState, type RefCallback } from "react";
+import { useCallback, useEffect, useRef, useState, type RefCallback } from "react";
 import type { View } from "react-native";
+import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
+import {
+  WORKSPACE_FILE_POINTER_DRAG_EVENT,
+  type WorkspaceFileDragPayload,
+  type WorkspaceFilePointerDragDetail,
+} from "@/attachments/workspace-file-drag";
 import { getOverlayRoot, OVERLAY_Z } from "@/lib/overlay-root";
 import { resolveExplorerEntryMoves, type ExplorerEntryDragPayload } from "./entry-drag";
 import type {
@@ -22,8 +28,7 @@ interface ExplorerDragPreview {
 const dropTargets = new Map<HTMLElement, PointerDropTarget>();
 let cancelActiveDrag: (() => void) | null = null;
 
-function findDropTarget(document: Document, x: number, y: number) {
-  const hit = document.elementFromPoint(x, y);
+function findDropTarget(hit: Element | null) {
   for (let element = hit; element; element = element.parentElement) {
     const binding = dropTargets.get(element as HTMLElement);
     if (binding) {
@@ -113,8 +118,8 @@ function createDragPreview(source: HTMLElement, count: number, view: Window): Ex
   return { element: preview, width, height };
 }
 
-// mini-electron does not complete HTML drag sources. Internal moves use pointer
-// capture instead, without changing the browser's HTML file/chat drag protocol.
+// mini-electron does not complete HTML drag sources. Pointer dragging handles tree
+// moves and delivers file references through the composer's existing drop zone.
 export function useExplorerEntryDrag({
   source,
   target,
@@ -124,7 +129,21 @@ export function useExplorerEntryDrag({
   const ref = useCallback<RefCallback<View>>((node) => {
     setElement(node as unknown as HTMLElement | null);
   }, []);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
 
+  useEffect(() => {
+    if (!element || !target) return;
+    const binding = { target, setHovered: setIsDropTarget };
+    dropTargets.set(element, binding);
+    return () => {
+      if (dropTargets.get(element) === binding) dropTargets.delete(element);
+      binding.setHovered(false);
+    };
+  }, [element, target]);
+
+  // Focus and selection updates can replace source/target objects during a drag.
+  // Keep the gesture listeners mounted until the row itself unmounts.
   useEffect(() => {
     if (!element) return;
     const dragElement = element;
@@ -132,14 +151,14 @@ export function useExplorerEntryDrag({
     const ownerWindow = document.defaultView;
     if (!ownerWindow) return;
     const view = ownerWindow;
-    const binding = target ? { target, setHovered: setIsDropTarget } : null;
-    if (binding) dropTargets.set(dragElement, binding);
 
     let cancelGesture: (() => void) | null = null;
     function handlePointerDown(event: PointerEvent) {
-      if (!source?.moveEnabled || event.button !== 0 || event.pointerType !== "mouse") return;
+      if (event.button !== 0 || event.pointerType !== "mouse") return;
+      const source = sourceRef.current;
+      if (!source || (!source.moveEnabled && !source.includeChatAttachment)) return;
       cancelActiveDrag?.();
-      const payload = source.payload;
+      const { payload, moveEnabled, includeChatAttachment } = source;
       const pointerId = event.pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
@@ -147,9 +166,37 @@ export function useExplorerEntryDrag({
       let cancelled = false;
       let hovered: PointerDropTarget | null = null;
       let preview: ExplorerDragPreview | null = null;
+      let workspaceFilePayload: WorkspaceFileDragPayload | null = null;
+      let chatTarget: HTMLElement | null = null;
+
+      function dispatchChatDrag(
+        element: HTMLElement,
+        phase: WorkspaceFilePointerDragDetail["phase"],
+      ) {
+        if (!workspaceFilePayload) return;
+        element.dispatchEvent(
+          new CustomEvent<WorkspaceFilePointerDragDetail>(WORKSPACE_FILE_POINTER_DRAG_EVENT, {
+            detail: { phase, payload: workspaceFilePayload },
+          }),
+        );
+      }
+
+      function clearChatTarget() {
+        if (chatTarget) dispatchChatDrag(chatTarget, "leave");
+        chatTarget = null;
+      }
 
       function updateTarget(x: number, y: number) {
-        const candidate = findDropTarget(document, x, y);
+        const hit = document.elementFromPoint(x, y);
+        const nextChatTarget = workspaceFilePayload
+          ? (hit?.closest<HTMLElement>('[data-file-drop-owner="attachment"]') ?? null)
+          : null;
+        if (nextChatTarget !== chatTarget) {
+          clearChatTarget();
+          chatTarget = nextChatTarget;
+        }
+        if (chatTarget) dispatchChatDrag(chatTarget, "over");
+        const candidate = moveEnabled && !chatTarget ? findDropTarget(hit) : null;
         const next = resolveMoves(payload, candidate) ? candidate : null;
         if (next !== hovered) {
           hovered?.setHovered(false);
@@ -161,6 +208,7 @@ export function useExplorerEntryDrag({
       function finish() {
         preview?.element.remove();
         preview = null;
+        clearChatTarget();
         hovered?.setHovered(false);
         document.removeEventListener("pointermove", handlePointerMove, true);
         document.removeEventListener("pointerup", handlePointerUp, true);
@@ -192,6 +240,17 @@ export function useExplorerEntryDrag({
         if (!dragging) {
           if (Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
           dragging = true;
+          if (includeChatAttachment) {
+            const entry = payload.entries.find((entry) => entry.kind === "file");
+            if (entry) {
+              workspaceFilePayload = {
+                version: 1,
+                serverId: payload.serverId,
+                workspaceId: payload.workspaceId,
+                attachment: createWorkspaceFileAttachment({ path: entry.path }),
+              };
+            }
+          }
           preview = createDragPreview(dragElement, payload.entries.length, view);
           dragElement.setPointerCapture(pointerId);
           document.addEventListener("click", preventClick, true);
@@ -210,11 +269,19 @@ export function useExplorerEntryDrag({
 
       function handlePointerUp(event: PointerEvent) {
         if (event.pointerId !== pointerId) return;
-        const destination =
-          dragging && !cancelled ? findDropTarget(document, event.clientX, event.clientY) : null;
+        const hit =
+          dragging && !cancelled ? document.elementFromPoint(event.clientX, event.clientY) : null;
+        const chatDestination = workspaceFilePayload
+          ? (hit?.closest<HTMLElement>('[data-file-drop-owner="attachment"]') ?? null)
+          : null;
+        const destination = moveEnabled && !chatDestination ? findDropTarget(hit) : null;
         const requests = resolveMoves(payload, destination);
         finish();
-        if (requests && destination) destination.target.onMove(requests);
+        if (chatDestination) {
+          dispatchChatDrag(chatDestination, "drop");
+        } else if (requests && destination) {
+          destination.target.onMove(requests);
+        }
       }
 
       function handlePointerCancel(event: PointerEvent) {
@@ -228,6 +295,7 @@ export function useExplorerEntryDrag({
         cancelled = true;
         preview?.element.remove();
         preview = null;
+        clearChatTarget();
         hovered?.setHovered(false);
         hovered = null;
       }
@@ -243,7 +311,8 @@ export function useExplorerEntryDrag({
     }
 
     function preventNativeDrag(event: DragEvent) {
-      if (source?.moveEnabled) event.preventDefault();
+      const source = sourceRef.current;
+      if (source && (source.moveEnabled || source.includeChatAttachment)) event.preventDefault();
     }
 
     dragElement.addEventListener("pointerdown", handlePointerDown);
@@ -252,10 +321,8 @@ export function useExplorerEntryDrag({
       cancelGesture?.();
       dragElement.removeEventListener("pointerdown", handlePointerDown);
       dragElement.removeEventListener("dragstart", preventNativeDrag);
-      if (dropTargets.get(dragElement) === binding) dropTargets.delete(dragElement);
-      binding?.setHovered(false);
     };
-  }, [element, source, target]);
+  }, [element]);
 
   return { ref, isDropTarget };
 }
