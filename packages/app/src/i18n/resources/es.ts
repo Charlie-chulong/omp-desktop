@@ -58,6 +58,16 @@ export const es: TranslationResources = {
       idle: "Inactivo",
     },
   },
+  hostConnection: {
+    disconnect: "Desconectar",
+    reconnect: "Volver a conectar",
+    disconnectAccessibility: "Desconectar {{host}}",
+    reconnectAccessibility: "Volver a conectar {{host}}",
+    disconnectHint: "Detiene los intentos de conexión y la reconexión automática",
+    reconnectHint: "Permite que este anfitrión se conecte automáticamente",
+    disconnectFailed: "No se pudo desconectar {{host}}: {{reason}}",
+    reconnectFailed: "No se pudo volver a conectar {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Añadir proyecto",
     methods: {
@@ -2119,6 +2129,14 @@ export const es: TranslationResources = {
       title: "Notificaciones",
       permission: "Permiso de notificaciones",
       refreshAccessibility: "Actualizar permiso de notificaciones",
+      refresh: "Actualizar",
+      refreshing: "Actualizando...",
+      actions: {
+        granted: "Permitido",
+        request: "Permitir notificaciones",
+        openSettings: "Ajustes de notificaciones",
+        requesting: "Solicitando...",
+      },
       playSound: "Reproducir sonido",
       playSoundHint: "Reproduce un sonido cuando llega una notificación de escritorio",
       test: "Probar notificación",
@@ -2219,6 +2237,11 @@ export const es: TranslationResources = {
         label: "Historial de terminal",
         description: "Líneas mantenidas en el búfer de terminal incorporado",
         accessibilityLabel: "Líneas del historial de terminal",
+      },
+      showTurnFileChanges: {
+        label: "Mostrar archivos después de cada respuesta",
+        description:
+          "Mostrar los archivos modificados sobre las estadísticas de la respuesta completada",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

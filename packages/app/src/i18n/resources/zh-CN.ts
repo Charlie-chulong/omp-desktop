@@ -73,6 +73,16 @@ export const zhCN: TranslationResources = {
       idle: "空闲",
     },
   },
+  hostConnection: {
+    disconnect: "断开连接",
+    reconnect: "重新连接",
+    disconnectAccessibility: "断开 {{host}}",
+    reconnectAccessibility: "重新连接 {{host}}",
+    disconnectHint: "停止连接尝试和自动重新连接",
+    reconnectHint: "允许此 Host 自动连接",
+    disconnectFailed: "无法断开 {{host}}：{{reason}}",
+    reconnectFailed: "无法重新连接 {{host}}：{{reason}}",
+  },
   addProjectFlow: {
     title: "添加项目",
     methods: {
@@ -1581,7 +1591,7 @@ export const zhCN: TranslationResources = {
       testNotification: {
         title: "OMP Desktop 通知测试",
         body: "如果你能看到这条通知，说明桌面通知可用。",
-        notDelivered: "通知未送达。请检查 System Settings > Notifications。",
+        notDelivered: "通知未送达。请在系统设置 > 通知中允许 OMP Desktop 发送通知。",
         failed: "发送通知失败。",
       },
     },
@@ -2156,6 +2166,14 @@ export const zhCN: TranslationResources = {
       title: "通知",
       permission: "通知权限",
       refreshAccessibility: "刷新通知权限",
+      refresh: "刷新",
+      refreshing: "正在刷新...",
+      actions: {
+        granted: "已授权",
+        request: "允许通知",
+        openSettings: "通知设置",
+        requesting: "正在请求...",
+      },
       playSound: "播放声音",
       playSoundHint: "收到桌面通知时播放声音",
       test: "测试通知",
@@ -2255,6 +2273,10 @@ export const zhCN: TranslationResources = {
       autoExpandReasoning: {
         label: "始终展开推理过程",
         description: "默认情况下完全展开 AI 的思考和推理过程",
+      },
+      showTurnFileChanges: {
+        label: "显示对话结束后的文件列表",
+        description: "在每轮回复结束后的统计信息上方显示变更文件列表",
       },
       toolCallDetail: {
         label: "工具调用显示",

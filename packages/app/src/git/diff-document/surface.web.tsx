@@ -655,32 +655,25 @@ function shiftCanvasPixels(input: {
   scratchContext.globalCompositeOperation = "copy";
   scratchContext.drawImage(input.canvas, 0, 0);
   input.context.setTransform(1, 0, 0, 1, 0, 0);
-  if (delta > 0) {
-    input.context.drawImage(
-      input.scratch,
-      0,
-      deltaPixels,
-      input.pixelWidth,
-      overlapPixels,
-      0,
-      0,
-      input.pixelWidth,
-      overlapPixels,
-    );
-    return { paintTop: input.canvasHeight - Math.abs(delta), paintHeight: Math.abs(delta) };
-  }
+  // Replace translucent pixels instead of blending them over the previous window.
+  input.context.save();
+  input.context.globalCompositeOperation = "copy";
   input.context.drawImage(
     input.scratch,
     0,
-    0,
+    delta > 0 ? deltaPixels : 0,
     input.pixelWidth,
     overlapPixels,
     0,
-    deltaPixels,
+    delta > 0 ? 0 : deltaPixels,
     input.pixelWidth,
     overlapPixels,
   );
-  return { paintTop: 0, paintHeight: Math.abs(delta) };
+  input.context.restore();
+  return {
+    paintTop: delta > 0 ? input.canvasHeight - Math.abs(delta) : 0,
+    paintHeight: Math.abs(delta),
+  };
 }
 
 function WebFileHeaderSection({

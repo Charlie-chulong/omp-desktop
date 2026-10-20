@@ -20,7 +20,7 @@ Windows `no omp` installers preserve an existing bundled runtime during upgrades
 
 The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime
 versions are released independently. Windows x64 uses runtime **0.1.15**, while the
-Apple Silicon channel currently provides runtime **0.1.13**. Windows discovers updates
+Apple Silicon channel currently provides runtime **0.1.16**. Windows discovers updates
 through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform
 latest pointer. Packaging validates the selected distribution's platform, architecture,
 and Electron API metadata.
@@ -69,6 +69,12 @@ authenticated HTTP CONNECT proxies. An unset or disabled proxy leaves downloads 
 No system routing or DNS changes are required. Download timeouts, cancellation, progress,
 SHA-256 verification, and staged runtime replacement are unchanged.
 
+**Settings → General → Integrations → OMP command shortcut** installs a managed launcher
+for the bundled OMP runtime with the current proxy configuration. Status checks compare
+the launcher size before reading its contents; ownership checks read only a bounded script
+header, so an existing standalone OMP binary is not loaded as text. Installing or uninstalling
+the shortcut never overwrites or removes a command Desktop does not own.
+
 Select **Configure models** on the home screen to open **Host Settings → Model providers**
 directly. The shortcut targets the local host when available, otherwise the first configured
 host; if no host is configured, it opens the add-host flow.
@@ -93,6 +99,38 @@ On macOS, titlebar dragging and double-click zoom/restore use native AppKit
 handling, including while maximized; the Windows/Linux manual restore-and-drag
 fallback is not used. Titlebar buttons remain excluded from drag regions.
 Double-click follows the macOS titlebar action preference.
+On Windows, a maximized titlebar single click leaves the window maximized;
+double-click restores it, and only actual drag motion starts the restore-and-drag
+fallback. Interactive titlebar controls remain excluded from these gestures.
+The web document's `color-scheme` follows the resolved application theme, keeping
+native selection and form-control colors aligned with light/dark appearance.
+Compact Web headers use a 44px row without additional top padding, retaining
+safe-area insets. Native mobile and desktop-wrapper header spacing is unchanged.
+**Settings → Connections** lists saved hosts with their connection status and
+daemon version, above relay and pairing controls. **About** contains the app
+version and, in Desktop, app updates; it no longer contains the host list.
+Remote hosts expose **Disconnect / Reconnect** in host pickers, the Connections
+list, and the host overview. Disconnect keeps the saved connection and cached
+workspace data, stops probing and automatic reconnection, and remains in effect
+after restarting the app. Reconnect resumes the saved connection; neither action
+stops the remote daemon. **Remove host** remains a separate operation.
+**Settings → General → Detail level** controls reasoning expansion, tool-call
+detail, the completed-response file list, and the Web chat outline. Turn off
+**Show files after each response** to hide file chips without hiding response
+statistics. The switch defaults to on and is saved across restarts.
+These controls are no longer under Appearance; existing preference values are preserved.
+The sidebar only shows projects and chats from online hosts. Disconnecting hides
+cached rows without removing host profiles, project order, or host filters;
+reconnecting restores them. In project grouping, pinned chats remain first and
+each pinned/unpinned section sorts by task state: running, needs input, failed,
+attention, then done. Equal-state chats retain their saved order, and keyboard
+shortcuts follow the displayed order.
+The composer's background-process pill stays hidden when no process content is
+available, including fetch failures and disconnections. Errors remain visible
+when retained process entries are available.
+Conversation prose uses medium weight with semibold emphasis; the light theme uses
+deeper near-black primary text. Font sizes, line heights, secondary text tones, and
+regular-weight code remain unchanged.
 Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
 vertical workspace splitters use matching two-pixel accent highlights on hover, without
 narrowing their invisible drag targets.
@@ -101,6 +139,8 @@ contexts, keeping the full drag target reachable on both sides of the visible
 line, including horizontal terminal splits.
 Their full hit areas opt out of native window dragging, so grabbing an
 overhanging edge resizes the pane instead of dragging the window underneath.
+Dragging a workspace divider follows the pointer distance even when adjacent groups
+contain hidden panes; hidden panes retain their stored size for later restoration.
 
 Sidebar conversations always use their conversation title, with only the last-activity time
 beside it (for example, `2h` or `2d`). Rows without an activity timestamp leave that space empty.
@@ -110,6 +150,17 @@ previous choices are removed without resetting other settings.
 Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
 These tips follow the interface language in all nine supported locales.
+
+## Git changes
+
+Discarding unstaged changes preserves staged content; a full discard restores selected
+tracked paths to `HEAD` and removes selected untracked files. Large file and folder
+selections use NUL-separated standard input for `reset`, `checkout`, and `rm --cached`.
+`status` and `clean` split path arguments by their Windows-escaped UTF-16 length,
+avoiding Windows command-line limits without widening the selected paths.
+Only a symbolic branch with no existing ref is treated as an unborn `HEAD`;
+process-start, index-lock, and corrupt-HEAD errors propagate instead of triggering
+index removal.
 
 ## Schedules
 
@@ -644,21 +695,43 @@ leading `launch` in that provider command is omitted for management commands onl
 scope when enabling or disabling retains the native runtime's unique-scope inference; explicit
 user and project scopes remain exact.
 
+Visible extension replies retain their persisted native entry IDs, original text and metadata
+in live conversations and history, even without a model `agent_start`. Custom replies do not
+complete a turn: native RPC acknowledgements and model lifecycle events own completion.
+The renderer preserves literal punctuation in native custom replies instead of rewriting
+JSON quotes or other original text through smart typography. Ordinary assistant Markdown
+keeps its normal typography and math rendering.
+
+Currently registered native extension commands are admitted before workflow and stale-plan
+reset envelopes, including after session restoration. They remain native commands rather
+than ordinary model prompts, and the next ordinary prompt still receives its workflow reset.
+
 In the private bundled-plugin distribution, first-run provisioning holds a separate native
 process-owned OS lease for the resolved profile. It does not block ordinary plugin management
 or reap PID files. Interrupted or unknown link outcomes are not automatically retried, and
 the durable seed ledger preserves uninstall choices across restarts and application updates.
 
+Desktop-managed daemons are reused only when their live status reports the matching
+distribution identity. Private identities include the sealed native-host digest;
+an equal application version alone cannot authorize reuse. An incompatible or
+unverified daemon is not stopped automatically for this check: let its tasks finish,
+stop it explicitly, then start the selected distribution again.
+
 ### Private Windows three-plugin distribution
 
 The separately named `OMP-Desktop-Plugins-Setup-0.5.2-x64.exe` bundles ChatPro 0.1.0,
 WorkBuddy 0.1.0 and the WeChat connector 0.1.2. It is a private build, not an upstream release.
-All three share one patched native OMP 18.12.1; no second plugin SDK or user account store
+All three share one patched native OMP 18.12.3; no second plugin SDK or user account store
 is installed. Ordered native patches, compiler/addon provenance and the exact host digest
 are included with the frozen plugin sources in `vendor/omp-plugins`.
 
+Only ChatPro and WorkBuddy are public plugin source releases. The WeChat connector,
+its source history and provenance remain private and are not included in the public
+Desktop repository or PR. Provide all three authorized plugin source/runtime inputs
+under the ignored vendor directory before selecting this opt-in build mode.
+
 The payload includes the plugins' required private runtimes and licences, including
-CPython 3.12/Tk for WeChat. Developer virtual environments, existing site-packages,
+CPython 3.12/Tk for WeChat. Developer virtual environments, ambient site-packages,
 credentials, account profiles, chat data and runtime caches are not collected.
 ChatPro and WorkBuddy remain upstream-disabled by default. WeChat is disconnected until
 the user completes its separate trusted local authorization; preinstallation grants no
@@ -678,14 +751,6 @@ Plugins page creates no automatic reinstall obligation: subsequent sessions and 
 retain that choice. Explicit local-path installation uses native OMP's normal link route.
 Existing plugin versions are not silently upgraded to the copy in a later application.
 
-Visible extension replies retain their persisted native entry IDs, original text and metadata
-in live conversations and history, even without a model `agent_start`. Custom replies do not
-complete a turn: native RPC acknowledgements and model lifecycle events own completion.
-
-Currently registered native extension commands are admitted before workflow and stale-plan
-reset envelopes, including after session restoration. They remain native commands rather
-than ordinary model prompts, and the next ordinary prompt still receives its workflow reset.
-
 Windows snapshot publication briefly waits out `EPERM` sharing conflicts while the same
 native provisioning lease remains authoritative. Only the new, unpublished owned-directory
 move is retried; native plugin writes, failed link intents and uninstall tombstones are not.
@@ -703,13 +768,12 @@ After building the exact pinned native host and the portable WeChat runtime, sta
 payload with `node packages/desktop/scripts/stage-bundled-plugins.mjs --host <absolute-host>`.
 The stager refuses an existing output or binary rather than overwriting it. Build Windows
 x64 with the verified mini-electron distribution selected by `MINI_ELECTRON_DIST_PATH`
-and `npm run build:desktop -- --win nsis --x64 --publish never`. Output goes to
+and `npm run build:windows -- --with-bundled-plugins`. Output goes to
 `packages/desktop/release-plugins`, separate from the previous qualified installer.
 Qualification must exercise the real Python/native extensions and production WeChat
 HelperClient ready/status/exit at the long profile-owned snapshot depth. Use the packaged
 `scripts/verify-bundled-runtime.py` for complete WeChat inventory/native-import/Tcl checks.
 A disconnected `/wechat status` alone does not launch or qualify that helper.
-
 
 ## Image generation with references
 
@@ -957,11 +1021,27 @@ Conversation notifications follow the same rule: reveal or add the conversation 
 project, preserving that project's other tabs, order, and split panes. Notification navigation
 does not change the conversation's owning workspace.
 
+Desktop **Settings → Notifications** includes localized permission controls,
+sound preferences, and a test notification. Native notification support is not
+proof of OS authorization; use **Notification settings** to open the macOS or
+Windows notification preferences and allow OMP Desktop notifications there.
+Test sends wait for the native `show`/`failed` result instead of reporting
+success immediately. OS rejection, closure before acknowledgement, or no
+acknowledgement within ten seconds reports an undelivered notification. An
+accepted notification may still have its banner suppressed by system Focus
+or presentation settings.
+
 ## File drag and drop
 
+- Hold **Ctrl** (or **Cmd** on macOS) while clicking file or folder rows to add or remove individual selections. **Shift+click** selects a contiguous range from the selection anchor; **Ctrl/Cmd+Shift+click** adds that range to the existing selection. These gestures select entries without opening files or expanding folders.
+- **Ctrl+left-click** also selects on macOS instead of opening the context menu. Ordinary right-click still opens the menu and preserves an existing multi-selection when the clicked row is already selected.
+- In Desktop's Files tree, drag a file or folder row onto another folder to move it within the same workspace. Drag onto blank tree space to move it back to the workspace root; selected entries move together.
+- Desktop dragging shows a translucent icon/name preview beside the pointer, with a count badge for multi-selection. The preview stays within the window without blocking folder targets, and disappears when the drag ends or is canceled.
+- Desktop tree moves use pointer dragging rather than native HTML drag-and-drop. Press **Escape** before releasing to cancel. A folder cannot be moved into itself or its descendants; cross-workspace moves are not supported.
+- Drag a file from the Files tree onto the message input in the same workspace to add a workspace-file reference without moving the file or sending a message. The input highlights while hovering; dropping focuses the input, and repeated drops of the same file do not add duplicate references. **Escape** cancels the drop.
 - Drop files onto the message input to add attachments without sending a message.
-- Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina displays use the same visible drop target as ordinary displays.
-- Paste a copied bitmap or screenshot (PNG/DIB) into the message input to add it as an attachment. The draft is not sent automatically. On Windows Desktop, right-click the editable input for native Cut, Copy, Paste, and Select All. Explorer's copied-file-only `CF_HDROP` clipboard format is not exposed by mini-electron 0.1.7; use the attachment button or drag and drop for those image files.
+- Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina and Windows high-DPI displays use the same visible drop target as ordinary displays. Windows uses native OLE file drops; reparse-point path components are not granted access.
+- Paste a clipboard image into the message input to add it as an attachment, including native PNG and DIB/DIBV5 images on Windows. The draft is not sent automatically. On Windows Desktop, right-click the editable input for native Cut, Copy, Paste, and Select All.
 - Drop external UTF-8 text files onto the conversation history or other ordinary areas to open local, read-only file tabs, not a dialog. Each tab offers **Preview / Source** modes; Markdown and HTML render in Preview mode. Files are not uploaded.
   - Outside a workspace, files open on a dedicated preview page with file tabs.
   - Preview tabs and their contents are session-only. Switching tabs retains the selected mode; closing a tab releases its content, and reloading removes local preview tabs.
@@ -981,16 +1061,22 @@ are made visible when needed. This uses the file's owning workspace on local or 
 files outside that workspace cannot be revealed in its tree.
 
 The Files tree refreshes its root and expanded directories when a conversation in that workspace
-finishes, fails, or is canceled. Background conversations refresh only their own workspace; manual
-refresh remains available for filesystem changes made outside a conversation.
+finishes, fails, or is canceled. Background conversations refresh only their own workspace.
+Consecutive completions each request a fresh listing, and older directory responses cannot
+overwrite newer results. Reopening a collapsed directory rereads its children instead of
+reusing an unchecked cache. A failed directory refresh remains visible even if another
+directory loads successfully. Manual refresh remains available for filesystem changes
+made outside a conversation.
 
 ## Text editor shortcuts
 
 Desktop inputs retain standard native editing shortcuts: **Cmd+A/C/X/V/Z** and
 **Cmd+Shift+Z** on macOS (select all, copy, cut, paste, undo, and redo).
+Windows uses **Ctrl+A/C/X/V/Z** and **Ctrl+Y** for redo.
 Use **Cmd+=** or **Cmd+Shift+=** to zoom in, **Cmd+-** to zoom out, and **Cmd+0**
-to restore actual size. Windows and Linux use **Ctrl** in place of **Cmd**.
+to restore actual size. Windows and Linux use **Ctrl** for the zoom shortcuts.
 Zoom shortcuts are suspended while recording a custom shortcut in settings.
+On Windows, **Ctrl+K** opens the command palette and **Ctrl+,** opens Settings.
 
 In an editable source tab, press **Ctrl+/** to comment or uncomment the selected lines. **Cmd+/**
 continues to work on macOS. The editor uses the comment syntax of the current file type.
@@ -1018,6 +1104,10 @@ messages do not block local diff viewing or mode switching.
 Git operation names, comparison labels, and action feedback follow
 **Settings → General → Language** in every supported language. **Archive workspace**
 and **Open Changes tab** are not part of this menu.
+
+Diff scrolling preserves transparent wallpaper backgrounds without accumulating
+green/red shading or text trails. Pixel reuse depends on the document and viewport
+heights, not a fixed changed-line count.
 
 ## Tablet and hybrid input
 
@@ -1052,7 +1142,7 @@ HTTP(S) links open externally. Text/source links open in the workspace file pane
 
 Targets that cannot be opened are plain text rather than colored links, and clicking one shows an unsupported-link error. Failed file or URL opens also show an error. A `sandbox:` URL is not a local file path: conversation data does not contain an authoritative mapping to an attachment on this host, so those links cannot open until such a mapping is provided. Remote-host binary files likewise cannot be opened by the local desktop file manager.
 
-On desktop, right-click an HTTP(S) conversation link to open it in the selected external browser or copy its address. Unsupported schemes do not receive an open action, and an unavailable plain **Copy** action is omitted. Read-only images offer image-specific actions without an ambiguous **Paste** action; editable targets still expose **Paste** according to their current edit capability. Native context menus follow the app's selected language.
+On desktop, right-click an HTTP(S) conversation link to open it in the selected external browser or copy its address. Unsupported schemes do not receive an open action, and an unavailable plain **Copy** action is omitted. Right-click a generated or displayed image, including a fullscreen preview, for **Copy Image** and **Save Image As…**. Copy puts image pixels on the system clipboard; save retains the original image file, including `data:` / `blob:` previews. The message input's native menu supports **Cut**, **Copy**, **Paste**, and **Select All**, preserving text selection and the existing image-attachment paste behavior. Read-only targets do not offer **Paste**. Native context menus follow the app's selected language.
 
 Choose the external browser under **Settings → General → Browser**. **System default** follows the operating system; installed Chrome, Edge, Firefox, Brave, Chromium, and Safari targets appear where supported. If a selected browser is later removed, OMP Desktop reports the unavailable browser instead of silently opening a different one.
 
@@ -1092,6 +1182,8 @@ the formula foreground in light and dark themes, including explicit TeX colors.
 ## Thinking and tool calls
 
 Collapsed activity groups show their item count in a compact, theme-aware pill with a layers icon. The count updates as activity arrives; expanding the group hides the pill and reveals the individual items. Read tool file buttons remove line-range selectors before opening the workspace file; for comma-separated ranges, the preview selects the first range.
+
+Expanded tool calls without additional details use a compact, centered hint with regular secondary text and consistent padding in light and dark themes.
 
 ## Background processes
 
@@ -1163,6 +1255,34 @@ SSH passwords, private-key passphrases, MFA responses, and pairing links are nev
 
 ## Build
 
+Package on either supported host with the same command:
+
+```bash
+npm run build:package
+```
+
+The Node.js launcher selects macOS on a Mac and Windows on Windows. It keeps native
+Windows builds independent of Git Bash. The published mini-electron runtimes support
+**macOS arm64 (Apple Silicon)** and **Windows x64**; Intel Mac and Windows arm64
+packages are not currently supported.
+
+Explicit targets remain available:
+
+```bash
+npm run build:mac           # Run on macOS; DMG + ZIP, arm64
+npm run build:mac:arm64     # Same explicit architecture
+npm run build:windows       # NSIS installer + ZIP, x64
+npm run build:package -- --help
+```
+
+Installer builds default to `--publish never` and write artifacts to
+`packages/desktop/release/`. Additional electron-builder options are forwarded,
+for example `npm run build:package -- mac --config.mac.identity=null`.
+macOS packaging requires a Mac; the launcher rejects it on Windows before starting
+the workspace builds.
+
+For an unpacked application without creating installers, use the lower-level build:
+
 ```bash
 npm run build:desktop -- --dir
 ```
@@ -1208,6 +1328,15 @@ window and share one pending creation when none exists. Explicit New Window and
 project launches retain their additional-window behavior. Only the successful
 desktop single-instance lock owner performs daemon/update shutdown; a secondary
 launch must not stop the primary's daemon.
+
+If a running main window loses its renderer, Desktop logs the exit reason and
+available exit code and opens a native recovery dialog, including for hidden or
+minimized windows. **Reload window** creates a new renderer at the same route,
+query, and fragment before closing the failed window; it does not restart the
+daemon or its Agent sessions. Unsent input may be lost. **Close window** closes
+the failed window through the normal application lifecycle. Initial startup
+failures retain their separate error dialog.
+
 Window-close choices retain the application's existing modal sheet, including
 Cancel, Exit, background-to-tray, and the remembered choice. The main process
 holds pending requests until that renderer is ready. Choosing Exit hides the
@@ -1244,6 +1373,21 @@ MINI_ELECTRON_DIST_PATH=/absolute/path/to/mini-electron/out/mac-arm64/runtime-di
   npm run build:desktop -- --dir --publish never
 ```
 
+The packager reads the selected runtime's `version.json`, defaults to that runtime's
+architecture (including when Node runs under Rosetta), and rejects a different target
+OS or architecture. `MINI_ELECTRON_DIST_PATH` must point to an extracted distribution
+for the requested target; it cannot reuse the host's runtime for another platform.
+
+Before packaging, refresh an existing installation with
+`npx mini-electron --update-runtime`. Normal dependency installation reuses an
+already valid native runtime; updating the npm installer alone does not refresh it.
+The macOS channel currently selects `0.1.16`; verify the installed native version in
+`node_modules/@iriscat/mini-electron/dist/version.json`.
+
+QQ clipboard compatibility requires native runtime `0.1.12` or newer: QQ can
+advertise PNG bytes as TIFF, so the runtime must identify the actual encoding.
+The distribution override above also selects a locally built fix.
+
 The `app-builder-lib` patch applied by `npm install` allows distributions without
 a generic Helper bundle. Packaged smoke checks verify macOS Dock visibility,
 including a cold daemon launch, rather than requiring a separate Helper path.
@@ -1255,6 +1399,15 @@ shell integration, and
 the target platform's native bindings. The early OMP catalog hook is loaded through an encoded
 module URL, so installation directories containing spaces remain valid. Windows ConPTY files are
 loaded from the matching node-pty prebuild, not its duplicate `third_party` directory.
+
+Daemon command execution collects `execFile` callback stdout and stderr explicitly. The
+mini-electron runtime does not expose Node's custom `promisify(execFile)` result shape;
+using it can misreport a supported bundled OMP as older than the required version.
+The packaged smoke keeps multiple native image launch configurations alive together
+inside the shipped runtime, in addition to invoking the OMP binary directly.
+Windows runtimes must use system randomness for `mkdtemp`: repeated suffixes can block
+agent history loading before OMP starts, eventually reporting a 60-second message timeout.
+The actual minimum remains OMP 18.8.7.
 
 The Electron language allowlists retain all nine application languages and common regional
 variants. macOS also retains each selected language's grammatical-gender `.lproj` variants.
@@ -1279,8 +1432,14 @@ For a local test package, run:
 npm run build:mac
 ```
 
-Without notarization credentials this produces an unsigned package and prints a warning. Gatekeeper
-will reject that package unless quarantine is explicitly removed on the test Mac.
+Without notarization credentials, this requires a valid code-signing identity named
+`OMP Desktop Local` in the macOS keychain and signs the test package with it. Create this
+self-signed code-signing certificate once and reuse the same certificate and private key
+across rebuilds so Keychain access can recognize the application. The first launch after
+switching signing identities may require allowing credential access again. A missing or
+invalid identity fails the build instead of falling back to an ad-hoc signature.
+This local signature is not notarized and does not satisfy Gatekeeper's distribution
+requirements on other Macs.
 
 macOS signing uses electron-builder's bundled entitlement template for the app;
 no separate Helper applications or entitlement files are required in
@@ -1293,17 +1452,48 @@ certificate (or `CSC_LINK`) and one of electron-builder's notarization credentia
 - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`; or
 - `APPLE_KEYCHAIN_PROFILE`, with optional `APPLE_KEYCHAIN`.
 
-When those credentials are present, the script verifies the application's code signature, stapled
-notarization ticket, and Gatekeeper assessment after packaging.
+Both local and release builds verify the application's code signature after packaging.
+When notarization credentials are present, the script also verifies the stapled
+notarization ticket and Gatekeeper assessment.
 
-The mini-electron Windows runtime currently supports x64 only. Build its installer with:
+Windows mini-electron packages currently support x64 only. On Windows, the npm scripts
+use the native `build-windows.ps1` script with Windows PowerShell 5.1 or newer; Git Bash
+is not required. Node.js, npm, and Windows' built-in `tar.exe` must be on `PATH`.
+On macOS and Linux, the Windows commands use `build-windows.sh` through Bash.
+Cross-builds require an extracted **win32-x64** mini-electron distribution selected
+with `MINI_ELECTRON_DIST_PATH`, plus electron-builder's Wine toolchain. Apple Silicon
+Macs also require Rosetta 2. For example, on macOS:
 
 ```bash
+MINI_ELECTRON_DIST_PATH=/absolute/path/to/windows-x64/runtime-dist \
+  npm run build:windows
+```
+
+```powershell
+npm run build:windows
+# Equivalent explicit target:
 npm run build:windows:x64
 ```
 
-`npm run build:windows` builds the same x64 target. The installer is
-`OMP-Desktop-Setup-<version>-x64.exe`; there is no arm64 or combined installer.
+You can also run the native script directly from PowerShell, forwarding additional
+electron-builder arguments after the script path:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
+Windows packages use `@iriscat/mini-electron` installer 0.1.12. Its Windows runtime
+channel selects 0.1.15, including the DirectComposition latency handle fix; the macOS
+channel remains independent. Native SQLite, IPC frame identity,
+clipboard/keyboard/OLE input, selection colors, and IME remain supported.
+To package an unpublished local runtime instead, build its checkout with
+`python build.py --package-dist` and select that distribution explicitly (PowerShell):
+
+```powershell
+$env:MINI_ELECTRON_DIST_PATH = "D:/Project/mini-electron/out/windows-x64/runtime-dist"
+npm run build:windows
+Remove-Item Env:MINI_ELECTRON_DIST_PATH
+```
 
 Update the native runtime explicitly before packaging an existing checkout:
 
@@ -1322,6 +1512,12 @@ For a local unsigned NSIS candidate with signing credentials absent and publishi
 npm exec -- cross-env CSC_IDENTITY_AUTO_DISCOVERY=false \
   npm run build:desktop -- --win nsis --x64 --publish never
 ```
+
+The output includes `OMP-Desktop-Setup-<version>-x64.exe`, its `.blockmap`, a `.zip`, and
+`latest.yml` (or the prerelease channel's metadata) in `packages/desktop/release`.
+Windows runtime builds disable Inspector/CDP, so the CDP-based
+`PASEO_DESKTOP_SMOKE=1` check is not supported there. Verify the real native window and
+bundled CLI/daemon instead; do not enable Inspector or bypass IPC frame checks to pass a smoke.
 
 Run the actual unpacked Windows application on an unlocked interactive desktop:
 
@@ -1347,6 +1543,19 @@ opens the menu itself. Native ownership and `HTCLIENT` are safety checks, not pr
 that the runtime has stopped ignoring mouse events.
 Upstream contract failures remain failures, not skipped or replaced by mock bridges.
 
+To exercise renderer-loss recovery on Windows with a freshly built local runtime:
+
+```powershell
+npm --prefix packages/desktop run build:main
+$env:ELECTRON_PATH = "D:/Project/mini-electron/out/windows-x64/mini-electron.exe"
+node packages/desktop/e2e/renderer-loss-recovery-smoke.js
+Remove-Item Env:ELECTRON_PATH
+```
+
+Choose **Reload window**, then click **Verify interaction** in the replacement.
+The smoke uses a temporary profile and terminates only its own renderer child;
+it does not use an existing Desktop process or require Inspector/CDP.
+
 Windows daemon and CLI process-tree cleanup launch `taskkill.exe /T /F` directly with a hidden
 console, avoiding transient `cmd.exe` windows during provider refresh and process shutdown.
 Interactive terminal launches are unchanged. macOS and Linux retain signal-based tree cleanup.
@@ -1361,22 +1570,20 @@ Every release must upload the updater metadata and payloads generated from the s
 
 - macOS: `OMP-Desktop-<version>-<arch>.dmg`, the matching `.zip`, and the channel metadata
   (`latest-mac.yml` for Stable or `beta-mac.yml` for Beta);
-- Windows: both architecture-specific `.exe` installers, their `.blockmap` files, and the merged
-  channel metadata (`latest.yml` for Stable or `beta.yml` for Beta);
+- Windows: the x64 `.exe` installer, its `.blockmap`, and the channel metadata
+  (`latest.yml` for Stable or `beta.yml` for Beta);
 - Linux AppImage releases: the AppImage, its blockmap, and the matching `*-linux.yml` metadata.
 
-`build-windows.sh` merges the x64 and arm64 metadata so `electron-updater` selects the installer
-matching `process.arch`. A GitHub Release that only contains DMG or EXE files remains available for
-manual download but cannot be installed by the in-app updater. Publish the generated files only
-after every target for that release is complete; do not use `--publish always` during the individual
-Windows architecture builds because it can publish incomplete channel metadata.
+Both `build-windows.ps1` and `build-windows.sh` write the updater metadata for the supported x64 target. A GitHub Release
+that only contains DMG or EXE files remains available for manual download but cannot be installed
+by the in-app updater. Publish the generated files only after every target for that release is
+complete; local Windows builds use `--publish never`.
 
 To build Windows packages without shipping a new OMP executable, run:
 
 ```bash
 npm run build:windows:no-omp
 npm run build:windows:no-omp:x64
-npm run build:windows:no-omp:arm64
 ```
 
 These artifacts use `OMP-Desktop-No-OMP-Setup-<version>-<arch>.exe` names so they do not overwrite

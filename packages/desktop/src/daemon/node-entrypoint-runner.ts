@@ -1,3 +1,5 @@
+import path from "node:path";
+import { readPackagedDesktopDistribution } from "../packaged-distribution.js";
 import { pathToFileURL } from "node:url";
 
 export async function main(): Promise<void> {
@@ -7,6 +9,25 @@ export async function main(): Promise<void> {
   }
   if (!entryPath) {
     throw new Error("Missing node entrypoint path.");
+  }
+
+  if (process.env.ELECTRON_RUN_AS_NODE === "1" && process.env.PASEO_DESKTOP_MANAGED === "1") {
+    const distribution = readPackagedDesktopDistribution(path.join(__dirname, "..", ".."));
+    process.env.PASEO_DESKTOP_DISTRIBUTION_IDENTITY = distribution.identity;
+    if (distribution.bundledPluginsPath) {
+      process.env.OMP_DESKTOP_BUNDLED_PLUGINS = distribution.bundledPluginsPath;
+    } else {
+      delete process.env.OMP_DESKTOP_BUNDLED_PLUGINS;
+    }
+    if (distribution.bundledOmpPath) {
+      process.env.OMP_COMMAND = distribution.bundledOmpPath;
+      const pathKey = Object.hasOwn(process.env, "Path") ? "Path" : "PATH";
+      const binDir = path.dirname(distribution.bundledOmpPath);
+      const previousPath = process.env[pathKey];
+      if (previousPath !== binDir && !previousPath?.startsWith(`${binDir}${path.delimiter}`)) {
+        process.env[pathKey] = previousPath ? `${binDir}${path.delimiter}${previousPath}` : binDir;
+      }
+    }
   }
 
   process.argv =

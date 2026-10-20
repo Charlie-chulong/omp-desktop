@@ -364,6 +364,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   text: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.content,
+    fontWeight: theme.fontWeight.medium,
     ...(isWeb
       ? {
           lineHeight: proseLineHeight(theme.fontSize.content),
@@ -1514,10 +1515,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   spacing = "default",
   phase,
 }: AssistantMessageProps) {
-  const markdownParser = useMemo(
-    () => createAssistantMarkdownParser(typographer),
-    [typographer],
-  );
+  const markdownParser = useMemo(() => createAssistantMarkdownParser(typographer), [typographer]);
 
   const fileLinkActions = useAssistantFileLinkActions();
   const handleMarkdownLinkPress = useStableEvent((url: string) => {

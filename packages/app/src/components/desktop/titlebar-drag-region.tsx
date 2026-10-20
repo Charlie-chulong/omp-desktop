@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { PointerEvent as NativePointerEvent } from "react-native";
 import { getDesktopWindow } from "@/desktop/electron/window";
 import type { DesktopWindowBridge } from "@/desktop/host";
@@ -48,6 +55,8 @@ interface WindowDragPoint {
   screenY: number;
 }
 
+const WINDOW_DRAG_START_DISTANCE = 4;
+
 function releasePointerCapture(target: HTMLElement | null, pointerId: number): void {
   if (target?.hasPointerCapture?.(pointerId)) {
     target.releasePointerCapture(pointerId);
@@ -61,6 +70,9 @@ export function useTitlebarWindowDragSurface() {
   const activeTargetRef = useRef<HTMLElement | null>(null);
   const activeBridgeRef = useRef<DesktopWindowBridge | null>(null);
   const activeActivityRef = useRef<WindowDragActivityToken | null>(null);
+  const dragStartPointRef = useRef<WindowDragPoint | null>(null);
+  const dragStartedRef = useRef(false);
+  const suppressClickRef = useRef(false);
   const pendingMoveRef = useRef<WindowDragPoint | null>(null);
   const moveFrameRef = useRef<number | null>(null);
   const manualMode = (isMaximized && !getIsElectronRuntimeMac()) || manualDragActive;
@@ -74,14 +86,18 @@ export function useTitlebarWindowDragSurface() {
     const bridge = activeBridgeRef.current;
     const pendingMove = pendingMoveRef.current;
     pendingMoveRef.current = null;
-    if (flushLastMove && pendingMove) {
-      bridge?.moveWindowDrag?.(pendingMove);
+    if (dragStartedRef.current) {
+      if (flushLastMove && pendingMove) {
+        bridge?.moveWindowDrag?.(pendingMove);
+      }
+      bridge?.endWindowDrag?.();
     }
-    bridge?.endWindowDrag?.();
     releasePointerCapture(activeTargetRef.current, pointerId);
     activePointerRef.current = null;
     activeTargetRef.current = null;
     activeBridgeRef.current = null;
+    dragStartPointRef.current = null;
+    dragStartedRef.current = false;
     endWindowDragActivity(activeActivityRef.current);
     activeActivityRef.current = null;
     setManualDragActive(false);
@@ -143,18 +159,14 @@ export function useTitlebarWindowDragSurface() {
       activePointerRef.current = pointerId;
       activeTargetRef.current = currentTarget;
       activeBridgeRef.current = bridge;
-      activeActivityRef.current = beginWindowDragActivity();
-      setManualDragActive(true);
+      dragStartPointRef.current = {
+        screenX: event.nativeEvent.screenX,
+        screenY: event.nativeEvent.screenY,
+      };
+      suppressClickRef.current = false;
       currentTarget.setPointerCapture?.(pointerId);
-      event.preventDefault();
-      void bridge
-        .beginWindowDrag({
-          screenX: event.nativeEvent.screenX,
-          screenY: event.nativeEvent.screenY,
-        })
-        .catch(() => resetActiveDrag(pointerId, false));
     },
-    [manualMode, resetActiveDrag],
+    [manualMode],
   );
 
   const handleWindowDragPointerMove = useCallback(
@@ -164,19 +176,60 @@ export function useTitlebarWindowDragSurface() {
         finishWindowDrag(event);
         return;
       }
-      pendingMoveRef.current = {
+      const point = {
         screenX: event.nativeEvent.screenX,
         screenY: event.nativeEvent.screenY,
       };
+      if (!dragStartedRef.current) {
+        const start = dragStartPointRef.current;
+        const bridge = activeBridgeRef.current;
+        if (
+          !start ||
+          !bridge?.beginWindowDrag ||
+          Math.max(
+            Math.abs(point.screenX - start.screenX),
+            Math.abs(point.screenY - start.screenY),
+          ) < WINDOW_DRAG_START_DISTANCE
+        ) {
+          return;
+        }
+        dragStartedRef.current = true;
+        suppressClickRef.current = true;
+        activeActivityRef.current = beginWindowDragActivity();
+        setManualDragActive(true);
+        const pointerId = event.nativeEvent.pointerId;
+        void bridge.beginWindowDrag(start).catch(() => resetActiveDrag(pointerId, false));
+      }
+      event.preventDefault();
+      pendingMoveRef.current = point;
       if (moveFrameRef.current !== null) return;
       moveFrameRef.current = requestAnimationFrame(() => {
         moveFrameRef.current = null;
-        const point = pendingMoveRef.current;
+        const pendingPoint = pendingMoveRef.current;
         pendingMoveRef.current = null;
-        if (point) activeBridgeRef.current?.moveWindowDrag?.(point);
+        if (pendingPoint) activeBridgeRef.current?.moveWindowDrag?.(pendingPoint);
       });
     },
-    [finishWindowDrag],
+    [finishWindowDrag, resetActiveDrag],
+  );
+
+  const handleWindowClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (
+        !manualMode ||
+        event.button !== 0 ||
+        event.detail !== 2 ||
+        suppressClickRef.current ||
+        (event.target instanceof Element &&
+          event.target.closest(TITLEBAR_INTERACTIVE_SELECTOR) !== null)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void getDesktopWindow()?.toggleMaximize?.();
+    },
+    [manualMode],
   );
 
   return useMemo(
@@ -188,9 +241,16 @@ export function useTitlebarWindowDragSurface() {
             onPointerMove: handleWindowDragPointerMove,
             onPointerUp: finishWindowDrag,
             onPointerCancel: finishWindowDrag,
+            onClick: handleWindowClick,
           }
         : { dataSet: TITLEBAR_DRAG_REGION_DATASET },
-    [finishWindowDrag, handleWindowDragPointerDown, handleWindowDragPointerMove, manualMode],
+    [
+      finishWindowDrag,
+      handleWindowClick,
+      handleWindowDragPointerDown,
+      handleWindowDragPointerMove,
+      manualMode,
+    ],
   );
 }
 

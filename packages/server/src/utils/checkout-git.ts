@@ -3505,42 +3505,92 @@ export async function unstageChanges(cwd: string, pathspecs: string[]): Promise<
   }
 }
 
-async function discardWorktreeChanges(cwd: string, pathspecs: string[]): Promise<void> {
-  const status = await runGitCommand(
-    ["--literal-pathspecs", "status", "--porcelain=v1", "-z", "--", ...pathspecs],
-    {
-      cwd,
-      timeout: DISCARD_CHANGES_TIMEOUT_MS,
-    },
-  );
-  const tracked: string[] = [];
-  const untracked: string[] = [];
-  const tokens = status.stdout.split("\0");
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.length < 4) {
-      continue;
-    }
-    const state = token.slice(0, 2);
-    const filePath = token.slice(3);
-    if (state.startsWith("R") || state.startsWith("C")) {
-      // Rename/copy entries carry the source path as the next NUL token.
-      index += 1;
-    }
-    if (state === "??") {
-      untracked.push(filePath);
-      continue;
-    }
-    tracked.push(filePath);
+function windowsSpawnArgumentLength(argument: string): number {
+  if (argument.length > 0 && !/[ \t"]/u.test(argument)) {
+    return argument.length;
   }
-  if (tracked.length > 0) {
-    await runGitCommand(["--literal-pathspecs", "checkout", "-q", "--", ...tracked], {
+  // shell:false uses libuv's argv quoting, not cmd.exe escaping. Count UTF-16
+  // units, doubling backslashes before quotes and before the closing quote.
+  let length = argument.length + 2;
+  let backslashes = 0;
+  for (let index = 0; index < argument.length; index++) {
+    if (argument[index] === "\\") {
+      backslashes += 1;
+    } else {
+      if (argument[index] === '"') {
+        length += backslashes + 1;
+      }
+      backslashes = 0;
+    }
+  }
+  return length + backslashes;
+}
+
+function* batchDiscardGitArgs(args: string[], pathspecs: string[]): Generator<string[]> {
+  // Include runGitCommand's prefix and the terminating NUL. Keep headroom below
+  // CreateProcessW's 32,767 UTF-16-unit limit, also bounding batches on Unix.
+  const prefixLength = ["git", "-c", "core.quotepath=false", ...args].reduce(
+    (length, argument) => length + windowsSpawnArgumentLength(argument) + 1,
+    0,
+  );
+  let length = prefixLength;
+  let batch = [...args];
+  for (const pathspec of pathspecs) {
+    const argumentLength = windowsSpawnArgumentLength(pathspec) + 1;
+    if (batch.length > args.length && length + argumentLength > 30_000) {
+      yield batch;
+      batch = [...args];
+      length = prefixLength;
+    }
+    batch.push(pathspec);
+    length += argumentLength;
+  }
+  if (batch.length > args.length) {
+    yield batch;
+  }
+}
+
+async function discardWorktreeChanges(cwd: string, pathspecs: string[]): Promise<void> {
+  const tracked = new Set<string>();
+  const untracked = new Set<string>();
+  const statusArgs = ["--literal-pathspecs", "status", "--porcelain=v1", "-z", "--"];
+  for (const args of batchDiscardGitArgs(statusArgs, pathspecs)) {
+    const status = await runGitCommand(args, {
       cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     });
+    const tokens = status.stdout.split("\0");
+    for (let index = 0; index < tokens.length; index++) {
+      const token = tokens[index];
+      if (token.length < 4) {
+        continue;
+      }
+      const state = token.slice(0, 2);
+      const filePath = token.slice(3);
+      if (state.startsWith("R") || state.startsWith("C")) {
+        // Rename/copy entries carry the source path as the next NUL token.
+        index += 1;
+      }
+      if (state === "??") {
+        untracked.add(filePath);
+        continue;
+      }
+      tracked.add(filePath);
+    }
   }
-  if (untracked.length > 0) {
-    await runGitCommand(["--literal-pathspecs", "clean", "-fd", "-q", "--", ...untracked], {
+  if (tracked.size > 0) {
+    await runGitCommand(
+      ["--literal-pathspecs", "checkout", "-q", "--pathspec-from-file=-", "--pathspec-file-nul"],
+      {
+        cwd,
+        timeout: DISCARD_CHANGES_TIMEOUT_MS,
+        stdin: Buffer.from(`${[...tracked].join("\0")}\0`),
+      },
+    );
+  }
+  const cleanArgs = ["--literal-pathspecs", "clean", "-fd", "-q", "--"];
+  for (const args of batchDiscardGitArgs(cleanArgs, [...untracked])) {
+    await runGitCommand(args, {
       cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
     });
@@ -3560,21 +3610,33 @@ export async function discardChanges(cwd: string, pathspecs: string[]): Promise<
   if (pathspecs.length === 0) {
     return;
   }
-  try {
-    await runGitCommand(["--literal-pathspecs", "reset", "-q", "HEAD", "--", ...pathspecs], {
+  // Only a symbolic branch whose ref does not exist is unborn. Detect it before
+  // mutating the index; reset failures (spawn, locks, corrupt HEAD) must propagate.
+  const head = await runGitCommand(["symbolic-ref", "--quiet", "HEAD"], {
+    cwd,
+    envOverlay: READ_ONLY_GIT_ENV,
+    acceptExitCodes: [0, 1],
+  });
+  const headRef = head.stdout.trim();
+  const unbornHead =
+    head.exitCode === 0 &&
+    headRef.startsWith("refs/heads/") &&
+    !(await doesGitRefExist(cwd, headRef));
+  await runGitCommand(
+    [
+      "--literal-pathspecs",
+      ...(unbornHead
+        ? ["rm", "--cached", "-r", "-q", "--ignore-unmatch"]
+        : ["reset", "-q", "HEAD"]),
+      "--pathspec-from-file=-",
+      "--pathspec-file-nul",
+    ],
+    {
       cwd,
       timeout: DISCARD_CHANGES_TIMEOUT_MS,
-    });
-  } catch {
-    // Why: unborn HEAD has no commit for reset, so remove the paths directly from the index.
-    await runGitCommand(
-      ["--literal-pathspecs", "rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", ...pathspecs],
-      {
-        cwd,
-        timeout: DISCARD_CHANGES_TIMEOUT_MS,
-      },
-    );
-  }
+      stdin: Buffer.from(`${pathspecs.join("\0")}\0`),
+    },
+  );
   // Reset makes staged changes worktree-only; the shared worktree pass then
   // restores tracked files and removes untracked files.
   await discardWorktreeChanges(cwd, pathspecs);

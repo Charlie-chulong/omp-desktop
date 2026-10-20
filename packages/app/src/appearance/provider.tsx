@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect } from "react";
-import { UnistylesRuntime } from "react-native-unistyles";
+import { UnistylesRuntime, withUnistyles } from "react-native-unistyles";
 import { DEFAULT_THEME_PREFERENCE, useAppSettings } from "@/hooks/use-settings";
 import { PLUGIN_THEME_PREFERENCE, THEME_TO_UNISTYLES, type Theme } from "@/styles/theme";
 import { getEffectiveWallpaperSourceKey } from "@/wallpaper/source";
@@ -28,6 +28,19 @@ const EMPTY_CONTRIBUTED_THEMES: ContributedThemes = {
 };
 
 const ContributedThemesContext = createContext<ContributedThemes | null>(null);
+
+function DocumentColorSchemeBase({ colorScheme }: { colorScheme: Theme["colorScheme"] }) {
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.style.colorScheme = colorScheme;
+    }
+  }, [colorScheme]);
+  return null;
+}
+
+const DocumentColorScheme = withUnistyles(DocumentColorSchemeBase, (theme) => ({
+  colorScheme: theme.colorScheme,
+}));
 
 export function AppearanceProvider({ children }: { children: ReactNode }) {
   const { settings, isLoading } = useAppSettings();
@@ -70,6 +83,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
   return (
     <ContributedThemesContext.Provider value={EMPTY_CONTRIBUTED_THEMES}>
+      <DocumentColorScheme />
       {children}
     </ContributedThemesContext.Provider>
   );

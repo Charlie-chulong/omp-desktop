@@ -1,3 +1,4 @@
+electronVersion: 41.2.0
 npmRebuild: false
 asar: false
 appId: sh.omp.desktop
@@ -14,7 +15,7 @@ publish:
   owner: iris-cat-dev
   repo: omp-desktop
 directories:
-  output: release-plugins
+  output: release
 files:
   - dist/**/*
   - assets/pets/**/*
@@ -34,6 +35,13 @@ files:
   - "!node_modules/@omp-desktop/*/.tasks/**"
   - "!node_modules/@omp-desktop/*/conversations/**"
   - "!node_modules/@omp-desktop/*/test-results/**"
+  # electron-builder's workspace dependency walk omits this directory even
+  # though the bundled CLI imports it at startup. Include the compiled source
+  # explicitly so the packaged CLI remains self-contained.
+  - from: ../cli/dist/output
+    to: node_modules/@omp-desktop/cli/dist/output
+    filter:
+      - "**/*.js"
 extraResources:
   - from: ../app/dist
     to: app-dist
@@ -82,15 +90,12 @@ linux:
 appImage:
   artifactName: "OMP-Desktop-${arch}.${ext}"
 win:
-  artifactName: "OMP-Desktop-Plugins-Setup-${version}-${arch}.${ext}"
+  artifactName: "OMP-Desktop-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
+  signAndEditExecutable: true
   extraResources:
     - from: ../../bin/omp-windows-${arch}.exe
       to: bin/omp.exe
-    - from: bundled-omp-plugins
-      to: bundled-omp-plugins
-    - from: bundled-omp-manager.json
-      to: manager.json
     - from: assets/icon.png
       to: icon.png
     - from: assets/icon.ico

@@ -128,6 +128,7 @@ describe("normalizeStoredHostProfile", () => {
     });
 
     expect(profile?.appearance).toEqual({ color: "none", badgeDisplay: null });
+    expect(profile?.lifecycle).toEqual({});
   });
 
   it("loads a stored appearance the user chose", () => {
@@ -140,6 +141,30 @@ describe("normalizeStoredHostProfile", () => {
     });
 
     expect(profile?.appearance).toEqual({ color: "teal", badgeDisplay: "icon" });
+  });
+
+  it("preserves a stored manual disconnect lifecycle", () => {
+    const profile = normalizeStoredHostProfile({
+      serverId: "srv_disabled",
+      lifecycle: { autoConnect: false },
+      connections: [
+        { id: "socket:/tmp/paseo.sock", type: "directSocket", path: "/tmp/paseo.sock" },
+      ],
+    });
+
+    expect(profile?.lifecycle).toEqual({ autoConnect: false });
+  });
+
+  it("keeps the empty lifecycle for records stored before auto-connect existed", () => {
+    const profile = normalizeStoredHostProfile({
+      serverId: "srv_legacy",
+      lifecycle: {},
+      connections: [
+        { id: "socket:/tmp/paseo.sock", type: "directSocket", path: "/tmp/paseo.sock" },
+      ],
+    });
+
+    expect(profile?.lifecycle).toEqual({});
   });
 });
 
@@ -174,6 +199,22 @@ describe("upsertHostConnectionInProfiles", () => {
     });
 
     expect(profile.appearance).toEqual({ color: "amber", badgeDisplay: "hidden" });
+  });
+
+  it("keeps a manual disconnect when connection metadata is rediscovered", () => {
+    const existing: HostProfile = {
+      ...makeHost("srv_known"),
+      lifecycle: { autoConnect: false },
+      connections: [],
+    };
+
+    const [profile] = upsertHostConnectionInProfiles({
+      profiles: [existing],
+      serverId: "srv_known",
+      connection,
+    });
+
+    expect(profile.lifecycle).toEqual({ autoConnect: false });
   });
 
   it("replaces a direct connection when its settings change", () => {

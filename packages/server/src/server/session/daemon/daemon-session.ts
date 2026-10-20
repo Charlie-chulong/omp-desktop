@@ -169,6 +169,10 @@ export class DaemonSession {
           requestId: msg.requestId,
           serverId: this.serverId ?? "",
           version: this.daemonVersion ?? null,
+          desktopDistributionIdentity:
+            process.env.PASEO_DESKTOP_MANAGED === "1"
+              ? (process.env.PASEO_DESKTOP_DISTRIBUTION_IDENTITY ?? null)
+              : null,
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: pidInfo?.startedAt ?? null,
@@ -185,6 +189,10 @@ export class DaemonSession {
           requestId: msg.requestId,
           serverId: this.serverId ?? "",
           version: this.daemonVersion ?? null,
+          desktopDistributionIdentity:
+            process.env.PASEO_DESKTOP_MANAGED === "1"
+              ? (process.env.PASEO_DESKTOP_DISTRIBUTION_IDENTITY ?? null)
+              : null,
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,

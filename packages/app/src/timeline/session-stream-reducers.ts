@@ -1283,9 +1283,9 @@ function applyTimelineIncrementalPath(args: {
   };
 }
 
-export function processTimelineResponse(
+function getTerminalTimelineResponse(
   input: ProcessTimelineResponseInput,
-): ProcessTimelineResponseOutput {
+): ProcessTimelineResponseOutput | null {
   const {
     payload,
     currentTail,
@@ -1293,13 +1293,8 @@ export function processTimelineResponse(
     currentCursor,
     isInitializing,
     hasActiveInitDeferred,
-    initRequestDirection,
-    sendingClientMessageIds,
   } = input;
-
-  // ------------------------------------------------------------------
-  // Error path: reject init and leave stream state unchanged
-  // ------------------------------------------------------------------
+  // Error path: reject init and leave stream state unchanged.
   if (payload.error) {
     return {
       commit: "apply",
@@ -1315,7 +1310,6 @@ export function processTimelineResponse(
       acknowledgedClientMessageIds: [],
     };
   }
-
   // A missing provider transcript is a terminal, readable state rather than a
   // transport failure. Preserve any painted replica while resolving bootstrap.
   if (payload.historyUnavailable) {
@@ -1332,6 +1326,27 @@ export function processTimelineResponse(
       sideEffects: [],
       acknowledgedClientMessageIds: [],
     };
+  }
+  return null;
+}
+
+export function processTimelineResponse(
+  input: ProcessTimelineResponseInput,
+): ProcessTimelineResponseOutput {
+  const {
+    payload,
+    currentTail,
+    currentHead,
+    currentCursor,
+    isInitializing,
+    hasActiveInitDeferred,
+    initRequestDirection,
+    sendingClientMessageIds,
+  } = input;
+
+  const terminalResponse = getTerminalTimelineResponse(input);
+  if (terminalResponse) {
+    return terminalResponse;
   }
 
   // ------------------------------------------------------------------

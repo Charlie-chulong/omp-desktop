@@ -2,6 +2,7 @@ export interface BackgroundModeWindow {
   isDestroyed(): boolean;
   isVisible(): boolean;
   hide(): void;
+  close(): void;
   on(event: "close", listener: (event: BackgroundModeCloseEvent) => void): void;
 }
 
@@ -24,6 +25,8 @@ interface BackgroundModeDependencies {
 export class BackgroundModeController {
   private readonly backgroundWindows = new Set<BackgroundModeWindow>();
   private readonly pendingPrompts = new Set<BackgroundModeWindow>();
+  private readonly immediateCloseWindows = new WeakSet<BackgroundModeWindow>();
+  private readonly rendererUnavailableWindows = new WeakSet<BackgroundModeWindow>();
   private trayCreated = false;
   private appQuitting = false;
 
@@ -42,6 +45,16 @@ export class BackgroundModeController {
     this.appQuitting = true;
   }
 
+  closeWindow(window: BackgroundModeWindow): void {
+    if (window.isDestroyed()) return;
+    this.immediateCloseWindows.add(window);
+    window.close();
+  }
+
+  markWindowRendererUnavailable(window: BackgroundModeWindow): void {
+    this.rendererUnavailableWindows.add(window);
+  }
+
   restoreWindows(): void {
     void this.restoreWindowsAsync().catch(this.dependencies.onError);
   }
@@ -52,6 +65,10 @@ export class BackgroundModeController {
   }
 
   private handleWindowClose(window: BackgroundModeWindow, event: BackgroundModeCloseEvent): void {
+    if (this.immediateCloseWindows.delete(window) || this.rendererUnavailableWindows.has(window)) {
+      return;
+    }
+
     if (this.appQuitting) {
       return;
     }

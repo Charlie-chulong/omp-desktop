@@ -34,6 +34,7 @@ export function createMarkdownStyles(theme: Theme) {
       ...webSelectableTextStyle,
       color: theme.colors.foreground,
       fontSize: theme.fontSize.content,
+      fontWeight: theme.fontWeight.medium,
       // Prose line-height scales with the content size, not the
       // code-size-coupled lineHeight.diff token used by code/diff surfaces.
       lineHeight: proseLineHeight(theme.fontSize.content),
@@ -135,7 +136,7 @@ export function createMarkdownStyles(theme: Theme) {
 
     strong: {
       ...webSelectableTextStyle,
-      fontWeight: theme.fontWeight.medium,
+      fontWeight: theme.fontWeight.semibold,
     },
 
     em: {
@@ -181,6 +182,7 @@ export function createMarkdownStyles(theme: Theme) {
       borderWidth: 0,
       fontFamily: theme.fontFamily.mono,
       fontSize: theme.fontSize.code,
+      fontWeight: theme.fontWeight.normal,
     },
 
     code_block: {
@@ -191,6 +193,7 @@ export function createMarkdownStyles(theme: Theme) {
       borderRadius: theme.borderRadius.md,
       fontFamily: theme.fontFamily.mono,
       fontSize: theme.fontSize.code,
+      fontWeight: theme.fontWeight.normal,
       marginVertical: theme.spacing[2],
     },
 
@@ -204,6 +207,7 @@ export function createMarkdownStyles(theme: Theme) {
       borderColor: theme.colors.border,
       fontFamily: theme.fontFamily.mono,
       fontSize: theme.fontSize.code,
+      fontWeight: theme.fontWeight.normal,
       marginVertical: theme.spacing[3],
     },
 

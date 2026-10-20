@@ -8,7 +8,12 @@ import {
 } from "@/stores/session-store-hooks";
 import { workspaceEqualityFns } from "@/stores/session-store-hooks/selectors";
 import { useHostProjects } from "@/projects/host-projects";
-import { getHostRuntimeStore, useHostRegistryLoaded, useHosts } from "@/runtime/host-runtime";
+import {
+  getHostRuntimeStore,
+  useHostRegistryLoaded,
+  useHostRuntimeConnectionStatuses,
+  useHosts,
+} from "@/runtime/host-runtime";
 import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import {
@@ -133,10 +138,16 @@ export function useSidebarWorkspacesList(options?: {
     reconcileHostFilters(allServerIds);
   }, [allServerIds, hostRegistryLoaded, reconcileHostFilters]);
 
+  const connectionStatuses = useHostRuntimeConnectionStatuses(serverIds);
+  const onlineServerIds = useMemo(
+    () => serverIds.filter((serverId) => connectionStatuses.get(serverId) === "online"),
+    [connectionStatuses, serverIds],
+  );
+
   const persistedProjectOrder = useSidebarOrderStore((state) => state.projectOrder ?? EMPTY_ORDER);
 
-  const hydratedServerIds = useHydratedWorkspaceServerIds(serverIds);
-  const directoryServerIds = useWorkspaceDirectoryServerIds(serverIds);
+  const hydratedServerIds = useHydratedWorkspaceServerIds(onlineServerIds);
+  const directoryServerIds = useWorkspaceDirectoryServerIds(onlineServerIds);
 
   const hostProjects = useHostProjects(directoryServerIds);
 
@@ -189,7 +200,7 @@ export function useSidebarWorkspacesList(options?: {
 
   const loadingState = deriveSidebarLoadingState({
     isActive,
-    serverIds,
+    serverIds: onlineServerIds,
     hydratedServerIds,
     hasProjects: projects.length > 0,
   });

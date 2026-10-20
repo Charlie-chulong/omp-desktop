@@ -58,6 +58,16 @@ export const ar: TranslationResources = {
       idle: "عاطل",
     },
   },
+  hostConnection: {
+    disconnect: "قطع الاتصال",
+    reconnect: "إعادة الاتصال",
+    disconnectAccessibility: "قطع الاتصال بـ {{host}}",
+    reconnectAccessibility: "إعادة الاتصال بـ {{host}}",
+    disconnectHint: "يوقف محاولات الاتصال وإعادة الاتصال التلقائي",
+    reconnectHint: "يسمح لهذا المضيف بالاتصال تلقائيًا",
+    disconnectFailed: "تعذر قطع الاتصال بـ {{host}}: {{reason}}",
+    reconnectFailed: "تعذرت إعادة الاتصال بـ {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "إضافة مشروع",
     methods: {
@@ -2070,6 +2080,14 @@ export const ar: TranslationResources = {
       title: "الإشعارات",
       permission: "إذن الإشعارات",
       refreshAccessibility: "تحديث إذن الإشعارات",
+      refresh: "تحديث",
+      refreshing: "جارٍ التحديث...",
+      actions: {
+        granted: "مسموح",
+        request: "السماح بالإشعارات",
+        openSettings: "إعدادات الإشعارات",
+        requesting: "جارٍ الطلب...",
+      },
       playSound: "تشغيل صوت",
       playSoundHint: "تشغيل صوت عند وصول إشعار سطح مكتب",
       test: "اختبار الإشعار",
@@ -2168,6 +2186,10 @@ export const ar: TranslationResources = {
         label: "التمرير Terminal",
         description: "يتم الاحتفاظ بالخطوط في المخزن المؤقت الطرفي المدمج",
         accessibilityLabel: "خطوط التمرير Terminal",
+      },
+      showTurnFileChanges: {
+        label: "إظهار الملفات بعد كل رد",
+        description: "إظهار قائمة الملفات المتغيرة فوق إحصاءات الرد المكتمل",
       },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",

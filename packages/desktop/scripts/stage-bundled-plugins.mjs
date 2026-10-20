@@ -20,7 +20,7 @@ const desktopRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const repositoryRoot = path.resolve(desktopRoot, "..", "..");
 const vendorRoot = path.join(repositoryRoot, "vendor", "omp-plugins");
 const output = path.join(desktopRoot, "bundled-omp-plugins");
-const hostSha256 = "ec012a0edab06ef80ff455b30a5b3221d81b314f60d0b3a2ccc21b81fbf91d43";
+const hostSha256 = "4a68fcc76d757bf2c9ce9aeac60d391b80ec1cda1d85b8025759f2e9b4b5c300";
 const packages = [
   { name: "omp-bridge-chatpro", version: "0.1.0" },
   { name: "omp-workbuddy-plugin", version: "0.1.0" },
@@ -128,7 +128,7 @@ try {
   }
   const manifest = {
     schemaVersion: 1,
-    host: { version: "18.12.1", sha256: hostSha256, platform: "win32", arch: "x64" },
+    host: { version: "18.12.3", sha256: hostSha256, platform: "win32", arch: "x64" },
     plugins,
   };
   writeFileSync(path.join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

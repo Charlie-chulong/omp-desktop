@@ -20,6 +20,7 @@ import type { TurnFooterHost } from "./layout";
 import { AssistantForkButton } from "@/components/assistant-fork-button";
 import { SyncedLoader } from "@/components/synced-loader";
 import { useRetainedPanelActive } from "@/components/retained-panel";
+import { useSettings } from "@/hooks/use-settings";
 
 const ThemedSyncedLoader = withUnistyles(SyncedLoader);
 const workingIndicatorColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -119,16 +120,19 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   onRestoreFile?: (path: string) => void;
   onForkAssistantTurn?: AssistantTurnForkHandler;
 }) {
+  const showTurnFileChanges = useSettings((settings) => settings.showTurnFileChanges);
   return (
     <TurnFooterRow>
       <View style={stylesheet.completedTurnFooterSlot}>
-        <TurnFileChangesBar
-          items={items}
-          rawItems={rawItems}
-          startIndex={startIndex}
-          onOpenFile={onOpenFile}
-          onRestoreFile={onRestoreFile}
-        />
+        {showTurnFileChanges ? (
+          <TurnFileChangesBar
+            items={items}
+            rawItems={rawItems}
+            startIndex={startIndex}
+            onOpenFile={onOpenFile}
+            onRestoreFile={onRestoreFile}
+          />
+        ) : null}
         <CompletedTurnFooter
           strategy={strategy}
           items={items}

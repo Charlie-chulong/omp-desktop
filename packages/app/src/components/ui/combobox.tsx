@@ -1179,6 +1179,14 @@ function DesktopComboboxBody(props: DesktopBodyProps): ReactElement {
   const handleWebOverlayKeyDown = useCallback(
     (event: KeyboardEvent) => {
       if (!isDesktopKey(event.key)) return false;
+      // Embedded row actions handle Enter themselves; do not select the host instead.
+      if (
+        event.key === "Enter" &&
+        event.target instanceof Element &&
+        event.target.closest('[role="toolbar"]')
+      ) {
+        return false;
+      }
       return handleDesktopKey(event.key, event);
     },
     [handleDesktopKey],

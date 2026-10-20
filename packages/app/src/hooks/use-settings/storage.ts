@@ -92,6 +92,7 @@ export interface AppSettings {
   autoExpandReasoning: boolean;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
+  showTurnFileChanges: boolean;
   homeAnimationsEnabled: boolean;
   vimKeybindings: boolean;
   wallpaperEnabled: boolean;
@@ -150,6 +151,7 @@ const StoredAppSettingsSchema = z.strictObject({
   toolCallDetailLevel: z.enum(["overview", "detailed"]).optional(),
   compactToolCalls: z.boolean().optional(),
   chatOutlineEnabled: z.boolean().optional(),
+  showTurnFileChanges: z.boolean().optional(),
   homeAnimationsEnabled: z.boolean().optional(),
   vimKeybindings: z.boolean().optional(),
   wallpaperEnabled: z.boolean().optional(),
@@ -190,6 +192,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   autoExpandReasoning: false,
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
+  showTurnFileChanges: true,
   homeAnimationsEnabled: true,
   vimKeybindings: false,
   wallpaperEnabled: false,
@@ -498,6 +501,9 @@ function pickBooleanAppSettings(stored: StoredAppSettings): Partial<AppSettings>
   }
   if (typeof stored.chatOutlineEnabled === "boolean") {
     result.chatOutlineEnabled = stored.chatOutlineEnabled;
+  }
+  if (typeof stored.showTurnFileChanges === "boolean") {
+    result.showTurnFileChanges = stored.showTurnFileChanges;
   }
   if (typeof stored.homeAnimationsEnabled === "boolean") {
     result.homeAnimationsEnabled = stored.homeAnimationsEnabled;

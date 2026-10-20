@@ -327,7 +327,7 @@ const lightSemanticColors = buildLightSemanticColors({
   surface4: "#c6c6c6",
   surfaceDiffEmpty: "#f3f3f3",
   surfaceSidebar: "#f3f3f3",
-  foreground: "#141414",
+  foreground: "#0f0f0f",
   foregroundMuted: "#6b6b6b",
   foregroundExtraMuted: "#a3a3a3",
   border: "#e0e0e0",

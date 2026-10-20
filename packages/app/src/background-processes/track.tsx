@@ -51,13 +51,13 @@ function ProcessStatusIcon({
     case "failed":
       return <ThemedCircleX size={16} uniProps={dangerColorMapping} />;
     case "exited":
-      return exitCode === 0 ? (
-        <ThemedCircleCheck size={16} uniProps={successColorMapping} />
-      ) : exitCode === null ? (
-        <ThemedCircleMinus size={16} uniProps={foregroundMutedColorMapping} />
-      ) : (
-        <ThemedCircleX size={16} uniProps={dangerColorMapping} />
-      );
+      if (exitCode === 0) {
+        return <ThemedCircleCheck size={16} uniProps={successColorMapping} />;
+      }
+      if (exitCode === null) {
+        return <ThemedCircleMinus size={16} uniProps={foregroundMutedColorMapping} />;
+      }
+      return <ThemedCircleX size={16} uniProps={dangerColorMapping} />;
     case "cancelled":
       return <ThemedCircleMinus size={16} uniProps={foregroundMutedColorMapping} />;
     case "unknown":
@@ -74,13 +74,17 @@ const RUNNING_STATUSES: Partial<Record<BackgroundProcess["status"], true>> = {
   stopping: true,
 };
 export function hasVisibleBackgroundProcessState(state: BackgroundProcessesState): boolean {
-  return (
-    state.error !== null || state.processes.some((process) => RUNNING_STATUSES[process.status])
+  return state.processes.some(
+    (process) => state.error !== null || RUNNING_STATUSES[process.status],
   );
 }
 
 const idleStopAccessibilityState = { busy: false, disabled: false };
 const stoppingAccessibilityState = { busy: true, disabled: true };
+const stopButtonStyle = ({ pressed }: { pressed: boolean }) => [
+  styles.stopButton,
+  pressed && styles.stopButtonPressed,
+];
 
 function BackgroundProcessRow({
   process,
@@ -147,7 +151,7 @@ function BackgroundProcessRow({
               accessibilityState={stopAccessibilityState}
               disabled={stopping}
               onPress={handleStop}
-              style={({ pressed }) => [styles.stopButton, pressed && styles.stopButtonPressed]}
+              style={stopButtonStyle}
               testID={`background-process-stop-${process.id}`}
             >
               <ThemedSquare size={14} uniProps={foregroundMutedColorMapping} />
@@ -177,7 +181,7 @@ export function BackgroundProcessesTrack({
     (count, process) => count + Number(RUNNING_STATUSES[process.status] === true),
     0,
   );
-  if (running === 0 && !state.error) return null;
+  if (!hasVisibleBackgroundProcessState(state)) return null;
   const bucket = !state.error && running > 0 ? ("running" as const) : null;
   let segmentText = t("backgroundProcesses.running", { count: running });
   if (state.error) {

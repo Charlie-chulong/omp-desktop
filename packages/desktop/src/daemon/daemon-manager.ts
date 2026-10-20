@@ -49,7 +49,7 @@ import { createWallpaperCommandHandler } from "../wallpaper/commands.js";
 import { isWallpaperCommand } from "@omp-desktop/protocol/desktop-wallpaper";
 import { getMainWindows } from "../window/main-windows.js";
 import { getPetLibrary } from "../pets/library.js";
-import { PRIVATE_PLUGIN_DISTRIBUTION } from "../distribution.js";
+import { DESKTOP_DISTRIBUTION_IDENTITY, PRIVATE_PLUGIN_DISTRIBUTION } from "../distribution.js";
 const DAEMON_LOG_FILENAME = "daemon.log";
 const STARTUP_POLL_INTERVAL_MS = 200;
 const STARTUP_POLL_MAX_ATTEMPTS = 150;
@@ -80,6 +80,7 @@ export interface DesktopDaemonStatus {
   home: string;
   version: string | null;
   desktopManaged: boolean;
+  distributionIdentity: string | null;
   error: string | null;
 }
 
@@ -148,6 +149,7 @@ function summarizeDesktopDaemonStatus(status: DesktopDaemonStatus): Record<strin
     serverId: status.serverId || null,
     version: status.version,
     desktopManaged: status.desktopManaged,
+    distributionIdentity: status.distributionIdentity,
     error: status.error,
   };
 }
@@ -279,6 +281,10 @@ export async function resolveDesktopDaemonStatus(): Promise<DesktopDaemonStatus>
       home,
       version: typeof payload.daemonVersion === "string" ? payload.daemonVersion : null,
       desktopManaged,
+      distributionIdentity:
+        typeof payload.desktopDistributionIdentity === "string"
+          ? payload.desktopDistributionIdentity
+          : null,
       error: null,
     };
   } catch (error) {
@@ -293,6 +299,7 @@ export async function resolveDesktopDaemonStatus(): Promise<DesktopDaemonStatus>
       home,
       version: null,
       desktopManaged: false,
+      distributionIdentity: null,
       error: errorMessage,
     };
   }
@@ -309,6 +316,20 @@ function shouldRestartForVersion(current: DesktopDaemonStatus): boolean {
   const appVersion = normalizeVersion(resolveDesktopAppVersion());
   const daemonVersion = normalizeVersion(current.version);
   return Boolean(appVersion && daemonVersion && appVersion !== daemonVersion);
+}
+
+function assertCompatibleDaemonDistribution(current: DesktopDaemonStatus): void {
+  if (
+    (current.desktopManaged ||
+      PRIVATE_PLUGIN_DISTRIBUTION ||
+      current.distributionIdentity !== null) &&
+    current.distributionIdentity !== DESKTOP_DISTRIBUTION_IDENTITY
+  ) {
+    throw new Error(
+      "The running daemon belongs to a different or unverified OMP Desktop distribution. " +
+        "Stop it explicitly after its tasks finish, then retry. Existing tasks were not stopped.",
+    );
+  }
 }
 
 function assertBuiltInDaemonManagementEnabled(settings: DesktopSettings): void {
@@ -344,7 +365,13 @@ async function pollForRunningDaemon(): Promise<DesktopDaemonStatus> {
         serverId: status.serverId || null,
       });
     }
-    if (status.status === "running" && status.serverId && status.listen) return status;
+    if (
+      status.status === "running" &&
+      status.serverId &&
+      status.listen &&
+      status.distributionIdentity === DESKTOP_DISTRIBUTION_IDENTITY
+    )
+      return status;
     await sleep(STARTUP_POLL_INTERVAL_MS);
     return poll(attempt + 1);
   }
@@ -367,6 +394,7 @@ function createDaemonEnvironment(invocationEnv: NodeJS.ProcessEnv): NodeJS.Proce
     : null;
   return {
     PASEO_DESKTOP_MANAGED: "1",
+    PASEO_DESKTOP_DISTRIBUTION_IDENTITY: DESKTOP_DISTRIBUTION_IDENTITY,
     PASEO_CLI: getBundledCliShimPath(),
     PASEO_WEB_UI_ENABLED: "false",
     ...(bundledOmpPath && daemonPath
@@ -376,7 +404,7 @@ function createDaemonEnvironment(invocationEnv: NodeJS.ProcessEnv): NodeJS.Proce
         }
       : {}),
     ...(bundledRipgrepPath ? { PASEO_RIPGREP_PATH: bundledRipgrepPath } : {}),
-    ...(bundledPluginsPath ? { OMP_DESKTOP_BUNDLED_PLUGINS: bundledPluginsPath } : {}),
+    OMP_DESKTOP_BUNDLED_PLUGINS: bundledPluginsPath ?? undefined,
   };
 }
 
@@ -400,6 +428,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
       });
       await stopDesktopDaemon("version_mismatch");
     } else {
+      assertCompatibleDaemonDistribution(current);
       return current;
     }
   }
@@ -486,7 +515,9 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
     throw buildStartupFailureError(result);
   }
 
-  return pollForRunningDaemon();
+  const started = await pollForRunningDaemon();
+  if (started.status === "running") assertCompatibleDaemonDistribution(started);
+  return started;
 }
 
 export async function stopDesktopDaemon(

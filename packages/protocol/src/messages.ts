@@ -5130,6 +5130,7 @@ export const DaemonGetStatusResponseSchema = z.object({
       requestId: z.string(),
       serverId: z.string(),
       version: z.string().nullable().optional(),
+      desktopDistributionIdentity: z.string().nullable().optional(),
       pid: z.number(),
       nodePath: z.string(),
       startedAt: z.string().nullable().optional(),

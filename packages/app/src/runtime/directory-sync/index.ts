@@ -132,6 +132,7 @@ export class DirectorySync {
     private readonly serverId: string,
     private readonly callbacks: {
       onAgentStoppedRunning: (agentId: string) => void;
+      onRunningAgentRemoved: (agent: Agent) => void;
       markAgentLoading: () => void;
       markAgentReady: () => void;
       markAgentError: (error: string) => void;
@@ -139,7 +140,11 @@ export class DirectorySync {
     },
     private readonly checkpoints?: DirectoryCheckpointStorage,
   ) {
-    this.agents = new AgentDirectoryReplica(serverId, callbacks.onAgentStoppedRunning);
+    this.agents = new AgentDirectoryReplica(
+      serverId,
+      callbacks.onAgentStoppedRunning,
+      callbacks.onRunningAgentRemoved,
+    );
     this.workspaces = new WorkspaceDirectoryReplica(serverId);
   }
 
@@ -283,9 +288,14 @@ export class DirectorySync {
           )
         : completion.deltas;
       // Keep the existing UI/timeline merge policy independent of pet authority.
-      const agents = this.commitAgentSnapshot(completion.snapshot, deltas);
+      const authoritativeActiveDirectory = !input.filter && !input.page?.cursor;
+      const agents = this.commitAgentSnapshot(
+        completion.snapshot,
+        deltas,
+        authoritativeActiveDirectory,
+      );
       this.persistAgentCursors(completion.snapshot, completion.deltas);
-      if (!input.filter && !input.page?.cursor) {
+      if (authoritativeActiveDirectory) {
         this.commitAgentPublication(completion.snapshot, completion.deltas);
       } else if (completion.deltas.length > 0) {
         this.requestAgentPublicationRefresh();
@@ -572,10 +582,16 @@ export class DirectorySync {
   private commitAgentSnapshot(
     snapshot: AgentSnapshot,
     deltas: readonly AgentDirectoryDelta[],
+    reportOmittedRunning: boolean,
   ): Map<string, Agent> {
     return snapshot.syncMode === "changes"
-      ? this.agents.commitChanges(snapshot.entries, snapshot.syncRemovals, deltas)
-      : this.agents.commitSnapshot(snapshot.entries, deltas);
+      ? this.agents.commitChanges(
+          snapshot.entries,
+          snapshot.syncRemovals,
+          deltas,
+          reportOmittedRunning,
+        )
+      : this.agents.commitSnapshot(snapshot.entries, deltas, reportOmittedRunning);
   }
 
   private persistAgentCursors(

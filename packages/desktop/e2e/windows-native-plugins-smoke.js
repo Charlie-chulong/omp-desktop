@@ -289,14 +289,14 @@ async function smokeBundledPlugins({
         url: location.href,
         title: document.title,
         body: document.body.textContent,
-        scrollSurfaces: Array.from(
-          document.querySelectorAll('[id^="agent-chat-scroll"]'),
-        ).map((element) => ({
-          id: element.id,
-          scrollTop: element.scrollTop,
-          scrollHeight: element.scrollHeight,
-          clientHeight: element.clientHeight,
-        })),
+        scrollSurfaces: Array.from(document.querySelectorAll('[id^="agent-chat-scroll"]')).map(
+          (element) => ({
+            id: element.id,
+            scrollTop: element.scrollTop,
+            scrollHeight: element.scrollHeight,
+            clientHeight: element.clientHeight,
+          }),
+        ),
       }));
       await page.snapshot("bundled-plugin-commands-before-agent-cleanup.png");
     } catch (captureError) {

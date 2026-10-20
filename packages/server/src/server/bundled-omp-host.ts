@@ -4,8 +4,8 @@ import { lstat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 export const BUNDLED_OMP_HOST = {
-  version: "18.12.1",
-  sha256: "ec012a0edab06ef80ff455b30a5b3221d81b314f60d0b3a2ccc21b81fbf91d43",
+  version: "18.12.3",
+  sha256: "4a68fcc76d757bf2c9ce9aeac60d391b80ec1cda1d85b8025759f2e9b4b5c300",
   platform: "win32",
   arch: "x64",
 } as const;

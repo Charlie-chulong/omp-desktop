@@ -58,6 +58,16 @@ export const ja: TranslationResources = {
       idle: "アイドル",
     },
   },
+  hostConnection: {
+    disconnect: "切断",
+    reconnect: "再接続",
+    disconnectAccessibility: "{{host}} を切断",
+    reconnectAccessibility: "{{host}} に再接続",
+    disconnectHint: "接続試行と自動再接続を停止します",
+    reconnectHint: "このホストへの自動接続を許可します",
+    disconnectFailed: "{{host}} を切断できませんでした: {{reason}}",
+    reconnectFailed: "{{host}} に再接続できませんでした: {{reason}}",
+  },
   addProjectFlow: {
     title: "プロジェクトを追加",
     methods: {
@@ -2091,6 +2101,14 @@ export const ja: TranslationResources = {
       title: "通知",
       permission: "通知の権限",
       refreshAccessibility: "通知の権限を更新",
+      refresh: "更新",
+      refreshing: "更新中...",
+      actions: {
+        granted: "許可済み",
+        request: "通知を許可",
+        openSettings: "通知設定",
+        requesting: "リクエスト中...",
+      },
       playSound: "サウンドを再生",
       playSoundHint: "デスクトップ通知が届いたときにサウンドを再生します",
       test: "通知をテスト",
@@ -2190,6 +2208,10 @@ export const ja: TranslationResources = {
         label: "ターミナルスクロールバック",
         description: "組み込みターミナルバッファに保持する行数",
         accessibilityLabel: "ターミナルスクロールバック行数",
+      },
+      showTurnFileChanges: {
+        label: "応答終了後にファイル一覧を表示",
+        description: "完了した応答の統計情報の上に変更されたファイル一覧を表示します",
       },
       autoExpandReasoning: {
         label: "常に思考プロセスを展開",

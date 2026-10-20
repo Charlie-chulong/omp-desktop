@@ -1,9 +1,7 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
+import { readPackagedDesktopDistribution } from "./packaged-distribution.js";
 
-const packageInfo: { ompDesktopDistribution?: string } = JSON.parse(
-  readFileSync(path.join(__dirname, "..", "package.json"), "utf8"),
-);
+const distribution = readPackagedDesktopDistribution(path.join(__dirname, ".."));
 
-export const PRIVATE_PLUGIN_DISTRIBUTION =
-  packageInfo.ompDesktopDistribution === "private-three-plugins";
+export const PRIVATE_PLUGIN_DISTRIBUTION = distribution.privatePlugins;
+export const DESKTOP_DISTRIBUTION_IDENTITY = distribution.identity;
