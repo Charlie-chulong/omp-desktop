@@ -58,6 +58,16 @@ export const ptBR: TranslationResources = {
       idle: "Ocioso",
     },
   },
+  hostConnection: {
+    disconnect: "Desconectar",
+    reconnect: "Reconectar",
+    disconnectAccessibility: "Desconectar {{host}}",
+    reconnectAccessibility: "Reconectar {{host}}",
+    disconnectHint: "Interrompe tentativas de conexão e a reconexão automática",
+    reconnectHint: "Permite que este host se conecte automaticamente",
+    disconnectFailed: "Não foi possível desconectar {{host}}: {{reason}}",
+    reconnectFailed: "Não foi possível reconectar {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Adicionar projeto",
     methods: {

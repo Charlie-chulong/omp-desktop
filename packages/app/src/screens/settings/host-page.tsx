@@ -26,6 +26,7 @@ import { AgentProfilesSection } from "@/agent-profiles";
 import { OmpSubagentsSection } from "@/omp-subagents";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { RemoteSshHostModal } from "@/components/remote-ssh-host-modal";
+import { HostConnectionAction } from "@/components/hosts/host-connection-action";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -710,6 +711,7 @@ export function HostSettingsPage({
         <Text style={styles.daemonHeaderLabel} numberOfLines={1}>
           {host.label}
         </Text>
+        <HostConnectionAction serverId={serverId} />
       </View>
 
       <HostStatusBadges serverId={serverId} />
@@ -2164,7 +2166,7 @@ const styles = StyleSheet.create((theme) => ({
   daemonHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
+    gap: theme.spacing[3],
     marginBottom: theme.spacing[4],
   },
   daemonHeaderLabel: {

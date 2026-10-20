@@ -58,6 +58,16 @@ export const ar: TranslationResources = {
       idle: "عاطل",
     },
   },
+  hostConnection: {
+    disconnect: "قطع الاتصال",
+    reconnect: "إعادة الاتصال",
+    disconnectAccessibility: "قطع الاتصال بـ {{host}}",
+    reconnectAccessibility: "إعادة الاتصال بـ {{host}}",
+    disconnectHint: "يوقف محاولات الاتصال وإعادة الاتصال التلقائي",
+    reconnectHint: "يسمح لهذا المضيف بالاتصال تلقائيًا",
+    disconnectFailed: "تعذر قطع الاتصال بـ {{host}}: {{reason}}",
+    reconnectFailed: "تعذرت إعادة الاتصال بـ {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "إضافة مشروع",
     methods: {

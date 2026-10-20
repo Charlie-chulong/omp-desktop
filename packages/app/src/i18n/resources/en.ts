@@ -72,6 +72,16 @@ export const en = {
       idle: "Idle",
     },
   },
+  hostConnection: {
+    disconnect: "Disconnect",
+    reconnect: "Reconnect",
+    disconnectAccessibility: "Disconnect {{host}}",
+    reconnectAccessibility: "Reconnect {{host}}",
+    disconnectHint: "Stops connection attempts and automatic reconnection",
+    reconnectHint: "Allows this host to connect automatically",
+    disconnectFailed: "Could not disconnect {{host}}: {{reason}}",
+    reconnectFailed: "Could not reconnect {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Add project",
     methods: {
