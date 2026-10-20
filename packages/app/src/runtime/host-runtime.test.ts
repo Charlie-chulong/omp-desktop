@@ -4,6 +4,7 @@ import type {
   ConnectionState,
   FetchAgentsEntry,
   FetchAgentsOptions,
+  FetchAgentTimelinePayload,
 } from "@omp-desktop/client/internal/daemon-client";
 import type { ConnectionOffer } from "@omp-desktop/protocol/connection-offer";
 import type { SessionOutboundMessage } from "@omp-desktop/protocol/messages";
@@ -36,6 +37,7 @@ class FakeDaemonClient {
   public fetchAgentsResponses: Array<
     Awaited<ReturnType<DaemonClient["fetchAgents"]>> | ReturnType<DaemonClient["fetchAgents"]>
   > = [];
+  public fetchAgentTimelineResponses: FetchAgentTimelinePayload[] = [];
   public sentAgentMessages: Array<Parameters<DaemonClient["sendAgentMessage"]>> = [];
   public sendAgentMessageFailures: Error[] = [];
   public sendAgentMessageResponses: Promise<void>[] = [];
@@ -142,6 +144,15 @@ class FakeDaemonClient {
     });
   }
 
+  async fetchAgentTimeline(
+    _agentId: string,
+    _options?: Parameters<DaemonClient["fetchAgentTimeline"]>[1],
+  ): Promise<FetchAgentTimelinePayload> {
+    const queued = this.fetchAgentTimelineResponses.shift();
+    if (!queued) throw new Error("Missing fake timeline response");
+    return queued;
+  }
+
   async waitForFetches(count: number): Promise<void> {
     if (this.fetchAgentsCalls.length >= count) return;
     await new Promise<void>((resolve) => {
@@ -231,6 +242,29 @@ function makeFetchAgentsPayload(input: {
     } as Awaited<ReturnType<DaemonClient["fetchAgents"]>>["pageInfo"],
     ...(input.subscriptionId ? { subscriptionId: input.subscriptionId } : {}),
     requestId: "req_test",
+  };
+}
+
+function makeFetchAgentTimelinePayload(
+  agent: FetchAgentsEntry["agent"],
+): FetchAgentTimelinePayload {
+  return {
+    requestId: "req_timeline_test",
+    agentId: agent.id,
+    agent,
+    direction: "tail",
+    projection: "projected",
+    epoch: "epoch",
+    reset: false,
+    staleCursor: false,
+    gap: false,
+    window: { minSeq: 0, maxSeq: 0, nextSeq: 0 },
+    startCursor: null,
+    endCursor: null,
+    hasOlder: false,
+    hasNewer: false,
+    entries: [],
+    error: null,
   };
 }
 
@@ -328,6 +362,37 @@ function makeFetchAgentsEntry(input: {
 
 function replicaAgent(snapshot: FetchAgentsEntry["agent"], serverId: string): Agent {
   return { ...normalizeAgentSnapshot(snapshot, serverId), projectPlacement: null };
+}
+
+function seedFileExplorer(serverId: string, workspaceStateKeys: string[] = ["root:/repo"]): void {
+  useSessionStore.getState().setFileExplorer(
+    serverId,
+    new Map(
+      workspaceStateKeys.map(
+        (workspaceStateKey) =>
+          [
+            workspaceStateKey,
+            {
+              directories: new Map(),
+              files: new Map(),
+              refreshRevision: 0,
+              isLoading: false,
+              lastError: null,
+              pendingRequest: null,
+              currentPath: ".",
+              history: ["."],
+              lastVisitedPath: ".",
+              selectedEntryPath: null,
+            },
+          ] as const,
+      ),
+    ),
+  );
+}
+
+function fileExplorerRefreshRevision(serverId: string, workspaceStateKey = "root:/repo") {
+  return useSessionStore.getState().sessions[serverId]?.fileExplorer.get(workspaceStateKey)
+    ?.refreshRevision;
 }
 
 function agentPermission(id: string): AgentPermissionRequest {
@@ -3330,6 +3395,177 @@ describe("HostRuntimeStore", () => {
         page: { limit: 200 },
       },
     ]);
+
+    store.syncHosts([]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("refreshes the old workspace when a reconnect snapshot omits a running agent", async () => {
+    const host = makeHost({
+      serverId: "srv_reconnect_running_omission",
+      connections: [{ id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" }],
+    });
+    const fakeClient = new FakeDaemonClient();
+    fakeClient.setConnectionState({ status: "connected" });
+    const runningEntry = makeFetchAgentsEntry({
+      id: "agent",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    fakeClient.fetchAgentsResponses.push(
+      makeFetchAgentsPayload({
+        entries: [
+          {
+            ...runningEntry,
+            agent: { ...runningEntry.agent, status: "running" },
+          },
+        ],
+        subscriptionId: "app:srv_reconnect_running_omission",
+      }),
+      makeFetchAgentsPayload({
+        entries: [],
+        subscriptionId: "app:srv_reconnect_running_omission",
+      }),
+    );
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => fakeClient as unknown as DaemonClient,
+        connectToDaemon: async ({ host: hostProfile }) => ({
+          client: fakeClient as unknown as DaemonClient,
+          serverId: hostProfile.serverId,
+          hostname: hostProfile.label ?? null,
+        }),
+        getClientId: async () => "cid_reconnect_running_omission",
+      },
+    });
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    seedFileExplorer(host.serverId, ["root:/repo", "root:/other"]);
+    store.syncHosts([host]);
+    await fakeClient.waitForFetches(1);
+    await waitForDirectoryReady(store, host.serverId);
+    expect(fileExplorerRefreshRevision(host.serverId)).toBe(0);
+
+    fakeClient.setConnectionState({ status: "disconnected", reason: "transport closed" });
+    fakeClient.setConnectionState({ status: "connected" });
+
+    await fakeClient.waitForFetches(2);
+    await vi.waitFor(() => {
+      expect(fileExplorerRefreshRevision(host.serverId)).toBe(1);
+    });
+    expect(fileExplorerRefreshRevision(host.serverId, "root:/other")).toBe(0);
+    expect(useSessionStore.getState().sessions[host.serverId]?.agents.has("agent")).toBe(false);
+
+    store.syncHosts([]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("refreshes once when a timeline snapshot reports idle before the directory update", async () => {
+    const host = makeHost({
+      serverId: "srv_timeline_idle_refresh",
+      connections: [{ id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" }],
+    });
+    const fakeClient = new FakeDaemonClient();
+    fakeClient.setConnectionState({ status: "connected" });
+    const runningEntry = makeFetchAgentsEntry({
+      id: "agent",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    runningEntry.agent.workspaceId = "timeline-workspace";
+    const idleAgent = {
+      ...runningEntry.agent,
+      status: "idle" as const,
+      updatedAt: "2026-07-12T10:01:00.000Z",
+    };
+    fakeClient.fetchAgentsResponses.push(
+      makeFetchAgentsPayload({
+        entries: [{ ...runningEntry, agent: { ...runningEntry.agent, status: "running" } }],
+        subscriptionId: "app:srv_timeline_idle_refresh",
+      }),
+    );
+    fakeClient.fetchAgentTimelineResponses.push(makeFetchAgentTimelinePayload(idleAgent));
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => fakeClient as unknown as DaemonClient,
+        connectToDaemon: async ({ host: hostProfile }) => ({
+          client: fakeClient as unknown as DaemonClient,
+          serverId: hostProfile.serverId,
+          hostname: hostProfile.label ?? null,
+        }),
+        getClientId: async () => "cid_timeline_idle_refresh",
+      },
+    });
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    seedFileExplorer(host.serverId, ["workspace:timeline-workspace", "root:/other"]);
+    store.syncHosts([host]);
+    await fakeClient.waitForFetches(1);
+    await waitForDirectoryReady(store, host.serverId);
+
+    await store.fetchAgentTimeline(host.serverId, "agent", {
+      direction: "tail",
+      projection: "projected",
+    });
+
+    expect(fileExplorerRefreshRevision(host.serverId, "workspace:timeline-workspace")).toBe(1);
+    expect(fileExplorerRefreshRevision(host.serverId, "root:/other")).toBe(0);
+    fakeClient.agentUpdate({
+      kind: "upsert",
+      agent: { ...idleAgent, updatedAt: "2026-07-12T10:02:00.000Z" },
+      project: runningEntry.project,
+    });
+    expect(fileExplorerRefreshRevision(host.serverId, "workspace:timeline-workspace")).toBe(1);
+    expect(fileExplorerRefreshRevision(host.serverId, "root:/other")).toBe(0);
+    expect(useSessionStore.getState().sessions[host.serverId]?.agents.get("agent")?.status).toBe(
+      "idle",
+    );
+
+    store.syncHosts([]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("refreshes the old workspace when a live update removes a running agent", async () => {
+    const host = makeHost({
+      serverId: "srv_live_running_removal",
+      connections: [{ id: "direct:lan:6767", type: "directTcp", endpoint: "lan:6767" }],
+    });
+    const fakeClient = new FakeDaemonClient();
+    fakeClient.setConnectionState({ status: "connected" });
+    const runningEntry = makeFetchAgentsEntry({
+      id: "agent",
+      cwd: "/repo",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+    });
+    fakeClient.fetchAgentsResponses.push(
+      makeFetchAgentsPayload({
+        entries: [{ ...runningEntry, agent: { ...runningEntry.agent, status: "running" } }],
+        subscriptionId: "app:srv_live_running_removal",
+      }),
+    );
+    const store = new HostRuntimeStore({
+      deps: {
+        createClient: () => fakeClient as unknown as DaemonClient,
+        connectToDaemon: async ({ host: hostProfile }) => ({
+          client: fakeClient as unknown as DaemonClient,
+          serverId: hostProfile.serverId,
+          hostname: hostProfile.label ?? null,
+        }),
+        getClientId: async () => "cid_live_running_removal",
+      },
+    });
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    seedFileExplorer(host.serverId, ["root:/repo", "root:/other"]);
+    store.syncHosts([host]);
+    await fakeClient.waitForFetches(1);
+    await waitForDirectoryReady(store, host.serverId);
+
+    fakeClient.agentUpdate({ kind: "remove", agentId: "agent" });
+
+    expect(fileExplorerRefreshRevision(host.serverId)).toBe(1);
+    expect(fileExplorerRefreshRevision(host.serverId, "root:/other")).toBe(0);
+    expect(useSessionStore.getState().sessions[host.serverId]?.agents.has("agent")).toBe(false);
 
     store.syncHosts([]);
     useSessionStore.getState().clearSession(host.serverId);

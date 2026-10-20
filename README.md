@@ -77,6 +77,18 @@ The web document's `color-scheme` follows the resolved application theme, keepin
 native selection and form-control colors aligned with light/dark appearance.
 Compact Web headers use a 44px row without additional top padding, retaining
 safe-area insets. Native mobile and desktop-wrapper header spacing is unchanged.
+**Settings → Connections** lists saved hosts with their connection status and
+daemon version, above relay and pairing controls. **About** contains the app
+version and, in Desktop, app updates; it no longer contains the host list.
+**Settings → General → Detail level** controls reasoning expansion, tool-call
+detail, and the Web chat outline. These controls are no longer under Appearance;
+existing preference values are preserved.
+The sidebar only shows projects and chats from online hosts. Disconnecting hides
+cached rows without removing host profiles, project order, or host filters;
+reconnecting restores them. In project grouping, pinned chats remain first and
+each pinned/unpinned section sorts by task state: running, needs input, failed,
+attention, then done. Equal-state chats retain their saved order, and keyboard
+shortcuts follow the displayed order.
 The composer's background-process pill stays hidden when no process content is
 available, including fetch failures and disconnections. Errors remain visible
 when retained process entries are available.
@@ -853,8 +865,12 @@ are made visible when needed. This uses the file's owning workspace on local or 
 files outside that workspace cannot be revealed in its tree.
 
 The Files tree refreshes its root and expanded directories when a conversation in that workspace
-finishes, fails, or is canceled. Background conversations refresh only their own workspace; manual
-refresh remains available for filesystem changes made outside a conversation.
+finishes, fails, or is canceled. Background conversations refresh only their own workspace.
+Consecutive completions each request a fresh listing, and older directory responses cannot
+overwrite newer results. Reopening a collapsed directory rereads its children instead of
+reusing an unchecked cache. A failed directory refresh remains visible even if another
+directory loads successfully. Manual refresh remains available for filesystem changes
+made outside a conversation.
 
 ## Text editor shortcuts
 

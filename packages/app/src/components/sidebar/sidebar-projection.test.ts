@@ -107,6 +107,68 @@ function twoProjectInput(groupMode: "project" | "status") {
 }
 
 describe("buildSidebarProjection", () => {
+  it("orders project chats by task status, preserving pins and same-status order", () => {
+    const rows = [
+      makeWorkspace("done"),
+      makeWorkspace("running-first", "running"),
+      makeWorkspace("waiting", "needs_input"),
+      makeWorkspace("pinned"),
+      makeWorkspace("failed", "failed"),
+      makeWorkspace("running-second", "running"),
+      makeWorkspace("attention", "attention"),
+    ];
+    const input = {
+      ...projectionInput(),
+      projects: [makeProject(rows.map((row) => row.placement))],
+      pinnedKeys: {
+        pinnedWorkspaceKeys: ["srv:pinned"],
+        pinnedAtByKey: { "srv:pinned": "2026-07-12T12:00:00.000Z" },
+      },
+      workspaceEntriesByKey: new Map(rows.map((row) => [row.entry.workspaceKey, row.entry])),
+    };
+    const projection = buildSidebarProjection(input);
+    expect(projection.projects[0]?.workspaces.map((row) => row.workspaceId)).toEqual([
+      "pinned",
+      "running-first",
+      "running-second",
+      "waiting",
+      "failed",
+      "attention",
+      "done",
+    ]);
+    expect(projection.shortcutModel.shortcutTargets.map((row) => row.workspaceId)).toEqual([
+      "pinned",
+      "running-first",
+      "running-second",
+      "waiting",
+      "failed",
+      "attention",
+      "done",
+    ]);
+    const updatedEntries = new Map(input.workspaceEntriesByKey);
+    updatedEntries.set("srv:done", { ...rows[0]!.entry, statusBucket: "running" });
+    updatedEntries.set("srv:running-first", { ...rows[1]!.entry, statusBucket: "done" });
+    const updated = buildSidebarProjection({ ...input, workspaceEntriesByKey: updatedEntries });
+    expect(updated.projects[0]?.workspaces.map((row) => row.workspaceId)).toEqual([
+      "pinned",
+      "done",
+      "running-second",
+      "waiting",
+      "failed",
+      "attention",
+      "running-first",
+    ]);
+    expect(input.projects[0]?.workspaces.map((row) => row.workspaceId)).toEqual([
+      "done",
+      "running-first",
+      "waiting",
+      "pinned",
+      "failed",
+      "running-second",
+      "attention",
+    ]);
+  });
+
   // The rule that outlived the bug it was written for: a project icon is fetched per project, so
   // whatever a mode groups by, the rows it produces can only reference projects already covered.
   for (const groupMode of ["project", "status"] as const) {
