@@ -73,6 +73,16 @@ export const zhCN: TranslationResources = {
       idle: "空闲",
     },
   },
+  hostConnection: {
+    disconnect: "断开连接",
+    reconnect: "重新连接",
+    disconnectAccessibility: "断开 {{host}}",
+    reconnectAccessibility: "重新连接 {{host}}",
+    disconnectHint: "停止连接尝试和自动重新连接",
+    reconnectHint: "允许此 Host 自动连接",
+    disconnectFailed: "无法断开 {{host}}：{{reason}}",
+    reconnectFailed: "无法重新连接 {{host}}：{{reason}}",
+  },
   addProjectFlow: {
     title: "添加项目",
     methods: {

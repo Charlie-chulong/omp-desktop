@@ -58,6 +58,16 @@ export const ja: TranslationResources = {
       idle: "アイドル",
     },
   },
+  hostConnection: {
+    disconnect: "切断",
+    reconnect: "再接続",
+    disconnectAccessibility: "{{host}} を切断",
+    reconnectAccessibility: "{{host}} に再接続",
+    disconnectHint: "接続試行と自動再接続を停止します",
+    reconnectHint: "このホストへの自動接続を許可します",
+    disconnectFailed: "{{host}} を切断できませんでした: {{reason}}",
+    reconnectFailed: "{{host}} に再接続できませんでした: {{reason}}",
+  },
   addProjectFlow: {
     title: "プロジェクトを追加",
     methods: {

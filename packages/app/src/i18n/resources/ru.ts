@@ -58,6 +58,16 @@ export const ru: TranslationResources = {
       idle: "Ожидание",
     },
   },
+  hostConnection: {
+    disconnect: "Отключить",
+    reconnect: "Подключить снова",
+    disconnectAccessibility: "Отключить {{host}}",
+    reconnectAccessibility: "Подключить {{host}} снова",
+    disconnectHint: "Останавливает попытки подключения и автоматическое переподключение",
+    reconnectHint: "Разрешает этому хосту подключаться автоматически",
+    disconnectFailed: "Не удалось отключить {{host}}: {{reason}}",
+    reconnectFailed: "Не удалось снова подключить {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Добавить проект",
     methods: {

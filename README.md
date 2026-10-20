@@ -80,6 +80,11 @@ safe-area insets. Native mobile and desktop-wrapper header spacing is unchanged.
 **Settings → Connections** lists saved hosts with their connection status and
 daemon version, above relay and pairing controls. **About** contains the app
 version and, in Desktop, app updates; it no longer contains the host list.
+Remote hosts expose **Disconnect / Reconnect** in host pickers, the Connections
+list, and the host overview. Disconnect keeps the saved connection and cached
+workspace data, stops probing and automatic reconnection, and remains in effect
+after restarting the app. Reconnect resumes the saved connection; neither action
+stops the remote daemon. **Remove host** remains a separate operation.
 **Settings → General → Detail level** controls reasoning expansion, tool-call
 detail, and the Web chat outline. These controls are no longer under Appearance;
 existing preference values are preserved.

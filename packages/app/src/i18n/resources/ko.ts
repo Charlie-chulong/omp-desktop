@@ -58,6 +58,16 @@ export const ko: TranslationResources = {
       idle: "대기 중",
     },
   },
+  hostConnection: {
+    disconnect: "연결 끊기",
+    reconnect: "다시 연결",
+    disconnectAccessibility: "{{host}} 연결 끊기",
+    reconnectAccessibility: "{{host}} 다시 연결",
+    disconnectHint: "연결 시도와 자동 재연결을 중지합니다",
+    reconnectHint: "이 호스트의 자동 연결을 허용합니다",
+    disconnectFailed: "{{host}} 연결을 끊지 못했습니다: {{reason}}",
+    reconnectFailed: "{{host}}에 다시 연결하지 못했습니다: {{reason}}",
+  },
   addProjectFlow: {
     title: "프로젝트 추가",
     methods: {

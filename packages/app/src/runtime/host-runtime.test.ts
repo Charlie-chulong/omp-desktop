@@ -33,6 +33,8 @@ class FakeDaemonClient {
   private latencyMeasurementFailure: Error | null = null;
   private latencyMeasurementsRequested: Array<{ timeoutMs?: number }> = [];
   public connectCalls = 0;
+  public closeCalls = 0;
+  public reconnectEnabledCalls: boolean[] = [];
   public fetchAgentsCalls: FetchAgentsOptions[] = [];
   public fetchAgentsResponses: Array<
     Awaited<ReturnType<DaemonClient["fetchAgents"]>> | ReturnType<DaemonClient["fetchAgents"]>
@@ -81,6 +83,7 @@ class FakeDaemonClient {
   }
 
   async close(): Promise<void> {
+    this.closeCalls += 1;
     this.setConnectionState({ status: "disconnected", reason: "client_closed" });
   }
 
@@ -178,7 +181,9 @@ class FakeDaemonClient {
     return result.rttMs;
   }
 
-  setReconnectEnabled(_enabled: boolean): void {}
+  setReconnectEnabled(enabled: boolean): void {
+    this.reconnectEnabledCalls.push(enabled);
+  }
 
   getLastLivenessRttMs(): number | null {
     return this.heartbeatRttMs;
@@ -1450,6 +1455,138 @@ describe("HostRuntimeController", () => {
     expect(controller.getSnapshot().clientGeneration).toBe(generationBeforeProbes);
     expect(createdClients).toHaveLength(0);
   });
+
+  it("keeps a disabled controller offline and closes an adopted client", async () => {
+    const host = makeHost({
+      lifecycle: { autoConnect: false },
+      connections: [makeHost().connections[0]!],
+    });
+    const existingClient = makeConnectedProbeClient(5);
+    let probeCalls = 0;
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          throw new Error("disabled host must not create a client");
+        },
+        connectToDaemon: async () => {
+          probeCalls += 1;
+          throw new Error("disabled host must not probe");
+        },
+        getClientId: async () => "cid_disabled",
+      },
+    });
+
+    await controller.start({
+      autoProbe: false,
+      initialConnection: {
+        connectionId: host.connections[0]!.id,
+        existingClient: existingClient as unknown as DaemonClient,
+      },
+    });
+    controller.ensureConnected();
+    await controller.runProbeCycleNow();
+
+    expect(controller.getSnapshot()).toMatchObject({
+      connectionStatus: "offline",
+      activeConnectionId: null,
+      client: null,
+    });
+    expect(probeCalls).toBe(0);
+    expect(existingClient.isDisposed()).toBe(true);
+    expect(existingClient.reconnectEnabledCalls).toContain(false);
+  });
+
+  it("invalidates an in-flight startup probe across rapid disable and reconnect", async () => {
+    const host = makeHost({ connections: [makeHost().connections[0]!] });
+    const firstProbeGate = createDeferred<void>();
+    const probeClients: FakeDaemonClient[] = [];
+    let probeCalls = 0;
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => {
+          throw new Error("probe clients should be adopted");
+        },
+        connectToDaemon: async ({ host: hostProfile }) => {
+          probeCalls += 1;
+          const client = makeConnectedProbeClient(probeCalls === 1 ? 50 : 5);
+          probeClients.push(client);
+          if (probeCalls === 1) {
+            await firstProbeGate.promise;
+          }
+          return {
+            client: client as unknown as DaemonClient,
+            serverId: hostProfile.serverId,
+            hostname: hostProfile.label,
+          };
+        },
+        getClientId: async () => "cid_probe_toggle",
+      },
+    });
+
+    const startup = controller.start({ autoProbe: false });
+    expect(probeCalls).toBe(1);
+
+    await controller.updateHost({ ...host, lifecycle: { autoConnect: false } });
+    await controller.updateHost({ ...host, lifecycle: { autoConnect: true } });
+
+    expect(probeCalls).toBe(2);
+    expect(controller.getSnapshot().connectionStatus).toBe("online");
+    expect(controller.getSnapshot().client).toBe(probeClients[1] as unknown as DaemonClient);
+
+    firstProbeGate.resolve();
+    await startup;
+
+    expect(probeClients[0]?.isDisposed()).toBe(true);
+    expect(probeClients[0]?.reconnectEnabledCalls).toContain(false);
+    expect(controller.getSnapshot().connectionStatus).toBe("online");
+    expect(controller.getSnapshot().client).toBe(probeClients[1] as unknown as DaemonClient);
+    await controller.stop();
+  });
+
+  it("closes a client whose connect continuation finishes after manual disable", async () => {
+    const host = makeHost({ connections: [makeHost().connections[0]!] });
+    const connectGate = createDeferred<void>();
+    const client = new FakeDaemonClient();
+    client.connect = async () => {
+      client.connectCalls += 1;
+      await connectGate.promise;
+      client.setConnectionState({ status: "connected" });
+    };
+    const controller = new HostRuntimeController({
+      host,
+      deps: {
+        createClient: () => client as unknown as DaemonClient,
+        connectToDaemon: async () => {
+          throw new Error("manual switch test must not probe");
+        },
+        getClientId: async () => "cid_switch_toggle",
+      },
+    });
+
+    const switching = controller.activateConnection({ connectionId: host.connections[0]!.id });
+    for (
+      let attempt = 0;
+      attempt < 20 && controller.getSnapshot().client !== (client as unknown as DaemonClient);
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
+    expect(controller.getSnapshot().client).toBe(client as unknown as DaemonClient);
+
+    await controller.updateHost({ ...host, lifecycle: { autoConnect: false } });
+    connectGate.resolve();
+    await switching;
+
+    expect(controller.getSnapshot()).toMatchObject({
+      connectionStatus: "offline",
+      activeConnectionId: null,
+      client: null,
+    });
+    expect(client.isDisposed()).toBe(true);
+    expect(client.reconnectEnabledCalls).toContain(false);
+  });
 });
 
 describe("HostRuntimeStore", () => {
@@ -1775,6 +1912,283 @@ describe("HostRuntimeStore", () => {
       (await storage.getItem("@omp-desktop:daemon-registry")) ?? "[]",
     );
     expect(persistedHosts[0]?.appearance).toEqual({ color: "teal", badgeDisplay: "icon" });
+    store.syncHosts([]);
+  });
+
+  it("disconnects without deleting the host, session, connections, or credentials", async () => {
+    const connection: HostConnection = {
+      id: "direct:lan:6767",
+      type: "directTcp",
+      endpoint: "lan:6767",
+      useTls: false,
+      password: "secret",
+    };
+    const host = makeHost({ connections: [connection], preferredConnectionId: connection.id });
+    const storage = createMemoryHostRuntimeStorage({
+      "@omp-desktop:daemon-registry": JSON.stringify([host]),
+      "@omp-desktop:e2e": "1",
+    });
+    const clients: FakeDaemonClient[] = [];
+    let probeCalls = 0;
+    let revokeCalls = 0;
+    const store = new HostRuntimeStore({
+      storage,
+      deps: {
+        createClient: () => {
+          throw new Error("probe client should be adopted");
+        },
+        connectToDaemon: async ({ host: hostProfile }) => {
+          probeCalls += 1;
+          const client = makeConnectedProbeClient(5);
+          clients.push(client);
+          return {
+            client: client as unknown as DaemonClient,
+            serverId: hostProfile.serverId,
+            hostname: hostProfile.label,
+          };
+        },
+        getClientId: async () => "cid_store_disconnect",
+      },
+      revokePushNotifications: async () => {
+        revokeCalls += 1;
+      },
+    });
+    await store.boot();
+    for (
+      let attempt = 0;
+      attempt < 20 && store.getSnapshot(host.serverId)?.connectionStatus !== "online";
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
+    expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("online");
+    expect(useSessionStore.getState().sessions[host.serverId]).toBeDefined();
+
+    await store.setHostConnectionEnabled(host.serverId, false);
+
+    expect(store.getHosts()).toHaveLength(1);
+    expect(store.getHosts()[0]).toMatchObject({
+      serverId: host.serverId,
+      lifecycle: { autoConnect: false },
+      connections: [connection],
+    });
+    expect(store.getSnapshot(host.serverId)).toMatchObject({
+      connectionStatus: "offline",
+      activeConnectionId: null,
+      client: null,
+    });
+    expect(useSessionStore.getState().sessions[host.serverId]).toBeDefined();
+    expect(clients[0]?.isDisposed()).toBe(true);
+    expect(revokeCalls).toBe(0);
+
+    const probesAfterDisconnect = probeCalls;
+    store.ensureConnectedAll();
+    await store.runProbeCycleNow(host.serverId);
+    store.syncHosts(store.getHosts());
+    await store.setHostColor(host.serverId, "teal");
+    await store.upsertDirectConnection({
+      serverId: host.serverId,
+      endpoint: connection.endpoint,
+      useTls: connection.useTls,
+      password: connection.password,
+    });
+    await Promise.resolve();
+
+    expect(probeCalls).toBe(probesAfterDisconnect);
+    expect(store.getHosts()[0]?.lifecycle).toEqual({ autoConnect: false });
+    expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("offline");
+
+    const persisted = JSON.parse((await storage.getItem("@omp-desktop:daemon-registry")) ?? "[]");
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({
+      serverId: host.serverId,
+      lifecycle: { autoConnect: false },
+      connections: [connection],
+    });
+
+    let reloadProbeCalls = 0;
+    const reloaded = new HostRuntimeStore({
+      storage,
+      deps: {
+        createClient: () => {
+          throw new Error("reloaded disabled host must not create a client");
+        },
+        connectToDaemon: async () => {
+          reloadProbeCalls += 1;
+          throw new Error("reloaded disabled host must not probe");
+        },
+        getClientId: async () => "cid_store_reload",
+      },
+    });
+    await reloaded.boot();
+
+    expect(reloaded.getHosts()[0]?.lifecycle).toEqual({ autoConnect: false });
+    expect(reloaded.getSnapshot(host.serverId)?.connectionStatus).toBe("offline");
+    expect(reloadProbeCalls).toBe(0);
+
+    store.syncHosts([]);
+    reloaded.syncHosts([]);
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("does not change visible connection state when lifecycle persistence fails", async () => {
+    const host = makeHost({
+      lifecycle: { autoConnect: false },
+      connections: [makeHost().connections[0]!],
+    });
+    const storage = createMemoryHostRuntimeStorage({
+      "@omp-desktop:daemon-registry": JSON.stringify([host]),
+      "@omp-desktop:e2e": "1",
+    });
+    let probeCalls = 0;
+    const store = new HostRuntimeStore({
+      storage,
+      deps: {
+        createClient: () => {
+          throw new Error("disabled host must not create a client");
+        },
+        connectToDaemon: async () => {
+          probeCalls += 1;
+          throw new Error("disabled host must not probe");
+        },
+        getClientId: async () => "cid_store_failure",
+      },
+    });
+    await store.boot();
+    storage.setItem = async () => {
+      throw new Error("disk full");
+    };
+
+    await expect(store.setHostConnectionEnabled(host.serverId, true)).rejects.toThrow("disk full");
+
+    expect(store.getHosts()[0]?.lifecycle).toEqual({ autoConnect: false });
+    expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("offline");
+    expect(probeCalls).toBe(0);
+    store.syncHosts([]);
+  });
+
+  it("serializes rapid connection toggles and persists the final state", async () => {
+    const host = makeHost({
+      lifecycle: { autoConnect: false },
+      connections: [makeHost().connections[0]!],
+    });
+    const storage = createMemoryHostRuntimeStorage({
+      "@omp-desktop:daemon-registry": JSON.stringify([host]),
+      "@omp-desktop:e2e": "1",
+    });
+    const createdClients: FakeDaemonClient[] = [];
+    const store = new HostRuntimeStore({
+      storage,
+      deps: {
+        createClient: () => {
+          throw new Error("probe client should be adopted");
+        },
+        connectToDaemon: async ({ host: hostProfile }) => {
+          const client = makeConnectedProbeClient(5);
+          createdClients.push(client);
+          return {
+            client: client as unknown as DaemonClient,
+            serverId: hostProfile.serverId,
+            hostname: hostProfile.label,
+          };
+        },
+        getClientId: async () => "cid_rapid_toggle",
+      },
+    });
+    await store.boot();
+
+    const firstWrite = createDeferred<void>();
+    const setItem = storage.setItem.bind(storage);
+    let writeCount = 0;
+    storage.setItem = async (key, value) => {
+      writeCount += 1;
+      if (writeCount === 1) {
+        await firstWrite.promise;
+      }
+      await setItem(key, value);
+    };
+
+    const enable = store.setHostConnectionEnabled(host.serverId, true);
+    const disable = store.setHostConnectionEnabled(host.serverId, false);
+    await Promise.resolve();
+    expect(writeCount).toBe(1);
+
+    firstWrite.resolve();
+    await Promise.all([enable, disable]);
+    await Promise.resolve();
+
+    expect(store.getHosts()[0]?.lifecycle).toEqual({ autoConnect: false });
+    expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("offline");
+    const persisted = JSON.parse((await storage.getItem("@omp-desktop:daemon-registry")) ?? "[]");
+    expect(persisted[0]?.lifecycle).toEqual({ autoConnect: false });
+    for (
+      let attempt = 0;
+      attempt < 20 && createdClients.some((client) => !client.isDisposed());
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
+    expect(createdClients.length).toBeGreaterThan(0);
+    expect(createdClients.every((client) => client.isDisposed())).toBe(true);
+
+    await store.setHostConnectionEnabled(host.serverId, true);
+    for (
+      let attempt = 0;
+      attempt < 20 && store.getSnapshot(host.serverId)?.connectionStatus !== "online";
+      attempt += 1
+    ) {
+      await Promise.resolve();
+    }
+
+    expect(store.getHosts()[0]?.lifecycle).toEqual({ autoConnect: true });
+    expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("online");
+    const reconnectedPersisted = JSON.parse(
+      (await storage.getItem("@omp-desktop:daemon-registry")) ?? "[]",
+    );
+    expect(reconnectedPersisted[0]?.lifecycle).toEqual({ autoConnect: true });
+    store.syncHosts([]);
+  });
+
+  it("keeps an explicitly re-paired disabled host disconnected", async () => {
+    const connection = makeHost().connections[0]!;
+    const host = makeHost({
+      lifecycle: { autoConnect: false },
+      connections: [connection],
+      preferredConnectionId: connection.id,
+    });
+    const storage = createMemoryHostRuntimeStorage({
+      "@omp-desktop:daemon-registry": JSON.stringify([host]),
+      "@omp-desktop:e2e": "1",
+    });
+    const pairClient = makeConnectedProbeClient(5);
+    let pairCalls = 0;
+    const store = new HostRuntimeStore({
+      storage,
+      deps: {
+        createClient: () => {
+          throw new Error("disabled host must not create a client");
+        },
+        connectToDaemon: async () => {
+          pairCalls += 1;
+          return {
+            client: pairClient as unknown as DaemonClient,
+            serverId: host.serverId,
+            hostname: host.label,
+          };
+        },
+        getClientId: async () => "cid_disabled_repair",
+      },
+    });
+    await store.boot();
+
+    const result = await store.probeAndUpsertConnection({ connection });
+
+    expect(result.profile.lifecycle).toEqual({ autoConnect: false });
+    expect(store.getHosts()[0]?.lifecycle).toEqual({ autoConnect: false });
+    expect(store.getSnapshot(host.serverId)?.connectionStatus).toBe("offline");
+    expect(pairCalls).toBe(1);
+    expect(pairClient.isDisposed()).toBe(true);
+    expect(pairClient.reconnectEnabledCalls).toContain(false);
     store.syncHosts([]);
   });
 

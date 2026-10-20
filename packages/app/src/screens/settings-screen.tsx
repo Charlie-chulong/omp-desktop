@@ -43,6 +43,7 @@ import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { HostPicker as SharedHostPicker } from "@/components/hosts/host-picker";
+import { HostConnectionAction } from "@/components/hosts/host-connection-action";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
@@ -779,7 +780,10 @@ function HostVersionRow({
           <Text style={settingsStyles.rowHint}>{t("settings.about.versionDiffers")}</Text>
         ) : null}
       </View>
-      <Text style={valueStyle}>{valueText}</Text>
+      <View style={styles.hostConnectionActions}>
+        <Text style={valueStyle}>{valueText}</Text>
+        <HostConnectionAction serverId={host.serverId} />
+      </View>
     </View>
   );
 }
@@ -1456,6 +1460,11 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: 720,
     alignSelf: "center",
+  },
+  hostConnectionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
   },
   aboutValue: {
     color: theme.colors.foregroundMuted,

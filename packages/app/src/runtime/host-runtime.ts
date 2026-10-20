@@ -561,6 +561,7 @@ export class HostRuntimeController {
   private clientIdHash: string | null = null;
   private switchRequestVersion = 0;
   private probeRequestVersion = 0;
+  private startRequestVersion = 0;
   private probeCycleInFlight: Promise<void> | null = null;
 
   constructor(input: {
@@ -571,9 +572,10 @@ export class HostRuntimeController {
     this.host = input.host;
     this.deps = input.deps ?? createDefaultDeps();
     this.onReconcileServerId = input.onReconcileServerId ?? null;
-    this.connectionMachineState = {
-      tag: "booting",
-    };
+    this.connectionMachineState =
+      this.host.lifecycle.autoConnect === false
+        ? { tag: "offline", activeConnectionId: null, activeConnection: null }
+        : { tag: "booting" };
     this.snapshot = {
       serverId: this.host.serverId,
       ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
@@ -602,10 +604,18 @@ export class HostRuntimeController {
   }
 
   async start(options?: HostRuntimeStartOptions): Promise<void> {
-    if (this.started) {
+    if (!this.isConnectionEnabled()) {
+      await this.stop();
+      await this.abortSwitchWithClient(options?.initialConnection?.existingClient);
       return;
     }
+    if (this.started) {
+      await this.abortSwitchWithClient(options?.initialConnection?.existingClient);
+      return;
+    }
+    const startRequestVersion = ++this.startRequestVersion;
     this.started = true;
+    this.connectionLastProbedAt.clear();
     this.trackConnectionFirstSeen();
     if (options?.initialConnection) {
       await this.switchToConnection({
@@ -613,7 +623,13 @@ export class HostRuntimeController {
         existingClient: options.initialConnection.existingClient,
       });
     }
+    if (!this.isCurrentStartRequest(startRequestVersion)) {
+      return;
+    }
     await this.runProbeCycleNow();
+    if (!this.isCurrentStartRequest(startRequestVersion)) {
+      return;
+    }
     if (options?.autoProbe !== false) {
       this.probeIntervalHandle = setInterval(() => {
         void this.runProbeCycleNow();
@@ -622,9 +638,13 @@ export class HostRuntimeController {
   }
 
   async stop(): Promise<void> {
+    this.startRequestVersion += 1;
     this.switchRequestVersion += 1;
     this.probeRequestVersion += 1;
     this.started = false;
+    this.probeCycleInFlight = null;
+    this.switchCandidateConnectionId = null;
+    this.switchCandidateHitCount = 0;
     if (this.probeIntervalHandle) {
       clearInterval(this.probeIntervalHandle);
       this.probeIntervalHandle = null;
@@ -637,23 +657,33 @@ export class HostRuntimeController {
       this.unsubscribeClientHandlers();
       this.unsubscribeClientHandlers = null;
     }
-    if (this.activeClient) {
-      const prev = this.activeClient;
-      this.activeClient = null;
-      await prev.close().catch(() => undefined);
-    }
+    const previousClient = this.activeClient;
+    this.activeClient = null;
     this.applyConnectionEvent({ type: "stopped" });
     this.updateSnapshot({
       ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
       client: null,
+      probeByConnectionId: new Map(),
     });
+    if (previousClient) {
+      await this.closeClient(previousClient);
+    }
   }
 
   async updateHost(host: HostProfile): Promise<void> {
+    const wasConnectionEnabled = this.isConnectionEnabled();
     const activeConnectionId = this.snapshot.activeConnectionId;
     const previousActiveConnection = findConnectionById(this.host, activeConnectionId);
     this.host = host;
     this.trackConnectionFirstSeen();
+    if (!this.isConnectionEnabled()) {
+      await this.stop();
+      return;
+    }
+    if (!wasConnectionEnabled) {
+      await this.start();
+      return;
+    }
     const nextActiveConnection = findConnectionById(this.host, activeConnectionId);
     if (
       activeConnectionId &&
@@ -668,6 +698,9 @@ export class HostRuntimeController {
   }
 
   ensureConnected(): void {
+    if (!this.isConnectionEnabled()) {
+      return;
+    }
     this.activeClient?.ensureConnected();
   }
 
@@ -706,6 +739,9 @@ export class HostRuntimeController {
   }
 
   markStartupError(message: string): void {
+    if (!this.isConnectionEnabled()) {
+      return;
+    }
     this.applyConnectionEvent({ type: "connect_failed", message });
     this.updateSnapshot({
       ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
@@ -716,10 +752,17 @@ export class HostRuntimeController {
     connectionId: string;
     existingClient?: DaemonClient;
   }): Promise<void> {
+    if (!this.isConnectionEnabled()) {
+      await this.abortSwitchWithClient(input.existingClient);
+      return;
+    }
     await this.switchToConnection(input);
   }
 
   async runProbeCycleNow(): Promise<void> {
+    if (!this.isConnectionEnabled()) {
+      return;
+    }
     if (this.probeCycleInFlight) {
       return this.probeCycleInFlight;
     }
@@ -735,6 +778,9 @@ export class HostRuntimeController {
 
   private async runProbeCycle(): Promise<void> {
     const requestVersion = ++this.probeRequestVersion;
+    if (!this.isConnectionEnabled()) {
+      return;
+    }
     if (this.host.connections.length === 0) {
       if (!this.isCurrentProbeRequest(requestVersion)) {
         return;
@@ -932,18 +978,20 @@ export class HostRuntimeController {
                 host: this.host,
                 connection,
               });
+              connectedClient = client;
+              shouldCloseClient = true;
+              if (!this.isCurrentProbeRequest(requestVersion)) {
+                return;
+              }
               if (serverId !== this.host.serverId) {
                 if (isPlaceholderServerId(this.host.serverId) && this.onReconcileServerId) {
                   this.onReconcileServerId(this.host.serverId, serverId);
                 } else {
-                  await client.close().catch(() => undefined);
                   throw new Error(
                     `Connection resolved to ${serverId}, expected ${this.host.serverId}.`,
                   );
                 }
               }
-              connectedClient = client;
-              shouldCloseClient = true;
             }
 
             if (!this.isCurrentProbeRequest(requestVersion)) {
@@ -988,7 +1036,7 @@ export class HostRuntimeController {
             }
           } finally {
             if (connectedClient && shouldCloseClient) {
-              await connectedClient.close().catch(() => undefined);
+              await this.closeClient(connectedClient);
             }
             settleProbe();
           }
@@ -1062,12 +1110,20 @@ export class HostRuntimeController {
     }
   }
 
+  private isConnectionEnabled(): boolean {
+    return this.host.lifecycle.autoConnect !== false;
+  }
+
+  private isCurrentStartRequest(version: number): boolean {
+    return this.isConnectionEnabled() && this.started && version === this.startRequestVersion;
+  }
+
   private isCurrentSwitchRequest(version: number): boolean {
-    return version === this.switchRequestVersion;
+    return this.isConnectionEnabled() && version === this.switchRequestVersion;
   }
 
   private isCurrentProbeRequest(version: number): boolean {
-    return version === this.probeRequestVersion;
+    return this.isConnectionEnabled() && version === this.probeRequestVersion;
   }
 
   private canProceedForProbe(expectedProbeVersion: number | undefined): boolean {
@@ -1077,9 +1133,18 @@ export class HostRuntimeController {
     return this.isCurrentProbeRequest(expectedProbeVersion);
   }
 
+  private async closeClient(client: DaemonClient): Promise<void> {
+    try {
+      client.setReconnectEnabled(false);
+    } catch {
+      // Closing the transport is still required if reconnect configuration fails.
+    }
+    await client.close().catch(() => undefined);
+  }
+
   private async abortSwitchWithClient(client: DaemonClient | undefined): Promise<void> {
     if (client) {
-      await client.close().catch(() => undefined);
+      await this.closeClient(client);
     }
   }
 
@@ -1124,7 +1189,7 @@ export class HostRuntimeController {
     if (this.activeClient) {
       const previousClient = this.activeClient;
       this.activeClient = null;
-      await previousClient.close().catch(() => undefined);
+      await this.closeClient(previousClient);
     }
   }
 
@@ -1149,7 +1214,7 @@ export class HostRuntimeController {
     existingClient?: DaemonClient;
   }): Promise<void> {
     const { connectionId, expectedProbeVersion, existingClient } = input;
-    if (!this.canProceedForProbe(expectedProbeVersion)) {
+    if (!this.isConnectionEnabled() || !this.canProceedForProbe(expectedProbeVersion)) {
       await this.abortSwitchWithClient(existingClient);
       return;
     }
@@ -1189,7 +1254,7 @@ export class HostRuntimeController {
       });
 
     if (!this.isSwitchStillValid(requestVersion, expectedProbeVersion)) {
-      await client.close().catch(() => undefined);
+      await this.closeClient(client);
       return;
     }
 
@@ -1231,6 +1296,12 @@ export class HostRuntimeController {
     try {
       if (!existingClient) {
         await client.connect();
+        if (
+          !this.isSwitchStillValid(requestVersion, expectedProbeVersion) ||
+          this.activeClient !== client
+        ) {
+          await this.closeClient(client);
+        }
       }
     } catch (error) {
       if (!this.isCurrentSwitchRequest(requestVersion) || this.activeClient !== client) {
@@ -1338,7 +1409,7 @@ export class HostRuntimeStore {
   private hostListVersion = 0;
   private hostRegistryLoaded = false;
   private hosts: HostProfile[] = [];
-  private hostAppearanceMutationTail: Promise<void> = Promise.resolve();
+  private hostMutationTail: Promise<void> = Promise.resolve();
   private hostRegistryStatus: HostRegistryStatus = "loading";
   private deps: HostRuntimeControllerDeps;
   private lastConnectionStatusByServer = new Map<string, HostRuntimeConnectionStatus>();
@@ -1851,14 +1922,42 @@ export class HostRuntimeStore {
     }));
   }
 
+  async setHostConnectionEnabled(serverId: string, enabled: boolean): Promise<void> {
+    const update = this.hostMutationTail.then(() =>
+      this.applyHostConnectionEnabled(serverId, enabled),
+    );
+    this.hostMutationTail = update.catch(() => undefined);
+    return update;
+  }
+
+  private async applyHostConnectionEnabled(serverId: string, enabled: boolean): Promise<void> {
+    const host = this.hosts.find((candidate) => candidate.serverId === serverId);
+    if (!host) {
+      throw new Error(`Unknown host ${serverId}`);
+    }
+    if ((host.lifecycle.autoConnect !== false) === enabled) {
+      return;
+    }
+    const updatedAt = new Date().toISOString();
+    const next = this.hosts.map((candidate) =>
+      candidate.serverId === serverId
+        ? {
+            ...candidate,
+            lifecycle: { ...candidate.lifecycle, autoConnect: enabled },
+            updatedAt,
+          }
+        : candidate,
+    );
+    await this.persistHosts(next);
+    this.setHostsAndSync(next);
+  }
+
   private updateHostAppearance(
     serverId: string,
     apply: (host: HostProfile) => HostProfile,
   ): Promise<void> {
-    const update = this.hostAppearanceMutationTail.then(() =>
-      this.applyHostAppearance(serverId, apply),
-    );
-    this.hostAppearanceMutationTail = update.catch(() => undefined);
+    const update = this.hostMutationTail.then(() => this.applyHostAppearance(serverId, apply));
+    this.hostMutationTail = update.catch(() => undefined);
     return update;
   }
 
@@ -2602,6 +2701,7 @@ export interface HostMutations {
   renameHost: (serverId: string, label: string) => Promise<void>;
   setHostColor: (serverId: string, color: HostColor) => Promise<void>;
   setHostBadgeDisplay: (serverId: string, badgeDisplay: HostBadgeDisplay) => Promise<void>;
+  setHostConnectionEnabled: (serverId: string, enabled: boolean) => Promise<void>;
   removeHost: (serverId: string) => Promise<void>;
   removeConnection: (serverId: string, connectionId: string) => Promise<void>;
 }
@@ -2619,6 +2719,8 @@ export function useHostMutations(): HostMutations {
       setHostColor: (serverId, color) => store.setHostColor(serverId, color),
       setHostBadgeDisplay: (serverId, badgeDisplay) =>
         store.setHostBadgeDisplay(serverId, badgeDisplay),
+      setHostConnectionEnabled: (serverId, enabled) =>
+        store.setHostConnectionEnabled(serverId, enabled),
       removeHost: (serverId) => store.removeHost(serverId),
       removeConnection: (serverId, connectionId) => store.removeConnection(serverId, connectionId),
     }),
