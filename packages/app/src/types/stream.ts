@@ -1637,21 +1637,18 @@ function reduceTimelineEvent(
       };
       return finalizeActiveThoughts(appendActivityLog(state, activity));
     }
-    case "system_notice":
+    case "system_notice": {
+      let noticeTag: string = item.notice;
+      if (item.notice === "model_changed") {
+        noticeTag = `${item.notice}:${item.modelId}`;
+      } else if (item.notice === "thinking_changed") {
+        noticeTag = `${item.notice}:${item.thinkingOptionId}`;
+      }
       return [
         ...state,
         {
           kind: "system_notice",
-          id: createUniqueTimelineId(
-            state,
-            "system_notice",
-            item.notice === "model_changed"
-              ? `${item.notice}:${item.modelId}`
-              : item.notice === "thinking_changed"
-                ? `${item.notice}:${item.thinkingOptionId}`
-                : item.notice,
-            timestamp,
-          ),
+          id: createUniqueTimelineId(state, "system_notice", noticeTag, timestamp),
           ...(timelineCursor ? { timelineCursor } : {}),
           timestamp,
           notice: item.notice,
@@ -1661,6 +1658,7 @@ function reduceTimelineEvent(
             : {}),
         },
       ];
+    }
     case "compaction":
       return finalizeActiveThoughts(
         reduceTimelineCompaction(state, item, timestamp, timelineCursor),

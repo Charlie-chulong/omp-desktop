@@ -92,9 +92,10 @@ vi.mock("@/background-processes/track", () => ({
     processes: BackgroundProcess[];
     error: string | null;
   }) =>
-    state.error !== null ||
-    state.processes.some((process) =>
-      ["starting", "running", "ready", "restarting", "stopping"].includes(process.status),
+    state.processes.some(
+      (process) =>
+        state.error !== null ||
+        ["starting", "running", "ready", "restarting", "stopping"].includes(process.status),
     ),
   BackgroundProcessesTrack: ({
     state,

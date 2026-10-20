@@ -7,9 +7,11 @@ import {
   HEADER_INNER_HEIGHT,
   HEADER_INNER_HEIGHT_MOBILE,
   HEADER_TOP_PADDING_MOBILE,
+  getIsElectronRuntime,
   useIsCompactFormFactor,
 } from "@/constants/layout";
 import { WindowChromeSafeArea } from "@/utils/desktop-window";
+import { isWeb } from "@/constants/platform";
 import {
   TitlebarDragRegion,
   useTitlebarWindowDragSurface,
@@ -42,15 +44,18 @@ export function ScreenHeader({
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const isMobile = useIsCompactFormFactor();
-  // Only add extra padding on mobile for better touch targets; on desktop, only use safe area insets
-  const topPadding = isMobile ? HEADER_TOP_PADDING_MOBILE : 0;
+  const isCompactWeb = isMobile && isWeb && !getIsElectronRuntime();
+  const topPadding = isMobile && !isCompactWeb ? HEADER_TOP_PADDING_MOBILE : 0;
   const baseHorizontalPadding = isMobile ? theme.spacing[2] : theme.spacing[3];
 
   const innerStyle = useMemo(
     () => [styles.inner, { paddingTop: insets.top + topPadding }],
     [insets.top, topPadding],
   );
-  const rowStyle = useMemo(() => [styles.row, borderless && styles.borderless], [borderless]);
+  const rowStyle = useMemo(
+    () => [styles.row, isCompactWeb && styles.compactWebRow, borderless && styles.borderless],
+    [isCompactWeb, borderless],
+  );
   const leftCombinedStyle = useMemo(() => [styles.left, leftStyle], [leftStyle]);
   const rightCombinedStyle = useMemo(() => [styles.right, rightStyle], [rightStyle]);
   const titlebarWindowDragSurface = useTitlebarWindowDragSurface();
@@ -95,6 +100,9 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomWidth: theme.borderWidth[1],
     borderBottomColor: theme.colors.border,
     userSelect: "none",
+  },
+  compactWebRow: {
+    height: 44,
   },
   left: {
     flex: 1,

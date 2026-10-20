@@ -10,6 +10,13 @@ export interface WorkspaceFileDragPayload {
   attachment: WorkspaceFileComposerAttachment;
 }
 
+export const WORKSPACE_FILE_POINTER_DRAG_EVENT = "paseo:workspace-file-pointer-drag";
+
+export interface WorkspaceFilePointerDragDetail {
+  phase: "over" | "leave" | "drop";
+  payload: WorkspaceFileDragPayload;
+}
+
 export function serializeWorkspaceFileDragPayload(payload: WorkspaceFileDragPayload): string {
   return JSON.stringify(payload);
 }

@@ -48,6 +48,7 @@ class FakeWindow implements BackgroundModeWindow {
       },
     };
     this.closeListener?.(event);
+    if (!event.prevented) this.destroyed = true;
     return event;
   }
 }
@@ -197,6 +198,29 @@ describe("background window mode", () => {
     expect(harness.quitApp).not.toHaveBeenCalled();
     expect(harness.window.visible).toBe(true);
     expect(harness.getTrayActions()).toBeNull();
+  });
+
+  it("lets a user close a window whose renderer can no longer answer the background prompt", () => {
+    const harness = createHarness("quit");
+    harness.controller.markWindowRendererUnavailable(harness.window);
+
+    const event = harness.window.close();
+
+    expect(event.prevented).toBe(false);
+    expect(harness.window.destroyed).toBe(true);
+    expect(harness.promptForCloseChoice).not.toHaveBeenCalled();
+    expect(harness.quitApp).not.toHaveBeenCalled();
+  });
+
+  it("closes a replaced renderer window without entering background or quit lifecycle", () => {
+    const harness = createHarness("quit");
+
+    harness.controller.closeWindow(harness.window);
+
+    expect(harness.window.destroyed).toBe(true);
+    expect(harness.window.hiddenCount).toBe(0);
+    expect(harness.promptForCloseChoice).not.toHaveBeenCalled();
+    expect(harness.quitApp).not.toHaveBeenCalled();
   });
 
   it("quits from the tray menu without reopening the close dialog", async () => {

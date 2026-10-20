@@ -288,6 +288,12 @@ function OmpPluginRow({
   const { t } = useTranslation();
   const handleToggle = useCallback((value: boolean) => onToggle(plugin, value), [onToggle, plugin]);
   const handleRemove = useCallback(() => onRemove(plugin), [onRemove, plugin]);
+  let shadowedLabel = "";
+  if (plugin.shadowedBy === "project") {
+    shadowedLabel = ` · ${t("settings.host.ompPlugins.scope.shadowed")}`;
+  } else if (plugin.scope === "project" && plugin.enabled === true) {
+    shadowedLabel = ` · ${t("settings.host.ompPlugins.scope.effectiveProject")}`;
+  }
   return (
     <View style={styles.pluginRow}>
       <View style={settingsStyles.rowContent}>
@@ -305,11 +311,7 @@ function OmpPluginRow({
           {plugin.scope === "project"
             ? t("settings.host.ompPlugins.scope.project")
             : t("settings.host.ompPlugins.scope.user")}
-          {plugin.shadowedBy === "project"
-            ? ` · ${t("settings.host.ompPlugins.scope.shadowed")}`
-            : plugin.scope === "project" && plugin.enabled === true
-              ? ` · ${t("settings.host.ompPlugins.scope.effectiveProject")}`
-              : ""}
+          {shadowedLabel}
         </Text>
         {plugin.path ? (
           <Text style={styles.pluginPath} numberOfLines={1}>
@@ -409,13 +411,13 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
   if (identity.current.client !== client || identity.current.serverId !== serverId) {
     identity.current = { client, serverId, generation: identity.current.generation + 1 };
   }
-  const applyContext = () => {
+  const applyContext = useCallback(() => {
     if (busy || !connected) return;
     const next = directory.trim() || undefined;
     if (next === cwd) return;
     setBusy(true);
     setCwd(next);
-  };
+  }, [busy, connected, cwd, directory]);
 
   return (
     <View style={styles.container}>
@@ -481,6 +483,8 @@ function OmpPluginsContextPage({
   const [operation, setOperation] = useState<string | null>(null);
   const operationLock = useRef(false);
   const [scope, setScope] = useState<MarketplaceScope>("user");
+  const selectUserScope = useCallback(() => setScope("user"), []);
+  const selectProjectScope = useCallback(() => setScope("project"), []);
   const [notice, setNotice] = useState<"applied" | "preview" | "catalogRefreshed" | null>(null);
   const [installSpec, setInstallSpec] = useState("");
   const [installDryRun, setInstallDryRun] = useState(false);
@@ -679,6 +683,11 @@ function OmpPluginsContextPage({
     });
   }, [client, cwd, mktSource, runOperation, t]);
 
+  const removeMarketplaceFromState = useCallback((name: string) => {
+    setMarketplaces((prev) => prev.filter((entry) => entry.name !== name));
+    setExpandedMarketplace((prev) => (prev === name ? null : prev));
+  }, []);
+
   const handleMarketplaceRemove = useCallback(
     (name: string) =>
       runOperation("marketplace", async () => {
@@ -686,8 +695,7 @@ function OmpPluginsContextPage({
         const result = await client.removeOmpPluginMarketplace(name, cwd);
         if (!active.current) return;
         if (result.ok) {
-          setMarketplaces((prev) => prev.filter((entry) => entry.name !== name));
-          setExpandedMarketplace((prev) => (prev === name ? null : prev));
+          removeMarketplaceFromState(name);
         } else {
           setLoadError(
             result.output ||
@@ -695,7 +703,7 @@ function OmpPluginsContextPage({
           );
         }
       }),
-    [client, cwd, runOperation, t],
+    [client, cwd, removeMarketplaceFromState, runOperation, t],
   );
 
   const handleMarketplaceRefresh = useCallback(
@@ -1044,7 +1052,7 @@ function OmpPluginsContextPage({
                 size="sm"
                 variant={scope === "user" ? "default" : "outline"}
                 disabled={controlsDisabled}
-                onPress={() => setScope("user")}
+                onPress={selectUserScope}
                 testID="omp-plugins-scope-user"
               >
                 {t("settings.host.ompPlugins.scope.user")}
@@ -1053,7 +1061,7 @@ function OmpPluginsContextPage({
                 size="sm"
                 variant={scope === "project" ? "default" : "outline"}
                 disabled={controlsDisabled || !cwd}
-                onPress={() => setScope("project")}
+                onPress={selectProjectScope}
                 testID="omp-plugins-scope-project"
               >
                 {t("settings.host.ompPlugins.scope.project")}

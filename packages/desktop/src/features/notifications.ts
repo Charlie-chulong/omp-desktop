@@ -1,6 +1,6 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
-import { app, BrowserWindow, Notification, ipcMain, nativeImage } from "electron";
+import { app, BrowserWindow, Notification, ipcMain, nativeImage, shell } from "electron";
 import { getDesktopSettingsStore } from "../settings/desktop-settings-electron.js";
 import { selectMainWindow, showMainWindow } from "../window/main-windows.js";
 
@@ -80,6 +80,18 @@ export function registerNotificationHandlers(): void {
     return Notification.isSupported();
   });
 
+  ipcMain.handle("paseo:notification:openSettings", async () => {
+    if (process.platform === "darwin") {
+      await shell.openExternal(
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+      );
+    } else if (process.platform === "win32") {
+      await shell.openExternal("ms-settings:notifications");
+    } else {
+      throw new Error("Notification settings are unavailable on this platform");
+    }
+  });
+
   ipcMain.handle("paseo:notification:send", async (event, rawInput?: NotificationInput) => {
     if (!Notification.isSupported()) {
       return false;
@@ -112,11 +124,37 @@ export function registerNotificationHandlers(): void {
       activeNotifications.delete(notification);
     });
 
-    notification.on("close", () => {
-      activeNotifications.delete(notification);
+    return await new Promise<boolean>((resolve) => {
+      const finish = (sent: boolean) => {
+        clearTimeout(timeout);
+        notification.removeListener("show", onShow);
+        notification.removeListener("failed", onFailed);
+        notification.removeListener("close", onClose);
+        if (!sent) {
+          activeNotifications.delete(notification);
+        }
+        resolve(sent);
+      };
+      const onShow = () => finish(true);
+      const onFailed = (_event: unknown, error: string) => {
+        console.error("[Notification] Delivery failed", error);
+        finish(false);
+      };
+      const onClose = () => finish(false);
+      const timeout = setTimeout(() => {
+        finish(false);
+        notification.close();
+      }, 10_000);
+      notification.on("show", onShow);
+      notification.on("failed", onFailed);
+      notification.on("close", onClose);
+      notification.on("close", () => activeNotifications.delete(notification));
+      try {
+        notification.show();
+      } catch (error) {
+        console.error("[Notification] Delivery failed", error);
+        finish(false);
+      }
     });
-
-    notification.show();
-    return true;
   });
 }

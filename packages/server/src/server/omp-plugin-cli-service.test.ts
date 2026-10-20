@@ -595,12 +595,13 @@ describe("OmpPluginCliService", () => {
     });
 
     it("does not report successful refresh when the native marketplace update fails", async () => {
-      const service = makeService(async () => {
-        throw Object.assign(new Error("update failed"), {
+      const runner = vi.fn<OmpPluginRunner>().mockRejectedValue(
+        Object.assign(new Error("update failed"), {
           stdout: "Fetching catalog",
           stderr: "remote repository unavailable",
-        });
-      });
+        }),
+      );
+      const service = makeService(runner);
       const result = await service.marketplaceUpdate({ name: "probe-mkt" });
       expect(result.ok).toBe(false);
       expect(result.output).toContain("Fetching catalog");

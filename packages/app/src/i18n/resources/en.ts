@@ -72,6 +72,16 @@ export const en = {
       idle: "Idle",
     },
   },
+  hostConnection: {
+    disconnect: "Disconnect",
+    reconnect: "Reconnect",
+    disconnectAccessibility: "Disconnect {{host}}",
+    reconnectAccessibility: "Reconnect {{host}}",
+    disconnectHint: "Stops connection attempts and automatic reconnection",
+    reconnectHint: "Allows this host to connect automatically",
+    disconnectFailed: "Could not disconnect {{host}}: {{reason}}",
+    reconnectFailed: "Could not reconnect {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Add project",
     methods: {
@@ -2189,6 +2199,14 @@ export const en = {
       title: "Notifications",
       permission: "Notification permission",
       refreshAccessibility: "Refresh notification permission",
+      refresh: "Refresh",
+      refreshing: "Refreshing...",
+      actions: {
+        granted: "Granted",
+        request: "Allow notifications",
+        openSettings: "Notification settings",
+        requesting: "Requesting...",
+      },
       playSound: "Play sound",
       playSoundHint: "Play a sound when a desktop notification arrives",
       test: "Test notification",
@@ -2346,6 +2364,10 @@ export const en = {
       autoExpandReasoning: {
         label: "Always expand reasoning",
         description: "Show agent thinking and chain-of-thought blocks fully expanded by default",
+      },
+      showTurnFileChanges: {
+        label: "Show files after each response",
+        description: "Show the changed-file list above completed response statistics",
       },
       toolCallDetail: {
         label: "Tool call display",

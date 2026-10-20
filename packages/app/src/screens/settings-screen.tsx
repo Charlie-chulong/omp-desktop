@@ -44,6 +44,7 @@ import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { HostPicker as SharedHostPicker } from "@/components/hosts/host-picker";
+import { HostConnectionAction } from "@/components/hosts/host-connection-action";
 import { HostStatusDot } from "@/components/host-status-dot";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import { HeaderIconBadge } from "@/components/headers/header-icon-badge";
@@ -252,6 +253,180 @@ let retainedDesktopSidebarScrollOffset = 0;
 // ---------------------------------------------------------------------------
 // Section components
 // ---------------------------------------------------------------------------
+
+interface AutoExpandReasoningRowProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function AutoExpandReasoningRow({ value, onChange }: AutoExpandReasoningRowProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={settingsStyles.row}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.general.autoExpandReasoning.label")}
+        </Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.general.autoExpandReasoning.description")}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        accessibilityLabel={t("settings.general.autoExpandReasoning.label")}
+      />
+    </View>
+  );
+}
+
+interface ChatOutlineRowProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function ChatOutlineRow({ value, onChange }: ChatOutlineRowProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.appearance.chatOutline.title")}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.appearance.chatOutline.description")}
+        </Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        accessibilityLabel={t("settings.appearance.chatOutline.title")}
+      />
+    </View>
+  );
+}
+
+const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
+  "detailed",
+  "overview",
+];
+
+interface ToolCallDetailMenuItemProps {
+  value: AppSettings["toolCallDetailLevel"];
+  selected: boolean;
+  onChange: (value: AppSettings["toolCallDetailLevel"]) => void;
+}
+
+function ToolCallDetailMenuItem({ value, selected, onChange }: ToolCallDetailMenuItemProps) {
+  const { t } = useTranslation();
+  const handleSelect = useCallback(() => onChange(value), [onChange, value]);
+  return (
+    <DropdownMenuItem selected={selected} onSelect={handleSelect}>
+      {t(`settings.general.toolCallDetail.options.${value}`)}
+    </DropdownMenuItem>
+  );
+}
+
+interface ToolCallDetailRowProps {
+  value: AppSettings["toolCallDetailLevel"];
+  onChange: (value: AppSettings["toolCallDetailLevel"]) => void;
+}
+
+function ToolCallDetailRow({ value, onChange }: ToolCallDetailRowProps) {
+  const { t } = useTranslation();
+  const selectedLabel = t(`settings.general.toolCallDetail.options.${value}`);
+  return (
+    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.general.toolCallDetail.label")}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {t("settings.general.toolCallDetail.description")}
+        </Text>
+      </View>
+      <DropdownMenu>
+        <DropdownTrigger
+          accessibilityRole="button"
+          style={themeTriggerStyle}
+          accessibilityLabel={t("settings.general.toolCallDetail.accessibilityLabel", {
+            value: selectedLabel,
+          })}
+        >
+          <Text style={styles.themeTriggerText}>{selectedLabel}</Text>
+        </DropdownTrigger>
+        <DropdownMenuContent side="bottom" align="end" width={200}>
+          {TOOL_CALL_DETAIL_LEVELS.map((option) => (
+            <ToolCallDetailMenuItem
+              key={option}
+              value={option}
+              selected={value === option}
+              onChange={onChange}
+            />
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </View>
+  );
+}
+
+function ConversationDetailSection() {
+  const { t } = useTranslation();
+  const { settings, updateSettings } = useAppSettings();
+  const handleAutoExpandReasoningChange = useCallback(
+    (autoExpandReasoning: boolean) => {
+      void updateSettings({ autoExpandReasoning });
+    },
+    [updateSettings],
+  );
+  const handleToolCallDetailLevelChange = useCallback(
+    (toolCallDetailLevel: AppSettings["toolCallDetailLevel"]) => {
+      void updateSettings({ toolCallDetailLevel });
+    },
+    [updateSettings],
+  );
+  const handleChatOutlineChange = useCallback(
+    (chatOutlineEnabled: boolean) => {
+      void updateSettings({ chatOutlineEnabled });
+    },
+    [updateSettings],
+  );
+  const handleShowTurnFileChangesChange = useCallback(
+    (showTurnFileChanges: boolean) => {
+      void updateSettings({ showTurnFileChanges });
+    },
+    [updateSettings],
+  );
+
+  return (
+    <SettingsSection title={t("settings.appearance.detailLevel.title")}>
+      <View style={settingsStyles.card}>
+        <AutoExpandReasoningRow
+          value={settings.autoExpandReasoning}
+          onChange={handleAutoExpandReasoningChange}
+        />
+        <ToolCallDetailRow
+          value={settings.toolCallDetailLevel}
+          onChange={handleToolCallDetailLevelChange}
+        />
+        <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>
+              {t("settings.general.showTurnFileChanges.label")}
+            </Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.general.showTurnFileChanges.description")}
+            </Text>
+          </View>
+          <Switch
+            value={settings.showTurnFileChanges}
+            onValueChange={handleShowTurnFileChangesChange}
+            accessibilityLabel={t("settings.general.showTurnFileChanges.label")}
+          />
+        </View>
+        {!isNative ? (
+          <ChatOutlineRow value={settings.chatOutlineEnabled} onChange={handleChatOutlineChange} />
+        ) : null}
+      </View>
+    </SettingsSection>
+  );
+}
 
 interface GeneralSectionProps {
   settings: AppSettings;
@@ -498,11 +673,10 @@ function DiagnosticsSection({
 }
 
 interface AboutSectionProps {
-  appVersion: string | null;
   appVersionText: string;
 }
 
-function AboutSection({ appVersion, appVersionText }: AboutSectionProps) {
+function AboutSection({ appVersionText }: AboutSectionProps) {
   const { t } = useTranslation();
   const update = useDesktopUpdate();
   const isDesktopApp = isElectronRuntime();
@@ -543,38 +717,35 @@ function AboutSection({ appVersion, appVersionText }: AboutSectionProps) {
   }, [update, updateReady]);
 
   return (
-    <>
-      <SettingsSection title={t("settings.about.title")}>
-        <View style={settingsStyles.card}>
-          <View style={settingsStyles.row}>
-            <View style={settingsStyles.rowContent}>
-              <Text style={settingsStyles.rowTitle}>{t("settings.about.appVersion")}</Text>
-              <Text style={settingsStyles.rowHint}>{t("settings.about.thisDevice")}</Text>
-            </View>
-            <Text style={styles.aboutValue}>{appVersionText}</Text>
+    <SettingsSection title={t("settings.about.title")}>
+      <View style={settingsStyles.card}>
+        <View style={settingsStyles.row}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>{t("settings.about.appVersion")}</Text>
+            <Text style={settingsStyles.rowHint}>{t("settings.about.thisDevice")}</Text>
           </View>
-          {isDesktopApp ? (
-            <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-              <View style={settingsStyles.rowContent}>
-                <Text style={settingsStyles.rowTitle}>{t("settings.about.updates.label")}</Text>
-                <Text style={settingsStyles.rowHint}>{updateStatusText}</Text>
-              </View>
-              <Button
-                variant={updateReady ? "default" : "secondary"}
-                size="sm"
-                loading={isChecking || isInstalling}
-                disabled={isChecking || isInstalling}
-                onPress={handleUpdateAction}
-                testID="settings-app-update-action"
-              >
-                {updateActionLabel}
-              </Button>
-            </View>
-          ) : null}
+          <Text style={styles.aboutValue}>{appVersionText}</Text>
         </View>
-      </SettingsSection>
-      <ConnectedHostsSection clientVersion={appVersion} />
-    </>
+        {isDesktopApp ? (
+          <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>{t("settings.about.updates.label")}</Text>
+              <Text style={settingsStyles.rowHint}>{updateStatusText}</Text>
+            </View>
+            <Button
+              variant={updateReady ? "default" : "secondary"}
+              size="sm"
+              loading={isChecking || isInstalling}
+              disabled={isChecking || isInstalling}
+              onPress={handleUpdateAction}
+              testID="settings-app-update-action"
+            >
+              {updateActionLabel}
+            </Button>
+          </View>
+        ) : null}
+      </View>
+    </SettingsSection>
   );
 }
 
@@ -655,7 +826,10 @@ function HostVersionRow({
           <Text style={settingsStyles.rowHint}>{t("settings.about.versionDiffers")}</Text>
         ) : null}
       </View>
-      <Text style={valueStyle}>{valueText}</Text>
+      <View style={styles.hostConnectionActions}>
+        <Text style={valueStyle}>{valueText}</Text>
+        <HostConnectionAction serverId={host.serverId} />
+      </View>
     </View>
   );
 }
@@ -1171,6 +1345,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
                 handleLanguageChange={handleLanguageChange}
                 handleTerminalScrollbackLinesChange={handleTerminalScrollbackLinesChange}
               />
+              <ConversationDetailSection />
               {isDesktopApp ? <DesktopBrowserSection /> : null}
               {isDesktopApp ? <DesktopStartupSection /> : null}
             </>
@@ -1183,7 +1358,12 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
             />
           );
         case "connections":
-          return <AddRemoteHostSection />;
+          return (
+            <>
+              <ConnectedHostsSection clientVersion={appVersion} />
+              <AddRemoteHostSection />
+            </>
+          );
         case "appearance":
           return <AppearanceSection />;
         case "editor":
@@ -1202,7 +1382,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
             />
           );
         case "about":
-          return <AboutSection appVersion={appVersion} appVersionText={appVersionText} />;
+          return <AboutSection appVersionText={appVersionText} />;
       }
     }
     return null;
@@ -1321,6 +1501,11 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     maxWidth: 720,
     alignSelf: "center",
+  },
+  hostConnectionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
   },
   aboutValue: {
     color: theme.colors.foregroundMuted,

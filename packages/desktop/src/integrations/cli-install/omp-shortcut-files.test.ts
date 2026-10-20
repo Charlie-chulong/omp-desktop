@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, truncate, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -67,6 +67,22 @@ describe("OMP command shortcut", () => {
     await uninstallOmpShortcutAtPaths(input);
 
     expect(await readFile(paths.targetPath, "utf8")).toBe("user command");
+  });
+
+  it("checks and preserves a standalone executable too large to read as text", async () => {
+    const paths = await createPaths();
+    const input = { ...paths, platform: "darwin" as const };
+    await mkdir(path.dirname(paths.targetPath), { recursive: true });
+    await writeFile(paths.targetPath, Buffer.from([0xcf, 0xfa, 0xed, 0xfe]));
+    // Sparse file: exceeds readFile's limit without allocating a multi-GB fixture.
+    const executableSize = 2 ** 31;
+    await truncate(paths.targetPath, executableSize);
+
+    expect(await isManagedOmpShortcut(input)).toBe(false);
+    await expect(installOmpShortcutAtPaths(input)).rejects.toThrow("already exists");
+    await uninstallOmpShortcutAtPaths(input);
+
+    expect((await stat(paths.targetPath)).size).toBe(executableSize);
   });
 
   it("uses an owned command trampoline on Windows", async () => {

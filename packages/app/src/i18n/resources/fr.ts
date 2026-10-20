@@ -58,6 +58,16 @@ export const fr: TranslationResources = {
       idle: "Inactif",
     },
   },
+  hostConnection: {
+    disconnect: "Déconnecter",
+    reconnect: "Reconnecter",
+    disconnectAccessibility: "Déconnecter {{host}}",
+    reconnectAccessibility: "Reconnecter {{host}}",
+    disconnectHint: "Arrête les tentatives de connexion et la reconnexion automatique",
+    reconnectHint: "Autorise cet hôte à se connecter automatiquement",
+    disconnectFailed: "Impossible de déconnecter {{host}} : {{reason}}",
+    reconnectFailed: "Impossible de reconnecter {{host}} : {{reason}}",
+  },
   addProjectFlow: {
     title: "Ajouter un projet",
     methods: {
@@ -2120,6 +2130,14 @@ export const fr: TranslationResources = {
       title: "Notifications",
       permission: "Autorisation des notifications",
       refreshAccessibility: "Actualiser l’autorisation des notifications",
+      refresh: "Actualiser",
+      refreshing: "Actualisation...",
+      actions: {
+        granted: "Autorisé",
+        request: "Autoriser les notifications",
+        openSettings: "Réglages des notifications",
+        requesting: "Demande en cours...",
+      },
       playSound: "Émettre un son",
       playSoundHint: "Émet un son lorsqu’une notification de bureau arrive",
       test: "Tester la notification",
@@ -2222,6 +2240,11 @@ export const fr: TranslationResources = {
         label: "DéfilementTerminal",
         description: "Lignes conservées dans le tampon du terminal intégré",
         accessibilityLabel: "Lignes de défilementTerminal",
+      },
+      showTurnFileChanges: {
+        label: "Afficher les fichiers après chaque réponse",
+        description:
+          "Afficher les fichiers modifiés au-dessus des statistiques de la réponse terminée",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",

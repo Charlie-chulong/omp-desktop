@@ -41,7 +41,9 @@ export type HostConnection =
   | DirectPipeHostConnection
   | RelayHostConnection;
 
-export type HostLifecycle = Record<string, never>;
+export interface HostLifecycle {
+  autoConnect?: boolean;
+}
 
 export interface HostProfile {
   serverId: string;
@@ -324,7 +326,7 @@ const StoredHostProfileSchema = z.strictObject({
   serverId: z.string().trim().min(1),
   label: z.string().optional(),
   appearance: HostAppearanceSchema.optional(),
-  lifecycle: z.strictObject({}).optional(),
+  lifecycle: z.strictObject({ autoConnect: z.boolean().optional() }).optional(),
   connections: z.array(StoredHostConnectionSchema).min(1),
   preferredConnectionId: z.string().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }).optional(),
@@ -405,7 +407,7 @@ export function normalizeStoredHostProfile(entry: unknown): HostProfile | null {
     serverId,
     label,
     appearance: record.appearance ?? defaultHostAppearance(),
-    lifecycle: defaultLifecycle(),
+    lifecycle: record.lifecycle ?? defaultLifecycle(),
     connections,
     preferredConnectionId,
     createdAt: record.createdAt ?? now,

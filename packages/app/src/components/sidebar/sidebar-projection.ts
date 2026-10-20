@@ -3,6 +3,7 @@ import { orderPinnedSidebarProjects, type PinnedSidebarKeys } from "@/hooks/use-
 import type {
   SidebarProjectEntry,
   SidebarWorkspaceEntry,
+  SidebarWorkspacePlacement,
 } from "@/hooks/use-sidebar-workspaces-list";
 import type { SidebarGroupMode } from "@/stores/sidebar-view-store";
 import {
@@ -42,12 +43,39 @@ export interface SidebarProjectionInput {
   collapsedWorkspaceGroupKeys: ReadonlySet<string>;
 }
 
+const PROJECT_STATUS_RANK: Record<SidebarWorkspaceEntry["statusBucket"], number> = {
+  running: 0,
+  needs_input: 1,
+  failed: 2,
+  attention: 3,
+  done: 4,
+};
+
 export function buildSidebarProjection(input: SidebarProjectionInput): SidebarProjection {
-  const projects = orderPinnedSidebarProjects({
+  let projects = orderPinnedSidebarProjects({
     projects: input.projects,
     keys: input.pinnedKeys,
     pinnedWorkspaceOrder: input.pinnedWorkspaceOrder,
   });
+  if (input.groupMode === "project") {
+    const pinned = new Set(input.pinnedKeys.pinnedWorkspaceKeys);
+    const compareWorkspaces = (left: SidebarWorkspacePlacement, right: SidebarWorkspacePlacement) =>
+      Number(pinned.has(right.workspaceKey)) - Number(pinned.has(left.workspaceKey)) ||
+      PROJECT_STATUS_RANK[
+        input.workspaceEntriesByKey.get(left.workspaceKey)?.statusBucket ?? "done"
+      ] -
+        PROJECT_STATUS_RANK[
+          input.workspaceEntriesByKey.get(right.workspaceKey)?.statusBucket ?? "done"
+        ];
+    projects = projects.map((project) => {
+      const needsSorting = project.workspaces.some(
+        (workspace, index, rows) => index > 0 && compareWorkspaces(rows[index - 1]!, workspace) > 0,
+      );
+      return needsSorting
+        ? { ...project, workspaces: project.workspaces.toSorted(compareWorkspaces) }
+        : project;
+    });
+  }
   const orderedWorkspaces = projects.flatMap((project) =>
     project.workspaces.flatMap((workspace) => {
       const entry = input.workspaceEntriesByKey.get(workspace.workspaceKey);

@@ -58,6 +58,16 @@ export const ptBR: TranslationResources = {
       idle: "Ocioso",
     },
   },
+  hostConnection: {
+    disconnect: "Desconectar",
+    reconnect: "Reconectar",
+    disconnectAccessibility: "Desconectar {{host}}",
+    reconnectAccessibility: "Reconectar {{host}}",
+    disconnectHint: "Interrompe tentativas de conexão e a reconexão automática",
+    reconnectHint: "Permite que este host se conecte automaticamente",
+    disconnectFailed: "Não foi possível desconectar {{host}}: {{reason}}",
+    reconnectFailed: "Não foi possível reconectar {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Adicionar projeto",
     methods: {
@@ -2113,6 +2123,14 @@ export const ptBR: TranslationResources = {
       title: "Notificações",
       permission: "Permissão de notificações",
       refreshAccessibility: "Atualizar permissão de notificações",
+      refresh: "Atualizar",
+      refreshing: "Atualizando...",
+      actions: {
+        granted: "Permitido",
+        request: "Permitir notificações",
+        openSettings: "Configurações de notificações",
+        requesting: "Solicitando...",
+      },
       playSound: "Reproduzir som",
       playSoundHint: "Reproduz um som quando chega uma notificação da área de trabalho",
       test: "Testar notificação",
@@ -2213,6 +2231,10 @@ export const ptBR: TranslationResources = {
         label: "Scrollback do terminal",
         description: "Linhas mantidas no buffer do terminal integrado",
         accessibilityLabel: "Linhas do scrollback do terminal",
+      },
+      showTurnFileChanges: {
+        label: "Mostrar arquivos após cada resposta",
+        description: "Mostrar os arquivos alterados acima das estatísticas da resposta concluída",
       },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",

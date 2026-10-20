@@ -44,6 +44,12 @@ import { registerWallpaperWindow } from "./wallpaper/commands.js";
 import { createWallpaperMediaResponse } from "./wallpaper/media-response.js";
 import { BackgroundModeController } from "./window/background-mode.js";
 import { CloseChoiceRequestBroker } from "./window/close-choice-request.js";
+import {
+  getRendererRecoveryRoute,
+  RendererLossRecoveryController,
+  showRendererLossPrompt,
+  showRendererRecoveryFailure,
+} from "./window/renderer-loss-recovery.js";
 import { setupDarwinCompositorWatchdog } from "./window/compositor-watchdog/index.js";
 import { registerDialogHandlers } from "./features/dialogs.js";
 import {
@@ -109,6 +115,8 @@ const closeChoiceRequests = new CloseChoiceRequestBroker();
 let petController: DesktopPetController | null = null;
 let ownsDesktopInstance = false;
 let mainWindowsQuitting = false;
+const presentedMainWindows = new WeakSet<BrowserWindow>();
+const restoreWindowStateByWindow = new WeakMap<BrowserWindow, boolean>();
 
 function failInitialWindowPresentation(window: BrowserWindow, error: unknown): void {
   if (mainWindowsQuitting || window.isDestroyed() || window.isVisible()) return;
@@ -235,6 +243,7 @@ ipcMain.handle("paseo:window:content-ready", async (event) => {
     if (mainWindowsQuitting || documentVersion !== getMainWindowDocumentVersion(window)) return;
     if (isMainWindowSender(event.sender) && event.senderFrame === event.sender.mainFrame) {
       markMainWindowContentReady(window);
+      presentedMainWindows.add(window);
     }
   } catch (error) {
     if (documentVersion === getMainWindowDocumentVersion(window)) {
@@ -384,12 +393,19 @@ function getInitialWindowUrl(initialRoute?: string | null): string {
   return initialRoute ? new URL(initialRoute, `${DEV_SERVER_URL}/`).toString() : DEV_SERVER_URL;
 }
 
+function assertWindowCreationAllowed(canCreate?: () => boolean): void {
+  if (mainWindowsQuitting || (canCreate && !canCreate())) {
+    throw new Error("Window creation was canceled because the application is closing");
+  }
+}
+
 async function createWindow(
   options: {
     initialRoute?: string | null;
     pendingOpenProjectPath?: string | null;
     restoreWindowState?: boolean;
   } = {},
+  canCreate?: () => boolean,
 ): Promise<BrowserWindow> {
   const iconPath = await getEffectiveAppIconPath();
   const systemTheme = resolveSystemWindowTheme();
@@ -406,6 +422,7 @@ async function createWindow(
   const restoredWindowState = savedWindowState
     ? clampWindowStateToWorkAreas(savedWindowState, getWorkAreasPrimaryFirst())
     : null;
+  assertWindowCreationAllowed(canCreate);
 
   const title = devWorktreeName ? `${APP_NAME} (${devWorktreeName})` : APP_NAME;
   const mainWindow = new BrowserWindow({
@@ -429,6 +446,8 @@ async function createWindow(
     mainWindow.on("page-title-updated", (event) => event.preventDefault());
   }
   registerMainWindow(mainWindow);
+  restoreWindowStateByWindow.set(mainWindow, restoreWindowState);
+  mainWindow.on("show", () => presentedMainWindows.add(mainWindow));
   registerWallpaperWindow(mainWindow);
   backgroundModeController.registerWindow(mainWindow);
 
@@ -438,7 +457,12 @@ async function createWindow(
   mainWindow.webContents.once("destroyed", () => petController?.clearActivity(webContentsId));
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     petController?.clearActivity(webContentsId);
-    failInitialWindowPresentation(mainWindow, new Error(`Renderer exited: ${details.reason}`));
+    if (!presentedMainWindows.has(mainWindow)) {
+      failInitialWindowPresentation(mainWindow, new Error(`Renderer exited: ${details.reason}`));
+      return;
+    }
+    backgroundModeController.markWindowRendererUnavailable(mainWindow);
+    void rendererLossRecoveryController.handleRendererLoss(mainWindow, details);
   });
   if (PASEO_DEBUG) {
     mainWindow.webContents.on("did-fail-load", (...args: unknown[]) => {
@@ -483,10 +507,6 @@ async function createWindow(
   });
 
   try {
-    if (!app.isPackaged) {
-      const { loadReactDevTools } = await import("./features/react-devtools.js");
-      await loadReactDevTools();
-    }
     const initialUrl = getInitialWindowUrl(options.initialRoute);
     initialDocumentVersion = getMainWindowDocumentVersion(mainWindow);
     captureInitialNavigation = process.platform === "win32";
@@ -571,6 +591,27 @@ const backgroundModeController = new BackgroundModeController({
   showWindow: (window, focus) => showMainWindow(window as BrowserWindow, focus),
   quitApp: () => app.quit(),
   onError: (error) => log.error("[background mode] operation failed", error),
+});
+
+const rendererLossRecoveryController = new RendererLossRecoveryController<BrowserWindow>({
+  getReplacementOptions: (window) => ({
+    initialRoute: getRendererRecoveryRoute(window.webContents.getURL()),
+    pendingOpenProjectPath: pendingOpenProjectStore.take(window.webContents.id),
+    restoreWindowState: restoreWindowStateByWindow.get(window) ?? false,
+  }),
+  showRecoveryPrompt: (window, details) =>
+    showRendererLossPrompt(window, (options) => dialog.showMessageBox(window, options), details),
+  showRecoveryFailure: (window, error) =>
+    showRendererRecoveryFailure(window, (options) => dialog.showMessageBox(window, options), error),
+  createWindow: (options, failedWindow) =>
+    createWindow(options, () => !mainWindowsQuitting && !failedWindow.isDestroyed()),
+  closeWindow: (window) => backgroundModeController.closeWindow(window),
+  onRendererLoss: (_window, details) => {
+    const rendererDetails: { reason: string; exitCode?: number } = { reason: details.reason };
+    if (typeof details.exitCode === "number") rendererDetails.exitCode = details.exitCode;
+    log.error("[renderer] process gone", rendererDetails);
+  },
+  onError: (error) => log.error("[renderer] recovery failed", error),
 });
 
 onDesktopContextMenuLabelsChange(updateBackgroundTrayContextMenu);
@@ -901,6 +942,7 @@ if (!isPetCreationCli) {
     // A failed-lock relaunch must not stop the primary GUI's daemon or updater.
     if (!ownsDesktopInstance) return;
     mainWindowsQuitting = true;
+    rendererLossRecoveryController.beginShutdown();
     beginMainWindowShutdown();
     backgroundModeController.markAppQuitting();
     petController?.beginShutdown();

@@ -9,11 +9,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
 import { OmpAgentSession } from "./agent.js";
 import { OmpHistoryMapper } from "./message-history.js";
-import {
-  OmpCliRuntime,
-  resolveOmpBackgroundJobsExtensionPath,
-  resolveOmpCodexCatalogPreloadPath,
-} from "./cli-runtime.js";
+import { OmpCliRuntime, resolveOmpCodexCatalogPreloadPath } from "./cli-runtime.js";
 import type { OmpRuntimeLaunch } from "./runtime.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import * as bundledPlugins from "../../../bundled-omp-plugins.js";
@@ -176,16 +172,6 @@ describe("OMP CLI runtime", () => {
     } finally {
       seed.mockRestore();
     }
-  });
-
-  test("passes an unpacked extension path to an external packaged OMP process", () => {
-    const moduleUrl = new URL(
-      "file:///Applications/OMP%20Desktop.app/Contents/Resources/app.asar/node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/cli-runtime.js",
-    );
-
-    expect(resolveOmpBackgroundJobsExtensionPath(moduleUrl, () => true)).toBe(
-      "/Applications/OMP Desktop.app/Contents/Resources/app.asar.unpacked/node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/background-jobs-extension.js",
-    );
   });
 
   test("keeps a packaged preload path out of whitespace-tokenized BUN_OPTIONS", async () => {
@@ -689,12 +675,15 @@ describe("OMP CLI runtime", () => {
 
   test("rejects startup when OMP exits before advertising readiness", async () => {
     const child = createOmpChild({ emitReady: false });
-    const startup = createRuntime(child).startSession({ cwd: "/workspace/project" });
+    const launches: OmpRuntimeLaunch[] = [];
+    const startup = createRuntime(child, launches).startSession({ cwd: "/workspace/project" });
+    const rejection = expect(startup).rejects.toThrow("startup exploded");
+    await vi.waitUntil(() => launches.length === 1);
 
     child.stderr.write("startup exploded");
     child.emit("exit", 7, null);
 
-    await expect(startup).rejects.toThrow("startup exploded");
+    await rejection;
   });
 
   test("allows cold startup for 30 seconds and reports an actionable timeout", async () => {

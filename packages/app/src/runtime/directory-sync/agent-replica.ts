@@ -33,6 +33,7 @@ export class AgentDirectoryReplica {
   constructor(
     private readonly serverId: string,
     private readonly onStoppedRunning: (agentId: string) => void,
+    private readonly onRunningAgentRemoved: (agent: Agent) => void = () => undefined,
   ) {}
 
   captureTimeline(agentId: string): AgentLifecycleToken {
@@ -61,15 +62,27 @@ export class AgentDirectoryReplica {
     if (accepted.archivedAt) {
       clearArchiveAgentPending({ queryClient, serverId: this.serverId, agentId: accepted.id });
     }
+    // A timeline read can observe completion before the directory subscription.
+    // Report the accepted transition now; the later idle upsert then deduplicates naturally.
+    if (existing?.status === "running" && accepted.status !== "running") {
+      this.onStoppedRunning(accepted.id);
+    }
     return true;
   }
 
   applyDelta(delta: AgentDirectoryDelta): void {
-    const before = this.members.has(delta.kind === "remove" ? delta.agentId : delta.agent.id);
+    const agentId = delta.kind === "remove" ? delta.agentId : delta.agent.id;
+    const before = this.members.has(agentId);
+    const session = useSessionStore.getState().sessions[this.serverId];
+    const removedAgent =
+      delta.kind === "remove"
+        ? (session?.agents.get(agentId) ?? session?.agentDetails.get(agentId))
+        : undefined;
     const result = applyAgentDirectoryDelta({ serverId: this.serverId, delta });
     if (delta.kind === "remove") {
       this.members.delete(delta.agentId);
       this.advance(delta.agentId);
+      if (removedAgent?.status === "running") this.onRunningAgentRemoved(removedAgent);
     } else {
       this.members.add(delta.agent.id);
       if (!before) this.advance(delta.agent.id);
@@ -80,6 +93,7 @@ export class AgentDirectoryReplica {
   commitSnapshot(
     entries: FetchAgentsEntry[],
     deltas: readonly AgentDirectoryDelta[],
+    reportOmittedRunning = true,
   ): Map<string, Agent> {
     const previous = useSessionStore.getState().sessions[this.serverId]?.agents ?? new Map();
     const reconciled = reconcileAgentDirectory({ previous, snapshot: entries, deltas });
@@ -90,8 +104,13 @@ export class AgentDirectoryReplica {
     for (const agentId of nextIds) {
       if (!this.members.has(agentId)) this.advance(agentId);
     }
-    for (const agentId of previous.keys()) {
-      if (!nextIds.has(agentId)) removeAgentDirectoryReplica(this.serverId, agentId);
+    // A reconnect can skip the final idle event and return an active snapshot that
+    // omits the now-archived agent. Preserve its old workspace through replacement.
+    const removedRunningAgents: Agent[] = [];
+    for (const [agentId, agent] of previous) {
+      if (nextIds.has(agentId)) continue;
+      if (reportOmittedRunning && agent.status === "running") removedRunningAgents.push(agent);
+      removeAgentDirectoryReplica(this.serverId, agentId);
     }
     this.members.clear();
     for (const agentId of nextIds) this.members.add(agentId);
@@ -100,6 +119,7 @@ export class AgentDirectoryReplica {
       entries: reconciled.entries,
     });
     for (const agentId of reconciled.stoppedRunningAgentIds) this.onStoppedRunning(agentId);
+    for (const agent of removedRunningAgents) this.onRunningAgentRemoved(agent);
     return agents;
   }
 
@@ -107,6 +127,7 @@ export class AgentDirectoryReplica {
     entries: FetchAgentsEntry[],
     removals: readonly { id: string }[],
     deltas: readonly AgentDirectoryDelta[],
+    reportOmittedRunning = true,
   ): Map<string, Agent> {
     const previous = useSessionStore.getState().sessions[this.serverId]?.agents ?? new Map();
     const merged = new Map<string, FetchAgentsEntry>();
@@ -119,7 +140,11 @@ export class AgentDirectoryReplica {
       kind: "remove",
       agentId: id,
     }));
-    return this.commitSnapshot(Array.from(merged.values()), [...removalsAsDeltas, ...deltas]);
+    return this.commitSnapshot(
+      Array.from(merged.values()),
+      [...removalsAsDeltas, ...deltas],
+      reportOmittedRunning,
+    );
   }
 
   archive(agentId: string, archivedAt: string): void {
@@ -135,9 +160,12 @@ export class AgentDirectoryReplica {
   }
 
   remove(agentId: string): void {
+    const session = useSessionStore.getState().sessions[this.serverId];
+    const removedAgent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
     this.members.delete(agentId);
     this.advance(agentId);
     removeAgentDirectoryReplica(this.serverId, agentId);
+    if (removedAgent?.status === "running") this.onRunningAgentRemoved(removedAgent);
   }
 
   private advance(agentId: string): void {

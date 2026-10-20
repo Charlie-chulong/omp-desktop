@@ -39,22 +39,6 @@ describe("OMP provider registry", () => {
     }
   });
 
-  test("launches OMP in always-ask mode by default", async () => {
-    const omp = new FakeOmp();
-    const registry = buildProviderRegistry(logger, { ompRuntime: omp });
-    const client = registry.omp.createClient(logger);
-    const session = await client.createSession({ provider: "omp", cwd: "/tmp/registry-omp" });
-
-    expect(omp.recordedLaunches).toEqual([
-      expect.objectContaining({
-        cwd: "/tmp/registry-omp",
-        protocolMode: "rpc-ui",
-        argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "always-ask"],
-      }),
-    ]);
-    await session.close();
-  });
-
   test("applies built-in OMP display overrides", () => {
     const registry = buildProviderRegistry(logger, {
       providerOverrides: {

@@ -101,30 +101,30 @@ export async function execCommand(
           ...(envOverlay ? [envOverlay] : []),
         );
 
-  // Runtime wrappers may drop execFile's custom promisifier. Collect both streams
-  // explicitly instead of letting generic promisify resolve only stdout.
-  return new Promise<ExecCommandResult>((resolve, reject) => {
-    execFile(
-      resolvedCommand,
-      resolvedArgs,
-      {
-        cwd: options?.cwd,
-        env: childEnv,
-        encoding: options?.encoding ?? "utf8",
-        killSignal: options?.killSignal,
-        timeout: options?.timeout,
-        maxBuffer: options?.maxBuffer,
-        shell,
-        signal: options?.signal,
-        windowsHide: true,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(Object.assign(error, { stdout, stderr }));
-          return;
-        }
+  // mini-electron does not provide execFile's Node-specific promisify hook.
+  // Collect both callback outputs explicitly rather than resolving stdout alone.
+  const { promise, resolve, reject } = Promise.withResolvers<ExecCommandResult>();
+  execFile(
+    resolvedCommand,
+    resolvedArgs,
+    {
+      cwd: options?.cwd,
+      env: childEnv,
+      encoding: options?.encoding ?? "utf8",
+      killSignal: options?.killSignal,
+      timeout: options?.timeout,
+      maxBuffer: options?.maxBuffer,
+      shell,
+      signal: options?.signal,
+      windowsHide: true,
+    },
+    (error, stdout, stderr) => {
+      if (error) {
+        reject(Object.assign(error, { stdout, stderr }));
+      } else {
         resolve({ stdout, stderr });
-      },
-    );
-  });
+      }
+    },
+  );
+  return promise;
 }

@@ -4,6 +4,7 @@ import type { GestureResponderEvent } from "react-native";
 import { Plus, Server, Settings } from "lucide-react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { HostStatusDot } from "@/components/host-status-dot";
+import { HostConnectionAction } from "@/components/hosts/host-connection-action";
 import { Combobox, ComboboxItem, type ComboboxProps } from "@/components/ui/combobox";
 import { useLocalDaemonServerId } from "@/hooks/use-is-local-daemon";
 import { useHostRuntimeSnapshot, type ActiveConnection } from "@/runtime/host-runtime";
@@ -88,36 +89,45 @@ export function HostPickerOption({
     [onOpenHostSettings, serverId],
   );
   const trailingSlot = useMemo(() => {
-    if (!onOpenHostSettings) return undefined;
     return (
-      <Pressable
-        onPress={handleSettingsPress}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${label} settings`}
-      >
-        <Settings size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
-      </Pressable>
+      <View style={styles.hostActions} accessibilityRole="toolbar">
+        <HostConnectionAction serverId={serverId} compact />
+        {onOpenHostSettings ? (
+          <Pressable
+            onPress={handleSettingsPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${label} settings`}
+          >
+            <Settings size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+          </Pressable>
+        ) : null}
+      </View>
     );
   }, [
     handleSettingsPress,
     label,
     onOpenHostSettings,
+    serverId,
     theme.colors.foregroundMuted,
     theme.iconSize.sm,
   ]);
 
   return (
-    <ComboboxItem
-      label={label}
-      description={connectionLabel}
-      leadingSlot={leadingSlot}
-      trailingSlot={trailingSlot}
-      selected={selected}
-      active={active}
-      onPress={onPress}
-      testID={testID}
-    />
+    <View style={styles.hostRow}>
+      <View style={styles.hostOption}>
+        <ComboboxItem
+          label={label}
+          description={connectionLabel}
+          leadingSlot={leadingSlot}
+          selected={selected}
+          active={active}
+          onPress={onPress}
+          testID={testID}
+        />
+      </View>
+      {trailingSlot}
+    </View>
   );
 }
 
@@ -319,6 +329,20 @@ export function HostPicker({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  hostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  hostOption: {
+    flex: 1,
+    minWidth: 0,
+  },
+  hostActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    paddingRight: theme.spacing[3],
+  },
   statusDotSlot: {
     width: theme.iconSize.sm,
     height: theme.iconSize.sm,

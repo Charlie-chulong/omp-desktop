@@ -32,6 +32,7 @@ interface DaemonStatus {
   cliVersion: string;
   daemonVersion: string | null;
   desktopManaged: boolean;
+  desktopDistributionIdentity: string | null;
   providers: ProviderBinaryStatus[];
   note?: string;
 }
@@ -200,6 +201,7 @@ interface DaemonProbeResult {
   connectedDaemon: DaemonStatus["connectedDaemon"];
   localDaemonOverride?: DaemonStatus["localDaemon"];
   daemonVersion?: string | null;
+  desktopDistributionIdentity?: string | null;
   daemonNodeOverride?: string;
   daemonProviders?: ProviderBinaryStatus[];
   relayStatus?: string;
@@ -254,6 +256,10 @@ async function probeDaemonOverWebsocket(args: {
     const statusPayload = await client.getDaemonStatus({
       timeout: DAEMON_STATUS_PROBE_TIMEOUT_MS,
     });
+    const desktopDistributionIdentity =
+      typeof statusPayload.desktopDistributionIdentity === "string"
+        ? statusPayload.desktopDistributionIdentity
+        : null;
     const labelMap = new Map(PROVIDER_BINARIES.map((p) => [p.binary, p.label]));
     const daemonProviders = statusPayload.providers.map((p) => ({
       label: labelMap.get(p.provider) ?? p.provider,
@@ -273,6 +279,7 @@ async function probeDaemonOverWebsocket(args: {
       return {
         connectedDaemon: "reachable",
         daemonVersion: statusPayload.version ?? daemonVersion,
+        desktopDistributionIdentity,
         daemonNodeOverride: statusPayload.nodePath,
         daemonProviders,
         relayStatus,
@@ -285,6 +292,7 @@ async function probeDaemonOverWebsocket(args: {
     return {
       connectedDaemon: "reachable",
       daemonVersion: statusPayload.version ?? daemonVersion,
+      desktopDistributionIdentity,
       daemonNodeOverride: statusPayload.nodePath,
       daemonProviders,
       relayStatus,
@@ -392,6 +400,7 @@ export async function runStatusCommand(
   let localDaemon: DaemonStatus["localDaemon"] = state.running ? "running" : "stopped";
   let connectedDaemon: DaemonStatus["connectedDaemon"] = "not_probed";
   let daemonVersion: string | null = null;
+  let desktopDistributionIdentity: string | null = null;
   let daemonProviders: ProviderBinaryStatus[] | undefined;
   let relayStatus = selectRelayStatus({ persisted: relayConfigFromLocalState(state) });
   let note: string | undefined;
@@ -403,6 +412,7 @@ export async function runStatusCommand(
 
   if (daemonTarget) {
     const probe = await probeDaemonOverWebsocket({ host: daemonTarget, state });
+    desktopDistributionIdentity = probe.desktopDistributionIdentity ?? null;
     ({
       connectedDaemon,
       localDaemon,
@@ -450,6 +460,7 @@ export async function runStatusCommand(
     cliVersion,
     daemonVersion,
     desktopManaged: state.pidInfo?.desktopManaged === true,
+    desktopDistributionIdentity,
     providers,
     note,
   };

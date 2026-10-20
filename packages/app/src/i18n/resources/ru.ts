@@ -58,6 +58,16 @@ export const ru: TranslationResources = {
       idle: "Ожидание",
     },
   },
+  hostConnection: {
+    disconnect: "Отключить",
+    reconnect: "Подключить снова",
+    disconnectAccessibility: "Отключить {{host}}",
+    reconnectAccessibility: "Подключить {{host}} снова",
+    disconnectHint: "Останавливает попытки подключения и автоматическое переподключение",
+    reconnectHint: "Разрешает этому хосту подключаться автоматически",
+    disconnectFailed: "Не удалось отключить {{host}}: {{reason}}",
+    reconnectFailed: "Не удалось снова подключить {{host}}: {{reason}}",
+  },
   addProjectFlow: {
     title: "Добавить проект",
     methods: {
@@ -2115,6 +2125,14 @@ export const ru: TranslationResources = {
       title: "Уведомления",
       permission: "Разрешение на уведомления",
       refreshAccessibility: "Обновить разрешение на уведомления",
+      refresh: "Обновить",
+      refreshing: "Обновление...",
+      actions: {
+        granted: "Разрешено",
+        request: "Разрешить уведомления",
+        openSettings: "Настройки уведомлений",
+        requesting: "Запрос...",
+      },
       playSound: "Воспроизводить звук",
       playSoundHint: "Воспроизводит звук при получении уведомления на компьютере",
       test: "Проверить уведомление",
@@ -2216,6 +2234,10 @@ export const ru: TranslationResources = {
         label: "Буфер прокрутки терминала",
         description: "Количество строк, сохраняемых во встроенном буфере терминала",
         accessibilityLabel: "Количество строк в буфере прокрутки терминала",
+      },
+      showTurnFileChanges: {
+        label: "Показывать файлы после каждого ответа",
+        description: "Показывать изменённые файлы над статистикой завершённого ответа",
       },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",
