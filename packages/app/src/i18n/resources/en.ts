@@ -2353,6 +2353,10 @@ export const en = {
         label: "Always expand reasoning",
         description: "Show agent thinking and chain-of-thought blocks fully expanded by default",
       },
+      showTurnFileChanges: {
+        label: "Show files after each response",
+        description: "Show the changed-file list above completed response statistics",
+      },
       toolCallDetail: {
         label: "Tool call display",
         description: "How tool calls appear in the timeline",

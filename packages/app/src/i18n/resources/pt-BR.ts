@@ -2220,6 +2220,10 @@ export const ptBR: TranslationResources = {
         description: "Linhas mantidas no buffer do terminal integrado",
         accessibilityLabel: "Linhas do scrollback do terminal",
       },
+      showTurnFileChanges: {
+        label: "Mostrar arquivos após cada resposta",
+        description: "Mostrar os arquivos alterados acima das estatísticas da resposta concluída",
+      },
       autoExpandReasoning: {
         label: "Sempre expandir raciocínio",
         description:

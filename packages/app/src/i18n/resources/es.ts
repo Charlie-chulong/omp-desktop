@@ -2226,6 +2226,10 @@ export const es: TranslationResources = {
         description: "Líneas mantenidas en el búfer de terminal incorporado",
         accessibilityLabel: "Líneas del historial de terminal",
       },
+      showTurnFileChanges: {
+        label: "Mostrar archivos después de cada respuesta",
+        description: "Mostrar los archivos modificados sobre las estadísticas de la respuesta completada",
+      },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",
         description:
