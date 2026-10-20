@@ -867,6 +867,7 @@ or presentation settings.
 ## File drag and drop
 
 - In Desktop's Files tree, drag a file or folder row onto another folder to move it within the same workspace. Drag onto blank tree space to move it back to the workspace root; selected entries move together.
+- Desktop dragging shows a translucent icon/name preview beside the pointer, with a count badge for multi-selection. The preview stays within the window without blocking folder targets, and disappears when the drag ends or is canceled.
 - Desktop tree moves use pointer dragging rather than native HTML drag-and-drop. Press **Escape** before releasing to cancel. A folder cannot be moved into itself or its descendants; cross-workspace moves are not supported.
 - Drop files onto the message input to add attachments without sending a message.
 - Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina and Windows high-DPI displays use the same visible drop target as ordinary displays. Windows uses native OLE file drops; reparse-point path components are not granted access.

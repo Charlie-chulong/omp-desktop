@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type RefCallback } from "react";
 import type { View } from "react-native";
+import { getOverlayRoot, OVERLAY_Z } from "@/lib/overlay-root";
 import { resolveExplorerEntryMoves, type ExplorerEntryDragPayload } from "./entry-drag";
 import type {
   ExplorerEntryDragBinding,
@@ -10,6 +11,12 @@ import type {
 interface PointerDropTarget {
   target: ExplorerEntryDropTarget;
   setHovered(hovered: boolean): void;
+}
+
+interface ExplorerDragPreview {
+  element: HTMLElement;
+  width: number;
+  height: number;
 }
 
 const dropTargets = new Map<HTMLElement, PointerDropTarget>();
@@ -36,6 +43,74 @@ function resolveMoves(payload: ExplorerEntryDragPayload, binding: PointerDropTar
         parentPath: binding.target.parentPath,
       })
     : null;
+}
+
+function createDragPreview(source: HTMLElement, count: number, view: Window): ExplorerDragPreview {
+  const document = source.ownerDocument;
+  let background = "Canvas";
+  for (let ancestor: HTMLElement | null = source; ancestor; ancestor = ancestor.parentElement) {
+    const color = view.getComputedStyle(ancestor).backgroundColor;
+    if (color !== "transparent" && color !== "rgba(0, 0, 0, 0)") {
+      background = color;
+      break;
+    }
+  }
+
+  const preview = document.createElement("div");
+  preview.dataset.testid = "file-explorer-drag-preview";
+  preview.setAttribute("aria-hidden", "true");
+  preview.inert = true;
+  Object.assign(preview.style, {
+    position: "fixed",
+    left: "0",
+    top: "0",
+    display: "flex",
+    alignItems: "center",
+    maxWidth: "calc(100vw - 16px)",
+    pointerEvents: "none",
+    opacity: "0.8",
+    backgroundColor: background,
+    border: "1px solid rgba(127, 127, 127, 0.35)",
+    borderRadius: "6px",
+    boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
+    zIndex: String(OVERLAY_Z.tooltip),
+  });
+
+  const row = source.cloneNode(true) as HTMLElement;
+  for (const node of [row, ...row.querySelectorAll<HTMLElement | SVGElement>("*")]) {
+    node.removeAttribute("id");
+    node.removeAttribute("data-testid");
+    node.style.pointerEvents = "none";
+  }
+  Object.assign(row.style, {
+    flex: "0 1 auto",
+    width: "max-content",
+    maxWidth: "280px",
+    minWidth: "0",
+    padding: "6px 10px",
+    margin: "0",
+    backgroundColor: "transparent",
+  });
+  preview.appendChild(row);
+
+  if (count > 1) {
+    const badge = document.createElement("span");
+    badge.textContent = String(count);
+    Object.assign(badge.style, {
+      flexShrink: "0",
+      marginRight: "8px",
+      padding: "0 6px",
+      borderRadius: "9px",
+      backgroundColor: "rgba(127, 127, 127, 0.25)",
+      color: "CanvasText",
+      font: "600 12px/18px sans-serif",
+    });
+    preview.appendChild(badge);
+  }
+
+  getOverlayRoot().appendChild(preview);
+  const { width, height } = preview.getBoundingClientRect();
+  return { element: preview, width, height };
 }
 
 // mini-electron does not complete HTML drag sources. Internal moves use pointer
@@ -71,6 +146,7 @@ export function useExplorerEntryDrag({
       let dragging = false;
       let cancelled = false;
       let hovered: PointerDropTarget | null = null;
+      let preview: ExplorerDragPreview | null = null;
 
       function updateTarget(x: number, y: number) {
         const candidate = findDropTarget(document, x, y);
@@ -83,6 +159,8 @@ export function useExplorerEntryDrag({
       }
 
       function finish() {
+        preview?.element.remove();
+        preview = null;
         hovered?.setHovered(false);
         document.removeEventListener("pointermove", handlePointerMove, true);
         document.removeEventListener("pointerup", handlePointerUp, true);
@@ -114,10 +192,19 @@ export function useExplorerEntryDrag({
         if (!dragging) {
           if (Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
           dragging = true;
+          preview = createDragPreview(dragElement, payload.entries.length, view);
           dragElement.setPointerCapture(pointerId);
           document.addEventListener("click", preventClick, true);
         }
         event.preventDefault();
+        if (preview) {
+          const x = Math.max(8, Math.min(event.clientX + 12, view.innerWidth - preview.width - 8));
+          const y = Math.max(
+            8,
+            Math.min(event.clientY + 12, view.innerHeight - preview.height - 8),
+          );
+          preview.element.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        }
         updateTarget(event.clientX, event.clientY);
       }
 
@@ -139,6 +226,8 @@ export function useExplorerEntryDrag({
         event.preventDefault();
         event.stopPropagation();
         cancelled = true;
+        preview?.element.remove();
+        preview = null;
         hovered?.setHovered(false);
         hovered = null;
       }
