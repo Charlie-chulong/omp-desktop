@@ -20,12 +20,16 @@ import {
 } from "../jsonl-rpc-process.js";
 import {
   buildOmpLaunch,
+  resolveOmpRuntimeCommand,
   type OmpRuntime,
   type OmpRuntimeLaunch,
   type OmpRuntimeSession,
   type OmpStartSessionInput,
 } from "./runtime.js";
 import { resolveOmpBuiltinToolArgsForLaunch } from "./provider-config.js";
+import { assertBundledOmpHost } from "../../../bundled-omp-host.js";
+import { provisionBundledOmpPlugins } from "../../../bundled-omp-plugins.js";
+import { createProviderEnv } from "../../provider-launch-config.js";
 import {
   prepareOmpImageSettingsLaunch,
   OMP_IMAGE_SETTINGS_TOKEN_ENV,
@@ -148,14 +152,24 @@ export class OmpCliRuntime implements OmpRuntime {
       runtimeSettings: this.options.runtimeSettings,
       session: input,
     });
+    const effectiveCommand = resolveOmpRuntimeCommand(this.command, this.options.runtimeSettings);
+    const providerEnv = createProviderEnv({ overlays: [launch.env] });
+    // Each cwd may initialize a different native dotenv/profile. Resolve it with
+    // the genuine host before launch; the per-profile ledger prevents reseeding.
+    const provisioning = await provisionBundledOmpPlugins({
+      command: effectiveCommand,
+      env: providerEnv,
+      cwd: launch.cwd,
+    });
+    for (const plugin of provisioning.plugins) {
+      if (plugin.error)
+        this.options.logger.warn(
+          { plugin: plugin.name, error: plugin.error },
+          "Bundled OMP plugin provisioning requires explicit management",
+        );
+    }
+    await assertBundledOmpHost(launch.argv[0], providerEnv);
     installCodexCatalogPreload(launch);
-    const configuredCommand = this.options.runtimeSettings?.command;
-    const effectiveCommand =
-      configuredCommand?.mode === "replace"
-        ? configuredCommand.argv
-        : configuredCommand?.mode === "append"
-          ? [...this.command, ...(configuredCommand.args ?? [])]
-          : this.command;
     const imageLaunch = input.getImageGenerationConfig
       ? await prepareOmpImageSettingsLaunch(effectiveCommand, launch.cwd, {
           ...globalThis.process.env,
@@ -168,13 +182,7 @@ export class OmpCliRuntime implements OmpRuntime {
     }
     try {
       if (this.options.disabledBuiltInTools?.length) {
-        const configuredCommand = this.options.runtimeSettings?.command;
-        let command: readonly string[] = this.command;
-        if (configuredCommand?.mode === "replace") {
-          command = configuredCommand.argv;
-        } else if (configuredCommand?.mode === "append") {
-          command = [...this.command, ...(configuredCommand.args ?? [])];
-        }
+        const command = effectiveCommand;
         if (
           launch.argv
             .slice(command.length)
@@ -229,6 +237,7 @@ export class OmpCliRuntime implements OmpRuntime {
             ?.split(",")
             .includes("generate_image") === true);
       const [command, ...args] = launch.argv;
+      await assertBundledOmpHost(command, providerEnv);
       const processLaunch: JsonlRpcLaunch = {
         command,
         args,

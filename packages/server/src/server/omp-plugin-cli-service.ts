@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 import { z } from "zod";
 
@@ -8,12 +8,16 @@ import {
   OmpMarketplacePluginInfoSchema,
   OmpPluginDoctorCheckSchema,
   OmpPluginInfoSchema,
+  OmpPluginMarketplaceCatalogEntrySchema,
   OmpPluginMarketplaceInfoSchema,
 } from "@omp-desktop/protocol/messages";
 
 import type { Logger } from "pino";
 import { execCommand } from "../utils/spawn.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
+import { provisionBundledOmpPlugins, resolveOmpPluginInvocation } from "./bundled-omp-plugins.js";
+import { assertBundledOmpHost, hasBundledOmpPlugins } from "./bundled-omp-host.js";
+import type { ProviderOverride } from "./agent/provider-launch-config.js";
 
 /**
  * Thin wrapper around the OMP runtime's own `omp plugin <action>` CLI.
@@ -34,7 +38,7 @@ const MAX_OUTPUT_CHARS = 8 * 1024;
 export type OmpPluginRunner = (
   command: string,
   args: string[],
-  options: { timeout: number },
+  options: { timeout: number; cwd: string; env?: NodeJS.ProcessEnv },
 ) => Promise<{ stdout: string; stderr: string }>;
 
 /** Minimal surface the service needs so tests can stub the runner. */
@@ -57,6 +61,8 @@ export interface OmpPluginCliServiceOptions {
    * PI_PROXY directly.
    */
   getProxyUrl?: () => string | undefined;
+  /** Live provider settings; management must target the same profile as sessions. */
+  getProviderConfig?: () => ProviderOverride | undefined;
 }
 
 const OmpPluginListJsonSchema = z
@@ -90,19 +96,7 @@ const OmpMarketplaceRegistryJsonSchema = z
 /** Marketplace catalog file (cache copy): plugins array with catalog metadata. */
 const OmpPluginMarketplaceCatalogJsonSchema = z
   .object({
-    plugins: z
-      .array(
-        z
-          .object({
-            name: z.string().min(1),
-            description: z.string().optional(),
-            version: z.string().optional(),
-            category: z.string().optional(),
-            keywords: z.array(z.string()).optional(),
-          })
-          .passthrough(),
-      )
-      .default([]),
+    plugins: z.array(OmpPluginMarketplaceCatalogEntrySchema).default([]),
   })
   .passthrough();
 
@@ -177,30 +171,59 @@ export interface OmpPluginMutateResult {
   output?: string;
 }
 
+function normalizeMarketplacePlugins(
+  summaries: z.infer<typeof OmpMarketplacePluginInfoSchema>[],
+): z.infer<typeof OmpPluginInfoSchema>[] {
+  const plugins: z.infer<typeof OmpPluginInfoSchema>[] = [];
+  for (const summary of summaries) {
+    const separator = summary.id.lastIndexOf("@");
+    const name = separator > 0 ? summary.id.slice(0, separator) : summary.id;
+    const entries = summary.entries?.length ? summary.entries : [undefined];
+    for (const entry of entries) {
+      const scope = entry?.scope ?? summary.scope;
+      plugins.push({
+        ...entry,
+        name,
+        id: summary.id,
+        version: entry?.version ?? summary.version ?? "",
+        path: entry?.installPath,
+        scope,
+        shadowedBy: scope === "project" ? undefined : summary.shadowedBy,
+        // Native installed entries omit `enabled` when enabled. A summary with
+        // no installed entry, however, does not establish any enabled state.
+        enabled: entry ? (entry.enabled ?? true) : undefined,
+      });
+    }
+  }
+  return plugins;
+}
+
 export class OmpPluginCliService {
   private readonly logger: Logger;
   private readonly runner: OmpPluginRunner;
   private readonly resolveOmpCommand: () => Promise<string | null>;
-  private readonly marketplacesRegistryPath: string;
+  private readonly marketplacesRegistryPath: string | undefined;
   private readonly getProxyUrl: (() => string | undefined) | undefined;
+  private readonly getProviderConfig: (() => ProviderOverride | undefined) | undefined;
   private inFlight: Promise<unknown> | null = null;
 
   constructor(options: OmpPluginCliServiceOptions) {
     this.logger = options.logger.child({ module: "omp-plugin-cli" });
     this.getProxyUrl = options.getProxyUrl;
+    this.getProviderConfig = options.getProviderConfig;
     this.runner =
       options.runner ??
       (async (command, args, runnerOptions) =>
         await execCommand(command, args, {
           timeout: runnerOptions.timeout,
+          cwd: runnerOptions.cwd,
           envMode: "internal",
-          envOverlay: this.buildProxyEnv(),
+          env: { ...runnerOptions.env, ...this.buildProxyEnv() },
         }));
     this.resolveOmpCommand =
       options.resolveOmpCommand ??
       (async () => process.env.OMP_COMMAND?.trim() || (await findExecutable("omp")) || null);
-    this.marketplacesRegistryPath =
-      options.marketplacesRegistryPath ?? join(homedir(), ".omp", "marketplaces.json");
+    this.marketplacesRegistryPath = options.marketplacesRegistryPath;
   }
 
   private buildProxyEnv(): Record<string, string> | undefined {
@@ -237,13 +260,51 @@ export class OmpPluginCliService {
     this.inFlight = run;
     return run as Promise<T>;
   }
-  private async runCli(args: string[], timeout: number): Promise<string> {
-    const command = await this.resolveOmpCommand();
-    if (!command) {
-      throw new OmpPluginUnavailableError();
+  private async runCli(
+    args: string[],
+    timeout: number,
+    cwd?: string,
+    scope?: "user" | "project",
+  ): Promise<string> {
+    if (scope === "project" && cwd === undefined) {
+      throw new Error("Project plugin operations require an explicit project cwd");
+    }
+    const workingDirectory = cwd ?? process.cwd();
+    if (cwd !== undefined) {
+      if (!isAbsolute(cwd)) {
+        throw new Error("Plugin cwd must be an existing absolute directory");
+      }
+      const directory = await stat(cwd).catch(() => null);
+      if (!directory?.isDirectory()) {
+        throw new Error(`Plugin cwd is not an existing directory: ${cwd}`);
+      }
+    }
+    const provider = this.getProviderConfig?.();
+    const command = provider?.command?.[0] ?? (await this.resolveOmpCommand());
+    if (!command) throw new OmpPluginUnavailableError();
+    const invocation = await resolveOmpPluginInvocation({
+      provider,
+      env: { ...process.env, OMP_COMMAND: command },
+      cwd: workingDirectory,
+    });
+    await assertBundledOmpHost(invocation.command[0], invocation.env);
+    // First-use setup must finish before native management, not before the
+    // daemon begins listening. Large private runtimes may require file staging.
+    const provisioning = await provisionBundledOmpPlugins(invocation);
+    for (const plugin of provisioning.plugins) {
+      if (plugin.error)
+        this.logger.error({ plugin: plugin.name, state: plugin.state }, plugin.error);
     }
     try {
-      const result = await this.runner(command, ["plugin", ...args], { timeout });
+      const result = await this.runner(
+        invocation.command[0],
+        [...invocation.command.slice(1), "plugin", ...args],
+        {
+          timeout,
+          cwd: workingDirectory,
+          env: invocation.env,
+        },
+      );
       return `${result.stdout}\n${result.stderr}`;
     } catch (error) {
       const err = error as { stdout?: string; stderr?: string; message?: string };
@@ -252,11 +313,11 @@ export class OmpPluginCliService {
     }
   }
 
-  async list(): Promise<OmpPluginListResult> {
+  async list(cwd?: string): Promise<OmpPluginListResult> {
     return this.runExclusive(async () => {
       let output: string;
       try {
-        output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS);
+        output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS, cwd);
       } catch (error) {
         return {
           plugins: [],
@@ -266,27 +327,7 @@ export class OmpPluginCliService {
       }
       const parsed = OmpPluginListJsonSchema.safeParse(parseTrailingJson(output));
       if (parsed.success) {
-        // Marketplace-installed plugins have a different CLI shape. Preserve
-        // their exact ID and scope: lifecycle commands need both when the same
-        // catalog plugin is installed from multiple marketplaces or scopes.
-        const fromMarketplace = parsed.data.marketplace.map((marketplacePlugin) => {
-          const separator = marketplacePlugin.id.lastIndexOf("@");
-          const name =
-            separator > 0 ? marketplacePlugin.id.slice(0, separator) : marketplacePlugin.id;
-          const entry =
-            marketplacePlugin.entries?.find(
-              (candidate) => candidate.scope === marketplacePlugin.scope,
-            ) ?? marketplacePlugin.entries?.[0];
-          return {
-            name,
-            id: marketplacePlugin.id,
-            version: entry?.version ?? marketplacePlugin.version ?? "",
-            path: entry?.installPath,
-            scope: marketplacePlugin.scope,
-            enabled: entry?.enabled !== false,
-            description: undefined,
-          };
-        });
+        const fromMarketplace = normalizeMarketplacePlugins(parsed.data.marketplace);
         return {
           plugins: [...parsed.data.npm, ...fromMarketplace],
           marketplace: parsed.data.marketplace,
@@ -301,6 +342,7 @@ export class OmpPluginCliService {
     spec: string;
     scope?: "user" | "project";
     dryRun?: boolean;
+    cwd?: string;
   }): Promise<OmpPluginMutateResult> {
     return this.runExclusive(async () => {
       const args = ["install", input.spec, "--json"];
@@ -308,7 +350,7 @@ export class OmpPluginCliService {
       if (input.dryRun) args.push("--dry-run");
       let output: string;
       try {
-        output = await this.runCli(args, INSTALL_TIMEOUT_MS);
+        output = await this.runCli(args, INSTALL_TIMEOUT_MS, input.cwd, input.scope);
       } catch (error) {
         return { ok: false, output: truncateOutput((error as Error).message) };
       }
@@ -331,6 +373,7 @@ export class OmpPluginCliService {
   async upgrade(
     name: string,
     scope?: "user" | "project",
+    cwd?: string,
   ): Promise<{ ok: boolean; output?: string }> {
     return this.runExclusive(async () => {
       // Upgrade force-reinstalls the current catalog version and retains enabled
@@ -338,7 +381,7 @@ export class OmpPluginCliService {
       const args = ["upgrade", name];
       if (scope) args.push("--scope", scope);
       try {
-        const output = await this.runCli(args, INSTALL_TIMEOUT_MS);
+        const output = await this.runCli(args, INSTALL_TIMEOUT_MS, cwd, scope);
         return { ok: true, output: truncateOutput(output) };
       } catch (error) {
         return { ok: false, output: truncateOutput((error as Error).message) };
@@ -349,12 +392,13 @@ export class OmpPluginCliService {
   async remove(
     name: string,
     scope?: "user" | "project",
+    cwd?: string,
   ): Promise<{ ok: boolean; output?: string }> {
     return this.runExclusive(async () => {
       try {
         const args = ["uninstall", name];
         if (scope) args.push("--scope", scope);
-        const output = await this.runCli(args, ACTION_TIMEOUT_MS);
+        const output = await this.runCli(args, ACTION_TIMEOUT_MS, cwd, scope);
         return { ok: true, output: truncateOutput(output) };
       } catch (error) {
         return { ok: false, output: truncateOutput((error as Error).message) };
@@ -366,43 +410,47 @@ export class OmpPluginCliService {
     name: string,
     enabled: boolean,
     scope?: "user" | "project",
-  ): Promise<{ ok: boolean }> {
+    cwd?: string,
+  ): Promise<{ ok: boolean; output?: string }> {
     return this.runExclusive(async () => {
       try {
         const args = [enabled ? "enable" : "disable", name];
         if (scope) args.push("--scope", scope);
-        await this.runCli(args, ACTION_TIMEOUT_MS);
+        await this.runCli(args, ACTION_TIMEOUT_MS, cwd, scope);
       } catch (error) {
         this.logger.warn({ err: error, name, enabled, scope }, "omp plugin enable/disable failed");
-        return { ok: false };
+        return { ok: false, output: truncateOutput((error as Error).message) };
       }
       // Verify the registry actually changed: the CLI can exit 0 silently.
       try {
-        const output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS);
+        const output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS, cwd, scope);
         const parsed = OmpPluginListJsonSchema.safeParse(parseTrailingJson(output));
-        if (!parsed.success) return { ok: false };
+        if (!parsed.success) {
+          return { ok: false, output: "Could not verify plugin state: invalid CLI list output" };
+        }
         const npmEntry = parsed.data.npm.find((item) => item.name === name);
-        if (npmEntry) return { ok: npmEntry.enabled === enabled };
-        const marketplaceEntry = parsed.data.marketplace.find(
-          (item) => item.id === name && (!scope || item.scope === scope),
+        const candidates = normalizeMarketplacePlugins(parsed.data.marketplace).filter(
+          (item) => item.id === name && (scope === undefined || item.scope === scope),
         );
-        const entry =
-          marketplaceEntry?.entries?.find((item) => !scope || item.scope === scope) ??
-          marketplaceEntry?.entries?.[0];
-        return { ok: entry !== undefined && (entry.enabled ?? true) === enabled };
-      } catch {
-        return { ok: false };
+        // With no scope native chooses the unique applicable install, not user.
+        // Never claim success for an ambiguous or differently scoped readback.
+        const entry = npmEntry ?? (candidates.length === 1 ? candidates[0] : undefined);
+        return entry?.enabled === enabled
+          ? { ok: true }
+          : { ok: false, output: "CLI readback did not confirm the requested plugin state" };
+      } catch (error) {
+        return { ok: false, output: truncateOutput((error as Error).message) };
       }
     });
   }
 
-  async doctor(input?: { fix?: boolean }): Promise<OmpPluginDoctorResult> {
+  async doctor(input?: { fix?: boolean; cwd?: string }): Promise<OmpPluginDoctorResult> {
     return this.runExclusive(async () => {
       const args = ["doctor", "--json"];
       if (input?.fix) args.push("--fix");
       let output: string;
       try {
-        output = await this.runCli(args, DOCTOR_TIMEOUT_MS);
+        output = await this.runCli(args, DOCTOR_TIMEOUT_MS, input?.cwd);
       } catch (error) {
         return { checks: [], rawOutput: truncateOutput((error as Error).message) };
       }
@@ -414,26 +462,39 @@ export class OmpPluginCliService {
     });
   }
 
+  private async resolveMarketplacesRegistryPath(cwd?: string): Promise<string> {
+    if (this.marketplacesRegistryPath) return this.marketplacesRegistryPath;
+    const output = await this.runCli(["list", "--json"], ACTION_TIMEOUT_MS, cwd);
+    const nativePaths = z
+      .object({
+        paths: z.object({ pluginsRoot: z.string().refine(isAbsolute) }),
+      })
+      .safeParse(parseTrailingJson(output));
+    if (nativePaths.success)
+      return join(dirname(nativePaths.data.paths.pluginsRoot), "marketplaces.json");
+    if (hasBundledOmpPlugins())
+      throw new Error("The private OMP host did not return authoritative plugin paths.");
+    return join(homedir(), ".omp", "marketplaces.json");
+  }
+
   /**
    * Reads the marketplace registry and catalogs directly: the omp CLI ignores
    * `--json` for `plugin marketplace list` (plain text only), so shelling out
    * would force brittle text parsing. Registry layout (verified against the
-   * runtime): `~/.omp/marketplaces.json` holds
+   * runtime): the resolved native data root's `marketplaces.json` holds
    * `{ marketplaces: [{ name, sourceType, sourceUri, catalogPath, ... }] }`,
    * and each `catalogPath` file holds `{ plugins: [{ name, description,
    * version, source, ... }] }`.
    */
-  async marketplaceList(): Promise<OmpPluginMarketplaceListResult> {
+  async marketplaceList(cwd?: string): Promise<OmpPluginMarketplaceListResult> {
     return this.runExclusive(async () => {
-      const registry = await this.readJsonFile(this.marketplacesRegistryPath);
+      const registryPath = await this.resolveMarketplacesRegistryPath(cwd);
+      const registry = await this.readJsonFile(registryPath);
       const entries = OmpMarketplaceRegistryJsonSchema.safeParse(registry);
       if (!entries.success) {
         const raw = registry === null ? undefined : JSON.stringify(registry);
         if (raw) {
-          this.logger.warn(
-            { path: this.marketplacesRegistryPath },
-            "Unparseable marketplaces registry",
-          );
+          this.logger.warn({ path: registryPath }, "Unparseable marketplaces registry");
         }
         return { marketplaces: [], rawOutput: raw ? truncateOutput(raw) : undefined };
       }
@@ -461,13 +522,14 @@ export class OmpPluginCliService {
     }
   }
 
-  async marketplaceAdd(input: { source: string }): Promise<{
+  async marketplaceAdd(input: { source: string; cwd?: string }): Promise<{
     ok: boolean;
     marketplace?: OmpPluginMarketplaceListResult["marketplaces"][number] | null;
     output?: string;
   }> {
     return this.runExclusive(async () => {
-      const beforeRegistry = await this.readJsonFile(this.marketplacesRegistryPath);
+      const registryPath = await this.resolveMarketplacesRegistryPath(input.cwd);
+      const beforeRegistry = await this.readJsonFile(registryPath);
       const beforeEntries = OmpMarketplaceRegistryJsonSchema.safeParse(beforeRegistry);
       const beforeNames = new Set(
         beforeEntries.success ? beforeEntries.data.marketplaces.map((entry) => entry.name) : [],
@@ -477,24 +539,47 @@ export class OmpPluginCliService {
         output = await this.runCli(
           ["marketplace", "add", input.source, "--json"],
           MARKETPLACE_TIMEOUT_MS,
+          input.cwd,
         );
       } catch (error) {
         return { ok: false, output: truncateOutput((error as Error).message) };
       }
       return {
         ok: true,
-        marketplace: await this.extractAddedMarketplace(beforeNames),
+        marketplace: await this.extractAddedMarketplace(beforeNames, registryPath),
         output: truncateOutput(output),
       };
     });
   }
 
-  async marketplaceRemove(input: { name: string }): Promise<{ ok: boolean; output?: string }> {
+  async marketplaceRemove(input: {
+    name: string;
+    cwd?: string;
+  }): Promise<{ ok: boolean; output?: string }> {
     return this.runExclusive(async () => {
       try {
         const output = await this.runCli(
           ["marketplace", "remove", input.name, "--json"],
           ACTION_TIMEOUT_MS,
+          input.cwd,
+        );
+        return { ok: true, output: truncateOutput(output) };
+      } catch (error) {
+        return { ok: false, output: truncateOutput((error as Error).message) };
+      }
+    });
+  }
+
+  async marketplaceUpdate(input: {
+    name: string;
+    cwd?: string;
+  }): Promise<{ ok: boolean; output?: string }> {
+    return this.runExclusive(async () => {
+      try {
+        const output = await this.runCli(
+          ["marketplace", "update", input.name],
+          MARKETPLACE_TIMEOUT_MS,
+          input.cwd,
         );
         return { ok: true, output: truncateOutput(output) };
       } catch (error) {
@@ -510,8 +595,9 @@ export class OmpPluginCliService {
    */
   private async extractAddedMarketplace(
     beforeNames: ReadonlySet<string>,
+    registryPath: string,
   ): Promise<OmpPluginMarketplaceListResult["marketplaces"][number] | null> {
-    const registry = await this.readJsonFile(this.marketplacesRegistryPath);
+    const registry = await this.readJsonFile(registryPath);
     const entries = OmpMarketplaceRegistryJsonSchema.safeParse(registry);
     if (!entries.success) return null;
     const added = entries.data.marketplaces.filter((entry) => !beforeNames.has(entry.name));

@@ -30,25 +30,44 @@ describe("marketplace updates", () => {
     expect(state.updateAvailable).toBe(false);
   });
 
-  it("updates the effective project installation rather than the shadowed user installation", () => {
+  it("selects the requested copy independently of the effective runtime copy", () => {
+    const user = {
+      name: "cloudbase",
+      id: "cloudbase@official",
+      version: "1.0.0",
+      enabled: true,
+      scope: "user" as const,
+    };
+    const project = { ...user, scope: "project" as const, version: "2.0.0" };
+    const entry = { name: "cloudbase", version: "2.0.0" };
+    expect(getMarketplacePluginState(entry, "official", [user, project]).installed).toBe(project);
+    const userState = getMarketplacePluginState(entry, "official", [user, project], "user");
+    expect(userState.installed).toBe(user);
+    expect(userState.updateAvailable).toBe(true);
+    expect(
+      getMarketplacePluginState(entry, "official", [user, project], "project").updateAvailable,
+    ).toBe(false);
+    expect(
+      getMarketplacePluginState(entry, "official", [user], "project").installed,
+    ).toBeUndefined();
+  });
+
+  it("does not let a disabled project copy shadow an enabled user copy", () => {
     const user = {
       name: "cloudbase",
       id: "cloudbase@official",
       version: "1.0.0",
       scope: "user" as const,
+      enabled: true,
     };
     const project = { ...user, scope: "project" as const, version: "2.0.0", enabled: false };
-    const state = getMarketplacePluginState({ name: "cloudbase", version: "2.1.0" }, "official", [
-      user,
+    const entry = { name: "cloudbase", version: "2.0.0" };
+    expect(getMarketplacePluginState(entry, "official", [project, user]).installed).toBe(user);
+    expect(getMarketplacePluginState(entry, "official", [user, project]).updateAvailable).toBe(
+      true,
+    );
+    expect(getMarketplacePluginState(entry, "official", [user, project], "project").installed).toBe(
       project,
-    ]);
-    expect(state.installed).toBe(project);
-    expect(state.updateAvailable).toBe(true);
-    expect(
-      getMarketplacePluginState({ name: "cloudbase", version: "2.0.0" }, "official", [
-        user,
-        project,
-      ]).updateAvailable,
-    ).toBe(false);
+    );
   });
 });

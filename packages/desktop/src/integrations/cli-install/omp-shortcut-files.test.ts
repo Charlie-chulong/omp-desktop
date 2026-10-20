@@ -27,32 +27,35 @@ afterEach(async () => {
 });
 
 describe("OMP command shortcut", () => {
-  it("migrates the legacy symlink to a proxy-aware POSIX command", async () => {
-    const paths = await createPaths();
-    const input = {
-      ...paths,
-      platform: "darwin" as const,
-      proxyUrl: "http://127.0.0.1:7890",
-    };
-    await mkdir(path.dirname(paths.targetPath), { recursive: true });
-    await symlink(paths.sourcePath, paths.targetPath);
+  it.runIf(process.platform !== "win32")(
+    "migrates the legacy symlink to a proxy-aware POSIX command",
+    async () => {
+      const paths = await createPaths();
+      const input = {
+        ...paths,
+        platform: "darwin" as const,
+        proxyUrl: "http://127.0.0.1:7890",
+      };
+      await mkdir(path.dirname(paths.targetPath), { recursive: true });
+      await symlink(paths.sourcePath, paths.targetPath);
 
-    await installOmpShortcutAtPaths(input);
+      await installOmpShortcutAtPaths(input);
 
-    const contents = await readFile(paths.targetPath, "utf8");
-    expect(contents).toContain("export PI_PROXY='http://127.0.0.1:7890'");
-    expect(contents).toContain('export HTTPS_PROXY="$PI_PROXY"');
-    expect(contents).toContain(`exec '${paths.sourcePath}' "$@"`);
-    expect(await isManagedOmpShortcut(input)).toBe(true);
+      const contents = await readFile(paths.targetPath, "utf8");
+      expect(contents).toContain("export PI_PROXY='http://127.0.0.1:7890'");
+      expect(contents).toContain('export HTTPS_PROXY="$PI_PROXY"');
+      expect(contents).toContain(`exec '${paths.sourcePath}' "$@"`);
+      expect(await isManagedOmpShortcut(input)).toBe(true);
 
-    const changedProxy = { ...input, proxyUrl: "http://127.0.0.1:7891" };
-    expect(await isManagedOmpShortcut(changedProxy)).toBe(false);
-    await installOmpShortcutAtPaths(changedProxy);
-    expect(await readFile(paths.targetPath, "utf8")).toContain("http://127.0.0.1:7891");
+      const changedProxy = { ...input, proxyUrl: "http://127.0.0.1:7891" };
+      expect(await isManagedOmpShortcut(changedProxy)).toBe(false);
+      await installOmpShortcutAtPaths(changedProxy);
+      expect(await readFile(paths.targetPath, "utf8")).toContain("http://127.0.0.1:7891");
 
-    await uninstallOmpShortcutAtPaths(changedProxy);
-    expect(await isManagedOmpShortcut(changedProxy)).toBe(false);
-  });
+      await uninstallOmpShortcutAtPaths(changedProxy);
+      expect(await isManagedOmpShortcut(changedProxy)).toBe(false);
+    },
+  );
 
   it("preserves an existing command it does not own", async () => {
     const paths = await createPaths();

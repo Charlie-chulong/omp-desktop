@@ -18,11 +18,27 @@ Standard Apple Silicon macOS and Windows x64 packages include OMP and do not req
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
 
-The desktop declares `@iriscat/mini-electron@^0.1.5` for development and packaging.
-Main-process code keeps Electron-compatible `electron` imports; the stock `electron`
-package is retained only for its TypeScript declarations and its binary download
-is not used by project scripts. mini-electron currently supports Windows x64 and
-Apple Silicon macOS.
+The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime
+versions are released independently. Windows x64 uses runtime **0.1.15**, while the
+Apple Silicon channel currently provides runtime **0.1.13**. Windows discovers updates
+through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform
+latest pointer. Packaging validates the selected distribution's platform, architecture,
+and Electron API metadata.
+Main-process code keeps Electron-compatible `electron` imports; the stock
+`electron` package is retained only for TypeScript declarations. Project scripts
+do not download or substitute its runtime.
+
+The Windows runtime includes the upstream
+[`executeJavaScript` value/Promise/error fix](https://github.com/iris-cat-dev/mini-electron/issues/3)
+and [nonactivating companion focus fix](https://github.com/iris-cat-dev/mini-electron/issues/4).
+A successful build is not native acceptance: qualify the actual packaged application,
+including generated-pet image conversion and right-click menu dismissal after one
+outside click. A minimal native menu probe is not substituted for that product path.
+
+Windows runtime 0.1.15 also has an observed
+[electron-log renderer-preload redeclaration issue](https://github.com/iris-cat-dev/mini-electron/issues/5).
+The native smoke retains this error; passing the application scenarios does not
+prove that renderer logging initialized successfully.
 
 Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
 avoiding repeated small-file-read overhead. The main window stays native-hidden until
@@ -440,6 +456,29 @@ Connected clients refresh their directories and history/search caches after dele
 Project files, deliverables, workspaces, Git worktrees/branches, and provider-owned session
 files are not deleted. This tool removes Desktop history, not the provider's independent logs.
 
+## Native OMP `/stats` usage
+
+For the selected host, **Settings → Usage** includes OMP's existing native
+`stats.db` index for the resolved host/profile, not just Desktop-created agents.
+Labels and explanations follow the application language, including Chinese.
+The read-only view does not invoke a CLI reindex, import transcripts, or expose
+prompt text, transcript paths, credentials, or raw database errors.
+
+Ranges cover 1 hour, 24 hours, 7 days, 30 days, 90 days, and all indexed time.
+Counts, failures, input/output/cache tokens, native total tokens, and API-equivalent
+USD costs include provider, model, and agent-type breakdowns. Native total tokens
+remain authoritative: provider orchestration tokens can make them differ from
+the four displayed conversation-token buckets. Indexed transcript counts are not
+Desktop conversation counts, and USD-equivalent costs are not subscription bills.
+Unpriced requests remain unknown rather than becoming free usage; recorded zero
+cost remains zero. Provider quotas and current-session usage stay separate.
+
+Refresh rereads the existing index and invalidates this host's cached ranges;
+it does not make the native index more current. The latest indexed request and
+the index read time are shown separately. Missing, unsupported, and unreadable
+sources are not presented as zero use. SQLite scans run in a short-lived child
+process with a 15-second deadline rather than blocking the daemon event loop.
+
 ## Zhipu Coding Plan usage
 
 The built-in `zhipu-coding-plan` provider reuses API keys saved through OMP sign-in.
@@ -598,6 +637,79 @@ current version rather than repeating the install operation.
 Installed entries are matched by their exact `plugin-name@marketplace-name` identity, so a plugin
 with the same name from another marketplace does not count as installed. Upgrades target that
 exact identity and preserve the existing user or project scope and enabled/disabled state.
+
+Plugin and marketplace operations share the selected project's working directory, including
+native `.env` discovery, and the configured provider's profile and environment. An explicit
+leading `launch` in that provider command is omitted for management commands only. Omitting a
+scope when enabling or disabling retains the native runtime's unique-scope inference; explicit
+user and project scopes remain exact.
+
+In the private bundled-plugin distribution, first-run provisioning holds a separate native
+process-owned OS lease for the resolved profile. It does not block ordinary plugin management
+or reap PID files. Interrupted or unknown link outcomes are not automatically retried, and
+the durable seed ledger preserves uninstall choices across restarts and application updates.
+
+### Private Windows three-plugin distribution
+
+The separately named `OMP-Desktop-Plugins-Setup-0.5.2-x64.exe` bundles ChatPro 0.1.0,
+WorkBuddy 0.1.0 and the WeChat connector 0.1.2. It is a private build, not an upstream release.
+All three share one patched native OMP 18.12.1; no second plugin SDK or user account store
+is installed. Ordered native patches, compiler/addon provenance and the exact host digest
+are included with the frozen plugin sources in `vendor/omp-plugins`.
+
+The payload includes the plugins' required private runtimes and licences, including
+CPython 3.12/Tk for WeChat. Developer virtual environments, existing site-packages,
+credentials, account profiles, chat data and runtime caches are not collected.
+ChatPro and WorkBuddy remain upstream-disabled by default. WeChat is disconnected until
+the user completes its separate trusted local authorization; preinstallation grants no
+read/send permission and does not approve any message.
+
+Windows private Python runtimes also support long profile/snapshot paths without changing
+machine-wide policy. WorkBuddy keeps full manifest hashes and private-state I/O on extended
+filesystem paths. WeChat's reviewed, package-owned portable startup hook normalizes the
+existing isolated import paths after `_pth`/site initialization; it adds no search directories
+and does not adopt an ambient interpreter or site-packages.
+
+The first Desktop plugin-management request or provider session seeds missing plugins into
+immutable, profile-owned snapshots. Setup does not block the daemon from beginning to listen.
+The existing Plugins loading state covers registration. Existing same-name registrations,
+disabled state and configuration are preserved. Uninstall through the normal
+Plugins page creates no automatic reinstall obligation: subsequent sessions and app updates
+retain that choice. Explicit local-path installation uses native OMP's normal link route.
+Existing plugin versions are not silently upgraded to the copy in a later application.
+
+Visible extension replies retain their persisted native entry IDs, original text and metadata
+in live conversations and history, even without a model `agent_start`. Custom replies do not
+complete a turn: native RPC acknowledgements and model lifecycle events own completion.
+
+Currently registered native extension commands are admitted before workflow and stale-plan
+reset envelopes, including after session restoration. They remain native commands rather
+than ordinary model prompts, and the next ordinary prompt still receives its workflow reset.
+
+Windows snapshot publication briefly waits out `EPERM` sharing conflicts while the same
+native provisioning lease remains authoritative. Only the new, unpublished owned-directory
+move is retried; native plugin writes, failed link intents and uninstall tombstones are not.
+
+Public Desktop auto-update and generic native OMP download/replacement are intentionally
+blocked for this distribution, including native self-update via the packaged `manager.json`.
+Standalone update ownership is resolved from the executing binary before reading that marker,
+never from another `omp` found on PATH. A missing running executable fails closed instead of
+redirecting an update to another installation.
+Upgrade with a compatible private whole-app installer; do not replace its host with stock OMP.
+Real account-backed consultations, WorkBuddy upstream calls and WeChat reads/sends require
+separate authorization and are not established by the no-account qualification.
+
+After building the exact pinned native host and the portable WeChat runtime, stage the
+payload with `node packages/desktop/scripts/stage-bundled-plugins.mjs --host <absolute-host>`.
+The stager refuses an existing output or binary rather than overwriting it. Build Windows
+x64 with the verified mini-electron distribution selected by `MINI_ELECTRON_DIST_PATH`
+and `npm run build:desktop -- --win nsis --x64 --publish never`. Output goes to
+`packages/desktop/release-plugins`, separate from the previous qualified installer.
+Qualification must exercise the real Python/native extensions and production WeChat
+HelperClient ready/status/exit at the long profile-owned snapshot depth. Use the packaged
+`scripts/verify-bundled-runtime.py` for complete WeChat inventory/native-import/Tcl checks.
+A disconnected `/wechat status` alone does not launch or qualify that helper.
+
 
 ## Image generation with references
 
@@ -849,7 +961,7 @@ does not change the conversation's owning workspace.
 
 - Drop files onto the message input to add attachments without sending a message.
 - Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina displays use the same visible drop target as ordinary displays.
-- Paste a clipboard image into the message input to add it as an attachment. The draft is not sent automatically.
+- Paste a copied bitmap or screenshot (PNG/DIB) into the message input to add it as an attachment. The draft is not sent automatically. On Windows Desktop, right-click the editable input for native Cut, Copy, Paste, and Select All. Explorer's copied-file-only `CF_HDROP` clipboard format is not exposed by mini-electron 0.1.7; use the attachment button or drag and drop for those image files.
 - Drop external UTF-8 text files onto the conversation history or other ordinary areas to open local, read-only file tabs, not a dialog. Each tab offers **Preview / Source** modes; Markdown and HTML render in Preview mode. Files are not uploaded.
   - Outside a workspace, files open on a dedicated preview page with file tabs.
   - Preview tabs and their contents are session-only. Switching tabs retains the selected mode; closing a tab releases its content, and reloading removes local preview tabs.
@@ -928,10 +1040,11 @@ connections** contains relay/pairing controls. Per-host projects and provider se
 under the selected host rather than being moved into app-wide settings.
 
 For a selected host, **Settings → Providers** manages models, sign-in accounts, and their
-connection state. **Settings → Usage** shows provider quotas and balances, Codex subscription
-and reset cards, and Claude limit-reset controls alongside each affected account. Reset actions
-still require their existing confirmation; changing an account's login or order remains in
-Providers.
+connection state. **Settings → Usage** shows native OMP `/stats`, provider quotas and
+balances, Codex subscription and reset cards, and Claude limit-reset controls alongside
+each affected account. Native totals and provider quotas are not added together. Reset
+actions still require their existing confirmation; changing an account's login or order
+remains in Providers.
 
 ## Assistant message links
 
@@ -968,6 +1081,9 @@ Assistant Markdown renders inline formulas delimited by `$...$`, `\(...\)`, or s
 `\[...\]`. Display formulas use standalone `$$...$$` or `\[...\]` blocks; these blocks also work
 inside Markdown quotes and lists. Explicit `\vec{v}` notation renders with both a vector arrow and
 a bold symbol, while `\mathbf{v}` remains available for bold-vector notation.
+Inline dollar formulas containing TeX commands also accept inner padding, for example
+`$ \dot x=Ax+Bu $` or `$ \frac{dy}{dx} $`. Ordinary currency such as `$5 and $10` or
+`$ 5 and $ 10` remains prose; inline formulas close at the first unescaped dollar.
 
 Math keeps its bundled KaTeX fonts when the interface font changes. `\binom61` renders
 6 above 1 inside full-height parentheses, without a fraction bar. Fraction bars follow
@@ -1189,6 +1305,48 @@ npm run build:windows:x64
 `npm run build:windows` builds the same x64 target. The installer is
 `OMP-Desktop-Setup-<version>-x64.exe`; there is no arm64 or combined installer.
 
+Update the native runtime explicitly before packaging an existing checkout:
+
+```bash
+npx mini-electron --update-runtime 0.1.15
+node -p "require('@iriscat/mini-electron/dist/version.json').runtimeVersion"
+```
+
+For a reproducible fresh Windows install, set `MINI_ELECTRON_RUNTIME_VERSION=0.1.15`
+when running `npm ci`. The npm lockfile pins the installer, not the native runtime;
+ordinary postinstall reuses an already valid distribution instead of refreshing it.
+
+For a local unsigned NSIS candidate with signing credentials absent and publishing disabled:
+
+```bash
+npm exec -- cross-env CSC_IDENTITY_AUTO_DISCOVERY=false \
+  npm run build:desktop -- --win nsis --x64 --publish never
+```
+
+Run the actual unpacked Windows application on an unlocked interactive desktop:
+
+```bash
+node packages/desktop/e2e/packaged-app-smoke.js \
+  --app packages/desktop/release/win-unpacked
+```
+
+The Windows driver uses a copied official runtime, isolated native profile paths,
+real renderer/preload/IPC/daemon/CLI/terminal/OMP, and synthetic numeric SQLite
+fixtures. It checks maximize/restore/minimize presentation, companion assets and
+native menu input, and Chinese Usage ranges/refresh. Native screen captures reject
+foreign-window overlap and use an owned opaque backing for transparent gaps.
+Only the copied main is temporarily topmost during window/Usage surface scenarios;
+its original native flag is checked after restoration and before companion tests.
+Other programs are never hidden, moved, or reconfigured.
+Input targets only verified owned windows; initial foreground acquisition does
+not loosen OS foreground policy or force repaint during restore measurements.
+Pet input waits for genuine, authenticated interactivity IPC to transition from an
+outside false state to a fresh true state for the same run, process, and pet HWND.
+The passive observer discards superseded events and never changes input state or
+opens the menu itself. Native ownership and `HTCLIENT` are safety checks, not proof
+that the runtime has stopped ignoring mouse events.
+Upstream contract failures remain failures, not skipped or replaced by mock bridges.
+
 Windows daemon and CLI process-tree cleanup launch `taskkill.exe /T /F` directly with a hidden
 console, avoiding transient `cmd.exe` windows during provider refresh and process shutdown.
 Interactive terminal launches are unchanged. macOS and Linux retain signal-based tree cleanup.
@@ -1392,7 +1550,8 @@ node packages/desktop/e2e/pet-layout-smoke.js
 The smoke briefly opens a non-focusing companion with an isolated temporary profile.
 It covers changing captions and task counts, all three sizes, main-window zoom,
 viewport changes, and opaque/transparent pointer targets without calling a model.
-Set `ELECTRON_PATH` to use an existing Electron executable instead of the npm binary.
+It uses an owned copy of the installed official Windows 0.1.15 runtime; stock
+Electron and legacy renderer-result wrappers are not used as fallbacks.
 
 ## License
 

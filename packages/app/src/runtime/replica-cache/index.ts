@@ -71,6 +71,7 @@ const StoredTimelineItemSchema = z.discriminatedUnion("kind", [
     messageId: z.string().optional(),
     text: z.string(),
     presentation: z.literal("plan").optional(),
+    customMessage: z.object({ customType: z.string(), details: z.unknown().optional() }).optional(),
     blockGroupId: z.string().optional(),
     blockIndex: z.number().int().nonnegative().optional(),
   }),
@@ -374,6 +375,7 @@ function serializeTimelineItem(item: StreamItem): StoredTimelineItem | null {
         ...(item.messageId ? { messageId: item.messageId } : {}),
         text: item.text,
         ...(item.presentation ? { presentation: item.presentation } : {}),
+        ...(item.customMessage ? { customMessage: item.customMessage } : {}),
         ...(item.blockGroupId ? { blockGroupId: item.blockGroupId } : {}),
         ...(item.blockIndex !== undefined ? { blockIndex: item.blockIndex } : {}),
       };
@@ -456,6 +458,7 @@ function deserializeTimelineItem(item: StoredTimelineItem): StreamItem {
         ...(item.messageId ? { messageId: item.messageId } : {}),
         text: item.text,
         ...(item.presentation ? { presentation: item.presentation } : {}),
+        ...(item.customMessage ? { customMessage: item.customMessage } : {}),
         ...(item.blockGroupId ? { blockGroupId: item.blockGroupId } : {}),
         ...(item.blockIndex !== undefined ? { blockIndex: item.blockIndex } : {}),
       };

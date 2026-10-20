@@ -3,12 +3,39 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { DaemonClient } from "@omp-desktop/client/internal/daemon-client";
+import type { OmpStatsSnapshot } from "@omp-desktop/protocol/omp-stats";
 import { HostUsagePage } from "./host-usage-page";
 
 type UsageClient = Pick<
   DaemonClient,
-  "getOmpProviderManagement" | "listProviderUsage" | "consumeOmpCodexResetCredit"
+  "getOmpProviderManagement" | "listProviderUsage" | "consumeOmpCodexResetCredit" | "getOmpStats"
 >;
+
+const nativeStats: OmpStatsSnapshot = {
+  status: "available",
+  source: "omp_stats_db",
+  range: "24h",
+  fetchedAt: "2026-10-18T00:00:00.000Z",
+  scope: { kind: "host_profile", profile: "default" },
+  indexedThrough: 1_792_300_000_000,
+  overall: {
+    totalRequests: 4,
+    failedRequests: 0,
+    totalInputTokens: 10,
+    totalOutputTokens: 20,
+    totalCacheReadTokens: 0,
+    totalCacheWriteTokens: 0,
+    totalTokens: 30,
+    totalCostUsd: 1.5,
+    unpricedRequests: 0,
+    transcriptCount: 1,
+    firstTimestamp: 1_792_300_000_000,
+    lastTimestamp: 1_792_300_000_000,
+  },
+  byModel: [],
+  byProvider: [],
+  byAgentType: [],
+};
 
 const runtime = vi.hoisted(() => ({
   client: null as UsageClient | null,
@@ -29,6 +56,7 @@ vi.mock("@/stores/session-store", () => ({
           serverInfo: {
             features: {
               providerUsageList: true,
+              ompStats: true,
               ompProviderManagement: true,
               ompCodexResetCredits: true,
               ompClaudeLimitResets: true,
@@ -120,6 +148,7 @@ it("shows account quota and its reset card together in Usage", async () => {
       providers: [],
     }),
     consumeOmpCodexResetCredit: consume,
+    getOmpStats: async () => ({ requestId: "native-stats", stats: nativeStats }),
   };
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -131,6 +160,9 @@ it("shows account quota and its reset card together in Usage", async () => {
   const card = await screen.findByTestId("omp-reset-credit-consume-42-card-1");
   expect(screen.getByText("agentControls.quota.weekly")).toBeTruthy();
   expect(screen.getAllByText("Remaining: 9007199254740993.000001 credits")).toHaveLength(1);
+  await screen.findByTestId("omp-native-stats-summary");
+  expect(screen.getByTestId("omp-native-stats-requests").textContent).toBe("4");
+  expect(screen.getByTestId("omp-native-stats-cost").textContent).toBe("$1.50");
   fireEvent.click(card);
   await waitFor(() => expect(runtime.confirm).toHaveBeenCalledOnce());
   expect(consume).not.toHaveBeenCalled();
@@ -168,6 +200,7 @@ it("shows Claude limits and reset controls in Usage", async () => {
       providers: [],
     }),
     consumeOmpCodexResetCredit: vi.fn(),
+    getOmpStats: async () => ({ requestId: "native-stats", stats: nativeStats }),
   };
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(

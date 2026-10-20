@@ -21,6 +21,7 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import type { PluginPageState } from "@/screens/settings/plugins-page-state";
 import { settingsStyles } from "@/styles/settings";
 import { getMarketplacePluginState } from "./marketplace-plugin-state";
+import { confirmDialog } from "@/utils/confirm-dialog";
 
 interface OmpPluginsPageProps {
   serverId: string;
@@ -29,6 +30,7 @@ interface OmpPluginsPageProps {
 interface PluginRowProps {
   plugin: OmpPluginInfo;
   busy: boolean;
+  disabled: boolean;
   onToggle: (plugin: OmpPluginInfo, enabled: boolean) => void;
   onRemove: (plugin: OmpPluginInfo) => void;
   removeLabel: string;
@@ -46,6 +48,12 @@ function getDoctorStatusVariant(status: OmpPluginDoctorCheck["status"]): StatusB
 }
 
 type OmpMarketplaceCatalogEntry = NonNullable<OmpPluginMarketplaceInfo["plugins"]>[number];
+type MarketplaceScope = "user" | "project";
+
+function metadataText(value: unknown): string | null {
+  if (value == null) return null;
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
 
 function getPluginOperationId(plugin: OmpPluginInfo): string {
   return plugin.id ?? plugin.name;
@@ -70,6 +78,8 @@ interface MarketplaceCatalogRowProps {
   plugin: OmpMarketplaceCatalogEntry;
   marketplaceName: string;
   busy: boolean;
+  disabled: boolean;
+  scope: MarketplaceScope;
   installedPlugins: OmpPluginInfo[];
   upgradeLabel: string;
   installedLabel: string;
@@ -81,16 +91,20 @@ function MarketplaceCatalogRow({
   plugin,
   marketplaceName,
   busy,
+  disabled,
+  scope,
   onInstall,
   installLabel,
   installedPlugins,
   upgradeLabel,
   installedLabel,
 }: MarketplaceCatalogRowProps) {
+  const { t } = useTranslation();
   const { installed, updateAvailable } = getMarketplacePluginState(
     plugin,
     marketplaceName,
     installedPlugins,
+    scope,
   );
   let actionLabel = installLabel;
   if (installed) actionLabel = updateAvailable ? upgradeLabel : installedLabel;
@@ -110,13 +124,23 @@ function MarketplaceCatalogRow({
             {plugin.description}
           </Text>
         ) : null}
+        <Text style={styles.pluginPath}>{`${plugin.name}@${marketplaceName}`}</Text>
+        {(["source", "author", "repository", "homepage"] as const).map((field) => {
+          const value = metadataText(plugin[field]);
+          return value ? (
+            <Text key={field} style={settingsStyles.rowHint}>
+              {t(`settings.host.ompPlugins.metadata.${field}`)}: {value}
+            </Text>
+          ) : null;
+        })}
       </View>
       <View style={styles.pluginActions}>
         <Button
           size="sm"
           loading={busy}
-          disabled={!!installed && !updateAvailable}
+          disabled={disabled || (!!installed && !updateAvailable)}
           onPress={handleInstall}
+          testID={`omp-plugins-catalog-install-${plugin.name}@${marketplaceName}`}
         >
           {actionLabel}
         </Button>
@@ -128,6 +152,9 @@ interface MarketplaceEntryCardProps {
   marketplace: OmpPluginMarketplaceInfo;
   expanded: boolean;
   busy: boolean;
+  disabled: boolean;
+  scope: MarketplaceScope;
+  onRefresh: (name: string) => void;
   busyCatalogName: string | null;
   hideLabel: string;
   browseLabel: string;
@@ -147,6 +174,9 @@ function MarketplaceEntryCard({
   marketplace,
   expanded,
   busy,
+  disabled,
+  scope,
+  onRefresh,
   busyCatalogName,
   hideLabel,
   browseLabel,
@@ -161,6 +191,11 @@ function MarketplaceEntryCard({
   onRemove,
   onInstall,
 }: MarketplaceEntryCardProps) {
+  const { t } = useTranslation();
+  const handleRefresh = useCallback(
+    () => onRefresh(marketplace.name),
+    [onRefresh, marketplace.name],
+  );
   const handleToggle = useCallback(() => onToggle(marketplace.name), [onToggle, marketplace.name]);
   const handleRemove = useCallback(() => onRemove(marketplace.name), [onRemove, marketplace.name]);
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -190,7 +225,22 @@ function MarketplaceEntryCard({
           <Button size="sm" variant="outline" onPress={handleToggle}>
             {expanded ? hideLabel : browseLabel}
           </Button>
-          <Button variant="destructive" size="sm" loading={busy} onPress={handleRemove}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled}
+            onPress={handleRefresh}
+            testID={`omp-plugins-marketplace-refresh-${marketplace.name}`}
+          >
+            {t("settings.host.ompPlugins.marketplace.actions.refresh")}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={disabled}
+            loading={busy}
+            onPress={handleRemove}
+          >
             {removeLabel}
           </Button>
         </View>
@@ -211,6 +261,8 @@ function MarketplaceEntryCard({
               plugin={entry}
               marketplaceName={marketplace.name}
               busy={busyCatalogName === `${entry.name}@${marketplace.name}`}
+              disabled={disabled}
+              scope={scope}
               onInstall={onInstall}
               installLabel={installLabel}
               installedPlugins={installedPlugins}
@@ -227,11 +279,13 @@ function MarketplaceEntryCard({
 function OmpPluginRow({
   plugin,
   busy,
+  disabled,
   onToggle,
   onRemove,
   removeLabel,
   toggleLabel,
 }: PluginRowProps) {
+  const { t } = useTranslation();
   const handleToggle = useCallback((value: boolean) => onToggle(plugin, value), [onToggle, plugin]);
   const handleRemove = useCallback(() => onRemove(plugin), [onRemove, plugin]);
   return (
@@ -246,6 +300,17 @@ function OmpPluginRow({
             {plugin.description}
           </Text>
         ) : null}
+        <Text style={styles.pluginPath}>{getPluginOperationId(plugin)}</Text>
+        <Text style={settingsStyles.rowHint}>
+          {plugin.scope === "project"
+            ? t("settings.host.ompPlugins.scope.project")
+            : t("settings.host.ompPlugins.scope.user")}
+          {plugin.shadowedBy === "project"
+            ? ` · ${t("settings.host.ompPlugins.scope.shadowed")}`
+            : plugin.scope === "project" && plugin.enabled === true
+              ? ` · ${t("settings.host.ompPlugins.scope.effectiveProject")}`
+              : ""}
+        </Text>
         {plugin.path ? (
           <Text style={styles.pluginPath} numberOfLines={1}>
             {plugin.path}
@@ -257,8 +322,17 @@ function OmpPluginRow({
           accessibilityLabel={toggleLabel}
           value={plugin.enabled === true}
           onValueChange={handleToggle}
+          disabled={disabled}
+          testID={`omp-plugins-toggle-${getPluginRowId(plugin)}`}
         />
-        <Button variant="destructive" size="sm" loading={busy} onPress={handleRemove}>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={disabled}
+          loading={busy}
+          onPress={handleRemove}
+          testID={`omp-plugins-remove-${getPluginRowId(plugin)}`}
+        >
           {removeLabel}
         </Button>
       </View>
@@ -328,50 +402,123 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
   const { t } = useTranslation();
   const client = useHostRuntimeClient(serverId);
   const connected = useHostRuntimeIsConnected(serverId);
+  const [directory, setDirectory] = useState("");
+  const [cwd, setCwd] = useState<string | undefined>();
+  const [busy, setBusy] = useState(true);
+  const identity = useRef({ client, serverId, generation: 0 });
+  if (identity.current.client !== client || identity.current.serverId !== serverId) {
+    identity.current = { client, serverId, generation: identity.current.generation + 1 };
+  }
+  const applyContext = () => {
+    if (busy || !connected) return;
+    const next = directory.trim() || undefined;
+    if (next === cwd) return;
+    setBusy(true);
+    setCwd(next);
+  };
+
+  return (
+    <View style={styles.container}>
+      <SettingsSection title={t("settings.host.ompPlugins.context.title")}>
+        <View style={settingsStyles.card} testID="omp-plugins-context">
+          <View style={[settingsStyles.row, styles.installRow]}>
+            <Text style={settingsStyles.rowHint}>{t("settings.host.ompPlugins.trustWarning")}</Text>
+            <ExternalLink
+              href="https://omp.sh/docs/plugins"
+              label={t("settings.host.ompPlugins.browsePackages")}
+              testID="omp-plugins-docs-link"
+            />
+            <Field label={t("settings.host.ompPlugins.context.directory")}>
+              <FieldControlRow
+                initialValue={directory}
+                onChangeText={setDirectory}
+                onSubmitEditing={applyContext}
+                placeholder={t("settings.host.ompPlugins.context.placeholder")}
+                editable={!busy && connected}
+                buttonLabel={t("settings.host.ompPlugins.context.apply")}
+                buttonLoading={busy}
+                buttonDisabled={busy || !connected || (directory.trim() || undefined) === cwd}
+                buttonTestID="omp-plugins-context-apply"
+                inputTestID="omp-plugins-context-directory"
+                onPress={applyContext}
+              />
+            </Field>
+            <Text style={settingsStyles.rowHint} testID="omp-plugins-applied-context">
+              {cwd
+                ? t("settings.host.ompPlugins.context.project", { cwd })
+                : t("settings.host.ompPlugins.context.user")}
+            </Text>
+            <Text style={settingsStyles.rowHint}>{t("settings.host.ompPlugins.runtimeHint")}</Text>
+          </View>
+        </View>
+      </SettingsSection>
+      <OmpPluginsContextPage
+        key={`${identity.current.generation}:${cwd ?? ""}:${connected}`}
+        serverId={serverId}
+        cwd={cwd}
+        onBusyChange={setBusy}
+      />
+    </View>
+  );
+}
+
+function OmpPluginsContextPage({
+  serverId,
+  cwd,
+  onBusyChange,
+}: OmpPluginsPageProps & {
+  cwd?: string;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const client = useHostRuntimeClient(serverId);
+  const connected = useHostRuntimeIsConnected(serverId);
 
   const [plugins, setPlugins] = useState<OmpPluginInfo[]>([]);
   const [pageState, setPageState] = useState<PluginPageState>("loading");
   const [rawOutput, setRawOutput] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [busyPlugin, setBusyPlugin] = useState<string | null>(null);
+  const [operation, setOperation] = useState<string | null>(null);
+  const operationLock = useRef(false);
+  const [scope, setScope] = useState<MarketplaceScope>("user");
+  const [notice, setNotice] = useState<"applied" | "preview" | "catalogRefreshed" | null>(null);
   const [installSpec, setInstallSpec] = useState("");
   const [installDryRun, setInstallDryRun] = useState(false);
-  const [installing, setInstalling] = useState(false);
   const [installOutput, setInstallOutput] = useState<string | null>(null);
   const [doctorChecks, setDoctorChecks] = useState<OmpPluginDoctorCheck[] | null>(null);
-  const [doctorRunning, setDoctorRunning] = useState(false);
   const [marketplaces, setMarketplaces] = useState<OmpPluginMarketplaceInfo[]>([]);
   const [expandedMarketplace, setExpandedMarketplace] = useState<string | null>(null);
   const [mktSource, setMktSource] = useState("");
-  const [mktBusy, setMktBusy] = useState(false);
-  const [busyCatalog, setBusyCatalog] = useState<string | null>(null);
 
-  // The daemon serializes ompPlugins.* RPCs (one operation at a time); a
-  // concurrent second call throws OmpPluginOperationInProgressError. Share a
-  // single in-flight load so overlapping callers await the same request.
+  // Context/client changes remount this page. Old completions can never publish
+  // into the new context; the guard also stops chained RPCs after unmount.
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const loadRef = useRef<Promise<void> | null>(null);
   const load = useCallback(async () => {
-    if (!client) {
+    if (!client || !connected) {
       setPageState("offline");
       return;
     }
-    if (loadRef.current) {
-      await loadRef.current;
-      return;
-    }
+    if (loadRef.current) return loadRef.current;
     const run = (async () => {
       setPageState("loading");
-      setLoadError(null);
       try {
-        const pluginResult = await client.listOmpPlugins();
-        const marketplaceResult = await client.listOmpPluginMarketplaces().catch(() => null);
+        const pluginResult = await client.listOmpPlugins(cwd);
+        if (!active.current) return;
+        const marketplaceResult = await client.listOmpPluginMarketplaces(cwd).catch(() => null);
+        if (!active.current) return;
         setPlugins(pluginResult.plugins);
         setRawOutput(pluginResult.rawOutput ?? null);
         setPageState(pluginResult.plugins.length === 0 ? "empty" : "ready");
-        if (marketplaceResult) {
-          setMarketplaces(marketplaceResult.marketplaces);
-        }
+        if (marketplaceResult) setMarketplaces(marketplaceResult.marketplaces);
       } catch (error) {
+        if (!active.current) return;
         setLoadError(error instanceof Error ? error.message : String(error));
         setPageState("error");
       } finally {
@@ -380,192 +527,231 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
     })();
     loadRef.current = run;
     await run;
-  }, [client]);
+  }, [client, connected, cwd]);
 
   useEffect(() => {
-    if (!connected) {
-      setPageState("offline");
-      return;
-    }
     void load();
-  }, [connected, load]);
+  }, [load]);
+  const controlsDisabled = !connected || !client || pageState === "loading" || operation !== null;
+  useEffect(() => {
+    onBusyChange(pageState === "loading" || operation !== null);
+  }, [onBusyChange, pageState, operation]);
+
+  const runOperation = useCallback(
+    async (key: string, action: () => Promise<void>) => {
+      if (!client || !connected || operationLock.current || loadRef.current || !active.current)
+        return;
+      operationLock.current = true;
+      setOperation(key);
+      setLoadError(null);
+      setNotice(null);
+      try {
+        await action();
+      } catch (error) {
+        if (active.current) setLoadError(error instanceof Error ? error.message : String(error));
+      } finally {
+        operationLock.current = false;
+        if (active.current) setOperation(null);
+      }
+    },
+    [client, connected],
+  );
 
   const handleToggle = useCallback(
-    async (plugin: OmpPluginInfo, enabled: boolean) => {
-      if (!client) return;
-      const rowId = getPluginRowId(plugin);
-      setBusyPlugin(rowId);
-      try {
+    (plugin: OmpPluginInfo, enabled: boolean) =>
+      void runOperation(getPluginRowId(plugin), async () => {
+        if (!client || (plugin.scope === "project" && !cwd)) return;
         const result = await client.setOmpPluginEnabled(
           getPluginOperationId(plugin),
           enabled,
           plugin.scope,
+          cwd,
         );
-        if (result.ok) {
-          setPlugins((prev) =>
-            prev.map((entry) => (getPluginRowId(entry) === rowId ? { ...entry, enabled } : entry)),
+        if (!active.current) return;
+        if (!result.ok) {
+          setLoadError(
+            result.output ||
+              t("settings.host.ompPlugins.feedback.toggleFailed", { id: plugin.name }),
           );
-        } else {
-          setLoadError(t("settings.host.ompPlugins.feedback.toggleFailed", { id: plugin.name }));
+          return;
         }
-      } catch (error) {
-        setLoadError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setBusyPlugin(null);
-      }
-    },
-    [client, t],
+        setNotice("applied");
+        await load();
+      }),
+    [client, cwd, load, runOperation, t],
   );
 
   const handleRemove = useCallback(
-    async (plugin: OmpPluginInfo) => {
-      if (!client) return;
-      const rowId = getPluginRowId(plugin);
-      setBusyPlugin(rowId);
-      try {
-        const result = await client.removeOmpPlugin(getPluginOperationId(plugin), plugin.scope);
-        if (result.ok) {
-          setPlugins((prev) => prev.filter((entry) => getPluginRowId(entry) !== rowId));
-        } else {
+    (plugin: OmpPluginInfo) =>
+      void runOperation(getPluginRowId(plugin), async () => {
+        if (!client || (plugin.scope === "project" && !cwd)) return;
+        const confirmed = await confirmDialog({
+          title: t("settings.host.ompPlugins.removeConfirmTitle", {
+            id: getPluginOperationId(plugin),
+          }),
+          message: t("settings.host.ompPlugins.removeConfirmMessage", {
+            scope:
+              plugin.scope === "project"
+                ? t("settings.host.ompPlugins.scope.project")
+                : t("settings.host.ompPlugins.scope.user"),
+            cwd: cwd ?? t("settings.host.ompPlugins.context.user"),
+          }),
+          confirmLabel: t("settings.host.ompPlugins.actions.remove"),
+          destructive: true,
+        });
+        if (!confirmed || !active.current) return;
+        const result = await client.removeOmpPlugin(
+          getPluginOperationId(plugin),
+          plugin.scope,
+          cwd,
+        );
+        if (!active.current) return;
+        if (!result.ok) {
           setLoadError(
-            result.output ??
+            result.output ||
               t("settings.host.ompPlugins.feedback.removeFailed", { id: plugin.name }),
           );
+          return;
         }
-      } catch (error) {
-        setLoadError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setBusyPlugin(null);
-      }
-    },
-    [client, t],
+        setNotice("applied");
+        await load();
+      }),
+    [client, cwd, load, runOperation, t],
   );
 
   const handleInstall = useCallback(async () => {
     if (!client || !installSpec.trim()) return;
-    setInstalling(true);
-    setInstallOutput(null);
-    try {
+    await runOperation("install", async () => {
+      setInstallOutput(null);
+      const spec = installSpec.trim();
+      const marketplaceSpec = /^[^@/:\s]+@[^@/:\s]+$/.test(spec);
       const result = await client.installOmpPlugin({
-        spec: installSpec.trim(),
+        spec,
         dryRun: installDryRun,
+        cwd,
+        ...(marketplaceSpec ? { scope } : {}),
       });
-      if (result.ok) {
-        setInstallSpec("");
-        setInstallDryRun(false);
-        if (!installDryRun) {
-          await load();
-        }
-      }
+      if (!active.current) return;
       setInstallOutput(result.output ?? null);
-    } catch (error) {
-      setInstallOutput(error instanceof Error ? error.message : String(error));
-    } finally {
-      setInstalling(false);
-    }
-  }, [client, installSpec, installDryRun, load]);
+      if (!result.ok) {
+        setLoadError(
+          result.output || t("settings.host.ompPlugins.feedback.installFailed", { id: spec }),
+        );
+        return;
+      }
+      if (installDryRun) {
+        setNotice("preview");
+        return;
+      }
+      setInstallSpec("");
+      setNotice("applied");
+      await load();
+    });
+  }, [client, cwd, installSpec, installDryRun, scope, load, runOperation, t]);
 
   const handleDoctor = useCallback(
-    async (fix: boolean) => {
-      if (!client) return;
-      setDoctorRunning(true);
-      try {
-        const result = await client.runOmpPluginDoctor(fix);
+    (fix: boolean) =>
+      runOperation("doctor", async () => {
+        if (!client) return;
+        const result = await client.runOmpPluginDoctor(fix, cwd);
+        if (!active.current) return;
         setDoctorChecks(result.checks.length > 0 ? result.checks : null);
         if (result.rawOutput) setInstallOutput(result.rawOutput);
-      } catch (error) {
-        setInstallOutput(error instanceof Error ? error.message : String(error));
-      } finally {
-        setDoctorRunning(false);
-      }
-    },
-    [client],
+        if (fix) await load();
+      }),
+    [client, cwd, load, runOperation],
   );
 
   const handleMarketplaceAdd = useCallback(async () => {
     if (!client || !mktSource.trim()) return;
-    setMktBusy(true);
-    setLoadError(null);
-    try {
-      const result = await client.addOmpPluginMarketplace(mktSource.trim());
-      if (result.ok) {
-        setMktSource("");
-        const refreshed = await client.listOmpPluginMarketplaces();
-        setMarketplaces(refreshed.marketplaces);
-        if (result.marketplace) {
-          setExpandedMarketplace(result.marketplace.name);
-        }
-      } else {
-        setLoadError(result.output ?? t("settings.host.ompPlugins.marketplace.feedback.addFailed"));
+    await runOperation("marketplace", async () => {
+      const result = await client.addOmpPluginMarketplace(mktSource.trim(), cwd);
+      if (!active.current) return;
+      if (!result.ok) {
+        setLoadError(result.output || t("settings.host.ompPlugins.marketplace.feedback.addFailed"));
+        return;
       }
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setMktBusy(false);
-    }
-  }, [client, mktSource, t]);
+      setMktSource("");
+      const refreshed = await client.listOmpPluginMarketplaces(cwd);
+      if (!active.current) return;
+      setMarketplaces(refreshed.marketplaces);
+      if (result.marketplace) setExpandedMarketplace(result.marketplace.name);
+    });
+  }, [client, cwd, mktSource, runOperation, t]);
 
   const handleMarketplaceRemove = useCallback(
-    async (name: string) => {
-      if (!client) return;
-      setMktBusy(true);
-      setLoadError(null);
-      try {
-        const result = await client.removeOmpPluginMarketplace(name);
+    (name: string) =>
+      runOperation("marketplace", async () => {
+        if (!client) return;
+        const result = await client.removeOmpPluginMarketplace(name, cwd);
+        if (!active.current) return;
         if (result.ok) {
           setMarketplaces((prev) => prev.filter((entry) => entry.name !== name));
           setExpandedMarketplace((prev) => (prev === name ? null : prev));
         } else {
           setLoadError(
-            result.output ??
+            result.output ||
               t("settings.host.ompPlugins.marketplace.feedback.removeFailed", { id: name }),
           );
         }
-      } catch (error) {
-        setLoadError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setMktBusy(false);
-      }
-    },
-    [client, t],
+      }),
+    [client, cwd, runOperation, t],
+  );
+
+  const handleMarketplaceRefresh = useCallback(
+    (name: string) =>
+      void runOperation("marketplace", async () => {
+        if (!client) return;
+        const result = await client.updateOmpPluginMarketplace(name, cwd);
+        if (!active.current) return;
+        if (!result.ok) {
+          setLoadError(
+            result.output ||
+              t("settings.host.ompPlugins.marketplace.feedback.refreshFailed", { id: name }),
+          );
+          return;
+        }
+        const refreshed = await client.listOmpPluginMarketplaces(cwd);
+        if (!active.current) return;
+        setMarketplaces(refreshed.marketplaces);
+        setNotice("catalogRefreshed");
+      }),
+    [client, cwd, runOperation, t],
   );
 
   const handleMarketplaceInstall = useCallback(
     async (plugin: OmpMarketplaceCatalogEntry, marketplaceName: string) => {
-      if (!client) return;
+      if (!client || (scope === "project" && !cwd)) return;
       const key = `${plugin.name}@${marketplaceName}`;
       const { installed, updateAvailable } = getMarketplacePluginState(
         plugin,
         marketplaceName,
         plugins,
+        scope,
       );
       if (installed && !updateAvailable) return;
-      setBusyCatalog(key);
-      setLoadError(null);
-      try {
+      await runOperation(key, async () => {
         const result = installed
-          ? await client.upgradeOmpPlugin(key, installed.scope ?? "user")
-          : await client.installOmpPlugin({ spec: key });
+          ? await client.upgradeOmpPlugin(key, scope, cwd)
+          : await client.installOmpPlugin({ spec: key, scope, cwd });
+        if (!active.current) return;
         if (result.ok) {
+          setNotice("applied");
           await load();
         } else {
           setLoadError(
-            result.output ??
+            result.output ||
               t(
                 installed
                   ? "settings.host.ompPlugins.feedback.upgradeFailed"
                   : "settings.host.ompPlugins.feedback.installFailed",
-                { id: plugin.name },
+                { id: key },
               ),
           );
         }
-      } catch (error) {
-        setLoadError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setBusyCatalog(null);
-      }
+      });
     },
-    [client, load, plugins, t],
+    [client, cwd, scope, plugins, load, runOperation, t],
   );
 
   const handleMarketplaceToggle = useCallback((name: string) => {
@@ -674,7 +860,8 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                   <OmpPluginRow
                     key={rowId}
                     plugin={plugin}
-                    busy={busyPlugin === rowId}
+                    busy={operation === rowId}
+                    disabled={controlsDisabled || (plugin.scope === "project" && !cwd)}
                     onToggle={handleToggle}
                     onRemove={handleRemove}
                     removeLabel={t("settings.host.ompPlugins.actions.remove")}
@@ -703,14 +890,14 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                   onChangeText={setInstallSpec}
                   onSubmitEditing={handleInstallPress}
                   placeholder={t("settings.host.ompPlugins.installPlaceholder")}
-                  editable={!installing}
+                  editable={!controlsDisabled}
                   buttonLabel={
                     installDryRun
                       ? t("settings.host.ompPlugins.actions.check")
                       : t("settings.host.ompPlugins.actions.install")
                   }
-                  buttonLoading={installing}
-                  buttonDisabled={!installSpec.trim()}
+                  buttonLoading={operation === "install"}
+                  buttonDisabled={controlsDisabled || !installSpec.trim()}
                   buttonTestID="omp-plugins-install-button"
                   inputTestID="omp-plugins-install-input"
                   onPress={handleInstallPress}
@@ -718,6 +905,7 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
               </Field>
               <View style={styles.dryRunRow}>
                 <Switch
+                  disabled={controlsDisabled}
                   value={installDryRun}
                   onValueChange={setInstallDryRun}
                   accessibilityLabel={t("settings.host.ompPlugins.dryRunLabel")}
@@ -734,11 +922,9 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
               ) : null}
             </View>
             <View style={styles.browseLinkRow}>
-              <ExternalLink
-                href="https://pi.dev/packages"
-                label={t("settings.host.ompPlugins.browsePackages")}
-                testID="omp-plugins-browse-packages-link"
-              />
+              <Text style={settingsStyles.rowHint}>
+                {t("settings.host.ompPlugins.manualScopeHint")}
+              </Text>
             </View>
           </View>
         </SettingsSection>
@@ -750,8 +936,11 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                 key={marketplace.name}
                 marketplace={marketplace}
                 expanded={expandedMarketplace === marketplace.name}
-                busy={mktBusy}
-                busyCatalogName={busyCatalog}
+                busy={operation === "marketplace"}
+                busyCatalogName={operation}
+                disabled={controlsDisabled}
+                scope={scope}
+                onRefresh={handleMarketplaceRefresh}
                 hideLabel={t("settings.host.ompPlugins.marketplace.actions.hide")}
                 browseLabel={t("settings.host.ompPlugins.marketplace.actions.browse", {
                   count: marketplace.plugins?.length ?? 0,
@@ -778,10 +967,10 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                   onChangeText={setMktSource}
                   onSubmitEditing={onMarketplaceAdd}
                   placeholder={t("settings.host.ompPlugins.marketplace.addPlaceholder")}
-                  editable={!mktBusy}
+                  editable={!controlsDisabled}
                   buttonLabel={t("settings.host.ompPlugins.marketplace.actions.add")}
-                  buttonLoading={mktBusy}
-                  buttonDisabled={!mktSource.trim()}
+                  buttonLoading={operation === "marketplace"}
+                  buttonDisabled={controlsDisabled || !mktSource.trim()}
                   buttonTestID="omp-plugins-marketplace-add-button"
                   inputTestID="omp-plugins-marketplace-input"
                   onPress={onMarketplaceAdd}
@@ -806,7 +995,8 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                 <Button
                   size="sm"
                   onPress={handleDoctorPress}
-                  loading={doctorRunning}
+                  loading={operation === "doctor"}
+                  disabled={controlsDisabled}
                   testID="omp-plugins-doctor-run"
                 >
                   {t("settings.host.ompPlugins.actions.doctor")}
@@ -815,8 +1005,8 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
                   variant="outline"
                   size="sm"
                   onPress={handleDoctorFixPress}
-                  loading={doctorRunning}
-                  disabled={doctorRunning}
+                  loading={operation === "doctor"}
+                  disabled={controlsDisabled}
                   testID="omp-plugins-doctor-fix"
                 >
                   {t("settings.host.ompPlugins.actions.doctorFix")}
@@ -844,7 +1034,50 @@ export function OmpPluginsPage({ serverId }: OmpPluginsPageProps) {
     );
   }
 
-  return <View style={styles.container}>{body}</View>;
+  return (
+    <View style={styles.container}>
+      <SettingsSection title={t("settings.host.ompPlugins.scope.title")}>
+        <View style={settingsStyles.card}>
+          <View style={[settingsStyles.row, styles.installRow]}>
+            <View style={styles.pluginActions}>
+              <Button
+                size="sm"
+                variant={scope === "user" ? "default" : "outline"}
+                disabled={controlsDisabled}
+                onPress={() => setScope("user")}
+                testID="omp-plugins-scope-user"
+              >
+                {t("settings.host.ompPlugins.scope.user")}
+              </Button>
+              <Button
+                size="sm"
+                variant={scope === "project" ? "default" : "outline"}
+                disabled={controlsDisabled || !cwd}
+                onPress={() => setScope("project")}
+                testID="omp-plugins-scope-project"
+              >
+                {t("settings.host.ompPlugins.scope.project")}
+              </Button>
+            </View>
+            <Text style={settingsStyles.rowHint}>{t("settings.host.ompPlugins.scope.hint")}</Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.host.ompPlugins.marketplace.refreshHint")}
+            </Text>
+          </View>
+        </View>
+      </SettingsSection>
+      {notice ? (
+        <View style={settingsStyles.card} testID={`omp-plugins-notice-${notice}`}>
+          <View style={settingsStyles.row}>
+            <Text style={settingsStyles.rowHint}>
+              {t(`settings.host.ompPlugins.notices.${notice}`)}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+      {body}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create((theme) => ({

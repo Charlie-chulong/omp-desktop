@@ -30,37 +30,37 @@ export class OmpPluginSession {
         return this.reply(
           requestId,
           "ompPlugins.list.response",
-          () => this.service.list() as unknown as Promise<Record<string, unknown>>,
+          () => this.service.list(msg.cwd) as unknown as Promise<Record<string, unknown>>,
         );
       }
       case "ompPlugins.install.request": {
-        const { requestId, spec, scope, dryRun } = msg;
+        const { requestId, spec, scope, dryRun, cwd } = msg;
         return this.reply(requestId, "ompPlugins.install.response", async () => {
-          const result = await this.service.install({ spec, scope, dryRun });
+          const result = await this.service.install({ spec, scope, dryRun, cwd });
           return { ok: result.ok, plugin: result.plugin ?? null, output: result.output };
         });
       }
       case "ompPlugins.upgrade.request": {
-        const { requestId, name, scope } = msg;
+        const { requestId, name, scope, cwd } = msg;
         return this.reply(
           requestId,
           "ompPlugins.upgrade.response",
-          () => this.service.upgrade(name, scope) as Promise<Record<string, unknown>>,
+          () => this.service.upgrade(name, scope, cwd) as Promise<Record<string, unknown>>,
         );
       }
       case "ompPlugins.remove.request": {
-        const { requestId, name, scope } = msg;
+        const { requestId, name, scope, cwd } = msg;
         return this.reply(
           requestId,
           "ompPlugins.remove.response",
-          () => this.service.remove(name, scope) as Promise<Record<string, unknown>>,
+          () => this.service.remove(name, scope, cwd) as Promise<Record<string, unknown>>,
         );
       }
       case "ompPlugins.setEnabled.request": {
-        const { requestId, name, enabled, scope } = msg;
+        const { requestId, name, enabled, scope, cwd } = msg;
         return this.reply(requestId, "ompPlugins.setEnabled.response", async () => {
-          const result = await this.service.setEnabled(name, enabled, scope);
-          return { ok: result.ok, name, enabled };
+          const result = await this.service.setEnabled(name, enabled, scope, cwd);
+          return { ok: result.ok, name, enabled, output: result.output };
         });
       }
       case "ompPlugins.doctor.request": {
@@ -69,7 +69,9 @@ export class OmpPluginSession {
           requestId,
           "ompPlugins.doctor.response",
           () =>
-            this.service.doctor({ fix: msg.fix }) as unknown as Promise<Record<string, unknown>>,
+            this.service.doctor({ fix: msg.fix, cwd: msg.cwd }) as unknown as Promise<
+              Record<string, unknown>
+            >,
         );
       }
       case "ompPlugins.marketplace.list.request": {
@@ -77,20 +79,28 @@ export class OmpPluginSession {
         return this.reply(
           requestId,
           "ompPlugins.marketplace.list.response",
-          () => this.service.marketplaceList() as unknown as Promise<Record<string, unknown>>,
+          () =>
+            this.service.marketplaceList(msg.cwd) as unknown as Promise<Record<string, unknown>>,
         );
       }
       case "ompPlugins.marketplace.add.request": {
-        const { requestId, source } = msg;
+        const { requestId, source, cwd } = msg;
         return this.reply(requestId, "ompPlugins.marketplace.add.response", async () => {
-          const result = await this.service.marketplaceAdd({ source });
+          const result = await this.service.marketplaceAdd({ source, cwd });
           return { ok: result.ok, marketplace: result.marketplace ?? null, output: result.output };
         });
       }
       case "ompPlugins.marketplace.remove.request": {
-        const { requestId, name } = msg;
+        const { requestId, name, cwd } = msg;
         return this.reply(requestId, "ompPlugins.marketplace.remove.response", async () => {
-          const result = await this.service.marketplaceRemove({ name });
+          const result = await this.service.marketplaceRemove({ name, cwd });
+          return { ok: result.ok, output: result.output };
+        });
+      }
+      case "ompPlugins.marketplace.update.request": {
+        const { requestId, name, cwd } = msg;
+        return this.reply(requestId, "ompPlugins.marketplace.update.response", async () => {
+          const result = await this.service.marketplaceUpdate({ name, cwd });
           return { ok: result.ok, output: result.output };
         });
       }
@@ -112,16 +122,14 @@ export class OmpPluginSession {
       } as SessionOutboundMessage);
     } catch (error) {
       this.logger.warn({ err: error, responseType }, "ompPlugins operation failed");
-      const statusMessage: SessionOutboundMessage = {
-        type: "status",
+      this.emitFn({
+        type: "rpc_error",
         payload: {
-          status: "ompPlugins_operation_failed",
-          severity: "error",
-          message: error instanceof Error ? error.message : String(error),
-          scope: "ompPlugins",
+          requestId,
+          requestType: responseType.replace(/\.response$/, ".request"),
+          error: error instanceof Error ? error.message : String(error),
         },
-      } as SessionOutboundMessage;
-      this.emitFn(statusMessage);
+      });
     }
   }
 }

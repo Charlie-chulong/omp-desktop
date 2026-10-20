@@ -11,6 +11,7 @@ import {
   mergeOmpAccountProviderUsage,
 } from "@/provider-usage/omp-account";
 import { ProviderUsageSettingsSection } from "@/provider-usage/settings-section";
+import { OmpStatsSettingsSection } from "@/provider-usage/omp-stats-section";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { useHosts } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
@@ -77,6 +78,7 @@ export function HostUsagePage({ serverId }: { serverId: string }) {
 
   return (
     <OmpQuotaServerContext.Provider value={serverId}>
+      <OmpStatsSettingsSection serverId={serverId} />
       <ProviderUsageSettingsSection
         view={usageView}
         onRefresh={handleRefresh}

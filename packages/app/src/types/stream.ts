@@ -4,6 +4,7 @@ import type {
   ToolCallDetail,
 } from "@omp-desktop/protocol/agent-types";
 import type { AgentAttachment, AgentStreamEventPayload } from "@omp-desktop/protocol/messages";
+import { ChatProDetailsSchema } from "@omp-desktop/protocol/messages";
 import type { AttachmentMetadata } from "@/attachments/types";
 import { extractTaskEntriesFromToolCall } from "../utils/tool-call-parsers";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
@@ -562,7 +563,9 @@ function preserveReplacementHead(
           isAfterCanonicalCoverage(item.timelineCursor, canonicalCoverage) ||
           isAgentToolCallItem(item) ||
           (item.kind === "assistant_message" &&
+            !item.customMessage &&
             canonicalTailAssistant?.kind === "assistant_message" &&
+            !canonicalTailAssistant.customMessage &&
             item.text.startsWith(canonicalTailAssistant.text)),
       )
     : currentHead.filter(
@@ -583,9 +586,8 @@ function preserveReplacementHead(
   const liveAssistant = unreconciledHead[liveAssistantIndex];
   const tailAssistant = reconciledTail.at(-1);
   if (
-    liveAssistant.kind !== "assistant_message" ||
-    !tailAssistant ||
-    tailAssistant.kind !== "assistant_message"
+    !isForegroundAssistantMessage(liveAssistant) ||
+    !isForegroundAssistantMessage(tailAssistant)
   ) {
     return { tail: reconciledTail, head: unreconciledHead, acknowledgedClientMessageIds: [] };
   }
@@ -632,6 +634,11 @@ function preserveReplacementHead(
     head,
     acknowledgedClientMessageIds: [],
   };
+}
+
+/** Custom records are complete background output, never a foreground text continuation. */
+function isForegroundAssistantMessage(item: StreamItem | undefined): item is AssistantMessageItem {
+  return item?.kind === "assistant_message" && item.customMessage === undefined;
 }
 
 function mergePreservedTailToolCalls(
@@ -764,6 +771,7 @@ export interface AssistantMessageItem {
   text: string;
   timestamp: Date;
   presentation?: "plan";
+  customMessage?: { customType: string; details?: unknown };
   blockGroupId?: string;
   blockIndex?: number;
 }
@@ -984,7 +992,11 @@ function isMatchingAssistantStream(
   messageId: string | undefined,
   presentation: "plan" | undefined,
 ): item is AssistantMessageItem {
-  if (item?.kind !== "assistant_message" || item.presentation !== presentation) {
+  if (
+    item?.kind !== "assistant_message" ||
+    item.customMessage ||
+    item.presentation !== presentation
+  ) {
     return false;
   }
   return messageId === undefined || item.messageId === messageId;
@@ -1000,7 +1012,23 @@ function appendAssistantMessage(
   reservedItemIds?: ReadonlySet<string>,
   timelineCursor?: TimelinePosition,
   turnId?: string,
+  customMessage?: AssistantMessageItem["customMessage"],
 ): StreamItem[] {
+  if (customMessage) {
+    // A custom record is one complete original message, not an assistant stream delta.
+    // In particular, a late background result must not extend the latest model response.
+    const item: AssistantMessageItem = {
+      kind: "assistant_message",
+      id: createAssistantItemId(state, messageId, text, timestamp, reservedItemIds),
+      ...(messageId ? { messageId } : {}),
+      ...(timelineCursor ? { timelineCursor } : {}),
+      ...(turnId ? { turnId } : {}),
+      customMessage,
+      text,
+      timestamp,
+    };
+    return [...state, item];
+  }
   const { chunk, hasContent } = normalizeChunk(text);
   if (!chunk) {
     return state;
@@ -1553,6 +1581,20 @@ function reduceTimelineEvent(
         ),
       );
     case "assistant_message":
+      if (item.customMessage) {
+        return appendAssistantMessage(
+          state,
+          item.text,
+          timestamp,
+          source,
+          item.messageId,
+          item.presentation,
+          reservedItemIds,
+          timelineCursor,
+          event.turnId,
+          item.customMessage,
+        );
+      }
       return finalizeActiveThoughts(
         appendAssistantMessage(
           state,
@@ -1619,9 +1661,6 @@ function reduceTimelineEvent(
             : {}),
         },
       ];
-    case "extension_notification":
-      // Toast-only item; not rendered in the timeline stream.
-      return state;
     case "compaction":
       return finalizeActiveThoughts(
         reduceTimelineCompaction(state, item, timestamp, timelineCursor),
@@ -1855,6 +1894,7 @@ function promoteCompletedAssistantBlocks(params: { tail: StreamItem[]; head: Str
     assistantIndex < 0 ||
     !activeItem ||
     activeItem.kind !== "assistant_message" ||
+    activeItem.customMessage !== undefined ||
     activeItem.presentation === "plan"
   ) {
     return {
@@ -2069,6 +2109,68 @@ function applyCanonicalUserMessageEvent(params: {
   };
 }
 
+function applyCustomMessageEvent(
+  params: Parameters<typeof applyStreamEvent>[0],
+): ApplyStreamEventResult | null {
+  const { tail, head, event, timestamp } = params;
+  if (
+    event.type !== "timeline" ||
+    event.item.type !== "assistant_message" ||
+    !event.item.customMessage
+  ) {
+    return null;
+  }
+  const incoming = event.item;
+  const customMessage = event.item.customMessage;
+  const metadata =
+    customMessage.customType === "omp-bridge-chatpro"
+      ? ChatProDetailsSchema.safeParse(customMessage.details)
+      : null;
+  const deliveryIdentity = metadata?.success ? JSON.stringify(metadata.data) : undefined;
+  const isDuplicate = (item: StreamItem) => {
+    if (
+      item.kind !== "assistant_message" ||
+      !item.customMessage ||
+      item.customMessage.customType !== customMessage.customType ||
+      item.text !== incoming.text
+    )
+      return false;
+    if (customMessage.customType !== "omp-bridge-chatpro") {
+      return incoming.messageId !== undefined && item.messageId === incoming.messageId;
+    }
+    if (!deliveryIdentity) return false;
+    const previous = ChatProDetailsSchema.safeParse(item.customMessage.details);
+    return previous.success && JSON.stringify(previous.data) === deliveryIdentity;
+  };
+  const tailIndex = tail.findIndex(isDuplicate);
+  const headIndex = tailIndex < 0 ? head.findIndex(isDuplicate) : -1;
+  if (tailIndex >= 0 || headIndex >= 0) {
+    const items = tailIndex >= 0 ? tail : head;
+    const index = tailIndex >= 0 ? tailIndex : headIndex;
+    const existing = items[index];
+    if (
+      incoming.messageId &&
+      existing?.kind === "assistant_message" &&
+      existing.messageId !== incoming.messageId
+    ) {
+      // JSONL reconstruction supplies native IDs that live RPC may omit.
+      const updated = [...items];
+      updated[index] = { ...existing, messageId: incoming.messageId };
+      return tailIndex >= 0
+        ? { tail: updated, head, changedTail: true, changedHead: false }
+        : { tail, head: updated, changedTail: false, changedHead: true };
+    }
+    return { tail, head, changedTail: false, changedHead: false };
+  }
+  // Background records never finalize the active foreground lane.
+  const nextTail = reduceStreamUpdate(tail, event, timestamp, {
+    source: params.source,
+    timelineCursor: params.timelineCursor,
+    reservedItemIds: new Set(head.map((item) => item.id)),
+  });
+  return { tail: nextTail, head, changedTail: nextTail !== tail, changedHead: false };
+}
+
 /**
  * Apply a stream event using head/tail model.
  *
@@ -2090,6 +2192,8 @@ export function applyStreamEvent(params: {
   unmatchedUserMessageInsert?: "tail" | "head";
 }): ApplyStreamEventResult {
   const { tail, head, event, timestamp } = params;
+  const customMessageResult = applyCustomMessageEvent(params);
+  if (customMessageResult) return customMessageResult;
   const canonicalUserResult = applyCanonicalUserMessageEvent({
     tail,
     head,

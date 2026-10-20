@@ -745,6 +745,7 @@ export const LiveElapsed = memo(function LiveElapsed({
 interface AssistantMessageProps {
   occurrenceKey: string;
   message: string;
+  typographer?: boolean;
   timestamp: number;
   workspaceRoot?: string;
   serverId?: string;
@@ -1505,6 +1506,7 @@ function MarkdownListView({
 export const AssistantMessage = memo(function AssistantMessage({
   occurrenceKey,
   message,
+  typographer = true,
   timestamp: _timestamp,
   workspaceRoot,
   serverId,
@@ -1512,7 +1514,10 @@ export const AssistantMessage = memo(function AssistantMessage({
   spacing = "default",
   phase,
 }: AssistantMessageProps) {
-  const markdownParser = useMemo(createAssistantMarkdownParser, []);
+  const markdownParser = useMemo(
+    () => createAssistantMarkdownParser(typographer),
+    [typographer],
+  );
 
   const fileLinkActions = useAssistantFileLinkActions();
   const handleMarkdownLinkPress = useStableEvent((url: string) => {

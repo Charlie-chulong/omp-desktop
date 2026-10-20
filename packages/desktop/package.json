@@ -2,6 +2,7 @@
   "name": "@omp-desktop/desktop",
   "version": "0.5.2",
   "private": true,
+  "ompDesktopDistribution": "private-three-plugins",
   "description": "OMP Desktop mini-electron application",
   "license": "AGPL-3.0-or-later",
   "author": "OMP Desktop contributors",
@@ -25,7 +26,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@iriscat/mini-electron": "^0.1.5",
+    "@iriscat/mini-electron": "0.1.12",
     "@types/node": "24.6.0",
     "@types/ws": "^8.5.14",
     "@vscode/ripgrep-universal": "^1.18.0",

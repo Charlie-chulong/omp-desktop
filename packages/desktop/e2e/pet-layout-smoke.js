@@ -5,28 +5,72 @@ const os = require("node:os");
 const path = require("node:path");
 const { setTimeout: delay } = require("node:timers/promises");
 
-// Run the real companion in its own Electron process, profile, and asset directory.
+// Run the real companion in the selected mini-electron process and an owned profile.
 // No daemon, model credentials, or installed-app data are used.
 if (!process.versions.electron) {
+  assert.equal(
+    process.platform,
+    "win32",
+    "This native smoke targets the official Windows mini-electron 0.1.15 release",
+  );
+  const {
+    isolatedEnvironment,
+    nativeProfilePaths,
+    reserveNativeEarlyProfile,
+    cleanupNativeEarlyProfile,
+    cleanupOwnedProcesses,
+  } = require("./windows-native-packaged-smoke");
   const desktopRoot = path.resolve(__dirname, "..");
+  const desktopMetadata = JSON.parse(
+    fs.readFileSync(path.join(desktopRoot, "package.json"), "utf8"),
+  );
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "omp-pet-layout-"));
+  let env;
+  let earlyProfile;
   try {
     const entry = path.join(temporary, path.basename(__filename));
     fs.copyFileSync(__filename, entry);
     fs.cpSync(path.join(desktopRoot, "assets", "pets"), path.join(temporary, "assets", "pets"), {
       recursive: true,
     });
-    const env = { ...process.env };
-    delete env.ELECTRON_RUN_AS_NODE;
-    delete env.NODE_OPTIONS;
+    // Use an owned copy of the official runtime so every native process can be
+    // identified/cleaned by its executable path, even after a timeout or crash.
+    const runtime = fs.realpathSync(require("@iriscat/mini-electron"));
+    const stagedRuntime = path.join(temporary, "runtime");
+    fs.cpSync(path.dirname(runtime), stagedRuntime, { recursive: true, dereference: true });
+    env = isolatedEnvironment({
+      root: temporary,
+      stagedApp: stagedRuntime,
+      daemonHome: path.join(temporary, "daemon"),
+      listen: "127.0.0.1:0",
+      userData: path.join(temporary, "user-data"),
+    });
+    earlyProfile = reserveNativeEarlyProfile(env);
+    fs.writeFileSync(
+      path.join(temporary, "package.json"),
+      `${JSON.stringify(
+        {
+          name: earlyProfile.name,
+          productName: earlyProfile.name,
+          version: desktopMetadata.version,
+          main: path.basename(entry),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    env.OMP_PET_LAYOUT_EARLY_PROFILE = JSON.stringify(earlyProfile);
+    env.OMP_PET_LAYOUT_SOURCE_ROOT = desktopRoot;
+    env.OMP_PET_LAYOUT_NATIVE_PATHS = JSON.stringify(nativeProfilePaths(env));
     const result = spawnSync(
-      process.env.ELECTRON_PATH || require("electron"),
-      [entry, desktopRoot],
+      path.join(stagedRuntime, path.basename(runtime)),
+      [`--app=${temporary}`],
       {
+        cwd: temporary,
         env,
         encoding: "utf8",
-        timeout: 30_000,
-        windowsHide: true,
+        timeout: 60_000,
+        windowsHide: false,
       },
     );
     if (result.stdout) process.stdout.write(result.stdout);
@@ -34,6 +78,8 @@ if (!process.versions.electron) {
     if (result.error) throw result.error;
     process.exitCode = result.status === 0 ? 0 : 1;
   } finally {
+    if (env) cleanupOwnedProcesses(temporary, env);
+    if (earlyProfile) cleanupNativeEarlyProfile(earlyProfile);
     fs.rmSync(temporary, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 } else {
@@ -45,12 +91,52 @@ if (!process.versions.electron) {
 
 async function runNativeSmoke() {
   const { app, BrowserWindow, protocol, screen } = require("electron");
-  const desktopRoot = process.argv[2];
-  for (const name of ["userData", "sessionData", "logs", "crashDumps"]) {
-    const directory = path.join(__dirname, name);
-    fs.mkdirSync(directory);
+  assert.equal(
+    process.versions.miniElectron,
+    "0.1.15",
+    "Pet layout smoke requires official Windows mini-electron 0.1.15",
+  );
+  const desktopRoot = process.env.OMP_PET_LAYOUT_SOURCE_ROOT;
+  assert.ok(desktopRoot, "The owned launch must supply the actual product module directory");
+  const nativePaths = JSON.parse(process.env.OMP_PET_LAYOUT_NATIVE_PATHS);
+  const ownedRoot = path.resolve(__dirname);
+  const isOwnedPath = (directory) => {
+    const relative = path.relative(ownedRoot, path.resolve(directory));
+    return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+  };
+  const earlyProfile = JSON.parse(process.env.OMP_PET_LAYOUT_EARLY_PROFILE);
+  const marker = JSON.parse(fs.readFileSync(earlyProfile.marker, "utf8"));
+  const earlyUserData = app.getPath("userData");
+  assert.ok(
+    isOwnedPath(earlyUserData) || path.relative(earlyProfile.directory, earlyUserData) === "",
+    "Official runtime early userData must stay in the owned sandbox or exact reserved namespace",
+  );
+  assert.equal(
+    path.basename(earlyUserData),
+    earlyProfile.name,
+    "The native early root must retain its unique name",
+  );
+  assert.equal(marker.kind, "omp-native-smoke-early-profile");
+  assert.equal(
+    app.getName(),
+    earlyProfile.name,
+    "Native startup must use the copied package's unique namespace",
+  );
+  assert.equal(
+    marker.token,
+    earlyProfile.token,
+    "The native early profile must retain its exact ownership marker",
+  );
+  for (const [name, directory] of Object.entries(nativePaths)) {
+    assert.ok(isOwnedPath(directory), `Native ${name} must stay in the owned profile`);
+    fs.mkdirSync(directory, { recursive: true });
     app.setPath(name, directory);
   }
+  assert.equal(
+    path.resolve(app.getPath("home")),
+    path.resolve(process.env.HOME),
+    "Native home must stay in the owned profile",
+  );
   app.setName("OMP Pet Layout Smoke");
   protocol.registerSchemesAsPrivileged([
     {
@@ -72,10 +158,10 @@ async function runNativeSmoke() {
   const { getDesktopSettingsStore } = product("settings/desktop-settings-electron.js");
   const { registerMainWindow } = product("window/main-windows.js");
   const { petWindowSize, PET_SPRITE_SIZE } = product("pets/geometry.js");
-  const preload = path.join(__dirname, "controls-preload.js");
-  fs.writeFileSync(
-    preload,
-    'const {contextBridge,ipcRenderer}=require("electron");contextBridge.exposeInMainWorld("petLayoutSmoke",{publish:activity=>ipcRenderer.invoke("paseo:pet:publishActivity",activity)});',
+  const preload = path.join(desktopRoot, "dist", "preload.js");
+  assert.ok(
+    fs.existsSync(preload),
+    "Use the actual production desktop preload, never a test replacement bridge",
   );
   await app.whenReady();
   protocol.handle("omp-desktop", async (request) => {
@@ -132,36 +218,40 @@ async function runNativeSmoke() {
           updatedAt: ++sequence,
         })),
       };
-      await main.webContents.executeJavaScript(
-        `window.petLayoutSmoke.publish(${JSON.stringify(activity)})`,
+      await evaluateRenderer(
+        main.webContents,
+        `window.paseoDesktop.pet.publishActivity(${JSON.stringify(activity)})`,
       );
       const caption = count ? labels.ready + (count > 1 ? ` · ${count} 个任务` : "") : labels.idle;
       await until(
-        async () => (await pet.webContents.executeJavaScript("bubble.textContent")) === caption,
+        async () => (await evaluateRenderer(pet.webContents, "bubble.textContent")) === caption,
       );
     };
     const measure = () =>
-      pet.webContents.executeJavaScript(`(() => {
+      evaluateRenderer(
+        pet.webContents,
+        `(() => {
       const c=canvas.getBoundingClientRect(),b=bubble.getBoundingClientRect();
       const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
       let painted=0;for(let i=3;i<data.length;i+=4)if(data[i]>16)painted++;
       return {viewport:{width:innerWidth,height:innerHeight},painted,
         canvas:{x:c.x,y:c.y,width:c.width,height:c.height},
         bubble:{x:b.x,y:b.y,width:b.width,height:b.height,right:b.right,bottom:b.bottom}};
-    })()`);
+    })()`,
+      );
     const settled = async (size) => {
       let current;
       await until(async () => {
         current = await measure();
-        const bounds = pet.getContentBounds();
+        const [width, height] = pet.getContentSize();
         const expected = petWindowSize(size);
         return (
           current.painted > 500 &&
           Math.abs(current.canvas.width - PET_SPRITE_SIZE[size]) < 1 &&
-          bounds.width === expected.width &&
-          bounds.height === expected.height &&
-          current.viewport.width === bounds.width &&
-          current.viewport.height === bounds.height
+          width === expected.width &&
+          height === expected.height &&
+          current.viewport.width === width &&
+          current.viewport.height === height
         );
       });
       return current;
@@ -220,20 +310,23 @@ async function runNativeSmoke() {
       check(await measure(), `viewport ${bounds.width}x${bounds.height}`, anchor);
     }
     // Exercise the actual alpha hit-test after the sprite's origin and viewport change.
-    const points = await pet.webContents.executeJavaScript(`(() => {
+    const points = await evaluateRenderer(
+      pet.webContents,
+      `(() => {
       const c=canvas.getBoundingClientRect(),d=ctx.getImageData(0,0,canvas.width,canvas.height).data;
       for(let y=Math.floor(canvas.height*.65);y<canvas.height*.8;y++)for(let x=Math.floor(canvas.width*.45);x<canvas.width*.55;x++){
         if(d[(y*canvas.width+x)*4+3]>200)return {art:{x:c.x+(x+.5)*c.width/canvas.width,y:c.y+(y+.5)*c.height/canvas.height},blank:{x:innerWidth-2,y:innerHeight-2}};
       }
       throw new Error('The companion has no opaque body hit target');
-    })()`);
+    })()`,
+    );
     for (const [point, expected] of [
       [points.art, true],
       [points.blank, false],
     ]) {
       pet.webContents.send("paseo:pet:pointer", point);
       await until(
-        async () => (await pet.webContents.executeJavaScript("interactive")) === expected,
+        async () => (await evaluateRenderer(pet.webContents, "interactive")) === expected,
       );
     }
     console.log("PASS opaque pet hit target and transparent click-through area");
@@ -242,6 +335,23 @@ async function runNativeSmoke() {
     main.destroy();
   }
   app.exit(0);
+}
+
+async function evaluateRenderer(contents, source) {
+  let timer;
+  try {
+    return await Promise.race([
+      contents.executeJavaScript(`(${source})`),
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("The real renderer preload action must settle within 5 seconds")),
+          5_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function until(predicate) {

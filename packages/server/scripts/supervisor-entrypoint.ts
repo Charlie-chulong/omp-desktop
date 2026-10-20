@@ -106,7 +106,6 @@ async function main(): Promise<void> {
       ? resolvePackagedNodeEntrypointRunnerPath(fileURLToPath(import.meta.url))
       : null;
 
-
   const paseoHome = resolvePaseoHome(workerEnv);
   const persistedConfig = loadPersistedConfig(paseoHome);
   const supervisorLogFile = resolveSupervisorLogFile(paseoHome, persistedConfig, workerEnv);
