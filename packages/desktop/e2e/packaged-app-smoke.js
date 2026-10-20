@@ -657,11 +657,21 @@ async function smokeBundledOmpRuntime({ appPath, env, executableName }) {
       "--input-type=module",
       "-e",
       `const { prepareOmpImageSettingsLaunch } = await import(${JSON.stringify(imageSettingsUrl)});
-const launch = await prepareOmpImageSettingsLaunch(
-  [${JSON.stringify(binaryPath)}], ${JSON.stringify(appPath)}, process.env,
-);
-await launch.cleanup();
-console.log("native-image-launch-ready");`,
+const launches = [];
+try {
+  for (let index = 0; index < 3; index++) {
+    const launch = await prepareOmpImageSettingsLaunch(
+      [${JSON.stringify(binaryPath)}], ${JSON.stringify(appPath)}, process.env,
+    );
+    launches.push(launch);
+  }
+  if (new Set(launches.map(launch => launch.configPath)).size !== launches.length) {
+    throw new Error("Concurrent agent launches reused an image settings directory");
+  }
+  console.log("native-image-launch-ready");
+} finally {
+  await Promise.all(launches.map(launch => launch.cleanup()));
+}`,
     ],
     { encoding: "utf8", env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, timeout: SMOKE_TIMEOUT_MS },
   );
