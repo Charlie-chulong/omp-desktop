@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { execFileSync, execSync, spawnSync } from "child_process";
 import {
   existsSync,
@@ -21,6 +21,7 @@ import {
   __setPullRequestStatusCacheTtlForTests,
   commitAll,
   discardChanges,
+  discardUnstagedChanges,
   CHECKOUT_DIFF_MAX_STRUCTURED_BYTES,
   createPullRequest,
   getCachedCheckoutShortstat,
@@ -48,6 +49,7 @@ import {
   warmCheckoutShortstatInBackground,
 } from "./checkout-git.js";
 import { startGitCommandMetrics, stopGitCommandMetrics } from "./run-git-command.js";
+import * as spawnUtils from "./spawn.js";
 import { createForgeResolver } from "../services/forge-resolver.js";
 import { GitHubApiError, GitHubAuthenticationError } from "../services/github-service.js";
 import type { CurrentPullRequestStatus, ForgeService } from "../services/forge-service.js";
@@ -3925,6 +3927,175 @@ describe("discardChanges", () => {
 
       expect(readTextFile(join(repoDir, "foo[ab].txt"))).toBe("literal original\n");
       expect(readTextFile(join(repoDir, "fooa.txt"))).toBe("sibling changed\n");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("batches short quoted pathspecs by their escaped Windows length", async () => {
+    const { tempDir, repoDir } = initRepo();
+    try {
+      writeFileSync(join(repoDir, "file.txt"), "changed\n");
+      writeFileSync(join(repoDir, "keep.txt"), "keep\n");
+      const paths = [
+        "file.txt",
+        ...Array.from({ length: 6_000 }, (_, index) => `missing ${index.toString(36)}`),
+      ];
+
+      await discardUnstagedChanges(repoDir, paths);
+
+      expect(readTextFile(join(repoDir, "file.txt"))).toBe("hello\n");
+      expect(readTextFile(join(repoDir, "keep.txt"))).toBe("keep\n");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["all", "files"],
+    ["all", "directory"],
+    ["unstaged", "files"],
+    ["unstaged", "directory"],
+  ] as const)(
+    "discards long %s selections supplied as %s without touching other changes",
+    async (scope, selection) => {
+      const { tempDir, repoDir } = initRepo();
+      try {
+        execFileSync("git", ["config", "core.autocrlf", "false"], { cwd: repoDir });
+        mkdirSync(join(repoDir, "selected"));
+        const tracked = Array.from(
+          { length: 500 },
+          (_, index) => `selected/tracked 文😀 ${index} [a] ${"x".repeat(52)}.txt`,
+        );
+        const untracked = tracked.map((path) => path.replace("tracked ", "scratch "));
+        for (const path of tracked) {
+          writeFileSync(join(repoDir, path), "original\n");
+        }
+        execFileSync("git", ["add", "selected"], { cwd: repoDir });
+        execFileSync("git", ["-c", "commit.gpgsign=false", "commit", "-m", "add bulk files"], {
+          cwd: repoDir,
+        });
+        for (const path of tracked) {
+          writeFileSync(join(repoDir, path), "staged\n");
+        }
+        execFileSync("git", ["add", "selected"], { cwd: repoDir });
+        for (const path of tracked) {
+          writeFileSync(join(repoDir, path), "unstaged\n");
+        }
+        for (const path of untracked) {
+          writeFileSync(join(repoDir, path), "scratch\n");
+        }
+        writeFileSync(join(repoDir, "file.txt"), "outside unstaged\n");
+        writeFileSync(join(repoDir, "outside.txt"), "keep\n");
+
+        const pathspecs = selection === "directory" ? ["selected"] : [...tracked, ...untracked];
+        if (scope === "all") {
+          await discardChanges(repoDir, pathspecs);
+        } else {
+          await discardUnstagedChanges(repoDir, pathspecs);
+        }
+
+        for (const path of tracked) {
+          expect(readTextFile(join(repoDir, path))).toBe(
+            scope === "all" ? "original\n" : "staged\n",
+          );
+        }
+        for (const path of untracked) {
+          expect(existsSync(join(repoDir, path))).toBe(false);
+        }
+        expect(readTextFile(join(repoDir, "file.txt"))).toBe("outside unstaged\n");
+        expect(readTextFile(join(repoDir, "outside.txt"))).toBe("keep\n");
+        const stagedPaths = execFileSync("git", ["diff", "--cached", "--name-only", "-z"], {
+          cwd: repoDir,
+          encoding: "utf8",
+        })
+          .split("\0")
+          .filter(Boolean)
+          .sort();
+        expect(stagedPaths).toEqual(scope === "all" ? [] : [...tracked].sort());
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
+  it("discards a long staged selection before the first commit while preserving other files", async () => {
+    const tempDir = realpathSync.native(mkdtempSync(join(tmpdir(), "checkout-git-unborn-bulk-")));
+    try {
+      execFileSync("git", ["init", "-b", "main"], { cwd: tempDir });
+      execFileSync("git", ["config", "core.autocrlf", "false"], { cwd: tempDir });
+      const paths = Array.from(
+        { length: 500 },
+        (_, index) => `-new 文😀 ${index} [a] ${"x".repeat(60)}.txt`,
+      );
+      for (const path of paths) {
+        writeFileSync(join(tempDir, path), "remove\n");
+      }
+      writeFileSync(join(tempDir, "keep.txt"), "keep\n");
+      execFileSync("git", ["add", "-A"], { cwd: tempDir });
+
+      await discardChanges(tempDir, paths);
+
+      for (const path of paths) {
+        expect(existsSync(join(tempDir, path))).toBe(false);
+      }
+      expect(readTextFile(join(tempDir, "keep.txt"))).toBe("keep\n");
+      expect(execFileSync("git", ["ls-files", "-z"], { cwd: tempDir, encoding: "utf8" })).toBe(
+        "keep.txt\0",
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("propagates reset spawn errors without removing staged files or their worktree content", async () => {
+    const { tempDir, repoDir } = initRepo();
+    const originalSpawn = spawnUtils.spawnProcess;
+    const spawnError = Object.assign(new Error("spawn EACCES"), { code: "EACCES" });
+    const spy = vi
+      .spyOn(spawnUtils, "spawnProcess")
+      .mockImplementation((command, args, options) => {
+        if (command === "git" && args.includes("reset")) {
+          throw spawnError;
+        }
+        return originalSpawn(command, args, options);
+      });
+    try {
+      writeFileSync(join(repoDir, "file.txt"), "staged\n");
+      execFileSync("git", ["add", "file.txt"], { cwd: repoDir });
+      writeFileSync(join(repoDir, "file.txt"), "worktree\n");
+      writeFileSync(join(repoDir, "scratch.txt"), "keep\n");
+
+      await expect(discardChanges(repoDir, ["file.txt", "scratch.txt"])).rejects.toBe(spawnError);
+
+      expect(readTextFile(join(repoDir, "file.txt"))).toBe("worktree\n");
+      expect(readTextFile(join(repoDir, "scratch.txt"))).toBe("keep\n");
+      expect(execFileSync("git", ["show", ":file.txt"], { cwd: repoDir, encoding: "utf8" })).toBe(
+        "staged\n",
+      );
+    } finally {
+      spy.mockRestore();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["detached", "branch"])("does not treat a corrupt %s HEAD as unborn", async (kind) => {
+    const { tempDir, repoDir } = initRepo();
+    try {
+      writeFileSync(join(repoDir, "file.txt"), "staged\n");
+      execFileSync("git", ["add", "file.txt"], { cwd: repoDir });
+      const index = readFileSync(join(repoDir, ".git", "index"));
+      const refPath =
+        kind === "detached"
+          ? join(repoDir, ".git", "HEAD")
+          : join(repoDir, ".git", "refs", "heads", "main");
+      writeFileSync(refPath, `${"1".repeat(40)}\n`);
+
+      await expect(discardChanges(repoDir, ["file.txt"])).rejects.toThrow();
+
+      expect(readFileSync(join(repoDir, ".git", "index"))).toEqual(index);
+      expect(readTextFile(join(repoDir, "file.txt"))).toBe("staged\n");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

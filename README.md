@@ -98,6 +98,17 @@ Hover **Fast** in model settings to see its cost explanation. The **Standard**,
 **Enhanced**, **Plan**, and **Goal** workflow options also show hover descriptions.
 These tips follow the interface language in all nine supported locales.
 
+## Git changes
+
+Discarding unstaged changes preserves staged content; a full discard restores selected
+tracked paths to `HEAD` and removes selected untracked files. Large file and folder
+selections use NUL-separated standard input for `reset`, `checkout`, and `rm --cached`.
+`status` and `clean` split path arguments by their Windows-escaped UTF-16 length,
+avoiding Windows command-line limits without widening the selected paths.
+Only a symbolic branch with no existing ref is treated as an unborn `HEAD`;
+process-start, index-lock, and corrupt-HEAD errors propagate instead of triggering
+index removal.
+
 ## Schedules
 
 Open a task's **⋮** menu on **Schedules** to **Pause** or **Resume** it, including
