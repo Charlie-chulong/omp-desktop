@@ -18,7 +18,7 @@ Standard Apple Silicon macOS and Windows x64 packages include OMP and do not req
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
 
-The desktop development and packaging runtime is `@iriscat/mini-electron@0.1.5`. Main-process
+The desktop development and packaging runtime is `@iriscat/mini-electron@0.1.12`. Main-process
 code keeps Electron-compatible `electron` imports; the stock `electron` package is retained
 only for its TypeScript declarations and its binary download is not used by project scripts.
 mini-electron currently supports Windows x64 and Apple Silicon macOS.
@@ -1061,6 +1061,15 @@ window and share one pending creation when none exists. Explicit New Window and
 project launches retain their additional-window behavior. Only the successful
 desktop single-instance lock owner performs daemon/update shutdown; a secondary
 launch must not stop the primary's daemon.
+
+If a running main window loses its renderer, Desktop logs the exit reason and
+available exit code and opens a native recovery dialog, including for hidden or
+minimized windows. **Reload window** creates a new renderer at the same route,
+query, and fragment before closing the failed window; it does not restart the
+daemon or its Agent sessions. Unsent input may be lost. **Close window** closes
+the failed window through the normal application lifecycle. Initial startup
+failures retain their separate error dialog.
+
 Window-close choices retain the application's existing modal sheet, including
 Cancel, Exit, background-to-tray, and the remembered choice. The main process
 holds pending requests until that renderer is ready. Choosing Exit hides the
@@ -1186,9 +1195,11 @@ electron-builder arguments after the script path:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-windows.ps1
 ```
 
-Windows packages use `@iriscat/mini-electron` 0.1.7 or newer, including native SQLite,
-IPC frame identity, native clipboard/keyboard/OLE input, selection colors, and IME
-handling. To package an unpublished local runtime instead, build its checkout with
+Windows packages use `@iriscat/mini-electron` installer 0.1.12 or newer. Its
+Windows runtime channel selects 0.1.15, including the DirectComposition latency
+handle fix; the macOS channel remains independent. Native SQLite, IPC frame
+identity, clipboard/keyboard/OLE input, selection colors, and IME remain supported.
+To package an unpublished local runtime instead, build its checkout with
 `python build.py --package-dist` and select that distribution explicitly (PowerShell):
 
 ```powershell
@@ -1202,6 +1213,19 @@ The output includes `OMP-Desktop-Setup-<version>-x64.exe`, its `.blockmap`, a `.
 Windows runtime builds disable Inspector/CDP, so the CDP-based
 `PASEO_DESKTOP_SMOKE=1` check is not supported there. Verify the real native window and
 bundled CLI/daemon instead; do not enable Inspector or bypass IPC frame checks to pass a smoke.
+
+To exercise renderer-loss recovery on Windows with a freshly built local runtime:
+
+```powershell
+npm --prefix packages/desktop run build:main
+$env:ELECTRON_PATH = "D:/Project/mini-electron/out/windows-x64/mini-electron.exe"
+node packages/desktop/e2e/renderer-loss-recovery-smoke.js
+Remove-Item Env:ELECTRON_PATH
+```
+
+Choose **Reload window**, then click **Verify interaction** in the replacement.
+The smoke uses a temporary profile and terminates only its own renderer child;
+it does not use an existing Desktop process or require Inspector/CDP.
 
 Windows daemon and CLI process-tree cleanup launch `taskkill.exe /T /F` directly with a hidden
 console, avoiding transient `cmd.exe` windows during provider refresh and process shutdown.
