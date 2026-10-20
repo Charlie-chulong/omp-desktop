@@ -869,6 +869,7 @@ or presentation settings.
 - In Desktop's Files tree, drag a file or folder row onto another folder to move it within the same workspace. Drag onto blank tree space to move it back to the workspace root; selected entries move together.
 - Desktop dragging shows a translucent icon/name preview beside the pointer, with a count badge for multi-selection. The preview stays within the window without blocking folder targets, and disappears when the drag ends or is canceled.
 - Desktop tree moves use pointer dragging rather than native HTML drag-and-drop. Press **Escape** before releasing to cancel. A folder cannot be moved into itself or its descendants; cross-workspace moves are not supported.
+- Drag a file from the Files tree onto the message input in the same workspace to add a workspace-file reference without moving the file or sending a message. The input highlights while hovering; dropping focuses the input, and repeated drops of the same file do not add duplicate references. **Escape** cancels the drop.
 - Drop files onto the message input to add attachments without sending a message.
 - Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina and Windows high-DPI displays use the same visible drop target as ordinary displays. Windows uses native OLE file drops; reparse-point path components are not granted access.
 - Paste a clipboard image into the message input to add it as an attachment, including native PNG and DIB/DIBV5 images on Windows. The draft is not sent automatically.
@@ -1228,8 +1229,14 @@ For a local test package, run:
 npm run build:mac
 ```
 
-Without notarization credentials this produces an unsigned package and prints a warning. Gatekeeper
-will reject that package unless quarantine is explicitly removed on the test Mac.
+Without notarization credentials, this requires a valid code-signing identity named
+`OMP Desktop Local` in the macOS keychain and signs the test package with it. Create this
+self-signed code-signing certificate once and reuse the same certificate and private key
+across rebuilds so Keychain access can recognize the application. The first launch after
+switching signing identities may require allowing credential access again. A missing or
+invalid identity fails the build instead of falling back to an ad-hoc signature.
+This local signature is not notarized and does not satisfy Gatekeeper's distribution
+requirements on other Macs.
 
 macOS signing uses electron-builder's bundled entitlement template for the app;
 no separate Helper applications or entitlement files are required in
@@ -1242,8 +1249,9 @@ certificate (or `CSC_LINK`) and one of electron-builder's notarization credentia
 - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`; or
 - `APPLE_KEYCHAIN_PROFILE`, with optional `APPLE_KEYCHAIN`.
 
-When those credentials are present, the script verifies the application's code signature, stapled
-notarization ticket, and Gatekeeper assessment after packaging.
+Both local and release builds verify the application's code signature after packaging.
+When notarization credentials are present, the script also verifies the stapled
+notarization ticket and Gatekeeper assessment.
 
 Windows mini-electron packages currently support x64 only. On Windows, the npm scripts
 use the native `build-windows.ps1` script with Windows PowerShell 5.1 or newer; Git Bash

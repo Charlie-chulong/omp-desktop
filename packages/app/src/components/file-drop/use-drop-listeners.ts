@@ -10,6 +10,8 @@ import type { FileDropSink } from "./types";
 import {
   parseWorkspaceFileDragPayload,
   WORKSPACE_FILE_DRAG_MIME,
+  WORKSPACE_FILE_POINTER_DRAG_EVENT,
+  type WorkspaceFilePointerDragDetail,
 } from "@/attachments/workspace-file-drag";
 import { createDroppedItems } from "./desktop-dropped-items";
 
@@ -164,16 +166,39 @@ export function useDropListeners({
         }
       }
 
+      function handleWorkspaceFilePointerDrag(event: Event) {
+        const { phase, payload } = (event as CustomEvent<WorkspaceFilePointerDragDetail>).detail;
+        if (phase === "leave") {
+          isDragging.value = false;
+          return;
+        }
+        const sink = getSink();
+        if (disabledRef.current || suppressed.value || !hasSink.value || !sink?.onWorkspaceFile) {
+          isDragging.value = false;
+          return;
+        }
+        isDragging.value = phase === "over";
+        if (phase === "drop") {
+          dragCounter.current = 0;
+          sink.onWorkspaceFile(payload);
+        }
+      }
+
       element.addEventListener("dragenter", handleDragEnter);
       element.addEventListener("dragover", handleDragOver);
       element.addEventListener("dragleave", handleDragLeave);
       element.addEventListener("drop", handleDrop);
+      element.addEventListener(WORKSPACE_FILE_POINTER_DRAG_EVENT, handleWorkspaceFilePointerDrag);
 
       cleanup = () => {
         element.removeEventListener("dragenter", handleDragEnter);
         element.removeEventListener("dragover", handleDragOver);
         element.removeEventListener("dragleave", handleDragLeave);
         element.removeEventListener("drop", handleDrop);
+        element.removeEventListener(
+          WORKSPACE_FILE_POINTER_DRAG_EVENT,
+          handleWorkspaceFilePointerDrag,
+        );
       };
     }
 

@@ -23,21 +23,23 @@ fi
 
 if [[ "$has_notarization_credentials" != true ]]; then
   cat >&2 <<'EOF'
-No macOS notarization credentials found; building an unsigned test package.
-Gatekeeper will reject this package unless quarantine is removed on the test Mac.
+No macOS notarization credentials found; signing the local test package with OMP Desktop Local.
+This signature is not notarized; Gatekeeper may reject the package on other Macs.
 EOF
-  CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --mac --arm64 --publish never "$@"
-  exit 0
-fi
+  CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:desktop -- --mac --arm64 --publish never \
+    --config.mac.identity="OMP Desktop Local" \
+    --config.mac.notarize=false \
+    --config.forceCodeSigning=true "$@"
+else
+  if [[ -z "${CSC_LINK:-}" ]] &&
+    ! security find-identity -v -p codesigning |
+      grep -q '"Developer ID Application:'; then
+    echo "No Developer ID Application identity found; install one or set CSC_LINK." >&2
+    exit 1
+  fi
 
-if [[ -z "${CSC_LINK:-}" ]] &&
-  ! security find-identity -v -p codesigning |
-    grep -q '"Developer ID Application:'; then
-  echo "No Developer ID Application identity found; install one or set CSC_LINK." >&2
-  exit 1
+  npm run build:desktop -- --mac --arm64 --publish never "$@"
 fi
-
-npm run build:desktop -- --mac --arm64 --publish never "$@"
 
 shopt -s nullglob
 apps=(packages/desktop/release/mac-*/*.app)
@@ -48,6 +50,8 @@ fi
 
 for app in "${apps[@]}"; do
   codesign --verify --deep --strict --verbose=2 "$app"
-  xcrun stapler validate "$app"
-  spctl --assess --type execute --verbose=2 "$app"
+  if [[ "$has_notarization_credentials" == true ]]; then
+    xcrun stapler validate "$app"
+    spctl --assess --type execute --verbose=2 "$app"
+  fi
 done
