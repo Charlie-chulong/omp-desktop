@@ -26,7 +26,7 @@ import {
 } from "react-native";
 import { EditingTextInput as TextInput } from "@/components/ui/text-input";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { getIsElectronRuntime, useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -97,7 +97,7 @@ import { deleteExplorerSelectionPaths, resolveExplorerSelection } from "@/file-e
 import { useExplorerEntryDrag } from "@/file-explorer/use-entry-drag";
 
 const FILE_EXPLORER_ROW_SELECTOR = '[data-testid^="file-explorer-row-"]';
-const FILE_EXPLORER_ROOT_DROP_BLOCKED_SELECTOR = '[data-testid="file-explorer-root-drop-blocker"]';
+const FILE_EXPLORER_ROOT_DROP_BLOCKED_SELECTOR = '[data-explorer-root-drop-blocked="true"]';
 
 interface ExplorerPressModifiers {
   additive: boolean;
@@ -452,8 +452,9 @@ function TreeRowItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger
+        triggerRef={entryDragRef}
         onPress={handlePress}
-        onLongPress={handleSelect}
+        onLongPress={getIsElectronRuntime() ? undefined : handleSelect}
         onContextMenu={handleSelect}
         style={pressableStyle}
         onHoverIn={showNameHover}
@@ -461,12 +462,9 @@ function TreeRowItem({
         accessibilityState={accessibilityState}
         aria-selected={isSelected}
         testID={testID}
+        dataSet={isWeb && blocksRootDrop ? { "explorer-root-drop-blocked": "true" } : undefined}
       >
-        <View
-          ref={entryDragRef}
-          style={styles.entryInfo}
-          testID={isWeb && blocksRootDrop ? "file-explorer-root-drop-blocker" : undefined}
-        >
+        <View style={styles.entryInfo}>
           <View style={styles.entryIcon}>
             {isDirectory ? (
               <DirectoryChevronIcon loading={loading} expanded={isExpanded} />

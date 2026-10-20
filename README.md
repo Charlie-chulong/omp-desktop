@@ -21,7 +21,8 @@ Windows `no omp` installers preserve an existing bundled runtime during upgrades
 The desktop development and packaging runtime is `@iriscat/mini-electron@0.1.12`. Main-process
 code keeps Electron-compatible `electron` imports; the stock `electron` package is retained
 only for its TypeScript declarations and its binary download is not used by project scripts.
-mini-electron currently supports Windows x64 and Apple Silicon macOS.
+The current npm runtime distribution supports Apple Silicon macOS; Windows x64
+uses its separate native distribution.
 
 Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
 avoiding repeated small-file-read overhead. The main window stays native-hidden until
@@ -864,6 +865,8 @@ or presentation settings.
 
 ## File drag and drop
 
+- In Desktop's Files tree, drag a file or folder row onto another folder to move it within the same workspace. Drag onto blank tree space to move it back to the workspace root; selected entries move together.
+- Desktop tree moves use pointer dragging rather than native HTML drag-and-drop. Press **Escape** before releasing to cancel. A folder cannot be moved into itself or its descendants; cross-workspace moves are not supported.
 - Drop files onto the message input to add attachments without sending a message.
 - Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina and Windows high-DPI displays use the same visible drop target as ordinary displays. Windows uses native OLE file drops; reparse-point path components are not granted access.
 - Paste a clipboard image into the message input to add it as an attachment, including native PNG and DIB/DIBV5 images on Windows. The draft is not sent automatically.
@@ -936,7 +939,7 @@ HTTP(S) links open externally. Text/source links open in the workspace file pane
 
 Targets that cannot be opened are plain text rather than colored links, and clicking one shows an unsupported-link error. Failed file or URL opens also show an error. A `sandbox:` URL is not a local file path: conversation data does not contain an authoritative mapping to an attachment on this host, so those links cannot open until such a mapping is provided. Remote-host binary files likewise cannot be opened by the local desktop file manager.
 
-On desktop, right-click an HTTP(S) conversation link to open it in the selected external browser or copy its address. Unsupported schemes do not receive an open action, and an unavailable plain **Copy** action is omitted. Read-only images offer image-specific actions without an ambiguous **Paste** action; editable targets still expose **Paste** according to their current edit capability. Native context menus follow the app's selected language.
+On desktop, right-click an HTTP(S) conversation link to open it in the selected external browser or copy its address. Unsupported schemes do not receive an open action, and an unavailable plain **Copy** action is omitted. Right-click a generated or displayed image, including a fullscreen preview, for **Copy Image** and **Save Image As…**. Copy puts image pixels on the system clipboard; save retains the original image file, including `data:` / `blob:` previews. The message input's native menu supports **Cut**, **Copy**, **Paste**, and **Select All**, preserving text selection and the existing image-attachment paste behavior. Read-only targets do not offer **Paste**. Native context menus follow the app's selected language.
 
 Choose the external browser under **Settings → General → Browser**. **System default** follows the operating system; installed Chrome, Edge, Firefox, Brave, Chromium, and Safari targets appear where supported. If a selected browser is later removed, OMP Desktop reports the unavailable browser instead of silently opening a different one.
 
@@ -1168,6 +1171,10 @@ The packager reads the selected runtime's `version.json`, defaults to that runti
 architecture (including when Node runs under Rosetta), and rejects a different target
 OS or architecture. `MINI_ELECTRON_DIST_PATH` must point to an extracted distribution
 for the requested target; it cannot reuse the host's runtime for another platform.
+
+QQ clipboard compatibility requires native runtime `0.1.12` or newer: QQ can
+advertise PNG bytes as TIFF, so the runtime must identify the actual encoding.
+The distribution override above also selects a locally built fix.
 
 The `app-builder-lib` patch applied by `npm install` allows distributions without
 a generic Helper bundle. Packaged smoke checks verify macOS Dock visibility,
