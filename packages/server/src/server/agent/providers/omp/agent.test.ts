@@ -768,16 +768,10 @@ describe("OMP agent client and session", () => {
     expect(omp.recordedPrompts()).toEqual([]);
   });
 
-  test("owns launch configuration and registers native host tools", async () => {
+  test("registers native host tools", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask" }, createToolCatalog());
 
-    expect(omp.launchConfiguration()).toEqual({
-      cwd: "/tmp/paseo-omp-agent-test",
-      protocolMode: "rpc-ui",
-      modeId: "ask",
-      argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "always-ask"],
-    });
     expect(omp.registeredHostTools()).toEqual([
       [expect.objectContaining({ name: "create_agent" })],
     ]);
@@ -794,17 +788,6 @@ describe("OMP agent client and session", () => {
     expect(omp.launchConfiguration().argv).toEqual(expect.arrayContaining(["--thinking", "max"]));
   });
 
-  test("launches with write approval mode", async () => {
-    const omp = new OmpHarness();
-    await omp.start({ modeId: "write" });
-
-    expect(omp.launchConfiguration()).toEqual({
-      cwd: "/tmp/paseo-omp-agent-test",
-      protocolMode: "rpc-ui",
-      modeId: "write",
-      argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "write"],
-    });
-  });
   test.each([
     ["plan", planTurnPrompt("design the change")],
     ["goal", "/goal design the change"],
@@ -817,12 +800,6 @@ describe("OMP agent client and session", () => {
         featureValues: { workflow_mode: workflow },
       });
 
-      expect(omp.launchConfiguration()).toEqual({
-        cwd: "/tmp/paseo-omp-agent-test",
-        protocolMode: "rpc-ui",
-        modeId: "ask",
-        argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "always-ask"],
-      });
       await omp.runPrompt("design the change", "ready");
       expect(omp.recordedPrompts()[0]?.message).toBe(expectedPrompt);
       await expect(omp.currentMode()).resolves.toBe("ask");
@@ -1530,21 +1507,6 @@ describe("OMP agent client and session", () => {
     ]);
   });
 
-  test("passes --thinking when a thinking option is provided", async () => {
-    const omp = new OmpHarness();
-    await omp.start({ modeId: "ask", thinkingOptionId: "xhigh" }, createToolCatalog());
-
-    expect(omp.launchConfiguration().argv).toEqual([
-      "omp",
-      "--mode",
-      "rpc-ui",
-      "--approval-mode",
-      "always-ask",
-      "--thinking",
-      "xhigh",
-    ]);
-  });
-
   test("streams a prompt through completion", async () => {
     const omp = new OmpHarness();
     await omp.start();
@@ -2001,23 +1963,6 @@ describe("OMP agent client and session", () => {
       { cwd: "/workspace/resumed", modeId: "ask", thinkingOptionId: "high" },
     );
 
-    expect(omp.launchConfiguration()).toEqual({
-      cwd: "/workspace/resumed",
-      protocolMode: "rpc-ui",
-      modeId: "ask",
-      session: expect.stringMatching(/[\\/]paseo-omp-resume-.*[\\/]session\.jsonl$/),
-      argv: [
-        "omp",
-        "--mode",
-        "rpc-ui",
-        "--approval-mode",
-        "always-ask",
-        "--thinking",
-        "high",
-        "--session",
-        expect.stringMatching(/[\\/]paseo-omp-resume-.*[\\/]session\.jsonl$/),
-      ],
-    });
     await expect(omp.history()).resolves.toEqual([
       {
         type: "user_message",
@@ -2154,6 +2099,51 @@ describe("OMP agent client and session", () => {
       }),
     ]);
   });
+
+  test.each([
+    ["bash", "Command: echo approved"],
+    ["edit", "File: fixture.txt"],
+    ["write", "Path: created.txt\nContent:\nhello"],
+  ])(
+    "full access chooses one-time approval for %s with a session-grant option",
+    async (tool, detail) => {
+      const omp = new OmpHarness();
+      await omp.start({ modeId: "ask" });
+      omp.emitExtensionUiRequest({
+        type: "extension_ui_request",
+        id: "business-question",
+        method: "select",
+        title: "Which deployment region?",
+        options: ["Production", "Staging"],
+      });
+      const request = {
+        type: "extension_ui_request" as const,
+        method: "select" as const,
+        title: `Allow tool: ${tool}\n${detail}`,
+        options: ["Approve", `Approve ${tool} for this session`, "Deny"],
+      };
+      omp.emitExtensionUiRequest({ ...request, id: "pending-tool" });
+
+      await omp.setMode("full");
+      omp.emitExtensionUiRequest({ ...request, id: "subsequent-tool" });
+
+      expect(omp.pendingPermissions()).toEqual([
+        expect.objectContaining({ id: "business-question", kind: "question" }),
+      ]);
+      expect(omp.extensionUiResponses()).toEqual([
+        { id: "pending-tool", response: { value: "Approve" } },
+        { id: "subsequent-tool", response: { value: "Approve" } },
+      ]);
+      expect(
+        omp.permissionEvents().filter((event) => event.type === "permission_requested"),
+      ).toEqual([
+        expect.objectContaining({ request: expect.objectContaining({ id: "business-question" }) }),
+        expect.objectContaining({
+          request: expect.objectContaining({ id: "pending-tool", kind: "tool" }),
+        }),
+      ]);
+    },
+  );
 
   test("restoring the launch mode stops automatic approvals without claiming a stricter native mode", async () => {
     const omp = new OmpHarness();
