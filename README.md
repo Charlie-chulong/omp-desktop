@@ -75,6 +75,9 @@ double-click restores it, and only actual drag motion starts the restore-and-dra
 fallback. Interactive titlebar controls remain excluded from these gestures.
 The web document's `color-scheme` follows the resolved application theme, keeping
 native selection and form-control colors aligned with light/dark appearance.
+Conversation prose uses medium weight with semibold emphasis; the light theme uses
+deeper near-black primary text. Font sizes, line heights, secondary text tones, and
+regular-weight code remain unchanged.
 Desktop scroll surfaces use the terminal's compact scrollbar treatment. The left sidebar and
 vertical workspace splitters use matching two-pixel accent highlights on hover, without
 narrowing their invisible drag targets.

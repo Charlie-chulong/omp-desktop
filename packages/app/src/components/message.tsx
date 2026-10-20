@@ -363,6 +363,7 @@ const userMessageStylesheet = StyleSheet.create((theme) => ({
   text: {
     color: theme.colors.foreground,
     fontSize: theme.fontSize.content,
+    fontWeight: theme.fontWeight.medium,
     ...(isWeb
       ? {
           lineHeight: proseLineHeight(theme.fontSize.content),
@@ -2260,18 +2261,20 @@ export const SystemNotice = memo(function SystemNotice({
   thinkingOptionId,
 }: Pick<SystemNoticeItem, "notice" | "modelId" | "thinkingOptionId">) {
   const { t } = useTranslation();
-  const message =
-    notice === "model_changed"
-      ? t("message.systemNotice.modelChanged", { model: modelId })
-      : notice === "thinking_changed"
-        ? t("message.systemNotice.thinkingChanged", {
-            thinking: thinkingOptionId && formatThinkingOptionLabel({ id: thinkingOptionId }),
-          })
-        : t(
-            notice === "fast_mode_enabled"
-              ? "message.systemNotice.fastModeEnabled"
-              : "message.systemNotice.fastModeDisabled",
-          );
+  let message: string;
+  if (notice === "model_changed") {
+    message = t("message.systemNotice.modelChanged", { model: modelId });
+  } else if (notice === "thinking_changed") {
+    message = t("message.systemNotice.thinkingChanged", {
+      thinking: thinkingOptionId && formatThinkingOptionLabel({ id: thinkingOptionId }),
+    });
+  } else {
+    message = t(
+      notice === "fast_mode_enabled"
+        ? "message.systemNotice.fastModeEnabled"
+        : "message.systemNotice.fastModeDisabled",
+    );
+  }
 
   return (
     <View style={compactionStylesheet.container} testID="system-notice">
