@@ -799,11 +799,13 @@ function replaceLiveAssistantWithProjectedText(params: {
   if (event.type !== "timeline" || event.item.type !== "assistant_message") {
     return null;
   }
+  if (event.item.customMessage) return null;
   const index = head.findLastIndex((item) => item.kind === "assistant_message");
   const current = head[index];
   if (!current || current.kind !== "assistant_message") {
     return null;
   }
+  if (current.customMessage) return null;
   if (!event.item.text.startsWith(current.text)) {
     return null;
   }
@@ -829,6 +831,7 @@ function reconcileOverlappingProjectedAssistant(params: {
   if (
     unit.event.type !== "timeline" ||
     unit.event.item.type !== "assistant_message" ||
+    unit.event.item.customMessage !== undefined ||
     !unit.sourceSeqRanges.some(
       (range) => range.startSeq <= params.currentEndSeq && range.endSeq > params.currentEndSeq,
     )
@@ -840,6 +843,7 @@ function reconcileOverlappingProjectedAssistant(params: {
   const projectedMessageId = unit.event.item.messageId;
   const matches = (item: StreamItem) => {
     if (item.kind !== "assistant_message") return false;
+    if (item.customMessage) return false;
     if (projectedMessageId && item.messageId) return item.messageId === projectedMessageId;
     return projectedText.startsWith(item.text);
   };

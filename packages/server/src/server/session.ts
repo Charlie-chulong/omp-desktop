@@ -927,6 +927,7 @@ export class Session {
       service: new OmpPluginCliService({
         logger: this.sessionLogger,
         getProxyUrl: () => resolveOmpProxyUrl(daemonConfigStore.get().providers.omp),
+        getProviderConfig: () => daemonConfigStore.get().providers.omp,
       }),
       emit: (msg) => this.emit(msg),
       logger: this.sessionLogger,
@@ -2526,6 +2527,8 @@ export class Session {
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
       case "provider.usage.list.request":
         return this.providerCatalogSession.handleProviderUsageListRequest(msg);
+      case "omp.stats.get.request":
+        return this.providerCatalogSession.handleOmpStatsGetRequest(msg);
       default:
         return (
           this.dispatchOmpProviderManagementMessage(msg) ??

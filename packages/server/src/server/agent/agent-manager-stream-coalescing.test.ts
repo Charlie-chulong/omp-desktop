@@ -378,6 +378,55 @@ afterEach(() => {
 });
 
 describe("target coalesced behavior", () => {
+  test("keeps detached and old-origin plugin records out of a new active turn without merging their full bodies", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness({ provider: "omp" });
+    try {
+      const { agentId, session } = await createManagedSession(harness);
+      session.pushEvent({ type: "turn_started", provider: "omp", turnId: "new-turn" });
+      await waitForSessionEventQueue();
+      const fullBody = `\n${"原文🙂".repeat(40_000)}\n`;
+      const customMessage = {
+        customType: "omp-bridge-chatpro",
+        details: { deliveryId: "result-one" },
+      };
+      session.pushEvent(
+        timelineEvent({ type: "assistant_message", text: fullBody, customMessage }, "omp"),
+      );
+      session.pushEvent(
+        timelineEvent(
+          { type: "assistant_message", text: "late old result", customMessage },
+          "omp",
+          "old-turn",
+        ),
+      );
+      session.pushEvent(
+        timelineEvent(
+          { type: "assistant_message", text: "another delivery", customMessage },
+          "omp",
+          "old-turn",
+        ),
+      );
+      await waitForSessionEventQueue();
+      await vi.advanceTimersByTimeAsync(COALESCE_WINDOW_MS);
+      const rows = await harness.manager.getTimelineRows(agentId);
+      expect(rows.map((row) => row.turnId)).toEqual([undefined, "old-turn", "old-turn"]);
+      expect(getTimelineItems(rows)).toEqual([
+        { type: "assistant_message", text: fullBody, customMessage },
+        { type: "assistant_message", text: "late old result", customMessage },
+        { type: "assistant_message", text: "another delivery", customMessage },
+      ]);
+      expect(harness.manager.getAgent(agentId)?.activeTurnId).toBe("new-turn");
+      expect(
+        getStreamEvents(harness.events, agentId).filter(
+          (event) => event.type === "agent_stream" && event.event.type === "turn_completed",
+        ),
+      ).toEqual([]);
+    } finally {
+      harness.cleanup();
+    }
+  });
+
   test("bounds tool output before persisting and streaming it", async () => {
     const harness = createHarness();
     try {

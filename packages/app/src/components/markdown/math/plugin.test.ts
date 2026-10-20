@@ -61,6 +61,40 @@ m(T) & 1 & 0
     ]);
   });
 
+  it.each([
+    [String.raw`代入状态方程 $ \dot x=Ax+Bu; y=Cx+Du $:`, String.raw`\dot x=Ax+Bu; y=Cx+Du`],
+    [String.raw`值 $ \frac{dy}{dx}$。`, String.raw`\frac{dy}{dx}`],
+    [String.raw`值 $\alpha + \beta $。`, String.raw`\alpha + \beta`],
+    [String.raw`值 $\tfrac12$。`, String.raw`\tfrac12`],
+    ["一阶导数 $f'(x)$。", "f'(x)"],
+  ])("captures inline derivatives and padded TeX: %s", (source, expected) => {
+    const math = parseMath(source).filter((token) => token.type === MATH_INLINE_TOKEN);
+    expect(math.map((token) => token.content)).toEqual([expected]);
+  });
+
+  it.each([
+    "Price $5 and $10.",
+    "Price $ 5 and $ 10.",
+    String.raw`Escaped \$ \dot x \$ stays literal.`,
+    "Whitespace $   $ stays literal.",
+    "Multiline $ \\dot x\n+y $ stays literal.",
+    String.raw`Code: ` + "`$ \\dot x $`",
+  ])("leaves currency, escaped delimiters, and code alone: %s", (source) => {
+    expect(parseMath(source).some((token) => token.type === MATH_INLINE_TOKEN)).toBe(false);
+  });
+
+  it("does not swallow currency or prose before a padded formula", () => {
+    const source = String.raw`Price $ 5 and $ 10; derivative $ \dot x $.`;
+    const tokens = parseMath(source);
+    expect(
+      tokens.filter((token) => token.type === MATH_INLINE_TOKEN).map((token) => token.content),
+    ).toEqual([String.raw`\dot x`]);
+    expect(tokens.filter((token) => token.type === "text").map((token) => token.content)).toEqual([
+      "Price $ 5 and $ 10; derivative ",
+      ".",
+    ]);
+  });
+
   it("renders bracket formulas embedded in prose without leaking TeX delimiters", () => {
     const tokens = parseMath(String.raw`说明 \[\text{输入}\] 结束`);
     const inline = tokens.filter((token) => token.type === MATH_INLINE_TOKEN);

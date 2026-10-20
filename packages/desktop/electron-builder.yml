@@ -14,7 +14,7 @@ publish:
   owner: iris-cat-dev
   repo: omp-desktop
 directories:
-  output: release
+  output: release-plugins
 files:
   - dist/**/*
   - assets/pets/**/*
@@ -82,11 +82,15 @@ linux:
 appImage:
   artifactName: "OMP-Desktop-${arch}.${ext}"
 win:
-  artifactName: "OMP-Desktop-Setup-${version}-${arch}.${ext}"
+  artifactName: "OMP-Desktop-Plugins-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
   extraResources:
     - from: ../../bin/omp-windows-${arch}.exe
       to: bin/omp.exe
+    - from: bundled-omp-plugins
+      to: bundled-omp-plugins
+    - from: bundled-omp-manager.json
+      to: manager.json
     - from: assets/icon.png
       to: icon.png
     - from: assets/icon.ico

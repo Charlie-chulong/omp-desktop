@@ -2,7 +2,13 @@ import { app, BrowserWindow, clipboard, ipcMain, Menu } from "electron";
 import log from "electron-log/main";
 import { isAllowedExternalUrl, openExternalUrl } from "./opener.js";
 import { getDesktopContextMenuLabels, setDesktopContextMenuLabels } from "./context-menu-labels.js";
-import { getMainWindows, selectMainWindow } from "../window/main-windows.js";
+import { getMainWindows, isMainWindowSender, selectMainWindow } from "../window/main-windows.js";
+
+interface ComposerContextMenuInput {
+  kind: "composer-input";
+  hasSelection: boolean;
+  isEditable: boolean;
+}
 
 interface TerminalContextMenuInput {
   kind: "terminal";
@@ -23,6 +29,7 @@ interface FileLinkContextMenuInput {
 }
 
 type ShowContextMenuInput =
+  | ComposerContextMenuInput
   | TerminalContextMenuInput
   | LinkContextMenuInput
   | FileLinkContextMenuInput;
@@ -235,7 +242,29 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
 
       let selectedAction: ContextMenuAction | null = null;
       let template: Electron.MenuItemConstructorOptions[];
-      if (input.kind === "terminal") {
+      if (input.kind === "composer-input") {
+        if (
+          !isMainWindowSender(event.sender) ||
+          !event.senderFrame ||
+          event.senderFrame !== event.sender.mainFrame ||
+          typeof input.hasSelection !== "boolean" ||
+          typeof input.isEditable !== "boolean"
+        ) {
+          return;
+        }
+        const labels = getDesktopContextMenuLabels();
+        template = [
+          {
+            label: labels.cut,
+            role: "cut",
+            enabled: input.isEditable && input.hasSelection,
+          },
+          { label: labels.copy, role: "copy", enabled: input.hasSelection },
+          { label: labels.paste, role: "paste", enabled: input.isEditable },
+          { type: "separator" },
+          { label: labels.selectAll, role: "selectAll" },
+        ];
+      } else if (input.kind === "terminal") {
         template = buildTerminalContextMenuTemplate(input, (action) => {
           selectedAction = action;
         });
@@ -265,6 +294,10 @@ export function setupApplicationMenu(options: ApplicationMenuOptions): void {
 
       const contextMenu = Menu.buildFromTemplate(template);
       const { promise, resolve } = Promise.withResolvers<ContextMenuAction | null>();
+      if (input.kind === "composer-input") {
+        // IPC may arrive after native focus changed; edit roles must target this editor's window.
+        win.webContents.focus();
+      }
       contextMenu.popup({
         window: win,
         callback: () => resolve(selectedAction),

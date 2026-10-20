@@ -1,6 +1,5 @@
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { extname } from "node:path";
-import { promisify } from "node:util";
 
 import { createExternalCommandProcessEnv, type ProcessEnvRecord } from "../server/paseo-env.js";
 import {
@@ -8,8 +7,6 @@ import {
   quoteWindowsArgument,
   quoteWindowsCommand,
 } from "./windows-command.js";
-
-const execFileAsync = promisify(execFile);
 
 interface ExternalEnvOptions {
   baseEnv?: ProcessEnvRecord;
@@ -104,14 +101,30 @@ export async function execCommand(
           ...(envOverlay ? [envOverlay] : []),
         );
 
-  return execFileAsync(resolvedCommand, resolvedArgs, {
-    cwd: options?.cwd,
-    env: childEnv,
-    encoding: options?.encoding ?? "utf8",
-    killSignal: options?.killSignal,
-    timeout: options?.timeout,
-    maxBuffer: options?.maxBuffer,
-    shell,
-    windowsHide: true,
-  }) as Promise<ExecCommandResult>;
+  // Runtime wrappers may drop execFile's custom promisifier. Collect both streams
+  // explicitly instead of letting generic promisify resolve only stdout.
+  return new Promise<ExecCommandResult>((resolve, reject) => {
+    execFile(
+      resolvedCommand,
+      resolvedArgs,
+      {
+        cwd: options?.cwd,
+        env: childEnv,
+        encoding: options?.encoding ?? "utf8",
+        killSignal: options?.killSignal,
+        timeout: options?.timeout,
+        maxBuffer: options?.maxBuffer,
+        shell,
+        signal: options?.signal,
+        windowsHide: true,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(Object.assign(error, { stdout, stderr }));
+          return;
+        }
+        resolve({ stdout, stderr });
+      },
+    );
+  });
 }

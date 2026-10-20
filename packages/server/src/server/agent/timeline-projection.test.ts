@@ -8,6 +8,40 @@ import {
 } from "./timeline-projection.js";
 
 describe("projectTimelineRows", () => {
+  test("preserves complete native custom records between model chunks without merging or stripping metadata", () => {
+    const customMessage = { customType: "omp-bridge-chatpro", details: { deliveryId: "delivery" } };
+    const text = `\n${"原文🙂\n".repeat(40_000)}\n`;
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-10-19T00:00:00.000Z",
+        item: { type: "assistant_message", text: "model before" },
+      },
+      {
+        seq: 2,
+        timestamp: "2026-10-19T00:00:01.000Z",
+        item: { type: "assistant_message", text, messageId: "native-one", customMessage },
+      },
+      {
+        seq: 3,
+        timestamp: "2026-10-19T00:00:02.000Z",
+        item: { type: "assistant_message", text, messageId: "native-two", customMessage },
+      },
+      {
+        seq: 4,
+        timestamp: "2026-10-19T00:00:03.000Z",
+        item: { type: "assistant_message", text: "model after" },
+      },
+    ];
+    for (const mode of ["canonical", "projected"] as const) {
+      const projected = projectTimelineRows({ rows, mode });
+      expect(projected.map((entry) => entry.item)).toEqual(rows.map((row) => row.item));
+      expect(projected.map((entry) => entry.sourceSeqRanges)).toEqual(
+        rows.map((row) => [{ startSeq: row.seq, endSeq: row.seq }]),
+      );
+    }
+  });
+
   test("merges adjacent assistant chunks in projected mode", () => {
     const rows: AgentTimelineRow[] = [
       {

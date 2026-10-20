@@ -374,6 +374,8 @@ export type AgentTimelineItem =
       text: string;
       messageId?: string;
       presentation?: AssistantMessagePresentation;
+      /** Original native custom record metadata; never interpreted as foreground-turn authority. */
+      customMessage?: { customType: string; details?: unknown };
     }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem

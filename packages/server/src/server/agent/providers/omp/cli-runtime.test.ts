@@ -16,6 +16,7 @@ import {
 } from "./cli-runtime.js";
 import type { OmpRuntimeLaunch } from "./runtime.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
+import * as bundledPlugins from "../../../bundled-omp-plugins.js";
 
 type OmpChild = ChildProcessWithoutNullStreams & {
   stdin: PassThrough;
@@ -111,6 +112,72 @@ function withoutRequestId(command: Record<string, unknown>): Record<string, unkn
 }
 
 describe("OMP CLI runtime", () => {
+  test("provisions each launch with its actual provider prefix, cwd and session env before spawning", async () => {
+    const seed = vi
+      .spyOn(bundledPlugins, "provisionBundledOmpPlugins")
+      .mockResolvedValue({ plugins: [] });
+    const events: string[] = [];
+    seed.mockImplementation(async () => {
+      events.push("seed");
+      return { plugins: [] };
+    });
+    const runtime = new OmpCliRuntime({
+      logger: pino({ level: "silent" }),
+      command: ["omp"],
+      runtimeSettings: {
+        command: { mode: "append", args: ["--profile", "work"] },
+        env: { OMP_PROFILE: "provider" },
+      },
+      spawnProcess: () => {
+        events.push("spawn");
+        return createOmpChild();
+      },
+    });
+    try {
+      for (const cwd of ["/workspace/first", "/workspace/second"]) {
+        const session = await runtime.startSession({
+          cwd,
+          env: { OMP_PROFILE: "session" },
+          extraArgs: ["--approval-mode", "yolo"],
+        });
+        await session.close();
+      }
+      expect(
+        seed.mock.calls.map(([input]) => ({
+          command: input?.command,
+          cwd: input?.cwd,
+          profile: input?.env?.OMP_PROFILE,
+        })),
+      ).toEqual([
+        { command: ["omp", "--profile", "work"], cwd: "/workspace/first", profile: "session" },
+        { command: ["omp", "--profile", "work"], cwd: "/workspace/second", profile: "session" },
+      ]);
+      expect(events).toEqual(["seed", "spawn", "seed", "spawn"]);
+    } finally {
+      seed.mockRestore();
+    }
+  });
+
+  test("never spawns a provider when authoritative provisioning fails", async () => {
+    const seed = vi
+      .spyOn(bundledPlugins, "provisionBundledOmpPlugins")
+      .mockRejectedValue(new Error("incompatible private host"));
+    const spawnProcess = vi.fn(() => createOmpChild());
+    const runtime = new OmpCliRuntime({
+      logger: pino({ level: "silent" }),
+      command: ["omp"],
+      spawnProcess,
+    });
+    try {
+      await expect(runtime.startSession({ cwd: "/workspace/project" })).rejects.toThrow(
+        "incompatible private host",
+      );
+      expect(spawnProcess).not.toHaveBeenCalled();
+    } finally {
+      seed.mockRestore();
+    }
+  });
+
   test("passes an unpacked extension path to an external packaged OMP process", () => {
     const moduleUrl = new URL(
       "file:///Applications/OMP%20Desktop.app/Contents/Resources/app.asar/node_modules/@omp-desktop/server/dist/server/server/agent/providers/omp/cli-runtime.js",

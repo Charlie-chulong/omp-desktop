@@ -501,6 +501,11 @@ function attachManagedTurnIdentity(
       return turnId ? { event: { ...event, turnId }, turnId } : { event, turnId };
     }
     case "timeline": {
+      // Background plugin records carry a separately validated origin (or deliberately none).
+      // Never infer ownership from whichever foreground turn happens to be active on delivery.
+      if (event.item.type === "assistant_message" && event.item.customMessage) {
+        return { event, turnId: undefined };
+      }
       // Live provider items belong to the foreground turn that owns their dispatch.
       // Provider history deliberately keeps absent IDs because it has no daemon turn identity.
       const turnId = agent.activeForegroundTurnId ?? agent.activeTurnId ?? undefined;

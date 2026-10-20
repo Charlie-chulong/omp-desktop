@@ -795,6 +795,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           <AssistantMessage
             occurrenceKey={createAssistantImageOccurrenceKey({ agentId, itemId: item.id })}
             message={item.text}
+            typographer={item.customMessage === undefined}
             timestamp={item.timestamp.getTime()}
             workspaceRoot={workspaceRoot}
             serverId={resolvedServerId}

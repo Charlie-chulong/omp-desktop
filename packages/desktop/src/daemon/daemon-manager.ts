@@ -49,6 +49,7 @@ import { createWallpaperCommandHandler } from "../wallpaper/commands.js";
 import { isWallpaperCommand } from "@omp-desktop/protocol/desktop-wallpaper";
 import { getMainWindows } from "../window/main-windows.js";
 import { getPetLibrary } from "../pets/library.js";
+import { PRIVATE_PLUGIN_DISTRIBUTION } from "../distribution.js";
 const DAEMON_LOG_FILENAME = "daemon.log";
 const STARTUP_POLL_INTERVAL_MS = 200;
 const STARTUP_POLL_MAX_ATTEMPTS = 150;
@@ -354,6 +355,10 @@ function createDaemonEnvironment(invocationEnv: NodeJS.ProcessEnv): NodeJS.Proce
   // installation status checks and legacy OMP subprocesses resolve the same executable.
   const bundledRipgrepPath = resolveBundledRipgrepPath();
   const bundledOmpPath = resolveBundledOmpPath();
+  const bundledPluginsPath =
+    app.isPackaged && PRIVATE_PLUGIN_DISTRIBUTION
+      ? path.join(process.resourcesPath, "bundled-omp-plugins")
+      : null;
   const daemonPathKey = Object.hasOwn(invocationEnv, "Path") ? "Path" : "PATH";
   const daemonPath = bundledOmpPath
     ? [path.dirname(bundledOmpPath), invocationEnv[daemonPathKey]]
@@ -371,6 +376,7 @@ function createDaemonEnvironment(invocationEnv: NodeJS.ProcessEnv): NodeJS.Proce
         }
       : {}),
     ...(bundledRipgrepPath ? { PASEO_RIPGREP_PATH: bundledRipgrepPath } : {}),
+    ...(bundledPluginsPath ? { OMP_DESKTOP_BUNDLED_PLUGINS: bundledPluginsPath } : {}),
   };
 }
 

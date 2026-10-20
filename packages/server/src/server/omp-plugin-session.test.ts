@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createTestLogger } from "../test-utils/test-logger.js";
 import { OmpPluginCliService, type OmpPluginRunner } from "./omp-plugin-cli-service.js";
@@ -25,7 +25,7 @@ function makeSession(runner: OmpPluginRunner) {
     emit: (msg) => emitted.push(msg),
     logger: createTestLogger(),
   });
-  return { session, emitted };
+  return { session, emitted, service };
 }
 
 describe("OmpPluginSession", () => {
@@ -57,6 +57,65 @@ describe("OmpPluginSession", () => {
       type: "ompPlugins.doctor.response",
       payload: { requestId: "r-2", checks: [], rawOutput: "cli exploded" },
     });
+  });
+
+  it("correlates invalid project context with a failed mutation response", async () => {
+    const runner = vi.fn(async () => ({ stdout: "", stderr: "" }));
+    const { session, emitted } = makeSession(runner);
+    await session.handleInboundMessage({
+      type: "ompPlugins.install.request",
+      requestId: "invalid-project",
+      spec: "probe@catalog",
+      scope: "project",
+    });
+    expect(emitted).toEqual([
+      {
+        type: "ompPlugins.install.response",
+        payload: {
+          requestId: "invalid-project",
+          ok: false,
+          plugin: null,
+          output: expect.stringContaining("explicit project cwd"),
+        },
+      },
+    ]);
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("rejects correlated calls immediately when an unexpected service error escapes", async () => {
+    const { session, emitted, service } = makeSession(async () => ({ stdout: "", stderr: "" }));
+    vi.spyOn(service, "marketplaceList").mockRejectedValue(new Error("catalog read failed"));
+    await session.handleInboundMessage({
+      type: "ompPlugins.marketplace.list.request",
+      requestId: "catalog-error",
+    });
+    expect(emitted).toEqual([
+      {
+        type: "rpc_error",
+        payload: {
+          requestId: "catalog-error",
+          requestType: "ompPlugins.marketplace.list.request",
+          error: "catalog read failed",
+        },
+      },
+    ]);
+  });
+
+  it("returns correlated native refresh diagnostics instead of a generic status", async () => {
+    const { session, emitted } = makeSession(async () => {
+      throw new Error("marketplace not found");
+    });
+    await session.handleInboundMessage({
+      type: "ompPlugins.marketplace.update.request",
+      requestId: "refresh-error",
+      name: "missing",
+    });
+    expect(emitted).toEqual([
+      {
+        type: "ompPlugins.marketplace.update.response",
+        payload: { requestId: "refresh-error", ok: false, output: "marketplace not found" },
+      },
+    ]);
   });
 
   it("returns undefined for unrelated message types", () => {

@@ -1,6 +1,8 @@
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import type { OmpAgentMessage, OmpImageContent, OmpTextContent } from "./rpc-types.js";
-import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
+import { mapOmpCustomAssistantMessage, shouldDisplayOmpCustomMessage } from "./custom-message.js";
+import { CHATPRO_CUSTOM_TYPE } from "./chatpro.js";
+import { ChatProDetailsSchema } from "@omp-desktop/protocol/messages";
 import { getOmpWorkflowDisplayText } from "./workflow-prompt.js";
 import {
   extractTextFromToolResult,
@@ -85,6 +87,7 @@ export class OmpHistoryMapper {
   private readonly pendingToolCalls = new Map<string, OmpTrackedToolCall>();
   private userIndex = 0;
   private assistantIndex = 0;
+  private readonly customDeliveries = new Map<string, Set<string>>();
 
   constructor(
     private readonly provider: string,
@@ -153,7 +156,20 @@ export class OmpHistoryMapper {
       return [];
     }
     const text = getUserMessageText(message.content);
-    const mappedEvent = text ? this.hooks.mapCustomMessage?.(message, text, this.provider) : null;
+    if (message.customType === CHATPRO_CUSTOM_TYPE) {
+      const parsed = ChatProDetailsSchema.safeParse(message.details);
+      if (parsed.success) {
+        const key = JSON.stringify(parsed.data);
+        const originals = this.customDeliveries.get(key);
+        if (originals?.has(text)) return [];
+        if (originals) originals.add(text);
+        else this.customDeliveries.set(key, new Set([text]));
+      }
+    }
+    const mappedEvent =
+      text && message.customType !== CHATPRO_CUSTOM_TYPE
+        ? this.hooks.mapCustomMessage?.(message, text, this.provider)
+        : null;
     if (mappedEvent) {
       return [mappedEvent];
     }
@@ -162,7 +178,7 @@ export class OmpHistoryMapper {
           {
             type: "timeline",
             provider: this.provider,
-            item: { type: "assistant_message", text },
+            item: mapOmpCustomAssistantMessage(message, text),
           },
         ]
       : [];

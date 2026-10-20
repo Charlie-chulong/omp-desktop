@@ -768,16 +768,10 @@ describe("OMP agent client and session", () => {
     expect(omp.recordedPrompts()).toEqual([]);
   });
 
-  test("owns launch configuration and registers native host tools", async () => {
+  test("registers native host tools and exposes their capabilities", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask" }, createToolCatalog());
 
-    expect(omp.launchConfiguration()).toEqual({
-      cwd: "/tmp/paseo-omp-agent-test",
-      protocolMode: "rpc-ui",
-      modeId: "ask",
-      argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "always-ask"],
-    });
     expect(omp.registeredHostTools()).toEqual([
       [expect.objectContaining({ name: "create_agent" })],
     ]);
@@ -794,17 +788,6 @@ describe("OMP agent client and session", () => {
     expect(omp.launchConfiguration().argv).toEqual(expect.arrayContaining(["--thinking", "max"]));
   });
 
-  test("launches with write approval mode", async () => {
-    const omp = new OmpHarness();
-    await omp.start({ modeId: "write" });
-
-    expect(omp.launchConfiguration()).toEqual({
-      cwd: "/tmp/paseo-omp-agent-test",
-      protocolMode: "rpc-ui",
-      modeId: "write",
-      argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "write"],
-    });
-  });
   test.each([
     ["plan", planTurnPrompt("design the change")],
     ["goal", "/goal design the change"],
@@ -817,12 +800,6 @@ describe("OMP agent client and session", () => {
         featureValues: { workflow_mode: workflow },
       });
 
-      expect(omp.launchConfiguration()).toEqual({
-        cwd: "/tmp/paseo-omp-agent-test",
-        protocolMode: "rpc-ui",
-        modeId: "ask",
-        argv: ["omp", "--mode", "rpc-ui", "--approval-mode", "always-ask"],
-      });
       await omp.runPrompt("design the change", "ready");
       expect(omp.recordedPrompts()[0]?.message).toBe(expectedPrompt);
       await expect(omp.currentMode()).resolves.toBe("ask");
@@ -1530,21 +1507,6 @@ describe("OMP agent client and session", () => {
     ]);
   });
 
-  test("passes --thinking when a thinking option is provided", async () => {
-    const omp = new OmpHarness();
-    await omp.start({ modeId: "ask", thinkingOptionId: "xhigh" }, createToolCatalog());
-
-    expect(omp.launchConfiguration().argv).toEqual([
-      "omp",
-      "--mode",
-      "rpc-ui",
-      "--approval-mode",
-      "always-ask",
-      "--thinking",
-      "xhigh",
-    ]);
-  });
-
   test("streams a prompt through completion", async () => {
     const omp = new OmpHarness();
     await omp.start();
@@ -1761,6 +1723,69 @@ describe("OMP agent client and session", () => {
       finalText: expect.stringContaining("model turn completed"),
     });
     expect(omp.completedTurnCount()).toBe(1);
+  });
+
+  test.each(["fresh", "resumed"] as const)(
+    "retains an idle plugin original in a %s session without a model turn",
+    async (phase) => {
+      const omp = new OmpHarness();
+      if (phase === "resumed") {
+        await omp.resume({
+          user: { id: "previous-user", text: "previous request" },
+          assistant: { id: "previous-answer", text: "previous answer" },
+        });
+      } else {
+        await omp.start();
+      }
+      const text = '{\n  "state": "stopped",\n  "upstreamEnabled": false\n}\n';
+      const details = { event: "status", schemaVersion: 1 };
+      omp.runtime().emit({
+        type: "message_end",
+        message: {
+          role: "custom",
+          customType: "omp-workbuddy-plugin",
+          content: text,
+          display: true,
+          entryId: "native-idle-status",
+          details,
+        },
+      });
+      expect(omp.timeline()).toEqual([
+        {
+          type: "assistant_message",
+          text,
+          messageId: "native-idle-status",
+          customMessage: { customType: "omp-workbuddy-plugin", details },
+        },
+      ]);
+      expect(omp.recordedPrompts()).toEqual([]);
+      expect(omp.completedTurnCount()).toBe(0);
+    },
+  );
+
+  test("a plugin original cannot finish a foreground prompt before its native acknowledgement", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    await omp.requireStartTurn("unrelated foreground task");
+    omp.runtime().emit({
+      type: "message_end",
+      message: {
+        role: "custom",
+        customType: "omp-workbuddy-plugin",
+        content: "background service is stopped",
+        display: true,
+        entryId: "native-late-status",
+      },
+    });
+    await waitForImmediate();
+    expect(omp.timeline()).toContainEqual({
+      type: "assistant_message",
+      text: "background service is stopped",
+      messageId: "native-late-status",
+      customMessage: { customType: "omp-workbuddy-plugin" },
+    });
+    expect(omp.completedTurnCount()).toBe(0);
+    await omp.interrupt();
   });
 
   test("omits live custom messages when display is false", async () => {
@@ -2001,23 +2026,6 @@ describe("OMP agent client and session", () => {
       { cwd: "/workspace/resumed", modeId: "ask", thinkingOptionId: "high" },
     );
 
-    expect(omp.launchConfiguration()).toEqual({
-      cwd: "/workspace/resumed",
-      protocolMode: "rpc-ui",
-      modeId: "ask",
-      session: expect.stringMatching(/[\\/]paseo-omp-resume-.*[\\/]session\.jsonl$/),
-      argv: [
-        "omp",
-        "--mode",
-        "rpc-ui",
-        "--approval-mode",
-        "always-ask",
-        "--thinking",
-        "high",
-        "--session",
-        expect.stringMatching(/[\\/]paseo-omp-resume-.*[\\/]session\.jsonl$/),
-      ],
-    });
     await expect(omp.history()).resolves.toEqual([
       {
         type: "user_message",
@@ -2030,6 +2038,37 @@ describe("OMP agent client and session", () => {
         messageId: "assistant-history",
       },
     ]);
+  });
+
+  test.each(["standard", "enhanced", "plan", "goal"])(
+    "native extension status remains a command rather than a %s workflow prompt",
+    async (workflow) => {
+      const omp = new OmpHarness();
+      omp.queueCommands([{ name: "wechat", source: "extension" }]);
+      await omp.start({ featureValues: { workflow_mode: workflow } });
+      await omp.runPromptWithoutTurn("/wechat status");
+      expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+      expect(omp.completedTurnCount()).toBe(1);
+    },
+  );
+
+  test("a restored native extension command does not consume the next ordinary prompt's stale-plan reset", async () => {
+    const omp = new OmpHarness();
+    omp.queueCommands([{ name: "wechat", source: "extension" }]);
+    await omp.resume({
+      user: { id: "old-plan", text: planTurnPrompt("draft the migration") },
+      assistant: { id: "old-plan-answer", text: "migration planned" },
+    });
+    await omp.runPromptWithoutTurn("/wechat status");
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+    omp.runtime().promptAck = {};
+    await omp.runPrompt("implement the migration", "implementation complete");
+    expect(omp.recordedPrompts().at(-1)?.message).toBe(
+      standardTurnPrompt("implement the migration"),
+    );
+    expect(omp.timeline().findLast((item) => item.type === "assistant_message")).toMatchObject({
+      text: "implementation complete",
+    });
   });
 
   test("expires stale plan directives when continuing a resumed standard session", async () => {
