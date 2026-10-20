@@ -18,11 +18,12 @@ Standard Apple Silicon macOS and Windows x64 packages include OMP and do not req
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
 
-The desktop development and packaging runtime is `@iriscat/mini-electron@0.1.12`. Main-process
-code keeps Electron-compatible `electron` imports; the stock `electron` package is retained
-only for its TypeScript declarations and its binary download is not used by project scripts.
-The current npm runtime distribution supports Apple Silicon macOS; Windows x64
-uses its separate native distribution.
+The desktop development and packaging installer is `@iriscat/mini-electron@0.1.12`.
+The npm installer and native runtime are versioned independently; current macOS
+packages use native runtime `0.1.16`. Main-process code keeps Electron-compatible
+`electron` imports; the stock `electron` package is retained only for its TypeScript
+declarations and its binary download is not used by project scripts.
+Apple Silicon macOS and Windows x64 use separate native runtime channels.
 
 Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
 avoiding repeated small-file-read overhead. The main window stays native-hidden until
@@ -1171,6 +1172,12 @@ The packager reads the selected runtime's `version.json`, defaults to that runti
 architecture (including when Node runs under Rosetta), and rejects a different target
 OS or architecture. `MINI_ELECTRON_DIST_PATH` must point to an extracted distribution
 for the requested target; it cannot reuse the host's runtime for another platform.
+
+Before packaging, refresh an existing installation with
+`npx mini-electron --update-runtime`. Normal dependency installation reuses an
+already valid native runtime; updating the npm installer alone does not refresh it.
+The macOS channel currently selects `0.1.16`; verify the installed native version in
+`node_modules/@iriscat/mini-electron/dist/version.json`.
 
 QQ clipboard compatibility requires native runtime `0.1.12` or newer: QQ can
 advertise PNG bytes as TIFF, so the runtime must identify the actual encoding.
