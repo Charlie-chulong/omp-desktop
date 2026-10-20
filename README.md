@@ -94,8 +94,10 @@ workspace data, stops probing and automatic reconnection, and remains in effect
 after restarting the app. Reconnect resumes the saved connection; neither action
 stops the remote daemon. **Remove host** remains a separate operation.
 **Settings → General → Detail level** controls reasoning expansion, tool-call
-detail, and the Web chat outline. These controls are no longer under Appearance;
-existing preference values are preserved.
+detail, the completed-response file list, and the Web chat outline. Turn off
+**Show files after each response** to hide file chips without hiding response
+statistics. The switch defaults to on and is saved across restarts.
+These controls are no longer under Appearance; existing preference values are preserved.
 The sidebar only shows projects and chats from online hosts. Disconnecting hides
 cached rows without removing host profiles, project order, or host filters;
 reconnecting restores them. In project grouping, pinned chats remain first and

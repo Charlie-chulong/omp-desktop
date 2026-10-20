@@ -2223,6 +2223,10 @@ export const ru: TranslationResources = {
         description: "Количество строк, сохраняемых во встроенном буфере терминала",
         accessibilityLabel: "Количество строк в буфере прокрутки терминала",
       },
+      showTurnFileChanges: {
+        label: "Показывать файлы после каждого ответа",
+        description: "Показывать изменённые файлы над статистикой завершённого ответа",
+      },
       autoExpandReasoning: {
         label: "Всегда разворачивать размышления",
         description:

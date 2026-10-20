@@ -2229,6 +2229,10 @@ export const fr: TranslationResources = {
         description: "Lignes conservées dans le tampon du terminal intégré",
         accessibilityLabel: "Lignes de défilementTerminal",
       },
+      showTurnFileChanges: {
+        label: "Afficher les fichiers après chaque réponse",
+        description: "Afficher les fichiers modifiés au-dessus des statistiques de la réponse terminée",
+      },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",
         description: "Afficher le raisonnement de l'agent entièrement développé par défaut",

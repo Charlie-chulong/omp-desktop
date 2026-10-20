@@ -380,6 +380,12 @@ function ConversationDetailSection() {
     },
     [updateSettings],
   );
+  const handleShowTurnFileChangesChange = useCallback(
+    (showTurnFileChanges: boolean) => {
+      void updateSettings({ showTurnFileChanges });
+    },
+    [updateSettings],
+  );
 
   return (
     <SettingsSection title={t("settings.appearance.detailLevel.title")}>
@@ -392,6 +398,21 @@ function ConversationDetailSection() {
           value={settings.toolCallDetailLevel}
           onChange={handleToolCallDetailLevelChange}
         />
+        <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>
+              {t("settings.general.showTurnFileChanges.label")}
+            </Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.general.showTurnFileChanges.description")}
+            </Text>
+          </View>
+          <Switch
+            value={settings.showTurnFileChanges}
+            onValueChange={handleShowTurnFileChangesChange}
+            accessibilityLabel={t("settings.general.showTurnFileChanges.label")}
+          />
+        </View>
         {!isNative ? (
           <ChatOutlineRow value={settings.chatOutlineEnabled} onChange={handleChatOutlineChange} />
         ) : null}

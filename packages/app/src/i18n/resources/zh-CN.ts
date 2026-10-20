@@ -2262,6 +2262,10 @@ export const zhCN: TranslationResources = {
         label: "始终展开推理过程",
         description: "默认情况下完全展开 AI 的思考和推理过程",
       },
+      showTurnFileChanges: {
+        label: "显示对话结束后的文件列表",
+        description: "在每轮回复结束后的统计信息上方显示变更文件列表",
+      },
       toolCallDetail: {
         label: "工具调用显示",
         description: "工具调用在时间线中的显示方式",

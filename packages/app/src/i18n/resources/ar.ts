@@ -2175,6 +2175,10 @@ export const ar: TranslationResources = {
         description: "يتم الاحتفاظ بالخطوط في المخزن المؤقت الطرفي المدمج",
         accessibilityLabel: "خطوط التمرير Terminal",
       },
+      showTurnFileChanges: {
+        label: "إظهار الملفات بعد كل رد",
+        description: "إظهار قائمة الملفات المتغيرة فوق إحصاءات الرد المكتمل",
+      },
       autoExpandReasoning: {
         label: "عرض التفكير دائماً",
         description: "إظهار تفكير الوكيل وخطوات الاستدلال بشكل كامل بشكل افتراضي",
