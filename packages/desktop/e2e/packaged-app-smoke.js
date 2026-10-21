@@ -513,7 +513,7 @@ async function waitForRendererStartedDaemon({
   );
 }
 
-function runShellCommand({ script, env, label }) {
+function runShellCommand({ script, env, label, timeoutMs = SMOKE_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const shell = getShellCommand(script, env);
@@ -548,7 +548,7 @@ function runShellCommand({ script, env, label }) {
           }`,
         ),
       );
-    }, SMOKE_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk) => stdout.push(chunk.toString()));
     child.stderr.on("data", (chunk) => stderr.push(chunk.toString()));
@@ -583,7 +583,7 @@ function getCliShimScript(cliShimPath, args) {
   return `${shellQuote(cliShimPath)} ${commandArgs}`;
 }
 
-async function runCliShimCommand({ appPath, env, args, label }) {
+async function runCliShimCommand({ appPath, env, args, label, timeoutMs }) {
   const cliShimPath = getCliShimPath(appPath);
   assertExecutable(cliShimPath, "Bundled CLI shim");
 
@@ -591,6 +591,7 @@ async function runCliShimCommand({ appPath, env, args, label }) {
     script: getCliShimScript(cliShimPath, args),
     env,
     label,
+    timeoutMs,
   });
 }
 
@@ -699,6 +700,9 @@ try {
     env,
     args: ["provider", "diagnostic", "omp"],
     label: "Bundled OMP provider diagnostic",
+    // A cold private profile stages its complete runtimes before the catalog.
+    // Preserve the real 180s diagnostic RPC deadline plus CLI startup allowance.
+    timeoutMs: 180_000 + SMOKE_TIMEOUT_MS,
   });
   if (!diagnostic.stdout.includes(binaryPath)) {
     throw new Error(

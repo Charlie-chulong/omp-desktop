@@ -95,24 +95,49 @@ async function smokeBundledPlugins({
       const element = document.querySelector(`[data-testid="${id}"]`);
       if (!(element instanceof HTMLElement) || element.getAttribute("aria-disabled") === "true")
         throw new Error("Real plugin toggle is unavailable");
+      element.scrollIntoView({ block: "center" });
       element.click();
       return true;
     }, workbuddyToggle);
   await clickToggle();
-  await until("real plugin-page disable reaching native plugin state", async () => {
-    const state = await rpc("list");
-    return (
-      state.plugins.find((plugin) => plugin.name === "omp-workbuddy-plugin")?.enabled === false &&
-      (await inspect()).toggles.some(
+  // Management RPCs are serialized and each private launch verifies its payload.
+  // Poll the real DOM without enqueueing extra CLI work behind the action being
+  // observed; only after its refresh settles perform an independent readback.
+  await until(
+    "real plugin-page disable and completed refresh",
+    async () => {
+      const view = await inspect();
+      assert.equal(view.error, null);
+      return view.toggles.some(
         (toggle) => toggle.id === workbuddyToggle && toggle.checked === "false" && !toggle.disabled,
-      )
-    );
-  });
+      );
+    },
+    90_000,
+  );
+  await page.snapshot("bundled-plugins-disabled-renderer.png");
+  const disabledState = await rpc("list");
+  assert.equal(
+    disabledState.plugins.find((plugin) => plugin.name === "omp-workbuddy-plugin")?.enabled,
+    false,
+  );
   await clickToggle();
-  await until("real plugin-page enable reaching native plugin state", async () => {
-    const state = await rpc("list");
-    return state.plugins.find((plugin) => plugin.name === "omp-workbuddy-plugin")?.enabled === true;
-  });
+  await until(
+    "real plugin-page enable and completed refresh",
+    async () => {
+      const view = await inspect();
+      assert.equal(view.error, null);
+      return view.toggles.some(
+        (toggle) => toggle.id === workbuddyToggle && toggle.checked === "true" && !toggle.disabled,
+      );
+    },
+    90_000,
+  );
+  await page.snapshot("bundled-plugins-enabled-renderer.png");
+  const enabledState = await rpc("list");
+  assert.equal(
+    enabledState.plugins.find((plugin) => plugin.name === "omp-workbuddy-plugin")?.enabled,
+    true,
+  );
   report.bundledPlugins = {
     manifestHost: manifest.host,
     initial,
@@ -120,6 +145,8 @@ async function smokeBundledPlugins({
     route,
     rendered,
     nativeToggleRoundTrip: true,
+    disabledState,
+    enabledState,
   };
   report.checks.push(
     "mandatory three genuine preinstalled native plugins and versions in owned profile snapshots; existing Chinese plugin page and real native disable/enable round trip",
