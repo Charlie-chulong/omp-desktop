@@ -48,6 +48,13 @@ function getRegisteredPathHandler(
   return handler as (_event: unknown, input: unknown) => Promise<void>;
 }
 
+function createSpawnedProcess(): EventEmitter & ExternalSpawnedProcess {
+  const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
+  child.unref = vi.fn();
+  queueMicrotask(() => child.emit("spawn"));
+  return child;
+}
+
 describe("desktop opener", () => {
   beforeEach(() => {
     vi.mocked(ipcMain.handle).mockReset();
@@ -114,12 +121,7 @@ describe("desktop opener", () => {
       await createDesktopSettingsStore({ userDataPath }).patch({
         browser: { target: "custom", custom: { executable, args } },
       });
-      const spawn = vi.fn(() => {
-        const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
-        child.unref = vi.fn();
-        queueMicrotask(() => child.emit("spawn"));
-        return child;
-      });
+      const spawn = vi.fn(createSpawnedProcess);
       const settingsStore = createDesktopSettingsStore({ userDataPath });
       const handler = getRegisteredOpenUrlHandler({
         settingsStore,

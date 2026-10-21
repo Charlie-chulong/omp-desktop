@@ -27,6 +27,7 @@ import {
   RotateCw,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   X,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -51,10 +52,13 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  useContextMenu,
 } from "@/components/ui/context-menu";
+import { measureElement } from "@/components/ui/menu/menu-anchor";
 import { Shortcut } from "@/components/ui/shortcut";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import { WORKSPACE_SECONDARY_HEADER_HEIGHT } from "@/constants/layout";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { useWorkspaceTabLayout } from "@/screens/workspace/use-workspace-tab-layout";
@@ -109,6 +113,7 @@ const TAB_SCROLL_EDGE_EPSILON = 1;
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedX = withUnistyles(X);
 const ThemedCopy = withUnistyles(Copy);
+const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
 
 function WorkspaceTabScrollShadeSvg({ side, color }: { side: "left" | "right"; color: string }) {
   const gradientId = `workspace-tab-scroll-shade-${side}-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -630,6 +635,64 @@ function TabHandleContent({
   );
 }
 
+function stopTabActionPropagation(event: { stopPropagation?: () => void }) {
+  event.stopPropagation?.();
+}
+
+const tabActionDragBlockers = isWeb
+  ? {
+      onPointerDown: stopTabActionPropagation,
+      onMouseDown: stopTabActionPropagation,
+    }
+  : undefined;
+
+function TabMenuMoreButton({
+  testID,
+  dragBlockers,
+}: {
+  testID: string;
+  dragBlockers?: {
+    onPointerDown: (event: { stopPropagation?: () => void }) => void;
+    onMouseDown: (event: { stopPropagation?: () => void }) => void;
+  };
+}) {
+  const { t } = useTranslation();
+  const menu = useContextMenu();
+  const buttonRef = useRef<View>(null);
+  const openMenu = useCallback(
+    async (event: { stopPropagation?: () => void }) => {
+      event.stopPropagation?.();
+      if (!buttonRef.current) return;
+      const rect = await measureElement(buttonRef.current);
+      menu.setAnchorRect(rect);
+      menu.setOpen(true);
+    },
+    [menu],
+  );
+  const stopRowPress = useCallback((event: { stopPropagation?: () => void }) => {
+    event.stopPropagation?.();
+  }, []);
+  const accessibilityState = useMemo(() => ({ expanded: menu.open }), [menu.open]);
+
+  return (
+    <View pointerEvents="box-none" style={styles.tabTrailingOverlay}>
+      <Pressable
+        {...(dragBlockers as object | undefined)}
+        ref={buttonRef}
+        testID={testID}
+        onPressIn={stopRowPress}
+        onPress={openMenu}
+        accessibilityRole="button"
+        accessibilityLabel={t("workspace.fileActions.moreActions")}
+        accessibilityState={accessibilityState}
+        style={styles.tabMenuButton}
+      >
+        <ThemedMoreHorizontal size={16} uniProps={mutedColorMapping} />
+      </Pressable>
+    </View>
+  );
+}
+
 function TabChip({
   tab,
   isActive,
@@ -666,6 +729,7 @@ function TabChip({
   dragHandleProps: DraggableListDragHandleProps | undefined;
 }) {
   const { t } = useTranslation();
+  const showPersistentActions = useShowPersistentActions();
   const { closeButtonTestId, contextMenuTestId, menuEntries } = resolvedTab;
   const middleClickRef = useMiddleClickClose(
     useCallback(() => void onCloseTab(tab.tabId), [onCloseTab, tab.tabId]),
@@ -677,16 +741,7 @@ function TabChip({
     isActive,
     isHovered,
   });
-  const closeButtonDragBlockers = isWeb
-    ? ({
-        onPointerDown: (event: { stopPropagation?: () => void }) => {
-          event.stopPropagation?.();
-        },
-        onMouseDown: (event: { stopPropagation?: () => void }) => {
-          event.stopPropagation?.();
-        },
-      } as const)
-    : undefined;
+  const closeButtonDragBlockers = tabActionDragBlockers;
 
   const tabChipStyle = useCallback(
     () => [
@@ -797,7 +852,13 @@ function TabChip({
           </TooltipContent>
         </Tooltip>
 
-        {showCloseButton && (isActive || isHovered || isClosingTab) ? (
+        {showPersistentActions ? (
+          <TabMenuMoreButton
+            testID={`workspace-tab-more-${testIdentity}`}
+            dragBlockers={closeButtonDragBlockers}
+          />
+        ) : null}
+        {!showPersistentActions && showCloseButton && (isActive || isHovered || isClosingTab) ? (
           <View pointerEvents="box-none" style={styles.tabTrailingOverlay}>
             <Pressable
               {...(closeButtonDragBlockers as object | undefined)}
@@ -1680,6 +1741,16 @@ const styles = StyleSheet.create((theme) => ({
     width: 18,
     height: 18,
     borderRadius: theme.borderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  tabMenuButton: {
+    position: "absolute",
+    right: theme.spacing[1],
+    width: 32,
+    height: 32,
+    borderRadius: theme.borderRadius.md,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,

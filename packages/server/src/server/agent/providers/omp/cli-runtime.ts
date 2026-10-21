@@ -20,12 +20,16 @@ import {
 } from "../jsonl-rpc-process.js";
 import {
   buildOmpLaunch,
+  resolveOmpRuntimeCommand,
   type OmpRuntime,
   type OmpRuntimeLaunch,
   type OmpRuntimeSession,
   type OmpStartSessionInput,
 } from "./runtime.js";
 import { resolveOmpBuiltinToolArgsForLaunch } from "./provider-config.js";
+import { assertBundledOmpHost } from "../../../bundled-omp-host.js";
+import { provisionBundledOmpPlugins } from "../../../bundled-omp-plugins.js";
+import { createProviderEnv } from "../../provider-launch-config.js";
 import {
   prepareOmpImageSettingsLaunch,
   OMP_IMAGE_SETTINGS_TOKEN_ENV,
@@ -142,20 +146,68 @@ export class OmpCliRuntime implements OmpRuntime {
     this.spawnProcess = options.spawnProcess;
   }
 
+  private async applyBuiltInToolPolicy(
+    launch: OmpRuntimeLaunch,
+    command: ReturnType<typeof resolveOmpRuntimeCommand>,
+  ): Promise<void> {
+    const disabledBuiltInTools = this.options.disabledBuiltInTools;
+    if (!disabledBuiltInTools?.length) return;
+    if (
+      launch.argv.slice(command.length).some((arg) => /^(?:--tools(?:=.*)?|--no-tools)$/.test(arg))
+    ) {
+      throw new Error(
+        "OMP built-in tool settings conflict with a configured --tools or --no-tools argument. Remove the custom tool flag first.",
+      );
+    }
+    let policyArgs = await resolveOmpBuiltinToolArgsForLaunch(disabledBuiltInTools, command, {
+      ...globalThis.process.env,
+      ...launch.env,
+    });
+    if (policyArgs[0] === "--tools") {
+      // Validate the actual registry: equal versions can expose different tools.
+      const available = await inspectOmpActiveTools(launch, this.options.logger);
+      if (!disabledBuiltInTools.some((name) => available.has(name))) {
+        policyArgs = [];
+      } else {
+        const enabled = policyArgs[1]!.split(",").filter((name) => available.has(name));
+        // Preserve a settings-gated image tool newer than the static manifest.
+        if (
+          available.has("generate_image") &&
+          !disabledBuiltInTools.includes("generate_image") &&
+          !enabled.includes("generate_image")
+        ) {
+          enabled.push("generate_image");
+        }
+        policyArgs = enabled.length ? ["--tools", enabled.join(",")] : ["--no-tools"];
+      }
+    }
+    launch.argv.push(...policyArgs);
+  }
+
   async startSession(input: OmpStartSessionInput): Promise<OmpRuntimeSession> {
     const launch = buildOmpLaunch({
       command: this.command,
       runtimeSettings: this.options.runtimeSettings,
       session: input,
     });
+    const effectiveCommand = resolveOmpRuntimeCommand(this.command, this.options.runtimeSettings);
+    const providerEnv = createProviderEnv({ overlays: [launch.env] });
+    // Each cwd may initialize a different native dotenv/profile. Resolve it with
+    // the genuine host before launch; the per-profile ledger prevents reseeding.
+    const provisioning = await provisionBundledOmpPlugins({
+      command: effectiveCommand,
+      env: providerEnv,
+      cwd: launch.cwd,
+    });
+    for (const plugin of provisioning.plugins) {
+      if (plugin.error)
+        this.options.logger.warn(
+          { plugin: plugin.name, error: plugin.error },
+          "Bundled OMP plugin provisioning requires explicit management",
+        );
+    }
+    await assertBundledOmpHost(launch.argv[0], providerEnv);
     installCodexCatalogPreload(launch);
-    const configuredCommand = this.options.runtimeSettings?.command;
-    const effectiveCommand =
-      configuredCommand?.mode === "replace"
-        ? configuredCommand.argv
-        : configuredCommand?.mode === "append"
-          ? [...this.command, ...(configuredCommand.args ?? [])]
-          : this.command;
     const imageLaunch = input.getImageGenerationConfig
       ? await prepareOmpImageSettingsLaunch(effectiveCommand, launch.cwd, {
           ...globalThis.process.env,
@@ -167,68 +219,14 @@ export class OmpCliRuntime implements OmpRuntime {
       launch.env = { ...launch.env, [OMP_IMAGE_SETTINGS_TOKEN_ENV]: imageLaunch.token };
     }
     try {
-      if (this.options.disabledBuiltInTools?.length) {
-        const configuredCommand = this.options.runtimeSettings?.command;
-        let command: readonly string[] = this.command;
-        if (configuredCommand?.mode === "replace") {
-          command = configuredCommand.argv;
-        } else if (configuredCommand?.mode === "append") {
-          command = [...this.command, ...(configuredCommand.args ?? [])];
-        }
-        if (
-          launch.argv
-            .slice(command.length)
-            .some((arg) => /^(?:--tools(?:=.*)?|--no-tools)$/.test(arg))
-        ) {
-          throw new Error(
-            "OMP built-in tool settings conflict with a configured --tools or --no-tools argument. Remove the custom tool flag first.",
-          );
-        }
-        let policyArgs = await resolveOmpBuiltinToolArgsForLaunch(
-          this.options.disabledBuiltInTools,
-          command,
-          { ...globalThis.process.env, ...launch.env },
-        );
-        if (policyArgs[0] === "--tools") {
-          // OMP validates --tools against the tools actually registered for this configuration.
-          // A version number alone cannot identify them: even builds with the same version and
-          // tools disabled by OMP settings have different registries.
-          const available = await inspectOmpActiveTools(launch, this.options.logger);
-          if (!this.options.disabledBuiltInTools.some((name) => available.has(name))) {
-            policyArgs = [];
-          } else {
-            const enabled = policyArgs[1]!.split(",").filter((name) => available.has(name));
-            // The native image tool is settings-gated and may be newer than the
-            // static Desktop manifest. Do not strip it from a generated whitelist.
-            if (
-              available.has("generate_image") &&
-              !this.options.disabledBuiltInTools.includes("generate_image") &&
-              !enabled.includes("generate_image")
-            ) {
-              enabled.push("generate_image");
-            }
-            policyArgs = enabled.length ? ["--tools", enabled.join(",")] : ["--no-tools"];
-          }
-        }
-        launch.argv.push(...policyArgs);
-      }
+      await this.applyBuiltInToolPolicy(launch, effectiveCommand);
       if (input.protocolMode === "rpc-ui") {
         launch.argv.push("--extension", resolveOmpBackgroundJobsExtensionPath());
       }
       if (imageLaunch) launch.argv.push("--extension", resolveOmpImageSettingsExtensionPath());
-      const toolFlag = launch.argv.findLastIndex(
-        (arg) => arg === "--tools" || arg.startsWith("--tools=") || arg === "--no-tools",
-      );
-      const imageToolAllowed =
-        toolFlag < 0 ||
-        (launch.argv[toolFlag] !== "--no-tools" &&
-          (launch.argv[toolFlag] === "--tools"
-            ? launch.argv[toolFlag + 1]
-            : launch.argv[toolFlag]!.slice("--tools=".length)
-          )
-            ?.split(",")
-            .includes("generate_image") === true);
+      const imageToolAllowed = imageToolAllowedByArguments(launch.argv);
       const [command, ...args] = launch.argv;
+      await assertBundledOmpHost(command, providerEnv);
       const processLaunch: JsonlRpcLaunch = {
         command,
         args,
@@ -360,6 +358,19 @@ async function inspectOmpActiveTools(
   }
 }
 
+function imageToolAllowedByArguments(argv: readonly string[]): boolean {
+  const toolFlag = argv.findLastIndex(
+    (arg) => arg === "--tools" || arg.startsWith("--tools=") || arg === "--no-tools",
+  );
+  return (
+    toolFlag < 0 ||
+    (argv[toolFlag] !== "--no-tools" &&
+      (argv[toolFlag] === "--tools" ? argv[toolFlag + 1] : argv[toolFlag]!.slice("--tools=".length))
+        ?.split(",")
+        .includes("generate_image") === true)
+  );
+}
+
 class OmpCliRuntimeSession implements OmpRuntimeSession {
   private readonly subscribers = new Set<(event: OmpRuntimeEvent) => void>();
   activeBranchEntryId?: string;
@@ -414,48 +425,53 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
     };
   }
 
+  private async applyImageSettings(
+    config: ReturnType<OmpImageSettingsGetter>,
+    encoded: string,
+  ): Promise<void> {
+    if (
+      encoded === this.appliedImageSettings &&
+      !(config?.enabled && this.imageToolAllowed && config.backend === "chatgpt-subscription")
+    )
+      return;
+    const signal = AbortSignal.timeout(OMP_READY_TIMEOUT_MS);
+    const aborted = Promise.withResolvers<never>();
+    const onAbort = () =>
+      aborted.reject(
+        new Error(
+          "OMP native image settings bridge did not become available; update OMP to v18.8.7 or newer",
+        ),
+      );
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      const readyPort = await Promise.race([this.imageEndpoint.promise, aborted.promise]);
+      const port = this.imageEndpointPort ?? readyPort;
+      const response = await fetch(`http://127.0.0.1:${port}/settings`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.imageToken}`,
+          "Content-Type": "application/json",
+        },
+        body: encoded,
+        signal,
+      });
+      if (!response.ok) {
+        const result = z.object({ error: z.string() }).safeParse(await response.json());
+        throw new Error(
+          result.success ? result.data.error : "OMP native image settings update failed",
+        );
+      }
+      this.appliedImageSettings = encoded;
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+
   async refreshImageSettings(): Promise<void> {
     if (!this.getImageGenerationConfig || !this.imageToken) return;
     const config = this.getImageGenerationConfig();
     const encoded = JSON.stringify({ config, allowed: this.imageToolAllowed });
-    const update = this.imageUpdates.then(async () => {
-      if (
-        encoded === this.appliedImageSettings &&
-        !(config?.enabled && this.imageToolAllowed && config.backend === "chatgpt-subscription")
-      )
-        return;
-      const signal = AbortSignal.timeout(OMP_READY_TIMEOUT_MS);
-      const aborted = Promise.withResolvers<never>();
-      const onAbort = () =>
-        aborted.reject(
-          new Error(
-            "OMP native image settings bridge did not become available; update OMP to v18.8.7 or newer",
-          ),
-        );
-      signal.addEventListener("abort", onAbort, { once: true });
-      try {
-        const readyPort = await Promise.race([this.imageEndpoint.promise, aborted.promise]);
-        const port = this.imageEndpointPort ?? readyPort;
-        const response = await fetch(`http://127.0.0.1:${port}/settings`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.imageToken}`,
-            "Content-Type": "application/json",
-          },
-          body: encoded,
-          signal,
-        });
-        if (!response.ok) {
-          const result = z.object({ error: z.string() }).safeParse(await response.json());
-          throw new Error(
-            result.success ? result.data.error : "OMP native image settings update failed",
-          );
-        }
-        this.appliedImageSettings = encoded;
-      } finally {
-        signal.removeEventListener("abort", onAbort);
-      }
-    });
+    const update = this.imageUpdates.then(() => this.applyImageSettings(config, encoded));
     this.imageUpdates = update.catch(() => undefined);
     await update;
   }
@@ -676,9 +692,9 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
       return;
     }
     void this.refreshImageSettings()
-      .then(() => {
-        this.process.send({ type: "follow_up", message, ...(images?.length ? { images } : {}) });
-      })
+      .then(() =>
+        this.process.send({ type: "follow_up", message, ...(images?.length ? { images } : {}) }),
+      )
       .catch((error: unknown) => {
         // A queued turn must not continue using stale credentials or silently
         // drop a failed settings update. Process exit is an observable provider error.

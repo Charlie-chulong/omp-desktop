@@ -18,12 +18,27 @@ Standard Apple Silicon macOS and Windows x64 packages include OMP and do not req
 Windows `no omp` installers preserve an existing bundled runtime during upgrades; a fresh
 `no omp` installation requires `omp` on `PATH`.
 
-The desktop development and packaging installer is `@iriscat/mini-electron@0.1.12`.
-The npm installer and native runtime are versioned independently; current macOS
-packages use native runtime `0.1.16`. Main-process code keeps Electron-compatible
-`electron` imports; the stock `electron` package is retained only for its TypeScript
-declarations and its binary download is not used by project scripts.
-Apple Silicon macOS and Windows x64 use separate native runtime channels.
+The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime
+versions are released independently. Windows x64 uses runtime **0.1.15**, while the
+Apple Silicon channel currently provides runtime **0.1.16**. Windows discovers updates
+through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform
+latest pointer. Packaging validates the selected distribution's platform, architecture,
+and Electron API metadata.
+Main-process code keeps Electron-compatible `electron` imports; the stock
+`electron` package is retained only for TypeScript declarations. Project scripts
+do not download or substitute its runtime.
+
+The Windows runtime includes the upstream
+[`executeJavaScript` value/Promise/error fix](https://github.com/iris-cat-dev/mini-electron/issues/3)
+and [nonactivating companion focus fix](https://github.com/iris-cat-dev/mini-electron/issues/4).
+A successful build is not native acceptance: qualify the actual packaged application,
+including generated-pet image conversion and right-click menu dismissal after one
+outside click. A minimal native menu probe is not substituted for that product path.
+
+Windows runtime 0.1.15 also has an observed
+[electron-log renderer-preload redeclaration issue](https://github.com/iris-cat-dev/mini-electron/issues/5).
+The native smoke retains this error; passing the application scenarios does not
+prove that renderer logging initialized successfully.
 
 Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB,
 avoiding repeated small-file-read overhead. The main window stays native-hidden until
@@ -33,6 +48,12 @@ WebSocket response validation, and terminal emulation load on first use instead 
 inflating the startup entry. Desktop daemon setup imports only its configuration/runtime
 helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell
 environment inheritance and daemon readiness checks are unchanged.
+
+On Windows, the renderer normally reports content readiness after app settings
+load. If that signal never arrives, a bounded main-process fallback presents the
+successfully loaded first document. Navigation, close, hide, minimize, or normal
+readiness cancels it; the fallback cannot reopen a window hidden to the tray.
+macOS remains gated on its native paint handoff.
 
 **Settings → General → Language → System** selects the first supported system
 language; a manually selected language takes precedence. The macOS runtime
@@ -160,6 +181,12 @@ In **Settings → Appearance**, the **Desktop pet** section follows **Wallpaper*
 always-on-top window. The feature is off by default and is only available in the Electron app.
 Like wallpaper, size, library, import/refresh, and creation settings appear only while the pet
 is enabled. Disabling it preserves the creation draft and model selection.
+
+Pet packages, selection, visibility, size, and position remain on this computer;
+connecting a phone or tablet to its daemon does not synchronize the pet or its
+overlay. The authoring conversation is an ordinary OMP conversation, not a pet
+asset-sync channel.
+
 On macOS, enabling the pet does not activate its window or take keyboard focus away from
 the application you are using. It stays visible across Spaces, including full-screen apps.
 On launch, an enabled pet waits until initial service startup settles and the main
@@ -314,6 +341,16 @@ In **Settings → Appearance**, enable **Wallpaper**, choose **File**, and use
 multi-selection and files from different folders are supported. Candidates are saved
 across restarts; the originals stay in their existing locations.
 
+Wallpaper files, candidate records, and the Desktop selection stay on this
+computer. Pairing a phone or tablet does not copy wallpaper media or settings
+from Desktop. A Web browser may set its own URL wallpaper independently in that
+browser's local settings; this is not synchronization with the Desktop wallpaper.
+
+With Wallpaper enabled, the home screen hides its decorative-motion switch and
+poster overlay so the wallpaper remains visible. Turning Wallpaper off restores
+the switch and its previously selected on/off value; conversation and project
+shortcuts remain available in both states.
+
 The candidate grid scrolls continuously inside Settings. It is virtualized rather
 than paginated or limited to the first 48 files. Covers are static images, including
 video covers. Adding candidates does not change the background: click a card to apply
@@ -414,23 +451,29 @@ discarding the current draft. They are unavailable while the conversation is run
 
 ## Ordering queued conversations
 
-When several conversations on the same host have queued follow-up messages, each affected
-composer shows that conversation's queue position and controls to move it earlier or later.
-Automatic delivery starts one queued conversation at a time in the displayed order; moving a
-conversation changes the next actual start, not only the UI. Existing active turns continue
-without interruption.
+When two or more conversations on the same host have queued follow-up messages, a shared order
+board appears above the input in every composer on that host, including conversations without
+their own queued message. Each row shows its position, title, and queued-message count. Hold
+and drag the handle to move a conversation directly to another position; no hover, right-click,
+or separate order buttons are needed. Automatic delivery uses the displayed order. Already
+running turns continue without interruption, and a conversation added or drained during a drag
+cannot be restored by an outdated drop. With a keyboard, focus a handle, press Space, move with
+the arrow keys, then press Space again to drop.
 
-Within a conversation, drag a queued message's handle directly to its new position. The
-highlighted row and moving gap preview the drop; releasing commits the displayed order to the
+Within a conversation, hold and drag a queued message's handle to reorder its pending messages.
+The highlighted row and moving gap preview the drop; releasing commits the displayed order to the
 same queue used for automatic delivery. For keyboard sorting, focus the handle, press **Space**,
 use **Up/Down**, and press **Space** again to drop; **Escape** cancels without changing the order.
-Native clients retain **Move queued message earlier/later** controls.
-Messages keep their text, attachments, identity, and enqueue order unless explicitly moved;
-already submitted or executing messages are not sortable. Reordering does not send or interrupt
-a turn, and dispatch during a drag cannot restore an already submitted message.
+On native clients, press and hold the handle briefly before dragging.
+Editing or adding messages during a drag keeps their latest contents and order; the drop moves
+only the selected message relative to a current queue neighbor. If either message was already
+sent or removed, the drop is ignored and cannot restore it. Messages keep their text,
+attachments, identity, and enqueue order unless explicitly moved. Already submitted or
+executing messages are not sortable. Reordering does not send or interrupt a turn.
 After a normal turn completes, the next queued message starts automatically, even if completion
 arrives before the previous submission's acknowledgment. Messages are submitted once in queue
 order; a failed submission retains the original message and attachments for retry.
+
 **Send queued message now** remains a separate, explicit override of the shared order.
 
 ## Answering grouped questions
@@ -463,6 +506,29 @@ cannot be deleted through this tool.
 Connected clients refresh their directories and history/search caches after deletion.
 Project files, deliverables, workspaces, Git worktrees/branches, and provider-owned session
 files are not deleted. This tool removes Desktop history, not the provider's independent logs.
+
+## Native OMP `/stats` usage
+
+For the selected host, **Settings → Usage** includes OMP's existing native
+`stats.db` index for the resolved host/profile, not just Desktop-created agents.
+Labels and explanations follow the application language, including Chinese.
+The read-only view does not invoke a CLI reindex, import transcripts, or expose
+prompt text, transcript paths, credentials, or raw database errors.
+
+Ranges cover 1 hour, 24 hours, 7 days, 30 days, 90 days, and all indexed time.
+Counts, failures, input/output/cache tokens, native total tokens, and API-equivalent
+USD costs include provider, model, and agent-type breakdowns. Native total tokens
+remain authoritative: provider orchestration tokens can make them differ from
+the four displayed conversation-token buckets. Indexed transcript counts are not
+Desktop conversation counts, and USD-equivalent costs are not subscription bills.
+Unpriced requests remain unknown rather than becoming free usage; recorded zero
+cost remains zero. Provider quotas and current-session usage stay separate.
+
+Refresh rereads the existing index and invalidates this host's cached ranges;
+it does not make the native index more current. The latest indexed request and
+the index read time are shown separately. Missing, unsupported, and unreadable
+sources are not presented as zero use. SQLite scans run in a short-lived child
+process with a 15-second deadline rather than blocking the daemon event loop.
 
 ## Zhipu Coding Plan usage
 
@@ -573,6 +639,11 @@ namespace alone. Settings and the sidebar show live compact reset countdowns suc
 `3d21h` and `2h12min`. At the deadline, Desktop refreshes server usage and shows an
 awaiting-refresh state rather than assuming the quota reset.
 
+Codex **Credits** shows the exact balance reported by the signed-in account's authenticated
+usage response, or its reported unlimited/disabled state. A missing balance is shown as
+unavailable, not zero. Credits are separate from five-hour/weekly quota and from the banked
+reset cards below; Desktop does not infer a currency or scrape ChatGPT browser cookies.
+
 Each account lists its banked Codex reset cards, server-reported available count, status,
 and grant/expiry timestamps with a timezone. **Use reset card** asks you to confirm the selected
 account, card, and applicable quota windows. Only available, unexpired `codex_rate_limits` cards
@@ -617,6 +688,120 @@ current version rather than repeating the install operation.
 Installed entries are matched by their exact `plugin-name@marketplace-name` identity, so a plugin
 with the same name from another marketplace does not count as installed. Upgrades target that
 exact identity and preserve the existing user or project scope and enabled/disabled state.
+
+Plugin and marketplace operations share the selected project's working directory, including
+native `.env` discovery, and the configured provider's profile and environment. An explicit
+leading `launch` in that provider command is omitted for management commands only. Omitting a
+scope when enabling or disabling retains the native runtime's unique-scope inference; explicit
+user and project scopes remain exact.
+
+Busy actions, including **Remove** while its confirmation is open, retain their original button
+dimensions and adjacent-control spacing. Progress indicators overlay the normal icon/text
+footprint without replacing caller-defined sizing or spacing.
+Retrying a failed catalog load clears its old error after recovery without dismissing
+feedback from a plugin operation's own refresh.
+
+Visible extension replies retain their persisted native entry IDs, original text and metadata
+in live conversations and history, even without a model `agent_start`. Custom replies do not
+complete a turn: native RPC acknowledgements and model lifecycle events own completion.
+The renderer preserves literal punctuation in native custom replies instead of rewriting
+JSON quotes or other original text through smart typography. Ordinary assistant Markdown
+keeps its normal typography and math rendering.
+Loading older history keeps each custom reply separate from adjacent model or custom replies.
+
+Currently registered native extension commands are admitted before workflow and stale-plan
+reset envelopes, including after session restoration. They remain native commands rather
+than ordinary model prompts, and the next ordinary prompt still receives its workflow reset.
+Stopping a submission during native-command discovery cancels that pending turn; delayed
+discovery cannot dispatch it or claim a replacement submission's request identity.
+
+In the private bundled-plugin distribution, first-run provisioning holds a separate native
+process-owned OS lease for the resolved profile. It does not block ordinary plugin management
+or reap PID files. Interrupted or unknown link outcomes are not automatically retried, and
+the durable seed ledger preserves uninstall choices across restarts and application updates.
+Namespace ownership is published only after its marker has been written and synced in an
+unpublished sibling directory and the native lease is still held. Interrupted ownership
+initialization does not publish a partial namespace. Existing directories with missing or
+invalid ownership markers are never adopted or automatically cleaned.
+
+Desktop-managed daemons are reused only when their live status reports the matching
+distribution identity. Private identities include the sealed native-host digest;
+an equal application version alone cannot authorize reuse. An incompatible or
+unverified daemon is preserved during startup, automatic version replacement and
+quit cleanup, even when **Keep daemon running after quit** is off. Let its tasks
+finish and stop it explicitly before switching distributions.
+The bundled CLI also checks live identity before using an implicit local target;
+deliberately selected `--host` and `PASEO_HOST` connections retain their existing behavior.
+
+### Private Windows three-plugin distribution
+
+The separately named `OMP-Desktop-Plugins-Setup-0.5.2-x64.exe` bundles ChatPro 0.1.0,
+WorkBuddy 0.1.0 and the WeChat connector 0.1.2. It is a private build, not an upstream release.
+All three share one patched native OMP 18.12.3; no second plugin SDK or user account store
+is installed. Ordered native patches, compiler/addon provenance and the exact host digest
+are included with the frozen plugin sources in `vendor/omp-plugins`.
+
+Public plugin source releases are [ChatPro](https://github.com/Charlie-chulong/omp-bridge-chatpro)
+and [WorkBuddy](https://github.com/Charlie-chulong/omp-workbuddy-plugin). The WeChat
+connector, its source history and provenance remain private and are not included in
+the public Desktop repository or PR. Provide all three authorized source/runtime
+inputs under the ignored vendor directory before selecting this opt-in build mode.
+
+The payload includes the plugins' required private runtimes and licences, including
+CPython 3.12/Tk for WeChat. Developer virtual environments, ambient site-packages,
+credentials, account profiles, chat data and runtime caches are not collected.
+ChatPro and WorkBuddy remain upstream-disabled by default. WeChat is disconnected until
+the user completes its separate trusted local authorization; preinstallation grants no
+read/send permission and does not approve any message.
+
+Windows private Python runtimes also support long profile/snapshot paths without changing
+machine-wide policy. WorkBuddy keeps full manifest hashes and private-state I/O on extended
+filesystem paths. WeChat's reviewed, package-owned portable startup hook normalizes the
+existing isolated import paths after `_pth`/site initialization; it adds no search directories
+and does not adopt an ambient interpreter or site-packages.
+
+The first Desktop plugin-management request or provider session seeds missing plugins into
+immutable, profile-owned snapshots. Setup does not block the daemon from beginning to listen.
+The existing Plugins loading state covers registration. Existing same-name registrations,
+disabled state and configuration are preserved. Uninstall through the normal
+Plugins page creates no automatic reinstall obligation: subsequent sessions and app updates
+retain that choice. Explicit local-path installation uses native OMP's normal link route.
+Existing plugin versions are not silently upgraded to the copy in a later application.
+
+Windows snapshot publication briefly waits out `EPERM` sharing conflicts while the same
+native provisioning lease remains authoritative. Only the new, unpublished owned-directory
+move is retried; native plugin writes, failed link intents and uninstall tombstones are not.
+
+Public Desktop auto-update and generic native OMP download/replacement are intentionally
+blocked for this distribution, including native self-update via the packaged `manager.json`.
+Standalone update ownership is resolved from the executing binary before reading that marker,
+never from another `omp` found on PATH. A missing running executable fails closed instead of
+redirecting an update to another installation.
+Upgrade with a compatible private whole-app installer; do not replace its host with stock OMP.
+Real account-backed consultations, WorkBuddy upstream calls and WeChat reads/sends require
+separate authorization and are not established by the no-account qualification.
+
+After building the exact pinned native host and the portable WeChat runtime, stage the
+payload with `node packages/desktop/scripts/stage-bundled-plugins.mjs --host <absolute-host>`.
+The stager refuses an existing output or binary rather than overwriting it. Build Windows
+x64 with the verified mini-electron distribution selected by `MINI_ELECTRON_DIST_PATH`
+and `npm run build:windows -- --with-bundled-plugins`. Output goes to
+`packages/desktop/release-plugins`, separate from the previous qualified installer.
+Packaging loads configuration once and keeps qualified resource exclusions through the build.
+It revalidates the actual configured private host against the pinned digest before staging
+and after copying and packaging hooks, rejecting stock-host replacements. Private builds
+must package from source; `--prepackaged` bypasses these checks and is not supported.
+Qualification must exercise the real Python/native extensions and production WeChat
+HelperClient ready/status/exit at the long profile-owned snapshot depth. Use the packaged
+`scripts/verify-bundled-runtime.py` for complete WeChat inventory/native-import/Tcl checks.
+A disconnected `/wechat status` alone does not launch or qualify that helper.
+
+The first private-profile catalog request copies and verifies the complete bundled runtimes.
+Native packaged qualification therefore uses the existing 180-second diagnostic RPC deadline
+plus CLI startup allowance, rather than the ordinary 60-second command limit; it still requires
+the real diagnostic, catalog and plugin checks to finish successfully.
+Plugin-page mutation qualification observes the completed real UI refresh before one independent
+native readback, so test polling cannot queue extra management work behind the action under test.
 
 ## Image generation with references
 
@@ -671,6 +856,14 @@ Account numbers are separate from OMP's globally increasing credential IDs. Desk
 the number mapping in `agent.db` without renumbering credentials or changing existing notes,
 provider configuration, or session references. OMP's disabled credential records remain
 disabled; releasing a display number does not reactivate or reuse an old credential.
+
+## Codex credit balance
+
+**Host Settings → Usage** shows each signed-in Codex account's remaining credit balance
+alongside its quota windows. The provider account details show the same value. Desktop
+preserves the authenticated Codex API's decimal string without rounding or treating
+credits as a currency amount; when the API does not report a balance, it says so rather
+than showing zero. Credits and quota-reset cards are separate balances.
 
 ## Model catalog refresh
 
@@ -871,12 +1064,13 @@ or presentation settings.
 - Hold **Ctrl** (or **Cmd** on macOS) while clicking file or folder rows to add or remove individual selections. **Shift+click** selects a contiguous range from the selection anchor; **Ctrl/Cmd+Shift+click** adds that range to the existing selection. These gestures select entries without opening files or expanding folders.
 - **Ctrl+left-click** also selects on macOS instead of opening the context menu. Ordinary right-click still opens the menu and preserves an existing multi-selection when the clicked row is already selected.
 - In Desktop's Files tree, drag a file or folder row onto another folder to move it within the same workspace. Drag onto blank tree space to move it back to the workspace root; selected entries move together.
+- Folder-row and nested-file-row indentation and action controls are not blank root-drop space. Drop onto the folder label to move into it; dropping on those gutters or controls leaves entries in place.
 - Desktop dragging shows a translucent icon/name preview beside the pointer, with a count badge for multi-selection. The preview stays within the window without blocking folder targets, and disappears when the drag ends or is canceled.
 - Desktop tree moves use pointer dragging rather than native HTML drag-and-drop. Press **Escape** before releasing to cancel. A folder cannot be moved into itself or its descendants; cross-workspace moves are not supported.
 - Drag a file from the Files tree onto the message input in the same workspace to add a workspace-file reference without moving the file or sending a message. The input highlights while hovering; dropping focuses the input, and repeated drops of the same file do not add duplicate references. **Escape** cancels the drop.
 - Drop files onto the message input to add attachments without sending a message.
 - Drop folders onto the message input on a local Desktop host to add directory attachments. macOS Retina and Windows high-DPI displays use the same visible drop target as ordinary displays. Windows uses native OLE file drops; reparse-point path components are not granted access.
-- Paste a clipboard image into the message input to add it as an attachment, including native PNG and DIB/DIBV5 images on Windows. The draft is not sent automatically.
+- Paste a clipboard image into the message input to add it as an attachment, including native PNG and DIB/DIBV5 images on Windows. The draft is not sent automatically. On Windows Desktop, right-click the editable input for native Cut, Copy, Paste, and Select All.
 - Drop external UTF-8 text files onto the conversation history or other ordinary areas to open local, read-only file tabs, not a dialog. Each tab offers **Preview / Source** modes; Markdown and HTML render in Preview mode. Files are not uploaded.
   - Outside a workspace, files open on a dedicated preview page with file tabs.
   - Preview tabs and their contents are session-only. Switching tabs retains the selected mode; closing a tab releases its content, and reloading removes local preview tabs.
@@ -944,6 +1138,33 @@ Diff scrolling preserves transparent wallpaper backgrounds without accumulating
 green/red shading or text trails. Pixel reuse depends on the document and viewport
 heights, not a fixed changed-line count.
 
+## Tablet and hybrid input
+
+On a touch-enabled browser or a compact layout, project, conversation, tab, and file actions
+stay visible without hovering or right-clicking. Tap the workspace header **+** to add an
+Agent, terminal, changes, or files tab; tap a tab's **More** control for its close actions.
+Project and conversation menus retain the same actions as their desktop context menus.
+Mouse hover, right-click, drag, and keyboard shortcuts remain available when peripherals
+are connected.
+
+The file explorer offers **Select files** for selecting several entries without modifier keys,
+then **Move selected items** and an explicit **Move here** destination (including the workspace
+root). Touch actions also expose code copying and panning a full-screen diagram. On touch
+or compact browser layouts, selecting transcript text exposes **Quote** and **Ask** without
+hover; OMP Desktop keeps those actions in the mouse right-click menu instead. Tap the
+context meter to open its details without hover.
+
+App-level **Settings → Chat behavior** contains conversation defaults; **Settings → Host
+connections** contains relay/pairing controls. Per-host projects and provider settings remain
+under the selected host rather than being moved into app-wide settings.
+
+For a selected host, **Settings → Providers** manages models, sign-in accounts, and their
+connection state. **Settings → Usage** shows native OMP `/stats`, provider quotas and
+balances, Codex subscription and reset cards, and Claude limit-reset controls alongside
+each affected account. Native totals and provider quotas are not added together. Reset
+actions still require their existing confirmation; changing an account's login or order
+remains in Providers.
+
 ## Assistant message links
 
 HTTP(S) links open externally. Text/source links open in the workspace file panel. On the local desktop host, links to existing images, documents, archives, and directories inside the workspace open with the operating system; executable files are shown in the file manager rather than launched. Web conversation headings support native `#heading` navigation.
@@ -979,6 +1200,9 @@ Assistant Markdown renders inline formulas delimited by `$...$`, `\(...\)`, or s
 `\[...\]`. Display formulas use standalone `$$...$$` or `\[...\]` blocks; these blocks also work
 inside Markdown quotes and lists. Explicit `\vec{v}` notation renders with both a vector arrow and
 a bold symbol, while `\mathbf{v}` remains available for bold-vector notation.
+Inline dollar formulas containing TeX commands also accept inner padding, for example
+`$ \dot x=Ax+Bu $` or `$ \frac{dy}{dx} $`. Ordinary currency such as `$5 and $10` or
+`$ 5 and $ 10` remains prose; inline formulas close at the first unescaped dollar.
 
 Math keeps its bundled KaTeX fonts when the interface font changes. `\binom61` renders
 6 above 1 inside full-height parentheses, without a fraction bar. Fraction bars follow
@@ -1287,10 +1511,10 @@ electron-builder arguments after the script path:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build-windows.ps1
 ```
 
-Windows packages use `@iriscat/mini-electron` installer 0.1.12 or newer. Its
-Windows runtime channel selects 0.1.15, including the DirectComposition latency
-handle fix; the macOS channel remains independent. Native SQLite, IPC frame
-identity, clipboard/keyboard/OLE input, selection colors, and IME remain supported.
+Windows packages use `@iriscat/mini-electron` installer 0.1.12. Its Windows runtime
+channel selects 0.1.15, including the DirectComposition latency handle fix; the macOS
+channel remains independent. Native SQLite, IPC frame identity,
+clipboard/keyboard/OLE input, selection colors, and IME remain supported.
 To package an unpublished local runtime instead, build its checkout with
 `python build.py --package-dist` and select that distribution explicitly (PowerShell):
 
@@ -1300,11 +1524,53 @@ npm run build:windows
 Remove-Item Env:MINI_ELECTRON_DIST_PATH
 ```
 
+Update the native runtime explicitly before packaging an existing checkout:
+
+```bash
+npx mini-electron --update-runtime 0.1.15
+node -p "require('@iriscat/mini-electron/dist/version.json').runtimeVersion"
+```
+
+For a reproducible fresh Windows install, set `MINI_ELECTRON_RUNTIME_VERSION=0.1.15`
+when running `npm ci`. The npm lockfile pins the installer, not the native runtime;
+ordinary postinstall reuses an already valid distribution instead of refreshing it.
+
+For a local unsigned NSIS candidate with signing credentials absent and publishing disabled:
+
+```bash
+npm exec -- cross-env CSC_IDENTITY_AUTO_DISCOVERY=false \
+  npm run build:desktop -- --win nsis --x64 --publish never
+```
+
 The output includes `OMP-Desktop-Setup-<version>-x64.exe`, its `.blockmap`, a `.zip`, and
 `latest.yml` (or the prerelease channel's metadata) in `packages/desktop/release`.
 Windows runtime builds disable Inspector/CDP, so the CDP-based
 `PASEO_DESKTOP_SMOKE=1` check is not supported there. Verify the real native window and
 bundled CLI/daemon instead; do not enable Inspector or bypass IPC frame checks to pass a smoke.
+
+Run the actual unpacked Windows application on an unlocked interactive desktop:
+
+```bash
+node packages/desktop/e2e/packaged-app-smoke.js \
+  --app packages/desktop/release/win-unpacked
+```
+
+The Windows driver uses a copied official runtime, isolated native profile paths,
+real renderer/preload/IPC/daemon/CLI/terminal/OMP, and synthetic numeric SQLite
+fixtures. It checks maximize/restore/minimize presentation, companion assets and
+native menu input, and Chinese Usage ranges/refresh. Native screen captures reject
+foreign-window overlap and use an owned opaque backing for transparent gaps.
+Only the copied main is temporarily topmost during window/Usage surface scenarios;
+its original native flag is checked after restoration and before companion tests.
+Other programs are never hidden, moved, or reconfigured.
+Input targets only verified owned windows; initial foreground acquisition does
+not loosen OS foreground policy or force repaint during restore measurements.
+Pet input waits for genuine, authenticated interactivity IPC to transition from an
+outside false state to a fresh true state for the same run, process, and pet HWND.
+The passive observer discards superseded events and never changes input state or
+opens the menu itself. Native ownership and `HTCLIENT` are safety checks, not proof
+that the runtime has stopped ignoring mouse events.
+Upstream contract failures remain failures, not skipped or replaced by mock bridges.
 
 To exercise renderer-loss recovery on Windows with a freshly built local runtime:
 
@@ -1435,11 +1701,10 @@ The Web export is `packages/app/dist`. These commands build artifacts; they do n
 ### Cloudflare Pages
 
 ```bash
-./deploy.sh
-# or: npm run deploy:web
+npm run deploy:web
 ```
 
-`deploy.sh` builds the Web export and runs `wrangler pages deploy` against project `omp-desktop` on branch `main`. Override with `CF_PAGES_PROJECT` / `CF_PAGES_BRANCH` if needed. SPA routes fall back through `packages/app/public/_redirects`. Pairing links should use the Pages origin as `app.baseUrl`.
+`scripts/deploy-webui.sh` builds the Web export and runs `wrangler pages deploy` against project `omp-desktop` on branch `main`. Authenticate Wrangler to the account that owns the Pages project before deploying; merging the fork does not update the hosted mobile site. Override with `CF_PAGES_PROJECT` / `CF_PAGES_BRANCH` if needed. SPA routes fall back through `packages/app/public/_redirects`. Pairing links should use the Pages origin as `app.baseUrl`.
 
 Deploy the `paseo-relay` repository using its `deployment/self-hosted/compose.yaml`, `Caddyfile`, and `.env.example`. That deployment serves both your WSS relay and the Web export on your own domains, with automatic HTTPS and SPA route fallback. The relay machine does not need OMP or access to the daemon's private listening port.
 
@@ -1521,7 +1786,8 @@ node packages/desktop/e2e/pet-layout-smoke.js
 The smoke briefly opens a non-focusing companion with an isolated temporary profile.
 It covers changing captions and task counts, all three sizes, main-window zoom,
 viewport changes, and opaque/transparent pointer targets without calling a model.
-Set `ELECTRON_PATH` to use an existing Electron executable instead of the npm binary.
+It uses an owned copy of the installed official Windows 0.1.15 runtime; stock
+Electron and legacy renderer-result wrappers are not used as fallbacks.
 
 ## License
 

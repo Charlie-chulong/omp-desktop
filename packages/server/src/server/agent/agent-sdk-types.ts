@@ -19,6 +19,7 @@ import type {
   OmpMemorySettings,
   OmpMemorySettingsPatch,
 } from "@omp-desktop/protocol/messages";
+import type { OmpStatsRange, OmpStatsResult } from "@omp-desktop/protocol/omp-stats";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ImageGenerationRuntimeConfig } from "../daemon-config-store.js";
 
@@ -436,6 +437,8 @@ export type AgentTimelineItem =
       text: string;
       messageId?: string;
       presentation?: AssistantMessagePresentation;
+      /** Original native custom record metadata; never interpreted as foreground-turn authority. */
+      customMessage?: { customType: string; details?: unknown };
     }
   | { type: "reasoning"; text: string }
   | ToolCallTimelineItem
@@ -851,6 +854,7 @@ export interface AgentClient {
   isAvailable(signal?: AbortSignal): Promise<boolean>;
   getDiagnostic?(): Promise<{ diagnostic: string }>;
   getOmpProviderManagement?(): Promise<OmpProviderManagement>;
+  getOmpStats?(range: OmpStatsRange): Promise<OmpStatsResult>;
   consumeOmpCodexResetCredit?(
     credentialId: number,
     creditId: string,

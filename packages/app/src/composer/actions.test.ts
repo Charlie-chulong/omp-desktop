@@ -24,7 +24,6 @@ import {
   editQueuedComposerMessage,
   findGithubItemByOption,
   isAttachmentSelectedForGithubItem,
-  moveQueuedComposerMessage,
   moveQueuedComposerMessageTo,
   openComposerAttachment,
   pickAndPersistImages,
@@ -788,62 +787,6 @@ describe("queueComposerMessage", () => {
   });
 });
 
-describe("moveQueuedComposerMessage", () => {
-  it("moves pending messages in both directions without changing their contents or other queues", () => {
-    const messages: QueuedComposerMessage[] = [
-      { id: "A", text: "做 A", attachments: [] },
-      { id: "B", text: "做 B", attachments: [] },
-      {
-        id: "C",
-        text: "  做 C\nKeep exact text.  ",
-        attachments: [
-          { kind: "image", metadata: imageWithId("queued-image") },
-          reviewWorkspaceAttachment("Keep the queued review snapshot."),
-        ],
-      },
-    ];
-    const other = [{ id: "other", text: "another conversation", attachments: [] }];
-    const queue = createFakeQueue(
-      new Map([
-        ["agent", messages],
-        ["other", other],
-      ]),
-    );
-    const move = (offset: -1 | 1) =>
-      moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset, queue });
-
-    move(-1);
-    move(-1);
-    expect(queue.state.get("agent")).toEqual([messages[2], messages[0], messages[1]]);
-    expect(queue.state.get("agent")?.[0]).toBe(messages[2]);
-    expect(queue.state.get("agent")?.[0]?.attachments).toBe(messages[2]!.attachments);
-    expect(messages.map((message) => message.id)).toEqual(["A", "B", "C"]);
-    expect(queue.state.get("other")).toBe(other);
-
-    move(1);
-    expect(queue.state.get("agent")).toEqual([messages[0], messages[2], messages[1]]);
-  });
-
-  it.each([
-    { agentId: "agent", messageId: "A", offset: -1 as const },
-    { agentId: "agent", messageId: "B", offset: 1 as const },
-    { agentId: "agent", messageId: "already-submitted", offset: -1 as const },
-    { agentId: "missing", messageId: "A", offset: 1 as const },
-  ])("ignores an unavailable move: $agentId/$messageId/$offset", (input) => {
-    const messages = [
-      { id: "A", text: "first pending", attachments: [] },
-      { id: "B", text: "last pending", attachments: [] },
-    ];
-    const queue = createFakeQueue(new Map([["agent", messages]]));
-    const before = queue.state;
-
-    moveQueuedComposerMessage({ ...input, queue });
-
-    expect(queue.state).toBe(before);
-    expect(queue.state.get("agent")).toEqual(messages);
-  });
-});
-
 describe("moveQueuedComposerMessageTo", () => {
   it("moves the third pending message directly to first and back without changing any payload", () => {
     const messages: QueuedComposerMessage[] = [
@@ -911,6 +854,37 @@ describe("moveQueuedComposerMessageTo", () => {
     expect(queue.state.get("agent")).toEqual([messages[2], messages[1], added]);
     expect(queue.state.get("agent")?.[2]).toBe(added);
     expect(queue.state.get("agent")?.some((message) => message.id === "A")).toBe(false);
+  });
+
+  it("uses the latest message contents and attachments when a pending drag is committed", () => {
+    const messages: QueuedComposerMessage[] = [
+      { id: "A", text: "first", attachments: [] },
+      { id: "B", text: "second", attachments: [] },
+      { id: "C", text: "original draft", attachments: [] },
+    ];
+    const queue = createFakeQueue(new Map([["agent", messages]]));
+    const drop = () =>
+      moveQueuedComposerMessageTo({
+        agentId: "agent",
+        messageId: "C",
+        targetMessageId: "A",
+        queue,
+      });
+    const updated: QueuedComposerMessage = {
+      id: "C",
+      text: "  Updated draft\nKeep exact text.  ",
+      attachments: [
+        { kind: "image", metadata: imageWithId("updated-dragged-image") },
+        reviewWorkspaceAttachment("Updated queued review."),
+      ],
+    };
+    queue.state = new Map([["agent", [messages[0]!, messages[1]!, updated]]]);
+
+    drop();
+
+    expect(queue.state.get("agent")).toEqual([updated, messages[0], messages[1]]);
+    expect(queue.state.get("agent")?.[0]).toBe(updated);
+    expect(queue.state.get("agent")?.[0]?.attachments).toBe(updated.attachments);
   });
 
   it.each([
@@ -1003,6 +977,24 @@ describe("sendQueuedComposerMessageNow", () => {
     expect(result).toEqual({ status: "submitted" });
     expect(queue.state.get("agent")).toBeUndefined();
     expect(submitted).toEqual([{ text: "send me", attachments: [review] }]);
+  });
+
+  it("does not submit the same queued message twice while its first send is pending", async () => {
+    const queue = createFakeQueue(
+      new Map([["agent", [{ id: "msg-1", text: "send once", attachments: [] }]]]),
+    );
+    const submission = Promise.withResolvers<void>();
+    const submitMessage = vi.fn(() => submission.promise);
+    const input = { agentId: "agent", messageId: "msg-1", queue, submitMessage };
+
+    const firstSend = sendQueuedComposerMessageNow(input);
+    expect(queue.read("agent")).toEqual([]);
+    await expect(sendQueuedComposerMessageNow(input)).resolves.toEqual({ status: "missing" });
+    expect(submitMessage).toHaveBeenCalledTimes(1);
+
+    submission.resolve();
+    await expect(firstSend).resolves.toEqual({ status: "submitted" });
+    expect(queue.state.get("agent")).toBeUndefined();
   });
 
   it("restores the queued entry to the front and surfaces the error message on failure", async () => {

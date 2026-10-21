@@ -137,6 +137,14 @@ export const fr: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Conversations en attente",
+      hint: "Maintenez une poignée et faites-la glisser. Les tours en cours continuent.",
+      dragConversation: "Réordonner {{title}}",
+      dragMessage: "Réordonner le message en attente : {{text}}",
+      messageCount: "Messages en attente : {{count}}",
+      untitledConversation: "Conversation sans titre · {{id}}",
+    },
     placeholders: {
       desktop: "Envoyez un message à l'agent, marquez@filesou utilisez/commandset/skills",
       mobile: "Message,@files,/commands",
@@ -174,14 +182,9 @@ export const fr: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Modifier le message en file d'attente",
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
-      moveQueuedMessageEarlier: "Avancer le message en file d’attente",
-      moveQueuedMessageLater: "Reculer le message en file d’attente",
-      dragQueuedMessage: "Faire glisser pour réordonner le message en file d’attente",
       dragQueuedMessageHint:
         "Appuyez sur Espace pour saisir, les flèches pour déplacer, Espace pour déposer ou Échap pour annuler.",
       queuedConversationPosition: "Conversation en file d’attente {{position}} sur {{count}}",
-      moveQueuedConversationEarlier: "Avancer la conversation en file d’attente",
-      moveQueuedConversationLater: "Reculer la conversation en file d’attente",
       openImage: "Ouvrir la pièce jointe de l'image",
       removeImage: "Supprimer l'image jointe",
       removeFile: "Remove file attachment",
@@ -628,6 +631,14 @@ export const fr: TranslationResources = {
         refreshing: "Actualisation des fichiers",
         hideHiddenFiles: "Masquer les fichiers cachés",
         showHiddenFiles: "Afficher les fichiers cachés",
+        selectEntries: "Sélectionner des fichiers",
+        finishSelection: "Terminer la sélection",
+        selectedCount: "{{count}} élément(s) sélectionné(s)",
+        moveSelection: "Déplacer la sélection",
+        chooseDestination: "Choisir un dossier de destination",
+        moveHere: "Déplacer ici",
+        cancelMove: "Annuler le déplacement",
+        selectEntry: "Sélectionner {{name}}",
       },
       empty: {
         noFiles: "Aucun fichier",
@@ -2099,7 +2110,8 @@ export const fr: TranslationResources = {
     groupInfo: "À propos de{{title}}",
     sections: {
       general: "Général",
-      connections: "Connexions",
+      connections: "Connexions aux hôtes",
+      chatBehavior: "Comportement du chat",
       appearance: "Apparence",
       editor: "Éditeur",
       shortcuts: "Raccourcis",
@@ -2231,7 +2243,8 @@ export const fr: TranslationResources = {
       },
       showTurnFileChanges: {
         label: "Afficher les fichiers après chaque réponse",
-        description: "Afficher les fichiers modifiés au-dessus des statistiques de la réponse terminée",
+        description:
+          "Afficher les fichiers modifiés au-dessus des statistiques de la réponse terminée",
       },
       autoExpandReasoning: {
         label: "Toujours afficher le raisonnement",

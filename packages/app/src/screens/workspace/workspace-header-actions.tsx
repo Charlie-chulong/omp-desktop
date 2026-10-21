@@ -5,6 +5,7 @@ import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HeaderToggleButton } from "@/components/headers/header-toggle-button";
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import type { Theme } from "@/styles/theme";
 
@@ -40,6 +41,7 @@ export function WorkspaceHeaderActions({
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
+  const showPersistentActions = useShowPersistentActions();
   const bottomLabel = t(
     bottomPaneOpen ? "workspace.tabs.terminalPanel.hide" : "workspace.tabs.terminalPanel.show",
   );
@@ -95,7 +97,8 @@ export function WorkspaceHeaderActions({
         <DropdownMenu>
           <DropdownMenuTrigger
             testID="workspace-header-new-tab"
-            style={styles.action}
+            style={[styles.action, showPersistentActions && styles.touchAction]}
+            hitSlop={showPersistentActions ? 4 : undefined}
             disabled={disabled}
             accessibilityRole="button"
             accessibilityLabel={t("workspace.tabs.actions.newTab")}
@@ -119,5 +122,9 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.lg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  touchAction: {
+    width: theme.spacing[8],
+    height: theme.spacing[8],
   },
 }));

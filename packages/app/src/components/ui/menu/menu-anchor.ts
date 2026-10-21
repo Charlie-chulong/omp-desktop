@@ -1,4 +1,5 @@
 import type { View } from "react-native";
+import { isWeb } from "@/constants/platform";
 
 /**
  * Where a floating menu surface goes relative to the thing that opened it.
@@ -26,6 +27,11 @@ export interface Size {
 const EDGE_PADDING = 8;
 
 export function measureElement(element: View): Promise<Rect> {
+  if (isWeb && "getBoundingClientRect" in element) {
+    const rect = (element as View & HTMLElement).getBoundingClientRect();
+    return Promise.resolve({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+  }
+  // The app's native Hermes runtime does not provide Promise.withResolvers.
   return new Promise((resolve) => {
     element.measureInWindow((x, y, width, height) => {
       resolve({ x, y, width, height });

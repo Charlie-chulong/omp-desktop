@@ -80,15 +80,26 @@ export default defineConfig({
       },
     },
   },
-  // Reanimated ships one file per platform and picks between them by extension
-  // (`findHostInstance.web.js`). Vite's dependency optimizer does not apply `resolve.extensions`,
-  // so it scans the native files and dies on imports react-native-web has no answer for.
-  // Unbundled, the same imports go through the resolver below and land on the web files.
-  // Expo's clipboard entry also contains JSX and pulls native core modules into
-  // the scan. Leave both unbundled so browser tests can mock the clipboard boundary.
+  // Reanimated and Expo Image ship native and web versions of their dependencies.
+  // Vite's dependency optimizer does not apply resolve.extensions, so scanning
+  // picks native modules that react-native-web cannot load. Leave them unbundled
+  // so the resolver selects the .web entries. Expo's clipboard entry also contains
+  // JSX and pulls native core modules into the scan; browser tests mock that boundary.
   optimizeDeps: {
-    include: ["react/jsx-runtime"],
-    exclude: ["react-native-reanimated", "expo-clipboard", "expo-modules-core"],
+    include: [
+      "react/jsx-runtime",
+      "@tanstack/react-query",
+      "@dnd-kit/core",
+      "@dnd-kit/sortable",
+      "@dnd-kit/utilities",
+    ],
+    exclude: [
+      "react-native-reanimated",
+      "expo-image",
+      "expo-clipboard",
+      "expo-modules-core",
+      "expo-router",
+    ],
   },
   // The globals a React Native bundler defines, which esbuild is no longer there to supply for
   // the package excluded above.

@@ -20,10 +20,17 @@ export interface CodexAccountQuotaFetchOptions {
 
 const CodexUsageResponseSchema = z.object({
   plan_type: z.unknown().optional(),
-  rate_limit: z.object({
-    primary_window: z.unknown().optional(),
-    secondary_window: z.unknown().optional(),
-  }),
+  rate_limit: z.unknown().optional(),
+  credits: z.unknown().optional(),
+});
+const CodexRateLimitSchema = z.object({
+  primary_window: z.unknown().optional(),
+  secondary_window: z.unknown().optional(),
+});
+const CodexUsageCreditsSchema = z.object({
+  has_credits: z.boolean(),
+  unlimited: z.boolean(),
+  balance: z.unknown().optional(),
 });
 const CodexUsageWindowSchema = z.object({
   used_percent: z.unknown().optional(),
@@ -78,6 +85,18 @@ function parseWindow(value: unknown): CodexUsageWindow | null {
   };
 }
 
+function parseCredits(value: unknown): OmpProviderAccountQuota["credits"] {
+  const parsed = CodexUsageCreditsSchema.safeParse(value);
+  if (!parsed.success) return null;
+  // Codex reports a decimal string, not a reset-card count or a currency amount.
+  const balance = typeof parsed.data.balance === "string" ? parsed.data.balance.trim() : null;
+  return {
+    hasCredits: parsed.data.has_credits,
+    unlimited: parsed.data.unlimited,
+    balance: balance !== null && /^\d+(?:\.\d+)?$/.test(balance) ? balance : null,
+  };
+}
+
 function failure(
   status: "unavailable" | "error",
   error: string,
@@ -95,48 +114,74 @@ function failure(
   };
 }
 
+function selectQuotaWindow(
+  primary: CodexUsageWindow | null,
+  secondary: CodexUsageWindow | null,
+  durationSeconds: number,
+  legacyWindow: CodexUsageWindow | null,
+): CodexUsageWindow | null {
+  // Explicit durations take precedence over the historical plan/position mapping.
+  // Unknown explicit durations must not be relabelled as either known window.
+  if (primary?.durationSeconds === durationSeconds) return primary;
+  if (secondary?.durationSeconds === durationSeconds) return secondary;
+  return legacyWindow && !legacyWindow.hasDuration ? legacyWindow : null;
+}
+
+function resolveQuotaWindows(
+  primary: CodexUsageWindow | null,
+  secondary: CodexUsageWindow | null,
+  hasFiveHourLimit: boolean,
+): { fiveHour: CodexUsageWindow | null; weekly: CodexUsageWindow | null } | { error: string } {
+  const fiveHour = selectQuotaWindow(primary, secondary, 18_000, hasFiveHourLimit ? primary : null);
+  const weekly = selectQuotaWindow(
+    primary,
+    secondary,
+    604_800,
+    hasFiveHourLimit ? secondary : primary,
+  );
+  if (!fiveHour && !weekly) {
+    return { error: "Codex usage response did not include a recognized quota window" };
+  }
+  if (!fiveHour && hasFiveHourLimit && !primary && secondary && !secondary.hasDuration) {
+    return { error: "Codex usage response did not include the five-hour limit" };
+  }
+  return { fiveHour, weekly };
+}
+
 function parseUsageResponse(payload: unknown, now: () => number): OmpProviderAccountQuota {
   const parsed = CodexUsageResponseSchema.safeParse(payload);
   if (!parsed.success) {
     return failure("error", "Codex usage response did not include rate limits", now);
   }
-  const primary = parseWindow(parsed.data.rate_limit.primary_window);
-  const secondary = parseWindow(parsed.data.rate_limit.secondary_window);
+  const credits = parseCredits(parsed.data.credits);
+  const rateLimit = CodexRateLimitSchema.safeParse(parsed.data.rate_limit);
+  if (!rateLimit.success) {
+    return {
+      ...failure("error", "Codex usage response did not include rate limits", now),
+      credits,
+    };
+  }
+  const primary = parseWindow(rateLimit.data.primary_window);
+  const secondary = parseWindow(rateLimit.data.secondary_window);
   const planLabel = typeof parsed.data.plan_type === "string" ? parsed.data.plan_type : null;
-  const hasFiveHourLimit = !isProPlan(planLabel);
-  // An explicitly reported duration takes precedence over the historical plan/position mapping.
-  // Unknown explicit durations must not be relabelled as either known window.
-  const explicitFiveHour =
-    primary?.durationSeconds === 18_000
-      ? primary
-      : secondary?.durationSeconds === 18_000
-        ? secondary
-        : null;
-  const explicitWeekly =
-    primary?.durationSeconds === 604_800
-      ? primary
-      : secondary?.durationSeconds === 604_800
-        ? secondary
-        : null;
-  const legacyWeekly = hasFiveHourLimit ? secondary : primary;
-  const fiveHour =
-    explicitFiveHour ?? (hasFiveHourLimit && primary && !primary.hasDuration ? primary : null);
-  const total = explicitWeekly ?? (legacyWeekly && !legacyWeekly.hasDuration ? legacyWeekly : null);
-  if (!fiveHour && !total) {
-    return failure("error", "Codex usage response did not include a recognized quota window", now);
+  const windows = resolveQuotaWindows(primary, secondary, !isProPlan(planLabel));
+  if ("error" in windows) {
+    return {
+      ...failure("error", windows.error, now),
+      credits,
+    };
   }
-  if (!fiveHour && hasFiveHourLimit && !primary && secondary && !secondary.hasDuration) {
-    return failure("error", "Codex usage response did not include the five-hour limit", now);
-  }
+  const { fiveHour, weekly } = windows;
   const fiveHourUsedPct = fiveHour?.usedPct ?? null;
   return {
     status: "available",
     planLabel,
+    credits,
     fiveHourUsedPct,
     fiveHourLimitReached: fiveHourUsedPct === null ? null : fiveHourUsedPct >= 100,
     fiveHourResetsAt: fiveHour?.resetsAt ?? null,
-    weeklyUsedPct: total?.usedPct ?? null,
-    weeklyResetsAt: total?.resetsAt ?? null,
+    weeklyUsedPct: weekly?.usedPct ?? null,
+    weeklyResetsAt: weekly?.resetsAt ?? null,
     fetchedAt: new Date(now()).toISOString(),
   };
 }

@@ -19,15 +19,7 @@ import {
   X,
 } from "lucide-react-native";
 import type { TFunction } from "i18next";
-import {
-  type ReactElement,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, type PressableStateCallbackType, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -57,18 +49,8 @@ import {
   OMP_PROVIDER_MANAGEMENT_STALE_TIME_MS,
   ompProviderManagementQueryKey,
   refreshOmpAccountQuotaManagement,
-  useOmpQuotaClock,
-  useOmpQuotaReachedRefresh,
 } from "@/hooks/use-omp-account-quota";
 import { useOmpProviderAccountNotes } from "@/hooks/use-omp-provider-account-notes";
-import { ProviderUsageBalanceBar } from "@/provider-usage/balance-bar";
-import { ProviderUsageWindowBar } from "@/provider-usage/window-bar";
-import { OmpExtraUsageDetails } from "@/provider-usage/extra-usage";
-import { formatOmpModelQuotaLabel } from "@/provider-usage/omp-account";
-import { resolveLoginProviderUsages } from "@/provider-usage/login-usage";
-import { ProviderUsageCard } from "@/provider-usage/card";
-import type { ProviderUsage } from "@/provider-usage/types";
-import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import { settingsStyles } from "@/styles/settings";
@@ -94,18 +76,6 @@ import {
 } from "./omp-custom-provider-config";
 import { updateOmpProviderAccountNote } from "./omp-provider-account-notes";
 import { formatOmpAccountIdentity, resolveOmpLoginAction } from "./omp-provider-accounts";
-import {
-  OmpCodexQuotaDetails,
-  OmpQuotaServerContext,
-  OmpQuotaCountdown,
-} from "./omp-codex-quota-details";
-import { OmpClaudeLimitResetDetails } from "./omp-claude-limit-reset-details";
-import {
-  formatOmpQuotaResetTime,
-  resolveOmpRemainingQuotaPct,
-  shouldShowOmpFiveHourQuota,
-} from "./omp-provider-quota";
-import { OmpClaudeQuotaNotices } from "./omp-claude-quota-notices";
 import {
   groupOmpDiscoveredModels,
   resolveProviderDiscoveredModels,
@@ -296,171 +266,8 @@ type OmpProviderAccount = NonNullable<
   OmpProviderManagement["loginProviders"][number]["accounts"]
 >[number];
 
-function OmpAccountQuotaWindow({
-  label,
-  usedPct,
-  resetsAt,
-  status,
-  limitReached = false,
-}: {
-  label: string;
-  usedPct: number | null | undefined;
-  resetsAt: string | null | undefined;
-  status: OmpProviderAccount["quota"] extends infer Quota
-    ? Quota extends { status: infer Status }
-      ? Status
-      : undefined
-    : undefined;
-  limitReached?: boolean;
-}) {
-  const { t, i18n } = useTranslation();
-  const { theme } = useUnistyles();
-  const remainingPct = resolveOmpRemainingQuotaPct(usedPct);
-  const reached = limitReached || remainingPct === 0;
-  let toneColor = theme.colors.foregroundMuted;
-  if (reached) {
-    toneColor = theme.colors.destructive;
-  } else if (remainingPct !== null) {
-    toneColor =
-      remainingPct <= 30 ? theme.colors.palette.amber[500] : theme.colors.palette.green[500];
-  }
-  const remainingText =
-    remainingPct !== null
-      ? t("settings.providers.omp.multiAccount.quotaRemaining", {
-          remaining: Math.round(remainingPct),
-        })
-      : null;
-  const statusText = reached
-    ? t("providerUsage.limitReached")
-    : (remainingText ??
-      t(
-        status !== "available"
-          ? "settings.providers.omp.multiAccount.quotaUnavailable"
-          : "settings.providers.omp.multiAccount.quotaUnknown",
-      ));
-  const resetTime = formatOmpQuotaResetTime(resetsAt, i18n.language);
-  const accessibilityValue = useMemo(
-    () => ({ min: 0, max: 100, now: Math.round(remainingPct ?? 0) }),
-    [remainingPct],
-  );
-  return (
-    <View style={sheetStyles.accountQuotaWindow}>
-      <View style={sheetStyles.accountQuotaHeader}>
-        <Text style={sheetStyles.accountQuotaLabel}>{label}</Text>
-        <Text style={[sheetStyles.accountQuotaStatus, { color: toneColor }]}>{statusText}</Text>
-      </View>
-      {remainingPct !== null ? (
-        <View
-          accessibilityRole="progressbar"
-          accessibilityLabel={label}
-          accessibilityValue={accessibilityValue}
-          style={sheetStyles.accountQuotaTrack}
-        >
-          <View
-            style={[
-              sheetStyles.accountQuotaFill,
-              { width: `${remainingPct}%`, backgroundColor: toneColor },
-            ]}
-          />
-        </View>
-      ) : null}
-      {resetTime ? (
-        <>
-          <OmpQuotaCountdown resetsAt={resetsAt} />
-          <Text style={sheetStyles.accountQuotaReset}>
-            {t("settings.providers.omp.multiAccount.quotaResetsAt", { time: resetTime })}
-          </Text>
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-function OmpAccountQuotaSummary({
-  credentialId,
-  quota,
-  providerId,
-}: {
-  credentialId: number;
-  quota?: OmpProviderAccount["quota"];
-  providerId: string;
-}) {
-  const { t } = useTranslation();
-  const serverId = useContext(OmpQuotaServerContext);
-  const resetTimes = [
-    quota?.weeklyResetsAt,
-    quota?.fiveHourResetsAt,
-    quota?.modelRateLimit?.resetsAt,
-    ...(quota?.modelWindows ?? []).map((window) => window.resetsAt),
-  ];
-  const now = useOmpQuotaClock(resetTimes.some(Boolean));
-  useOmpQuotaReachedRefresh(serverId, resetTimes, now);
-  return (
-    <View style={sheetStyles.accountQuota} testID={`omp-provider-account-quota-${credentialId}`}>
-      <OmpAccountQuotaWindow
-        label={t("agentControls.quota.weekly")}
-        usedPct={quota?.weeklyUsedPct}
-        resetsAt={quota?.weeklyResetsAt}
-        status={quota?.status}
-      />
-      {shouldShowOmpFiveHourQuota(quota, providerId) ? (
-        <OmpAccountQuotaWindow
-          label={t("settings.providers.omp.multiAccount.quotaFiveHour")}
-          usedPct={quota?.fiveHourUsedPct}
-          resetsAt={quota?.fiveHourResetsAt}
-          status={quota?.status}
-          limitReached={quota?.fiveHourLimitReached === true}
-        />
-      ) : null}
-      {(quota?.modelWindows ?? []).map((window) => (
-        <OmpAccountQuotaWindow
-          key={window.model}
-          label={formatOmpModelQuotaLabel(window.model, t)}
-          usedPct={window.usedPct}
-          resetsAt={window.resetsAt}
-          status={quota?.status}
-        />
-      ))}
-      {quota?.extraUsage ? <OmpExtraUsageDetails extraUsage={quota.extraUsage} /> : null}
-      {providerId === "anthropic" ? <OmpClaudeQuotaNotices quota={quota} /> : null}
-    </View>
-  );
-}
-
-function OmpProviderAccountQuotaDetails({
-  account,
-  providerId,
-  accountLabel,
-}: {
-  account: OmpProviderAccount;
-  providerId: string;
-  accountLabel: string;
-}) {
-  if (providerId !== "openai-codex" && providerId !== "anthropic") return null;
-  return (
-    <>
-      <OmpAccountQuotaSummary
-        credentialId={account.credentialId}
-        quota={account.quota}
-        providerId={providerId}
-      />
-      {providerId === "openai-codex" ? (
-        <OmpCodexQuotaDetails account={account} accountLabel={accountLabel} />
-      ) : (
-        <>
-          {account.quota?.planLabel ? (
-            <Text style={sheetStyles.mutedText}>{account.quota.planLabel}</Text>
-          ) : null}
-          <OmpClaudeLimitResetDetails account={account} accountLabel={accountLabel} />
-        </>
-      )}
-    </>
-  );
-}
-
 function OmpProviderAccountRow({
   account,
-  providerId,
   index,
   note,
   editing,
@@ -480,7 +287,6 @@ function OmpProviderAccountRow({
   onMoveDown,
 }: {
   account: OmpProviderAccount;
-  providerId: string;
   index: number;
   note?: string;
   editing: boolean;
@@ -559,11 +365,6 @@ function OmpProviderAccountRow({
                 {note}
               </Text>
             ) : null}
-            <OmpProviderAccountQuotaDetails
-              account={account}
-              providerId={providerId}
-              accountLabel={accountLabel}
-            />
           </View>
           <View style={sheetStyles.accountActions}>
             {canMoveUp || canMoveDown ? (
@@ -649,7 +450,6 @@ interface OmpProviderSummaryRowProps {
   onChangeAccountNote?: (value: string) => void;
   onSaveAccountNote?: () => void;
   onCancelAccountNote?: () => void;
-  usages?: ProviderUsage[];
 }
 
 function OmpProviderSummaryActions({
@@ -807,7 +607,6 @@ function OmpProviderSummaryActions({
 
 function OmpProviderAccountListItem({
   account,
-  providerId,
   index,
   credentialIds,
   loginId,
@@ -826,7 +625,6 @@ function OmpProviderAccountListItem({
   onReorderAccounts,
 }: {
   account: OmpProviderAccount;
-  providerId: string;
   index: number;
   credentialIds: number[];
   loginId?: string;
@@ -872,7 +670,6 @@ function OmpProviderAccountListItem({
   return (
     <OmpProviderAccountRow
       account={account}
-      providerId={providerId}
       index={index}
       note={note}
       editing={editing}
@@ -950,7 +747,6 @@ function OmpProviderAccounts({
         <OmpProviderAccountListItem
           key={account.credentialId}
           account={account}
-          providerId={summary.id}
           index={index}
           credentialIds={credentialIds}
           loginId={summary.login?.id}
@@ -1019,7 +815,6 @@ function OmpProviderSummaryRow({
   editingAccountId = null,
   accountNoteDraft = "",
   savingAccountNoteId = null,
-  usages = [],
   onConfigureModels,
   onEdit,
   onLogin,
@@ -1095,26 +890,6 @@ function OmpProviderSummaryRow({
         onLogoutAccount={onLogoutAccount}
         onReorderAccounts={onReorderAccounts}
       />
-      {(usages ?? []).map((usage) => (
-        <View
-          key={usage.providerId}
-          style={sheetStyles.providerUsage}
-          testID={`omp-provider-usage-${usage.providerId}`}
-        >
-          {usage.providerId.startsWith("zhipu-coding-plan:") ? (
-            <ProviderUsageCard usage={usage} compact />
-          ) : (
-            <>
-              {usage.windows.map((window) => (
-                <ProviderUsageWindowBar key={window.id} window={window} />
-              ))}
-              {(usage.balances ?? []).map((balance) => (
-                <ProviderUsageBalanceBar key={balance.id} balance={balance} />
-              ))}
-            </>
-          )}
-        </View>
-      ))}
     </View>
   );
 }
@@ -1854,7 +1629,6 @@ function OmpManagementPanel({
   const supported = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.ompProviderManagement === true,
   );
-  const { view: providerUsageView } = useProviderUsage(serverId, { enabled: visible });
   const [management, setManagement] = useState<OmpProviderManagement | null>(cachedManagement);
   const [configYaml, setConfigYaml] = useState(cachedManagement?.configYaml ?? "");
   const [activeTab, setActiveTab] = useState<OmpManagementTab>("sign-in");
@@ -2369,7 +2143,6 @@ function OmpManagementPanel({
           <OmpProviderSummaryRow
             key={summary.id}
             summary={summary}
-            usages={resolveLoginProviderUsages(providerUsageView, summary.id)}
             loggingInProviderId={loginProviderId}
             loginFlowActive={loginFlow !== null}
             loggingOutProviderId={logoutProviderId}
@@ -2643,11 +2416,7 @@ function OmpManagementPanel({
     );
   }
 
-  return (
-    <OmpQuotaServerContext.Provider value={visible ? serverId : null}>
-      {renderPanel()}
-    </OmpQuotaServerContext.Provider>
-  );
+  return renderPanel();
 }
 export function OmpProviderConfigurationPanel({ serverId }: { serverId: string }) {
   const { refresh } = useProvidersSnapshot(serverId, { enabled: false });
@@ -3332,15 +3101,6 @@ const sheetStyles = StyleSheet.create((theme) => ({
   accountList: {
     paddingBottom: theme.spacing[2],
   },
-  providerUsage: {
-    gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[4],
-    paddingTop: theme.spacing[2],
-    paddingBottom: theme.spacing[3],
-    marginLeft: theme.spacing[4],
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
   accountRow: {
     flexDirection: "column",
     alignItems: "stretch",
@@ -3364,42 +3124,6 @@ const sheetStyles = StyleSheet.create((theme) => ({
     fontFamily: theme.fontFamily.mono,
   },
   accountNote: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  accountQuotaWindow: {
-    gap: theme.spacing[1],
-  },
-  accountQuota: {
-    gap: theme.spacing[1],
-    marginTop: theme.spacing[1],
-  },
-  accountQuotaHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing[2],
-  },
-  accountQuotaLabel: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
-  },
-  accountQuotaStatus: {
-    flexShrink: 1,
-    fontSize: theme.fontSize.sm,
-  },
-  accountQuotaTrack: {
-    height: 5,
-    width: "100%",
-    overflow: "hidden",
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surface2,
-  },
-  accountQuotaFill: {
-    height: "100%",
-    borderRadius: theme.borderRadius.full,
-  },
-  accountQuotaReset: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },

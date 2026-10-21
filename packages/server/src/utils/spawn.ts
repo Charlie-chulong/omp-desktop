@@ -115,6 +115,7 @@ export async function execCommand(
       timeout: options?.timeout,
       maxBuffer: options?.maxBuffer,
       shell,
+      signal: options?.signal,
       windowsHide: true,
     },
     (error, stdout, stderr) => {

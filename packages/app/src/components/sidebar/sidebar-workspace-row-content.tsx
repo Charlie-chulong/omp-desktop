@@ -52,22 +52,35 @@ export function SidebarWorkspaceRowFrame({
     isHovered: boolean;
     contextMenuOpen: boolean;
     onContextMenuOpenChange: (open: boolean) => void;
-    hoverHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
+    hoverHandlers: {
+      onPointerEnter: () => void;
+      onPointerLeave: () => void;
+      onFocus: () => void;
+      onBlur: () => void;
+    };
   }) => ReactNode;
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const handlePointerEnter = useCallback(() => {
     if (!contextMenuOpen) setIsHovered(true);
   }, [contextMenuOpen]);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
   const handleContextMenuOpenChange = useCallback((open: boolean) => {
     setContextMenuOpen(open);
     if (open) setIsHovered(false);
   }, []);
   const hoverHandlers = useMemo(
-    () => ({ onPointerEnter: handlePointerEnter, onPointerLeave: handlePointerLeave }),
-    [handlePointerEnter, handlePointerLeave],
+    () => ({
+      onPointerEnter: handlePointerEnter,
+      onPointerLeave: handlePointerLeave,
+      onFocus: handleFocus,
+      onBlur: handleBlur,
+    }),
+    [handlePointerEnter, handlePointerLeave, handleFocus, handleBlur],
   );
 
   return (
@@ -78,7 +91,7 @@ export function SidebarWorkspaceRowFrame({
       disabled={contextMenuOpen}
     >
       {children({
-        isHovered: isHovered && !contextMenuOpen && !isDragging,
+        isHovered: (isHovered || isFocused) && !contextMenuOpen && !isDragging,
         contextMenuOpen,
         onContextMenuOpenChange: handleContextMenuOpenChange,
         hoverHandlers,
@@ -369,12 +382,14 @@ export function resolveTrailingActionVisibility({
   hasArchiveAction,
   isHovered,
   isTouchPlatform,
+  showPersistentActions = false,
   showShortcut,
 }: {
   workspace: SidebarWorkspaceEntry;
   hasArchiveAction: boolean;
   isHovered: boolean;
   isTouchPlatform: boolean;
+  showPersistentActions?: boolean;
   showShortcut: boolean;
 }): {
   showTrailing: boolean;
@@ -384,8 +399,9 @@ export function resolveTrailingActionVisibility({
   reserveSlotWidth: boolean;
 } {
   const hasTrailing = workspace.statusEnteredAt !== null;
+  const persistent = isTouchPlatform || showPersistentActions;
   const showKebab =
-    Boolean(hasArchiveAction && (isHovered || isTouchPlatform)) && (!showShortcut || isHovered);
+    Boolean(hasArchiveAction && (isHovered || persistent)) && (!showShortcut || isHovered);
   const showTrailing = hasTrailing && !showShortcut && (isHovered || !showKebab);
   return {
     showTrailing,
@@ -395,11 +411,8 @@ export function resolveTrailingActionVisibility({
     // touch, which shows the kebab without ever hovering, never gets one.
     showScrim: showKebab && isHovered,
     renderSlot: hasArchiveAction || hasTrailing,
-    // The slot only holds width for something that permanently sits in it. Trailing content
-    // does; the kebab only does on touch, where there is no hover for it to appear on and so
-    // no scrim to let it overlay the title. Everywhere else the width goes back to the title
-    // and the kebab fades in over its tail.
-    reserveSlotWidth: hasTrailing || (hasArchiveAction && isTouchPlatform),
+    // Reserve space when the action stays visible, including hybrid and keyboard-only input.
+    reserveSlotWidth: hasTrailing || (hasArchiveAction && persistent),
   };
 }
 
