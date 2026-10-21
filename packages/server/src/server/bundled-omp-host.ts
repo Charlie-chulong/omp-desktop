@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { lstat } from "node:fs/promises";
+import type { BigIntStats } from "node:fs";
+import { lstat, open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
+
+export type Sha256FileHasher = (file: string) => Promise<string>;
+export type BundledOmpHostVerifier = (
+  command: string | undefined,
+  env?: NodeJS.ProcessEnv,
+) => Promise<void>;
 
 export const BUNDLED_OMP_HOST = {
   version: "18.12.3",
@@ -22,20 +28,108 @@ export function rejectBundledOmpHostUpdate(env: NodeJS.ProcessEnv = process.env)
   }
 }
 
-export async function sha256RegularFile(file: string): Promise<string> {
-  const info = await lstat(file);
+async function regularFileInfo(file: string): Promise<BigIntStats> {
+  const info = await lstat(file, { bigint: true });
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error(`Expected a regular file, not a symlink or directory: ${file}`);
   }
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
-  return hash.digest("hex");
+  return info;
+}
+
+function sameFileInfo(left: BigIntStats, right: BigIntStats): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.size === right.size &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs &&
+    left.birthtimeNs === right.birthtimeNs
+  );
+}
+
+function changedFile(file: string): Error {
+  return new Error(`File changed while computing SHA-256: ${file}`);
+}
+
+async function sha256StableFile(file: string, before: BigIntStats): Promise<string> {
+  const handle = await open(file, "r");
+  try {
+    // Bind the bytes to the inspected file, not merely to the pathname that
+    // happened to exist before open(). Check both again after consuming it.
+    if (!sameFileInfo(before, await handle.stat({ bigint: true }))) throw changedFile(file);
+    const hash = createHash("sha256");
+    for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
+    if (
+      !sameFileInfo(before, await handle.stat({ bigint: true })) ||
+      !sameFileInfo(before, await regularFileInfo(file))
+    ) {
+      throw changedFile(file);
+    }
+    return hash.digest("hex");
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function sha256RegularFile(file: string): Promise<string> {
+  return sha256StableFile(file, await regularFileInfo(file));
+}
+
+/**
+ * Process-local content reuse only: every lookup inspects the current file.
+ * Callers own this cache's lifetime; no trust is persisted across processes.
+ */
+export function createSha256FileCache(): Sha256FileHasher {
+  const entries = new Map<
+    string,
+    { info: BigIntStats; pending: Promise<string>; checksum?: string }
+  >();
+  return async (file) => {
+    let info: BigIntStats;
+    try {
+      info = await regularFileInfo(file);
+    } catch (error) {
+      entries.delete(file);
+      throw error;
+    }
+    let entry = entries.get(file);
+    if (!entry || !sameFileInfo(entry.info, info)) {
+      entry = { info, pending: sha256StableFile(file, info) };
+      entries.set(file, entry);
+    }
+    if (entry.checksum !== undefined) return entry.checksum;
+    try {
+      const checksum = await entry.pending;
+      // A concurrent waiter must still see the same file when its hash settles.
+      if (!sameFileInfo(entry.info, await regularFileInfo(file))) throw changedFile(file);
+      entry.checksum = checksum;
+      return checksum;
+    } catch (error) {
+      if (entries.get(file) === entry) entries.delete(file);
+      throw error;
+    }
+  };
+}
+
+/** A fresh verifier is required for every provider launch or management operation. */
+export function createBundledOmpHostVerifier(): BundledOmpHostVerifier {
+  const hashFile = createSha256FileCache();
+  return (command, env = process.env) => verifyBundledOmpHost(command, env, hashFile);
 }
 
 /** No cache: replacement between daemon boot and a new session must be detected. */
 export async function assertBundledOmpHost(
   command: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  return verifyBundledOmpHost(command, env, sha256RegularFile);
+}
+
+async function verifyBundledOmpHost(
+  command: string | undefined,
+  env: NodeJS.ProcessEnv,
+  hashFile: Sha256FileHasher,
 ): Promise<void> {
   if (!hasBundledOmpPlugins(env)) return;
   if (process.platform !== BUNDLED_OMP_HOST.platform || process.arch !== BUNDLED_OMP_HOST.arch) {
@@ -48,7 +142,7 @@ export async function assertBundledOmpHost(
   }
   let checksum: string;
   try {
-    checksum = await sha256RegularFile(command);
+    checksum = await hashFile(command);
   } catch (error) {
     throw new Error(
       `The plugin-bound OMP host is missing or unreadable at ${command}. Reinstall the private Desktop package.`,

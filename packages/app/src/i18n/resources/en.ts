@@ -377,6 +377,9 @@ export const en = {
       reconnecting: "Reconnecting",
       timelineSyncFailed: "Couldn't refresh agent history.",
       timelineSyncRetrying: "Retrying…",
+      bundledPluginsVerifying: "Verifying bundled plugins…",
+      bundledPluginsPreparing: "Preparing bundled plugins…",
+      bundledPluginsInstalling: "Installing bundled plugins for the first time…",
       historyUnavailableTitle: "Conversation history unavailable",
       historyUnavailableMissing:
         "This agent still exists, but its provider conversation file was removed. Any cached messages above are read-only.",

@@ -85,6 +85,33 @@ function taskTexts(tasks: ReadonlyArray<{ text: string }>): string[] {
   return tasks.map((task) => task.text);
 }
 
+describe("transient agent initialization progress", () => {
+  it("invalidates callbacks when the session client changes and does not restore old phases", () => {
+    initializeTestSession();
+    const store = useSessionStore.getState();
+    const scope = store.beginAgentInitializationProgress("test-server", "agent")!;
+    const progress = {
+      status: "agent_initialization_progress" as const,
+      agentId: "agent",
+      requestId: "request",
+      phase: "verifying" as const,
+    };
+    store.updateAgentInitializationProgress("test-server", scope, progress);
+    expect(
+      useSessionStore.getState().sessions["test-server"]?.agentInitializationProgress.get("agent"),
+    ).toMatchObject({ requestId: "request", phase: "verifying" });
+
+    store.updateSessionClient("test-server", {} as DaemonClient, 2);
+    store.updateAgentInitializationProgress("test-server", scope, {
+      ...progress,
+      phase: "installing",
+    });
+    const replacement = useSessionStore.getState().sessions["test-server"]!;
+    expect(replacement.agentInitializationProgressScopes.has("agent")).toBe(false);
+    expect(replacement.agentInitializationProgress.size).toBe(0);
+  });
+});
+
 describe("queued conversation ordering", () => {
   function queuedMessages(...ids: string[]) {
     return ids.map((id) => ({ id, text: id, attachments: [] }));

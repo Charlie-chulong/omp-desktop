@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DaemonClient, FetchAgentsEntry } from "@omp-desktop/client/internal/daemon-client";
+import type {
+  DaemonClient,
+  FetchAgentsEntry,
+  FetchAgentTimelineOptions,
+  FetchAgentTimelinePayload,
+} from "@omp-desktop/client/internal/daemon-client";
 import type { AgentSnapshotPayload, SessionOutboundMessage } from "@omp-desktop/protocol/messages";
 import { normalizeProjectDescriptor, useSessionStore } from "@/stores/session-store";
 import { DirectoryRefreshSupersededError, DirectorySync } from "./index";
@@ -11,6 +16,7 @@ type AgentFetchResult = Extract<
   { type: "fetch_agents_response" }
 >["payload"];
 
+type TimelinePage = FetchAgentTimelinePayload;
 class FakeDirectoryClient {
   fetchAgentsCalls = 0;
   lastAgentOptions: unknown;
@@ -19,6 +25,10 @@ class FakeDirectoryClient {
   lastProjectOptions: unknown;
   projectResult: ProjectListResult | null = null;
   agentResult: AgentFetchResult | null = null;
+  readonly timelineRequests: Array<{
+    options: FetchAgentTimelineOptions | undefined;
+    complete: (page: TimelinePage) => void;
+  }> = [];
   private pendingWorkspaceFetch: Promise<WorkspaceFetchResult> | null = null;
   private readonly handlers = new Map<
     SessionOutboundMessage["type"],
@@ -40,6 +50,15 @@ class FakeDirectoryClient {
     message: Extract<SessionOutboundMessage, { type: TType }>,
   ): void {
     for (const handler of this.handlers.get(message.type) ?? []) handler(message);
+  }
+
+  fetchAgentTimeline(
+    _agentId: string,
+    options: FetchAgentTimelineOptions | undefined,
+  ): Promise<TimelinePage> {
+    const { promise, resolve } = Promise.withResolvers<TimelinePage>();
+    this.timelineRequests.push({ options, complete: resolve });
+    return promise;
   }
 
   holdWorkspaceFetch(): (result: WorkspaceFetchResult) => void {
@@ -122,6 +141,120 @@ function createDirectory(serverId: string): {
 afterEach(() => {
   for (const serverId of serverIds) useSessionStore.getState().clearSession(serverId);
   serverIds.clear();
+});
+
+describe("DirectorySync initialization progress", () => {
+  it("shares identical reads and keeps a newer request's phase when an older read ends", async () => {
+    const serverId = "initialization-progress";
+    const { client, directory } = createDirectory(serverId);
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, client as unknown as DaemonClient, 1);
+    const first = directory.fetchTimeline("agent", { direction: "tail", limit: 40 });
+    const duplicate = directory.fetchTimeline("agent", { direction: "tail", limit: 40 });
+    const second = directory.fetchTimeline("agent", { direction: "tail", limit: 100 });
+    expect(client.timelineRequests).toHaveLength(2);
+    const reportFirst = client.timelineRequests[0]!.options?.onInitializationProgress;
+    const reportSecond = client.timelineRequests[1]!.options?.onInitializationProgress;
+    expect(reportFirst).toBeTypeOf("function");
+    expect(reportSecond).toBeTypeOf("function");
+    reportFirst?.({
+      status: "agent_initialization_progress",
+      agentId: "agent",
+      requestId: "first",
+      phase: "verifying",
+    });
+    // Initial directory hydration must not invalidate an active initialization.
+    client.emit({
+      type: "agent_update",
+      payload: { kind: "upsert", ...petDirectoryEntry() },
+    });
+    reportSecond?.({
+      status: "agent_initialization_progress",
+      agentId: "agent",
+      requestId: "second",
+      phase: "installing",
+    });
+    reportFirst?.({
+      status: "agent_initialization_progress",
+      agentId: "agent",
+      requestId: "first",
+      phase: null,
+    });
+    expect(
+      useSessionStore.getState().sessions[serverId]?.agentInitializationProgress.get("agent"),
+    ).toMatchObject({ requestId: "second", phase: "installing" });
+    reportSecond?.({
+      status: "agent_initialization_progress",
+      agentId: "agent",
+      requestId: "second",
+      phase: null,
+    });
+    expect(
+      useSessionStore.getState().sessions[serverId]?.agentInitializationProgress.has("agent"),
+    ).toBe(false);
+    for (const request of client.timelineRequests) {
+      request.complete({ hasNewer: false } as TimelinePage);
+    }
+    await Promise.all([first, duplicate, second]);
+    directory.dispose();
+  });
+
+  it.each([
+    "disconnect",
+    "connection epoch",
+    "client generation",
+    "client replacement",
+    "session replacement",
+    "agent deletion",
+    "dispose",
+  ])("clears progress and rejects late callbacks after %s", async (boundary) => {
+    const serverId = `initialization-${boundary}`;
+    const { client, directory } = createDirectory(serverId);
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, client as unknown as DaemonClient, 1);
+    const fetch = directory.fetchTimeline("agent", { direction: "tail", limit: 40 });
+    const request = client.timelineRequests[0]!;
+    const progress = {
+      status: "agent_initialization_progress" as const,
+      agentId: "agent",
+      requestId: "request",
+      phase: "preparing" as const,
+    };
+    request.options?.onInitializationProgress?.(progress);
+    expect(
+      useSessionStore.getState().sessions[serverId]?.agentInitializationProgress.get("agent"),
+    ).toMatchObject({ phase: "preparing" });
+
+    if (boundary === "session replacement") {
+      store.clearSession(serverId);
+      store.initializeSession(serverId, client as unknown as DaemonClient, 1);
+    } else if (boundary === "agent deletion") {
+      client.emit({
+        type: "agent_deleted",
+        payload: { agentId: "agent", requestId: "delete-request" },
+      });
+    } else if (boundary === "dispose") {
+      directory.dispose();
+    } else {
+      directory.connectionChanged({
+        client:
+          boundary === "client replacement"
+            ? (new FakeDirectoryClient() as unknown as DaemonClient)
+            : (client as unknown as DaemonClient),
+        status: boundary === "disconnect" ? "offline" : "online",
+        source: {
+          clientGeneration: boundary === "client generation" ? 2 : 1,
+          connectionEpoch: boundary === "connection epoch" ? 2 : 1,
+        },
+      });
+    }
+    expect(useSessionStore.getState().sessions[serverId]?.agentInitializationProgress.size).toBe(0);
+    request.options?.onInitializationProgress?.({ ...progress, phase: "installing" });
+    expect(useSessionStore.getState().sessions[serverId]?.agentInitializationProgress.size).toBe(0);
+    request.complete({ hasNewer: false } as TimelinePage);
+    await fetch;
+    directory.dispose();
+  });
 });
 
 describe("DirectorySync session readiness", () => {

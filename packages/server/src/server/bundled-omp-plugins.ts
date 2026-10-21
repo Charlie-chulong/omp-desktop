@@ -18,6 +18,7 @@ import { z } from "zod";
 
 import { execCommand, spawnProcess } from "../utils/spawn.js";
 import { applyOmpProxyEnabled } from "@omp-desktop/protocol/provider-config";
+import type { AgentInitializationPhase } from "@omp-desktop/protocol/messages";
 import {
   createProviderEnv,
   mergeRuntimeSettings,
@@ -27,10 +28,13 @@ import {
   type ProviderRuntimeSettings,
 } from "./agent/provider-launch-config.js";
 import {
-  assertBundledOmpHost,
+  createBundledOmpHostVerifier,
+  createSha256FileCache,
   BUNDLED_OMP_HOST,
   hasBundledOmpPlugins,
   sha256RegularFile,
+  type BundledOmpHostVerifier,
+  type Sha256FileHasher,
 } from "./bundled-omp-host.js";
 
 const PLUGIN_NAMES = [
@@ -101,9 +105,24 @@ type Plugin = z.infer<typeof pluginSchema>;
 type Ledger = z.infer<typeof ledgerSchema>;
 type SeedEntry = z.infer<typeof entrySchema>;
 
+// Cache content hashes, never a validation success: every invocation still
+// walks the complete inventory and checks file identities and metadata.
+let cachedPayload:
+  | {
+      root: string;
+      manifestSha256: string;
+      hashFile: Sha256FileHasher;
+    }
+  | undefined;
+
 export interface BundledOmpProvisioningResult {
   /** These are seeding-history outcomes, not a replacement native plugin registry. */
   plugins: Array<{ name: string; state: SeedEntry["state"]; error?: string }>;
+}
+
+export interface ValidatedBundledOmpPayload {
+  manifest: z.infer<typeof manifestSchema>;
+  manifestSha256: string;
 }
 
 function digest(value: string): string {
@@ -165,7 +184,11 @@ async function assertDirectory(path: string): Promise<void> {
   }
 }
 
-async function verifyPackage(root: string, plugin: Plugin): Promise<void> {
+async function verifyPackage(
+  root: string,
+  plugin: Plugin,
+  hashFile: Sha256FileHasher = sha256RegularFile,
+): Promise<void> {
   await assertDirectory(root);
   const expected = new Map<string, z.infer<typeof fileSchema>>();
   const folded = new Set<string>();
@@ -187,10 +210,7 @@ async function verifyPackage(root: string, plugin: Plugin): Promise<void> {
         await visit(path);
       } else if (info.isFile() && expected.has(path)) {
         const file = expected.get(path)!;
-        if (
-          info.size !== file.bytes ||
-          (await sha256RegularFile(join(root, path))) !== file.sha256
-        ) {
+        if (info.size !== file.bytes || (await hashFile(join(root, path))) !== file.sha256) {
           throw new Error(`Bundled plugin integrity check failed: ${plugin.name}/${path}`);
         }
         visited.add(path);
@@ -217,10 +237,9 @@ async function verifyPackage(root: string, plugin: Plugin): Promise<void> {
 }
 
 /** Validate the complete payload before any native plugin state can change. */
-export async function validateBundledOmpPayload(payload: string): Promise<{
-  manifest: z.infer<typeof manifestSchema>;
-  manifestSha256: string;
-}> {
+export async function validateBundledOmpPayload(
+  payload: string,
+): Promise<ValidatedBundledOmpPayload> {
   if (!isAbsolute(payload))
     throw new Error("OMP_DESKTOP_BUNDLED_PLUGINS must be an absolute directory.");
   await assertDirectory(payload);
@@ -229,6 +248,16 @@ export async function validateBundledOmpPayload(payload: string): Promise<{
     throw new Error("Bundled plugin manifest is too large.");
   const raw = await readFile(manifestPath, "utf8");
   const manifest = manifestSchema.parse(JSON.parse(raw));
+  const manifestSha256 = digest(raw);
+  let verification = cachedPayload;
+  if (
+    !verification ||
+    verification.root !== payload ||
+    verification.manifestSha256 !== manifestSha256
+  ) {
+    verification = { root: payload, manifestSha256, hashFile: createSha256FileCache() };
+    cachedPayload = verification;
+  }
   const names = new Set<string>();
   for (const plugin of manifest.plugins) {
     if (plugin.directory !== plugin.name || names.has(plugin.name))
@@ -236,13 +265,13 @@ export async function validateBundledOmpPayload(payload: string): Promise<{
         "Bundled plugin manifest contains duplicate or mismatched package directories.",
       );
     names.add(plugin.name);
-    await verifyPackage(join(payload, plugin.directory), plugin);
+    await verifyPackage(join(payload, plugin.directory), plugin, verification.hashFile);
   }
   for (const item of await readdir(payload)) {
     if (item !== "manifest.json" && !names.has(item))
       throw new Error(`Unmanifested bundled payload entry: ${item}`);
   }
-  return { manifest, manifestSha256: digest(raw) };
+  return { manifest, manifestSha256 };
 }
 
 async function atomicJson(file: string, value: unknown, assertHeld: () => void): Promise<void> {
@@ -330,8 +359,9 @@ async function acquireProvisioningLease(
   env: NodeJS.ProcessEnv,
   cwd: string,
   paths: z.infer<typeof nativePathsSchema>,
+  hostVerifier: BundledOmpHostVerifier,
 ): Promise<ProvisioningLease> {
-  await assertBundledOmpHost(command[0], env);
+  await hostVerifier(command[0], env);
   const child = spawnProcess(command[0], [...command.slice(1), "plugin", "lease", "--json"], {
     envMode: "internal",
     env,
@@ -669,7 +699,15 @@ async function loadSeedLedger(
 }
 
 /** Reconcile only a previous intent; this transition never authorizes another link. */
-function reconcilePreviousSeed(entry: SeedEntry, present: boolean): void {
+async function reconcilePreviousSeed(
+  entry: SeedEntry,
+  present: boolean,
+  ledgerFile: string,
+  ledger: Ledger,
+  assertHeld: () => void,
+): Promise<void> {
+  const previousState = entry.state;
+  const previousError = entry.error;
   if (entry.state === "linking") {
     entry.state = "failed";
     entry.error =
@@ -679,6 +717,10 @@ function reconcilePreviousSeed(entry: SeedEntry, present: boolean): void {
   if (entry.state === "failed" && present) {
     entry.state = "preserved";
     delete entry.error;
+  }
+  // An uninstall tombstone is permanent even if the user later installs manually.
+  if (entry.state !== previousState || entry.error !== previousError) {
+    await atomicJson(ledgerFile, ledger, assertHeld);
   }
 }
 
@@ -737,12 +779,33 @@ async function stagePackage(
   }
 }
 
+async function verifyProvisioningPayload(
+  payload: string,
+  command: string,
+  env: NodeJS.ProcessEnv,
+  hostVerifier: BundledOmpHostVerifier,
+  onProgress: ((phase: AgentInitializationPhase) => void) | undefined,
+): Promise<ValidatedBundledOmpPayload> {
+  onProgress?.("verifying");
+  await hostVerifier(command, env);
+  const validated = await validateBundledOmpPayload(payload).catch((error: unknown) => {
+    throw new Error(
+      `Bundled plugin payload at ${payload} is missing, corrupt or incompatible. Reinstall the compatible private Desktop package. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  });
+  onProgress?.("preparing");
+  return validated;
+}
+
 /** Also called before each provider launch, using that launch's exact cwd/env/command prefix. */
 export async function provisionBundledOmpPlugins(
   options: {
     env?: NodeJS.ProcessEnv;
     command?: [string, ...string[]];
     cwd?: string;
+    hostVerifier?: BundledOmpHostVerifier;
+    onProgress?: (phase: AgentInitializationPhase) => void;
   } = {},
 ): Promise<BundledOmpProvisioningResult> {
   const env = { ...(options.env ?? process.env) };
@@ -750,19 +813,18 @@ export async function provisionBundledOmpPlugins(
   const payload = env.OMP_DESKTOP_BUNDLED_PLUGINS!.trim();
   const command = normalizeOmpPluginCommand(options.command ?? [env.OMP_COMMAND?.trim() || "omp"]);
   const cwd = options.cwd ?? process.cwd();
-  await assertBundledOmpHost(command[0], env);
-  const { manifest, manifestSha256 } = await validateBundledOmpPayload(payload).catch(
-    (error: unknown) => {
-      throw new Error(
-        `Bundled plugin payload at ${payload} is missing, corrupt or incompatible. Reinstall the compatible private Desktop package. ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
-    },
+  const hostVerifier = options.hostVerifier ?? createBundledOmpHostVerifier();
+  const { manifest, manifestSha256 } = await verifyProvisioningPayload(
+    payload,
+    command[0],
+    env,
+    hostVerifier,
+    options.onProgress,
   );
   let listed = await listNative(command, env, cwd);
   const profileRoot = listed.paths.dataRoot;
   const pluginsRoot = listed.paths.pluginsRoot;
-  const lease = await acquireProvisioningLease(command, env, cwd, listed.paths);
+  const lease = await acquireProvisioningLease(command, env, cwd, listed.paths, hostVerifier);
   try {
     lease.assertHeld();
     const namespace = await ownedNamespace(profileRoot, lease.assertHeld);
@@ -792,9 +854,7 @@ export async function provisionBundledOmpPlugins(
       );
       const present = native !== undefined || marketplace || reservations.has(plugin.name);
       if (entry.state !== "pending") {
-        reconcilePreviousSeed(entry, present);
-        // An uninstall tombstone is permanent even if the user later installs manually.
-        await atomicJson(ledgerFile, ledger, lease.assertHeld);
+        await reconcilePreviousSeed(entry, present, ledgerFile, ledger, lease.assertHeld);
         continue;
       }
       // A pending entry from an older application keeps its original version choice.
@@ -806,6 +866,7 @@ export async function provisionBundledOmpPlugins(
         continue;
       }
       try {
+        options.onProgress?.("installing");
         const target = await stagePackage(
           namespace,
           payload,
@@ -819,7 +880,7 @@ export async function provisionBundledOmpPlugins(
         await atomicJson(ledgerFile, ledger, lease.assertHeld);
         // The native manager arbitrates every reservation under the SAME lock as
         // ordinary installs/config changes. A preflight list can never authorize replacement.
-        await assertBundledOmpHost(command[0], env);
+        await hostVerifier(command[0], env);
         lease.assertHeld();
         const { stdout } = await execCommand(
           command[0],

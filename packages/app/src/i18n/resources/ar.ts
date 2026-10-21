@@ -353,6 +353,9 @@ export const ar: TranslationResources = {
       reconnecting: "جارٍ إعادة الاتصال",
       timelineSyncFailed: "تعذر تحديث سجل الوكيل.",
       timelineSyncRetrying: "جارٍ إعادة المحاولة…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "سجل المحادثة غير متاح",
       historyUnavailableMissing:
         "لا يزال هذا الوكيل موجودًا، ولكن تمت إزالة ملف محادثة المزوّد. أي رسائل مخزنة مؤقتًا أعلاه متاحة للقراءة فقط.",

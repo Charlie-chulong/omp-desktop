@@ -724,6 +724,18 @@ unpublished sibling directory and the native lease is still held. Interrupted ow
 initialization does not publish a partial namespace. Existing directories with missing or
 invalid ownership markers are never adopted or automatically cleaned.
 
+Subsequent provider launches still resolve the native cwd/profile and acquire its lease,
+but reuse payload content hashes within the daemon while file identity and nanosecond
+metadata remain unchanged. Every check walks the complete inventory; changed files are
+rehashed, and missing, extra, non-regular or symlinked paths remain errors. This cache is
+bounded to one payload/manifest and is never persisted. Host hashes are reused only within
+one provider launch or plugin-management operation, with metadata checked at each boundary;
+the next operation hashes the host again. Settled seed ledgers are written only when their
+state changes. Conversation loading displays the actual bundled-plugin verification,
+preparation and first-install phases separately from ordinary history loading. Phase
+completion clears that indicator on success or failure; it does not claim installation
+succeeded or bypass the existing error and degraded-history behavior.
+
 Desktop-managed daemons are reused only when their live status reports the matching
 distribution identity. Private identities include the sealed native-host digest;
 an equal application version alone cannot authorize reuse. An incompatible or

@@ -1169,6 +1169,111 @@ test("preserves legacy fetchAgent id overload", async () => {
   await expect(responsePromise).rejects.toThrow("legacy fetch sentinel");
 });
 
+test.each(["success", "response-error", "rpc-error", "timeout", "disconnect"] as const)(
+  "timeline initialization observers match requests and clean up after %s",
+  async (outcome) => {
+    useHeartbeatClock();
+    const mock = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger: createMockLogger(),
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+    const progress = vi.fn();
+    const emitProgress = (agentId: string, requestId: string, phase: string | null) => {
+      mock.triggerMessage(
+        wrapSessionMessage({
+          type: "status",
+          payload: { status: "agent_initialization_progress", agentId, requestId, phase },
+        }),
+      );
+    };
+    const send = mock.transport.send;
+    mock.transport.send = (data) => {
+      send(data);
+      if (typeof data === "string" && data.includes("fetch_agent_timeline_request")) {
+        emitProgress("progress-agent", "progress-request", "verifying");
+      }
+    };
+    const response = client.fetchAgentTimeline("progress-agent", {
+      requestId: "progress-request",
+      timeout: 20,
+      onInitializationProgress: progress,
+    });
+    expect(progress.mock.calls.map(([payload]) => payload.phase)).toEqual(["verifying"]);
+    emitProgress("other-agent", "progress-request", "installing");
+    emitProgress("progress-agent", "other-request", "installing");
+    emitProgress("progress-agent", "progress-request", "invalid-phase");
+    expect(progress).toHaveBeenCalledTimes(1);
+    emitProgress("progress-agent", "progress-request", "preparing");
+    emitProgress("progress-agent", "progress-request", null);
+    emitProgress("progress-agent", "progress-request", "installing");
+
+    const completion =
+      outcome === "success"
+        ? expect(response).resolves.toMatchObject({ error: null, entries: [] })
+        : expect(response).rejects.toThrow();
+    if (outcome === "timeout") {
+      await vi.advanceTimersByTimeAsync(20);
+    } else if (outcome === "disconnect") {
+      mock.triggerClose({ code: 1006, reason: "connection lost" });
+    } else if (outcome === "rpc-error") {
+      mock.triggerMessage(
+        wrapSessionMessage({
+          type: "rpc_error",
+          payload: { requestId: "progress-request", error: "restore failed" },
+        }),
+      );
+    } else {
+      mock.triggerMessage(
+        wrapSessionMessage({
+          type: "fetch_agent_timeline_response",
+          payload: {
+            requestId: "progress-request",
+            agentId: "progress-agent",
+            agent: null,
+            direction: "tail",
+            projection: "projected",
+            epoch: "",
+            reset: false,
+            staleCursor: false,
+            gap: false,
+            window: { minSeq: 0, maxSeq: 0, nextSeq: 0 },
+            startCursor: null,
+            endCursor: null,
+            hasOlder: false,
+            hasNewer: false,
+            entries: [],
+            error: outcome === "response-error" ? "restore failed" : null,
+          },
+        }),
+      );
+    }
+    await completion;
+    expect(progress.mock.calls.map(([payload]) => payload.phase)).toEqual([
+      "verifying",
+      "preparing",
+      null,
+      "installing",
+      null,
+    ]);
+    expect(progress).toHaveBeenLastCalledWith({
+      status: "agent_initialization_progress",
+      agentId: "progress-agent",
+      requestId: "progress-request",
+      phase: null,
+    });
+    emitProgress("progress-agent", "progress-request", "verifying");
+    expect(progress).toHaveBeenCalledTimes(5);
+  },
+);
+
 test("honors explicit fetchAgentTimeline timeout below the session RPC default", async () => {
   useHeartbeatClock();
   const logger = createMockLogger();

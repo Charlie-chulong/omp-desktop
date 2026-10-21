@@ -353,6 +353,9 @@ export const es: TranslationResources = {
       reconnecting: "Reconectando",
       timelineSyncFailed: "No se pudo actualizar el historial del agente.",
       timelineSyncRetrying: "Reintentando…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "El historial de conversación no está disponible",
       historyUnavailableMissing:
         "Este agente aún existe, pero se eliminó el archivo de conversación del proveedor. Los mensajes almacenados en caché arriba son de solo lectura.",

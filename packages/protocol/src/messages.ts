@@ -4063,6 +4063,17 @@ const AgentStatusWithTimelineSchema = AgentStatusWithRequestSchema.extend({
   timelineSize: z.number().optional(),
 });
 
+export const AgentInitializationPhaseSchema = z.enum(["verifying", "preparing", "installing"]);
+export type AgentInitializationPhase = z.infer<typeof AgentInitializationPhaseSchema>;
+
+export const AgentInitializationProgressStatusPayloadSchema = AgentStatusWithRequestSchema.extend({
+  status: z.literal("agent_initialization_progress"),
+  phase: AgentInitializationPhaseSchema.nullable(),
+});
+export type AgentInitializationProgressStatusPayload = z.infer<
+  typeof AgentInitializationProgressStatusPayloadSchema
+>;
+
 export const AgentCreatedStatusPayloadSchema = z
   .object({
     status: z.literal("agent_created"),
@@ -4120,6 +4131,7 @@ export const KnownStatusPayloadSchema = z.discriminatedUnion("status", [
   AgentCreateFailedStatusPayloadSchema,
   AgentResumedStatusPayloadSchema,
   AgentRefreshedStatusPayloadSchema,
+  AgentInitializationProgressStatusPayloadSchema,
   ShutdownRequestedStatusPayloadSchema,
   RestartRequestedStatusPayloadSchema,
   DaemonConfigChangedStatusPayloadSchema,

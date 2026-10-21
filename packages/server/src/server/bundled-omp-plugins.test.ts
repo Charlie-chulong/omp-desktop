@@ -12,6 +12,7 @@ import {
   readdir,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -168,15 +169,20 @@ afterEach(async () => {
 });
 
 describe("bundled plugin inventory integrity", () => {
-  it("accepts complete regular packages and rejects changed bytes without changing the source", async () => {
+  it("rejects same-size payload tampering after verification even when mtime is restored", async () => {
     const f = await fixture();
+    const file = join(f.payload, NAMES[0]!, "assets", "identity.txt");
+    const original = await readFile(file, "utf8");
+    const mtime = new Date("2020-01-01T00:00:00.000Z");
+    await utimes(file, mtime, mtime);
     await expect(validateBundledOmpPayload(f.payload)).resolves.toMatchObject({
       manifestSha256: sha(JSON.stringify(f.manifest)),
     });
-    const file = join(f.payload, NAMES[0]!, "assets", "identity.txt");
-    await writeFile(file, "corrupt");
+    const corrupt = "!".repeat(Buffer.byteLength(original));
+    await writeFile(file, corrupt);
+    await utimes(file, mtime, mtime);
     await expect(validateBundledOmpPayload(f.payload)).rejects.toThrow("integrity");
-    expect(await readFile(file, "utf8")).toBe("corrupt");
+    expect(await readFile(file, "utf8")).toBe(corrupt);
     expect(await readdir(f.home)).toEqual([]);
   });
 
@@ -199,6 +205,7 @@ describe("bundled plugin inventory integrity", () => {
 
   it("rejects unmanifested files, duplicate case-folded names and incomplete manifests", async () => {
     const f = await fixture();
+    await validateBundledOmpPayload(f.payload);
     const extra = join(f.payload, NAMES[0]!, "extra.txt");
     await writeFile(extra, "unexpected");
     await expect(validateBundledOmpPayload(f.payload)).rejects.toThrow("Unmanifested");
@@ -216,6 +223,7 @@ describe("bundled plugin inventory integrity", () => {
 
   it("rejects junction/symlink directories without following or deleting their target", async () => {
     const f = await fixture();
+    await validateBundledOmpPayload(f.payload);
     const outside = join(f.root, "outside");
     await mkdir(outside);
     await writeFile(join(outside, "identity.txt"), "must survive");

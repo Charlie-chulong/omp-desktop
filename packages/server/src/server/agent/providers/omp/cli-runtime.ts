@@ -27,8 +27,15 @@ import {
   type OmpStartSessionInput,
 } from "./runtime.js";
 import { resolveOmpBuiltinToolArgsForLaunch } from "./provider-config.js";
-import { assertBundledOmpHost } from "../../../bundled-omp-host.js";
-import { provisionBundledOmpPlugins } from "../../../bundled-omp-plugins.js";
+import {
+  createBundledOmpHostVerifier,
+  type BundledOmpHostVerifier,
+} from "../../../bundled-omp-host.js";
+import {
+  provisionBundledOmpPlugins,
+  type BundledOmpProvisioningResult,
+} from "../../../bundled-omp-plugins.js";
+import { beginBundledOmpInitialization } from "../../../bundled-omp-initialization.js";
 import { createProviderEnv } from "../../provider-launch-config.js";
 import {
   prepareOmpImageSettingsLaunch,
@@ -184,6 +191,35 @@ export class OmpCliRuntime implements OmpRuntime {
     launch.argv.push(...policyArgs);
   }
 
+  private async provisionBundledPlugins(
+    command: [string, ...string[]],
+    env: NodeJS.ProcessEnv,
+    cwd: string,
+    hostVerifier: BundledOmpHostVerifier,
+    agentId: string | undefined,
+  ): Promise<void> {
+    const initialization = agentId ? beginBundledOmpInitialization(agentId) : undefined;
+    let provisioning: BundledOmpProvisioningResult;
+    try {
+      provisioning = await provisionBundledOmpPlugins({
+        command,
+        env,
+        cwd,
+        hostVerifier,
+        onProgress: initialization?.report,
+      });
+    } finally {
+      initialization?.close();
+    }
+    for (const plugin of provisioning.plugins) {
+      if (plugin.error)
+        this.options.logger.warn(
+          { plugin: plugin.name, error: plugin.error },
+          "Bundled OMP plugin provisioning requires explicit management",
+        );
+    }
+  }
+
   async startSession(input: OmpStartSessionInput): Promise<OmpRuntimeSession> {
     const launch = buildOmpLaunch({
       command: this.command,
@@ -192,21 +228,17 @@ export class OmpCliRuntime implements OmpRuntime {
     });
     const effectiveCommand = resolveOmpRuntimeCommand(this.command, this.options.runtimeSettings);
     const providerEnv = createProviderEnv({ overlays: [launch.env] });
+    const hostVerifier = createBundledOmpHostVerifier();
     // Each cwd may initialize a different native dotenv/profile. Resolve it with
     // the genuine host before launch; the per-profile ledger prevents reseeding.
-    const provisioning = await provisionBundledOmpPlugins({
-      command: effectiveCommand,
-      env: providerEnv,
-      cwd: launch.cwd,
-    });
-    for (const plugin of provisioning.plugins) {
-      if (plugin.error)
-        this.options.logger.warn(
-          { plugin: plugin.name, error: plugin.error },
-          "Bundled OMP plugin provisioning requires explicit management",
-        );
-    }
-    await assertBundledOmpHost(launch.argv[0], providerEnv);
+    await this.provisionBundledPlugins(
+      effectiveCommand,
+      providerEnv,
+      launch.cwd,
+      hostVerifier,
+      input.env?.PASEO_AGENT_ID,
+    );
+    await hostVerifier(launch.argv[0], providerEnv);
     installCodexCatalogPreload(launch);
     const imageLaunch = input.getImageGenerationConfig
       ? await prepareOmpImageSettingsLaunch(effectiveCommand, launch.cwd, {
@@ -226,7 +258,7 @@ export class OmpCliRuntime implements OmpRuntime {
       if (imageLaunch) launch.argv.push("--extension", resolveOmpImageSettingsExtensionPath());
       const imageToolAllowed = imageToolAllowedByArguments(launch.argv);
       const [command, ...args] = launch.argv;
-      await assertBundledOmpHost(command, providerEnv);
+      await hostVerifier(command, providerEnv);
       const processLaunch: JsonlRpcLaunch = {
         command,
         args,

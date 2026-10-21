@@ -6,6 +6,7 @@ import {
   AgentCreateFailedStatusPayloadSchema,
   AgentCreatedStatusPayloadSchema,
   AgentRefreshedStatusPayloadSchema,
+  AgentInitializationProgressStatusPayloadSchema,
   AgentResumedStatusPayloadSchema,
   CheckoutRenameBranchResponseSchema,
   parseServerInfoStatusPayload,
@@ -15,6 +16,7 @@ import {
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
+  type AgentInitializationProgressStatusPayload,
   type ServerInfoStatusPayload,
 } from "@omp-desktop/protocol/messages";
 import type {
@@ -626,6 +628,7 @@ export interface FetchAgentTimelineOptions {
   mergeWindow?: boolean;
   requestId?: string;
   timeout?: number;
+  onInitializationProgress?: (progress: AgentInitializationProgressStatusPayload) => void;
 }
 
 export type AgentTimelinePromptIndexPayload = Extract<
@@ -2964,38 +2967,59 @@ export class DaemonClient {
     options: FetchAgentTimelineOptions = {},
   ): Promise<FetchAgentTimelinePayload> {
     const resolvedRequestId = this.createRequestId(options.requestId);
-    const message = SessionInboundMessageSchema.parse({
-      type: "fetch_agent_timeline_request",
-      agentId,
-      requestId: resolvedRequestId,
-      ...(options.direction ? { direction: options.direction } : {}),
-      ...(options.cursor ? { cursor: options.cursor } : {}),
-      ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
-      ...(options.projection ? { projection: options.projection } : {}),
-      ...(options.mergeWindow === true ? { mergeWindow: true } : {}),
-    });
+    const unsubscribe = options.onInitializationProgress
+      ? this.on("status", (status) => {
+          const progress = AgentInitializationProgressStatusPayloadSchema.safeParse(status.payload);
+          if (
+            progress.success &&
+            progress.data.agentId === agentId &&
+            progress.data.requestId === resolvedRequestId
+          ) {
+            options.onInitializationProgress?.(progress.data);
+          }
+        })
+      : undefined;
+    try {
+      const message = SessionInboundMessageSchema.parse({
+        type: "fetch_agent_timeline_request",
+        agentId,
+        requestId: resolvedRequestId,
+        ...(options.direction ? { direction: options.direction } : {}),
+        ...(options.cursor ? { cursor: options.cursor } : {}),
+        ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
+        ...(options.projection ? { projection: options.projection } : {}),
+        ...(options.mergeWindow === true ? { mergeWindow: true } : {}),
+      });
+      const payload = await this.sendRequest({
+        requestId: resolvedRequestId,
+        message,
+        timeout: options.timeout,
+        options: { skipQueue: true },
+        select: (msg) => {
+          if (msg.type !== "fetch_agent_timeline_response") {
+            return null;
+          }
+          if (msg.payload.requestId !== resolvedRequestId) {
+            return null;
+          }
+          return msg.payload;
+        },
+      });
 
-    const payload = await this.sendRequest({
-      requestId: resolvedRequestId,
-      message,
-      timeout: options.timeout,
-      options: { skipQueue: true },
-      select: (msg) => {
-        if (msg.type !== "fetch_agent_timeline_response") {
-          return null;
-        }
-        if (msg.payload.requestId !== resolvedRequestId) {
-          return null;
-        }
-        return msg.payload;
-      },
-    });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
 
-    if (payload.error) {
-      throw new Error(payload.error);
+      return payload;
+    } finally {
+      unsubscribe?.();
+      options.onInitializationProgress?.({
+        status: "agent_initialization_progress",
+        agentId,
+        requestId: resolvedRequestId,
+        phase: null,
+      });
     }
-
-    return payload;
   }
 
   async listAgentTimelinePrompts(
