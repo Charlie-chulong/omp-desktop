@@ -779,6 +779,13 @@ HelperClient ready/status/exit at the long profile-owned snapshot depth. Use the
 `scripts/verify-bundled-runtime.py` for complete WeChat inventory/native-import/Tcl checks.
 A disconnected `/wechat status` alone does not launch or qualify that helper.
 
+The first private-profile catalog request copies and verifies the complete bundled runtimes.
+Native packaged qualification therefore uses the existing 180-second diagnostic RPC deadline
+plus CLI startup allowance, rather than the ordinary 60-second command limit; it still requires
+the real diagnostic, catalog and plugin checks to finish successfully.
+Plugin-page mutation qualification observes the completed real UI refresh before one independent
+native readback, so test polling cannot queue extra management work behind the action under test.
+
 ## Image generation with references
 
 Desktop uses OMP's native `generate_image` tool; there is no separate Desktop image-generation
