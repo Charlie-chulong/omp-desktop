@@ -698,6 +698,8 @@ user and project scopes remain exact.
 Busy actions, including **Remove** while its confirmation is open, retain their original button
 dimensions and adjacent-control spacing. Progress indicators overlay the normal icon/text
 footprint without replacing caller-defined sizing or spacing.
+Retrying a failed catalog load clears its old error after recovery without dismissing
+feedback from a plugin operation's own refresh.
 
 Visible extension replies retain their persisted native entry IDs, original text and metadata
 in live conversations and history, even without a model `agent_start`. Custom replies do not
@@ -705,15 +707,22 @@ complete a turn: native RPC acknowledgements and model lifecycle events own comp
 The renderer preserves literal punctuation in native custom replies instead of rewriting
 JSON quotes or other original text through smart typography. Ordinary assistant Markdown
 keeps its normal typography and math rendering.
+Loading older history keeps each custom reply separate from adjacent model or custom replies.
 
 Currently registered native extension commands are admitted before workflow and stale-plan
 reset envelopes, including after session restoration. They remain native commands rather
 than ordinary model prompts, and the next ordinary prompt still receives its workflow reset.
+Stopping a submission during native-command discovery cancels that pending turn; delayed
+discovery cannot dispatch it or claim a replacement submission's request identity.
 
 In the private bundled-plugin distribution, first-run provisioning holds a separate native
 process-owned OS lease for the resolved profile. It does not block ordinary plugin management
 or reap PID files. Interrupted or unknown link outcomes are not automatically retried, and
 the durable seed ledger preserves uninstall choices across restarts and application updates.
+Namespace ownership is published only after its marker has been written and synced in an
+unpublished sibling directory and the native lease is still held. Interrupted ownership
+initialization does not publish a partial namespace. Existing directories with missing or
+invalid ownership markers are never adopted or automatically cleaned.
 
 Desktop-managed daemons are reused only when their live status reports the matching
 distribution identity. Private identities include the sealed native-host digest;
@@ -778,6 +787,10 @@ The stager refuses an existing output or binary rather than overwriting it. Buil
 x64 with the verified mini-electron distribution selected by `MINI_ELECTRON_DIST_PATH`
 and `npm run build:windows -- --with-bundled-plugins`. Output goes to
 `packages/desktop/release-plugins`, separate from the previous qualified installer.
+Packaging loads configuration once and keeps qualified resource exclusions through the build.
+It revalidates the actual configured private host against the pinned digest before staging
+and after copying and packaging hooks, rejecting stock-host replacements. Private builds
+must package from source; `--prepackaged` bypasses these checks and is not supported.
 Qualification must exercise the real Python/native extensions and production WeChat
 HelperClient ready/status/exit at the long profile-owned snapshot depth. Use the packaged
 `scripts/verify-bundled-runtime.py` for complete WeChat inventory/native-import/Tcl checks.
@@ -1051,6 +1064,7 @@ or presentation settings.
 - Hold **Ctrl** (or **Cmd** on macOS) while clicking file or folder rows to add or remove individual selections. **Shift+click** selects a contiguous range from the selection anchor; **Ctrl/Cmd+Shift+click** adds that range to the existing selection. These gestures select entries without opening files or expanding folders.
 - **Ctrl+left-click** also selects on macOS instead of opening the context menu. Ordinary right-click still opens the menu and preserves an existing multi-selection when the clicked row is already selected.
 - In Desktop's Files tree, drag a file or folder row onto another folder to move it within the same workspace. Drag onto blank tree space to move it back to the workspace root; selected entries move together.
+- Folder-row and nested-file-row indentation and action controls are not blank root-drop space. Drop onto the folder label to move into it; dropping on those gutters or controls leaves entries in place.
 - Desktop dragging shows a translucent icon/name preview beside the pointer, with a count badge for multi-selection. The preview stays within the window without blocking folder targets, and disappears when the drag ends or is canceled.
 - Desktop tree moves use pointer dragging rather than native HTML drag-and-drop. Press **Escape** before releasing to cancel. A folder cannot be moved into itself or its descendants; cross-workspace moves are not supported.
 - Drag a file from the Files tree onto the message input in the same workspace to add a workspace-file reference without moving the file or sending a message. The input highlights while hovering; dropping focuses the input, and repeated drops of the same file do not add duplicate references. **Escape** cancels the drop.

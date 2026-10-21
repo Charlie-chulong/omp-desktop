@@ -1734,6 +1734,7 @@ export class OmpAgentSession implements AgentSession {
   private activeAskUserDialog: ActiveAskUserDialog | null = null;
   private pendingAskUserFollowUpResponse: PendingAskUserFollowUpResponse | null = null;
   private activeTurnId: string | null = null;
+  private pendingTurnAdmission: { turnId: string; controller: AbortController } | null = null;
   private activeClientMessageId: string | null = null;
   private activeAssistantMessageId: string | null = null;
   private activeTurnTerminalAssistantMessage: OmpAgentMessage | null = null;
@@ -2011,6 +2012,7 @@ export class OmpAgentSession implements AgentSession {
   private async prepareNativeExtensionTurn(
     prompt: AgentPromptInput,
     origin: { turnId: string; clientMessageId?: string },
+    signal: AbortSignal,
   ): Promise<string | undefined> {
     const chatProCommand = readChatProCommand(prompt);
     const command = chatProCommand ?? readPlainTextPromptInput(prompt);
@@ -2018,6 +2020,7 @@ export class OmpAgentSession implements AgentSession {
     const invocation = this.parseSlashCommandInput(command);
     if (!invocation) return undefined;
     const commands = await this.runtimeSession.getCommands();
+    if (signal.aborted) return undefined;
     if (
       !commands.some((item) => item.name === invocation.commandName && item.source === "extension")
     ) {
@@ -2035,19 +2038,48 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async startTurn(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<StartTurnResult> {
-    if (this.activeTurnId) {
+    if (this.activeTurnId || this.pendingTurnAdmission) {
       throw new Error("An OMP turn is already active");
     }
+    if (this.closed) {
+      throw new Error("The OMP session is closed");
+    }
+    const turnId = randomUUID();
+    const controller = new AbortController();
+    const admission = { turnId, controller };
+    this.pendingTurnAdmission = admission;
+    const canceled = new Promise<StartTurnResult>((resolve) => {
+      controller.signal.addEventListener("abort", () => resolve({ turnId }), { once: true });
+    });
+    try {
+      return await Promise.race([
+        this.startAdmittedTurn(prompt, options, turnId, controller.signal),
+        canceled,
+      ]);
+    } finally {
+      if (this.pendingTurnAdmission === admission) {
+        this.pendingTurnAdmission = null;
+      }
+    }
+  }
+
+  private async startAdmittedTurn(
+    prompt: AgentPromptInput,
+    options: AgentRunOptions | undefined,
+    turnId: string,
+    signal: AbortSignal,
+  ): Promise<StartTurnResult> {
     this.suppressAutonomousEventsAfterInterrupt = false;
     this.activeInterrupt = null;
     this.dismissPendingPlanApproval();
 
-    const turnId = randomUUID();
+    const clientMessageId = options?.clientMessageId;
     const origin = {
       turnId,
-      ...(options?.clientMessageId ? { clientMessageId: options.clientMessageId } : {}),
+      ...(clientMessageId ? { clientMessageId } : {}),
     };
-    const nativeCommand = await this.prepareNativeExtensionTurn(prompt, origin);
+    const nativeCommand = await this.prepareNativeExtensionTurn(prompt, origin, signal);
+    if (signal.aborted) return { turnId };
     const payload = convertPromptInput(prompt, { model: this.state.model });
     const displayPromptText = payload.text;
     if (nativeCommand !== undefined) payload.text = nativeCommand;
@@ -2056,11 +2088,13 @@ export class OmpAgentSession implements AgentSession {
       selectedWorkflowMode === "plan" ? selectedWorkflowMode : this.workflowModePending;
     if (nativeCommand === undefined) {
       if (workflowMode === "standard" || workflowMode === "enhanced") {
-        await this.disableActiveWorkflowMode();
+        await this.disableActiveWorkflowMode(signal);
+        if (signal.aborted) return { turnId };
         this.workflowModePending = null;
       } else if (workflowMode) {
         if (this.activeWorkflowMode && this.activeWorkflowMode !== workflowMode) {
-          await this.disableActiveWorkflowMode();
+          await this.disableActiveWorkflowMode(signal);
+          if (signal.aborted) return { turnId };
         }
         payload.text =
           workflowMode === "plan"
@@ -2080,7 +2114,7 @@ export class OmpAgentSession implements AgentSession {
     }
     this.live = true;
     this.activeTurnId = turnId;
-    this.activeClientMessageId = options?.clientMessageId ?? null;
+    this.activeClientMessageId = clientMessageId ?? null;
     this.lastSubmittedPromptText = payload.text;
     this.lastSubmittedPromptDisplayText = displayPromptText;
     this.lastSubmittedPromptClientMessageId = this.activeClientMessageId;
@@ -2663,6 +2697,22 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async interrupt(reason: AgentInterruptReason = "user"): Promise<void> {
+    const admission = this.pendingTurnAdmission;
+    if (admission && !this.activeTurnId) {
+      // No foreground prompt has been dispatched. Settle the accepted identity now;
+      // discovery may still resolve, but cannot register or dispatch this canceled turn.
+      this.pendingTurnAdmission = null;
+      this.cancelModelErrorContinuation();
+      this.suppressAutonomousEventsAfterInterrupt = true;
+      admission.controller.abort();
+      this.emit({
+        type: "turn_canceled",
+        provider: this.provider,
+        reason,
+        turnId: admission.turnId,
+      });
+      return;
+    }
     const turnId = this.activeTurnId;
     const pendingContinuation = this.pendingModelErrorContinuation;
     this.cancelModelErrorContinuation();
@@ -2724,6 +2774,8 @@ export class OmpAgentSession implements AgentSession {
       return;
     }
     this.closed = true;
+    this.pendingTurnAdmission?.controller.abort();
+    this.pendingTurnAdmission = null;
     this.cancelModelErrorContinuation();
     this.backgroundDaemons?.dispose();
     this.stopAutomaticCredentialResolution();
@@ -3363,11 +3415,12 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
-  private async disableActiveWorkflowMode(): Promise<void> {
-    if (!this.activeWorkflowMode) return;
+  private async disableActiveWorkflowMode(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted || !this.activeWorkflowMode) return;
     if (this.activeWorkflowMode === "goal") {
       await this.runtimeSession.prompt("/goal drop");
     }
+    if (signal?.aborted) return;
     this.setActiveWorkflowMode(null);
   }
 

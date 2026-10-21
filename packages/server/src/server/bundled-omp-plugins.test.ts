@@ -348,6 +348,56 @@ describe.skipIf(!hasRealHost)("real native bundled plugin provisioning", () => {
     expect((await f.ledger()).plugins[NAMES[0]!].state).toBe("uninstalled");
   }, 180_000);
 
+  it("leaves interrupted ownership initialization unpublished so the next seed can succeed", async () => {
+    const f = await fixture();
+    const realOpen = fs.open;
+    const open = vi.spyOn(fs, "open").mockImplementation(async (file, flags, mode) => {
+      if (basename(String(file)) === "owner") {
+        throw Object.assign(new Error("Interrupted ownership initialization"), { code: "EIO" });
+      }
+      return realOpen(file, flags, mode);
+    });
+    syncBuiltinESMExports();
+    try {
+      await expect(provisionBundledOmpPlugins({ env: f.env })).rejects.toThrow(
+        "Interrupted ownership initialization",
+      );
+      await expect(lstat(f.namespace)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      open.mockRestore();
+      syncBuiltinESMExports();
+    }
+    const seeded = await provisionBundledOmpPlugins({ env: f.env });
+    expect(seeded.plugins.map((entry) => entry.state)).toEqual([
+      "completed",
+      "completed",
+      "completed",
+    ]);
+    expect((await f.list()).npm.map((plugin) => plugin.name).sort()).toEqual([...NAMES].sort());
+  }, 180_000);
+
+  it.each([
+    { marker: "missing", expectedOwner: "ENOENT" },
+    { marker: "invalid", expectedOwner: "foreign owner" },
+  ])(
+    "preserves a foreign namespace with a $marker ownership marker",
+    async ({ marker, expectedOwner }) => {
+      const f = await fixture();
+      await mkdir(f.namespace, { recursive: true });
+      const sentinel = join(f.namespace, "keep.txt");
+      await writeFile(sentinel, "foreign profile data");
+      if (marker === "invalid") await writeFile(join(f.namespace, "owner"), "foreign owner");
+      await expect(provisionBundledOmpPlugins({ env: f.env })).rejects.toThrow();
+      expect(await readFile(sentinel, "utf8")).toBe("foreign profile data");
+      const owner = await readFile(join(f.namespace, "owner"), "utf8").catch(
+        (error: NodeJS.ErrnoException) => error.code,
+      );
+      expect(owner).toBe(expectedOwner);
+      await expect(lstat(f.ledgerPath)).rejects.toMatchObject({ code: "ENOENT" });
+    },
+    180_000,
+  );
+
   it.skipIf(process.platform !== "win32")(
     "does not turn a temporary Windows snapshot sharing conflict into a permanent missing plugin",
     async () => {

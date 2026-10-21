@@ -519,6 +519,9 @@ function OmpPluginsContextPage({
         if (!active.current) return;
         setPlugins(pluginResult.plugins);
         setRawOutput(pluginResult.rawOutput ?? null);
+        // Operation refreshes share this error channel; only standalone loads
+        // dismiss the previous load failure, not feedback from an active action.
+        if (!operationLock.current) setLoadError(null);
         setPageState(pluginResult.plugins.length === 0 ? "empty" : "ready");
         if (marketplaceResult) setMarketplaces(marketplaceResult.marketplaces);
       } catch (error) {

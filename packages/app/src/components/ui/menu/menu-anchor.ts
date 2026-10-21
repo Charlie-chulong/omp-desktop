@@ -31,11 +31,12 @@ export function measureElement(element: View): Promise<Rect> {
     const rect = (element as View & HTMLElement).getBoundingClientRect();
     return Promise.resolve({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
   }
-  const { promise, resolve } = Promise.withResolvers<Rect>();
-  element.measureInWindow((x, y, width, height) => {
-    resolve({ x, y, width, height });
+  // The app's native Hermes runtime does not provide Promise.withResolvers.
+  return new Promise((resolve) => {
+    element.measureInWindow((x, y, width, height) => {
+      resolve({ x, y, width, height });
+    });
   });
-  return promise;
 }
 
 /**

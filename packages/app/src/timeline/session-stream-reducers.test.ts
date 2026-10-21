@@ -3435,6 +3435,80 @@ describe("processTimelineResponse", () => {
     });
   });
 
+  it.each([
+    ["custom", "custom"],
+    ["custom", "model"],
+    ["model", "custom"],
+  ] as const)(
+    "preserves independent %s and %s records across the older-page prepend boundary",
+    (olderKind, newerKind) => {
+      const olderCustomMessage =
+        olderKind === "custom"
+          ? {
+              customType: "omp-bridge-chatpro",
+              details: {
+                schemaVersion: 1,
+                event: "result",
+                deliveryId: "older-result",
+                sessionId: "session",
+                runtimeId: "runtime",
+                agentId: "main",
+              },
+            }
+          : undefined;
+      const newerCustomMessage =
+        newerKind === "custom"
+          ? { customType: "omp-workbuddy-plugin", details: { event: "status", nativeJobId: "job" } }
+          : undefined;
+      const olderText = olderKind === "custom" ? '\n{"original":"older"}\n' : "older model text";
+      const newerText = newerKind === "custom" ? '\n{"original":"newer"}\n' : "newer model text";
+      const currentTail: StreamItem[] = [
+        {
+          ...makeAssistantItem(newerText, "native-newer"),
+          messageId: "native-newer",
+          customMessage: newerCustomMessage,
+          timelineCursor: { epoch: "epoch-1", seq: 3 },
+        },
+      ];
+      const result = processTimelineResponse({
+        ...baseTimelineInput,
+        currentTail,
+        currentCursor: { epoch: "epoch-1", startSeq: 3, endSeq: 3 },
+        payload: {
+          ...baseTimelineInput.payload,
+          direction: "before",
+          epoch: "epoch-1",
+          startCursor: { seq: 1 },
+          endCursor: { seq: 2 },
+          entries: [
+            {
+              ...makeTimelineEntry(1, olderText),
+              item: {
+                type: "assistant_message",
+                text: olderText,
+                messageId: "native-older",
+                customMessage: olderCustomMessage,
+              },
+            },
+          ],
+        },
+      });
+
+      expect(
+        result.tail.map((item) =>
+          item.kind === "assistant_message"
+            ? { text: item.text, messageId: item.messageId, customMessage: item.customMessage }
+            : item,
+        ),
+      ).toEqual([
+        { text: olderText, messageId: "native-older", customMessage: olderCustomMessage },
+        { text: newerText, messageId: "native-newer", customMessage: newerCustomMessage },
+      ]);
+      expect(result.head).toEqual([]);
+      expect(result.cursor).toEqual({ epoch: "epoch-1", startSeq: 1, endSeq: 3 });
+    },
+  );
+
   it("coalesces tool call lifecycle rows across the older-page prepend boundary", () => {
     const callId = "toolu_boundary";
     const currentTail = hydrateStreamState(
