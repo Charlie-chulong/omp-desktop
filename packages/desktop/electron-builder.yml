@@ -92,6 +92,7 @@ appImage:
 win:
   artifactName: "OMP-Desktop-Setup-${version}-${arch}.${ext}"
   icon: assets/icon.ico
+  signAndEditExecutable: true
   extraResources:
     - from: ../../bin/omp-windows-${arch}.exe
       to: bin/omp.exe

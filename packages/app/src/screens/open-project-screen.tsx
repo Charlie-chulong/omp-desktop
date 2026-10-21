@@ -241,7 +241,7 @@ function OmpDotCloud({ animationsEnabled }: { animationsEnabled: boolean }) {
     const initializeFrame = window.requestAnimationFrame(() => {
       void (async () => {
         const posterModule = await loadPosterModule();
-        if (!posterModule.enabled) {
+        if (disposed || !posterModule.enabled) {
           canvas.remove();
           return;
         }
@@ -304,11 +304,12 @@ export function OpenProjectScreen() {
   const openImportedProject = useOpenProject(importServerId);
   const [isImportSheetOpen, setIsImportSheetOpen] = useState(false);
   const {
-    settings: { homeAnimationsEnabled: storedHomeAnimationsEnabled },
+    settings: { homeAnimationsEnabled: storedHomeAnimationsEnabled, wallpaperEnabled },
     isLoading: areSettingsLoading,
     updateSettings,
   } = useAppSettings();
-  const homeAnimationsEnabled = !areSettingsLoading && storedHomeAnimationsEnabled;
+  const showHomeEffects = !areSettingsLoading && !wallpaperEnabled;
+  const homeAnimationsEnabled = showHomeEffects && storedHomeAnimationsEnabled;
   // The poster, its scanlines and the brand glows are drawn for a dark canvas. Light schemes keep
   // Cursor Light's flat canvas and an ink mark instead.
   const isLight = theme.colorScheme === "light";
@@ -367,7 +368,7 @@ export function OpenProjectScreen() {
 
   const backgroundStyle = useMemo(
     () =>
-      Platform.OS === "web" && !isLight
+      Platform.OS === "web" && !isLight && showHomeEffects
         ? inlineUnistylesStyle({
             backgroundColor: theme.colors.surface0,
             backgroundImage: [
@@ -377,12 +378,14 @@ export function OpenProjectScreen() {
             backgroundSize: "auto, 2px 2px",
           })
         : null,
-    [isLight, theme.colors.surface0],
+    [isLight, showHomeEffects, theme.colors.surface0],
   );
 
   return (
     <View style={[styles.container, backgroundStyle]}>
-      {isLight ? null : <OmpDotCloud animationsEnabled={homeAnimationsEnabled} />}
+      {showHomeEffects && !isLight ? (
+        <OmpDotCloud animationsEnabled={homeAnimationsEnabled} />
+      ) : null}
       <MenuHeader borderless />
       <View style={styles.content}>
         <TitlebarDragRegion />
@@ -400,18 +403,19 @@ export function OpenProjectScreen() {
             <Text style={styles.brandMeta}>DESKTOP</Text>
           </View>
         </View>
-        <View style={styles.motionPreference}>
-          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Sparkles size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+        {showHomeEffects ? (
+          <View style={styles.motionPreference}>
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <Sparkles size={theme.iconSize.sm} color={theme.colors.foregroundMuted} />
+            </View>
+            <Switch
+              value={homeAnimationsEnabled}
+              onValueChange={handleAnimationsChange}
+              accessibilityLabel={t("openProject.motion.accessibilityLabel")}
+              testID="home-animations-switch"
+            />
           </View>
-          <Switch
-            value={homeAnimationsEnabled}
-            onValueChange={handleAnimationsChange}
-            disabled={areSettingsLoading}
-            accessibilityLabel={t("openProject.motion.accessibilityLabel")}
-            testID="home-animations-switch"
-          />
-        </View>
+        ) : null}
         <View style={styles.tiles}>
           <HomeTile
             index="01"

@@ -351,6 +351,31 @@ function parseHostOfferOrNull(host: string | undefined): ConnectionOffer | null 
   }
 }
 
+async function assertImplicitDesktopDaemonIdentity(
+  client: DaemonClient,
+  explicitHost: string | undefined,
+): Promise<void> {
+  const expectedIdentity =
+    process.env.PASEO_DESKTOP_MANAGED === "1"
+      ? process.env.PASEO_DESKTOP_DISTRIBUTION_IDENTITY
+      : undefined;
+  if (explicitHost?.trim() || !expectedIdentity) return;
+
+  try {
+    const status = await client.getDaemonStatus();
+    if (status.desktopDistributionIdentity !== expectedIdentity) {
+      throw new Error(
+        "The implicit local daemon belongs to a different or unverified Desktop distribution. " +
+          "Let its tasks finish and stop it explicitly before switching distributions, " +
+          "or deliberately select a daemon with --host or PASEO_HOST.",
+      );
+    }
+  } catch (error) {
+    await client.close().catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function connectToDaemon(options?: ConnectOptions): Promise<DaemonClient> {
   const timeout = options?.timeout ?? DEFAULT_TIMEOUT;
   const clientId = await getOrCreateCliClientId();
@@ -373,6 +398,7 @@ export async function connectToDaemon(options?: ConnectOptions): Promise<DaemonC
     const password = resolveDaemonPassword(host);
     const result = await tryConnectHost(host, password, clientId, timeout, nodeWebSocketFactory);
     if ("client" in result) {
+      await assertImplicitDesktopDaemonIdentity(result.client, explicitHost);
       return result.client;
     }
     return tryNext(index + 1, result.error);

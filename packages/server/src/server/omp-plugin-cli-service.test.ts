@@ -50,6 +50,77 @@ const LIST_JSON = JSON.stringify({
 });
 
 describe("OmpPluginCliService", () => {
+  it("uses live provider command/profile/env for GUI and cold-CLI management", async () => {
+    let profile = "first";
+    const runner = vi.fn<OmpPluginRunner>().mockResolvedValue({ stdout: LIST_JSON, stderr: "" });
+    const service = new OmpPluginCliService({
+      logger: createTestLogger(),
+      runner,
+      resolveOmpCommand: async () => "unused-default",
+      getProviderConfig: () => ({
+        command: ["configured-omp", "--profile", profile],
+        env: { OMP_PROFILE: "persisted-env" },
+      }),
+    });
+    await service.list();
+    profile = "second";
+    await service.list();
+    expect(
+      runner.mock.calls.map(([command, args, options]) => ({
+        command,
+        args,
+        cwd: options.cwd,
+        profile: options.env?.OMP_PROFILE,
+      })),
+    ).toEqual([
+      {
+        command: "configured-omp",
+        args: ["--profile", "first", "plugin", "list", "--json"],
+        cwd: process.cwd(),
+        profile: "persisted-env",
+      },
+      {
+        command: "configured-omp",
+        args: ["--profile", "second", "plugin", "list", "--json"],
+        cwd: process.cwd(),
+        profile: "persisted-env",
+      },
+    ]);
+  });
+
+  it("reads marketplace catalogs beside the authoritative native plugins root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omp-profile-marketplace-"));
+    try {
+      await writeFile(
+        join(root, "marketplaces.json"),
+        JSON.stringify({
+          marketplaces: [
+            {
+              name: "profile-only",
+              sourceUri: "local-fixture",
+              catalogPath: join(root, "catalog.json"),
+            },
+          ],
+        }),
+      );
+      await writeFile(join(root, "catalog.json"), JSON.stringify({ plugins: [] }));
+      const runner = makeRunner(
+        JSON.stringify({
+          npm: [],
+          marketplace: [],
+          paths: { dataRoot: root, pluginsRoot: join(root, "plugins") },
+        }),
+      );
+      const service = makeService(runner);
+      expect((await service.marketplaceList()).marketplaces).toEqual([
+        { name: "profile-only", source: "local-fixture", plugins: [] },
+      ]);
+      expect(runner.calls[0]?.args).toEqual(["plugin", "list", "--json"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("lists plugins and marketplace entries from omp plugin list --json", async () => {
     const runner = makeRunner(LIST_JSON);
     const result = await makeService(runner).list();
@@ -127,7 +198,7 @@ describe("OmpPluginCliService", () => {
       });
     };
 
-    const result = await makeService(runner).upgrade("probe@catalog", "project");
+    const result = await makeService(runner).upgrade("probe@catalog", "project", tmpdir());
 
     expect(result.ok).toBe(false);
     expect(result.output).toContain("Resolving probe@catalog");
@@ -174,21 +245,45 @@ describe("OmpPluginCliService", () => {
     expect(result.plugin?.name).toBe("@omp/plugin-memory");
   });
 
-  it("omits scope and dry-run flags when not requested", async () => {
-    const runner = makeRunner(
-      JSON.stringify({ npm: [{ name: "x", version: "1", enabled: true }], marketplace: [] }),
-    );
-    await makeService(runner).install({ spec: "x", dryRun: true, scope: "project" });
-
-    expect(runner.calls[0]?.args).toEqual([
-      "plugin",
-      "install",
-      "x",
-      "--json",
-      "--scope",
-      "project",
-      "--dry-run",
+  it("refuses every project mutation without explicit cwd before invoking the CLI", async () => {
+    const runner = makeRunner("");
+    const service = makeService(runner);
+    const results = await Promise.all([
+      service.install({ spec: "probe@catalog", scope: "project" }),
+      service.upgrade("probe@catalog", "project"),
+      service.remove("probe@catalog", "project"),
+      service.setEnabled("probe@catalog", false, "project"),
     ]);
+
+    for (const result of results) {
+      expect(result.ok).toBe(false);
+      expect(result.output).toContain("explicit project cwd");
+    }
+    expect(runner.calls).toHaveLength(0);
+  });
+
+  it("rejects relative, nonexistent and file contexts without invoking the CLI", async () => {
+    const root = await mkdtemp(join(tmpdir(), "omp-plugin-context-"));
+    try {
+      const file = join(root, "not-a-directory");
+      await writeFile(file, "");
+      const runner = makeRunner(LIST_JSON);
+      const service = makeService(runner);
+      for (const cwd of ["relative-project", join(root, "missing"), file]) {
+        const installed = await service.install({ spec: "probe@catalog", scope: "project", cwd });
+        expect(installed.ok).toBe(false);
+        expect(installed.output).toContain("directory");
+        const listed = await service.list(cwd);
+        expect(listed.plugins).toEqual([]);
+        expect(listed.rawOutput).toContain("directory");
+        const doctor = await service.doctor({ cwd });
+        expect(doctor.checks).toEqual([]);
+        expect(doctor.rawOutput).toContain("directory");
+      }
+      expect(runner.calls).toHaveLength(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("verifies setEnabled against a fresh list instead of trusting exit code", async () => {
@@ -209,33 +304,89 @@ describe("OmpPluginCliService", () => {
     expect(retry.ok).toBe(true);
   });
 
-  it("targets and verifies marketplace plugins by exact ID and scope", async () => {
-    const runner = makeRunner("", (_command, args) => {
-      if (args[1] === "list") {
-        return JSON.stringify({
-          npm: [],
-          marketplace: [
-            {
-              id: "probe@catalog",
-              scope: "project",
-              entries: [{ scope: "project", version: "1", enabled: false }],
-            },
-          ],
-        });
-      }
-      return "";
-    });
+  it("does not verify a user toggle using the same ID's project state", async () => {
+    const runner = makeRunner(
+      JSON.stringify({
+        npm: [],
+        marketplace: [
+          {
+            id: "probe@catalog",
+            scope: "project",
+            entries: [{ scope: "project", enabled: false }],
+          },
+          { id: "probe@catalog", scope: "user", entries: [{ scope: "user" }] },
+        ],
+      }),
+    );
+    const result = await makeService(runner).setEnabled("probe@catalog", false, "user");
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("did not confirm");
+  });
 
-    const result = await makeService(runner).setEnabled("probe@catalog", false, "project");
+  it("verifies the exact project entry even when the same ID's user entry appears first", async () => {
+    const runner = makeRunner(
+      JSON.stringify({
+        npm: [],
+        marketplace: [
+          {
+            id: "probe@catalog",
+            scope: "project",
+            entries: [{ scope: "user" }, { scope: "project", enabled: false }],
+          },
+        ],
+      }),
+    );
+    const service = makeService(runner);
+    expect((await service.setEnabled("probe@catalog", false, "project", tmpdir())).ok).toBe(true);
+    expect((await service.setEnabled("probe@catalog", true, "project", tmpdir())).ok).toBe(false);
+  });
 
-    expect(runner.calls[0]?.args).toEqual([
-      "plugin",
-      "disable",
-      "probe@catalog",
-      "--scope",
-      "project",
+  it("keeps same-ID scoped copies, shadowing, metadata and native default enabled state", async () => {
+    const marketplace = [
+      {
+        id: "probe@catalog",
+        scope: "user",
+        shadowedBy: "project",
+        entries: [{ scope: "user", version: "1", installedAt: "2026-10-19" }],
+      },
+      {
+        id: "probe@catalog",
+        scope: "project",
+        entries: [{ scope: "project", version: "2", enabled: false }],
+      },
+      { id: "unknown@catalog", scope: "user" },
+    ];
+    const result = await makeService(makeRunner(JSON.stringify({ npm: [], marketplace }))).list();
+    expect(result.marketplace).toEqual(marketplace);
+    expect(result.plugins).toEqual([
+      expect.objectContaining({
+        id: "probe@catalog",
+        scope: "user",
+        version: "1",
+        enabled: true,
+        shadowedBy: "project",
+        installedAt: "2026-10-19",
+      }),
+      expect.objectContaining({
+        id: "probe@catalog",
+        scope: "project",
+        version: "2",
+        enabled: false,
+      }),
+      expect.objectContaining({ id: "unknown@catalog", scope: "user", enabled: undefined }),
     ]);
-    expect(result.ok).toBe(true);
+  });
+
+  it("does not confirm enabled state from a summary without an installed entry", async () => {
+    const service = makeService(
+      makeRunner(
+        JSON.stringify({
+          npm: [],
+          marketplace: [{ id: "probe@catalog", scope: "user" }],
+        }),
+      ),
+    );
+    expect((await service.setEnabled("probe@catalog", true, "user")).ok).toBe(false);
   });
 
   it("returns doctor checks parsed from CLI output", async () => {
@@ -269,20 +420,6 @@ describe("OmpPluginCliService", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("passes marketplace scope to uninstall", async () => {
-    const runner = makeRunner("removed");
-    const result = await makeService(runner).remove("probe@catalog", "project");
-
-    expect(runner.calls[0]?.args).toEqual([
-      "plugin",
-      "uninstall",
-      "probe@catalog",
-      "--scope",
-      "project",
-    ]);
-    expect(result.ok).toBe(true);
-  });
-
   describe("marketplaces", () => {
     const REGISTRY_CATALOG_PATH = join(tmpdir(), "omp-mkt-registry-fixture", "probe-mkt.json");
     const REGISTRY_JSON = JSON.stringify({
@@ -299,7 +436,17 @@ describe("OmpPluginCliService", () => {
     });
     const CATALOG_JSON = JSON.stringify({
       name: "probe-mkt",
-      plugins: [{ name: "probe-plugin", description: "d", version: "1.0.0" }],
+      plugins: [
+        {
+          name: "probe-plugin",
+          description: "d",
+          version: "1.0.0",
+          source: { type: "git", url: "https://example.com/plugin.git" },
+          author: { name: "Catalog publisher" },
+          homepage: "https://example.com/plugin",
+          repository: { url: "https://example.com/source" },
+        },
+      ],
     });
 
     async function withRegistry(files: Record<string, string>) {
@@ -351,7 +498,17 @@ describe("OmpPluginCliService", () => {
           {
             name: "probe-mkt",
             source: "D:/mp",
-            plugins: [{ name: "probe-plugin", description: "d", version: "1.0.0" }],
+            plugins: [
+              {
+                name: "probe-plugin",
+                description: "d",
+                version: "1.0.0",
+                source: { type: "git", url: "https://example.com/plugin.git" },
+                author: { name: "Catalog publisher" },
+                homepage: "https://example.com/plugin",
+                repository: { url: "https://example.com/source" },
+              },
+            ],
           },
         ]);
       } finally {
@@ -435,6 +592,21 @@ describe("OmpPluginCliService", () => {
       } finally {
         await dispose();
       }
+    });
+
+    it("does not report successful refresh when the native marketplace update fails", async () => {
+      const runner = vi.fn<OmpPluginRunner>().mockRejectedValue(
+        Object.assign(new Error("update failed"), {
+          stdout: "Fetching catalog",
+          stderr: "remote repository unavailable",
+        }),
+      );
+      const service = makeService(runner);
+      const result = await service.marketplaceUpdate({ name: "probe-mkt" });
+      expect(result.ok).toBe(false);
+      expect(result.output).toContain("Fetching catalog");
+      expect(result.output).toContain("remote repository unavailable");
+      expect(result.output).toContain("update failed");
     });
 
     it("removes a marketplace via CLI", async () => {

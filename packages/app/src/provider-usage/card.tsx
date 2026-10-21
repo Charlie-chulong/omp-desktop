@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
@@ -47,9 +47,11 @@ function footerText(usage: ProviderUsage, t: TFunction): string | null {
 export function ProviderUsageCard({
   usage,
   compact = false,
+  children,
 }: {
   usage: ProviderUsage;
   compact?: boolean;
+  children?: ReactNode;
 }) {
   const { t } = useTranslation();
   const status = statusText(usage, t);
@@ -134,6 +136,7 @@ export function ProviderUsageCard({
           {footer}
         </Text>
       ) : null}
+      {children}
     </View>
   );
 }

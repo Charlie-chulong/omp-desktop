@@ -7,6 +7,7 @@ import type { OmpInstallationStatus } from "@omp-desktop/protocol/messages";
 
 import { findExecutable } from "../../../../executable-resolution/executable-resolution.js";
 import { execCommand } from "../../../../utils/spawn.js";
+import { rejectBundledOmpHostUpdate } from "../../../bundled-omp-host.js";
 
 const OMP_REPOSITORY = "can1357/oh-my-pi";
 const LATEST_RELEASE_URL = `https://github.com/${OMP_REPOSITORY}/releases/latest`;
@@ -340,6 +341,7 @@ export class OmpExecutableBusyError extends Error {
 export async function replaceManagedOmpBinary(
   options: ReplaceManagedOmpBinaryOptions,
 ): Promise<void> {
+  rejectBundledOmpHostUpdate();
   const fileSystem = options.fileSystem ?? fs;
   const platform = options.platform ?? process.platform;
   const hadCurrent = await pathExists(options.installPath, fileSystem);
@@ -517,6 +519,8 @@ export async function applyPendingOmpUpdate(
   const { stagedPath, checksumPath, previousPath } = resolveOmpUpdatePaths(installPath, platform);
   if (!existsSync(stagedPath)) return { applied: false, pending: false };
   try {
+    rejectBundledOmpHostUpdate();
+    rejectBundledOmpHostUpdate(options.env);
     await verifyStagedBinary(stagedPath, checksumPath);
     await replaceManagedOmpBinary({
       installPath,
@@ -669,6 +673,11 @@ async function runOmpInstall(
 }
 
 export function installOmp(options: OmpInstallOptions = {}): Promise<OmpInstallationStatus> {
+  try {
+    rejectBundledOmpHostUpdate();
+  } catch (error) {
+    return Promise.reject(error);
+  }
   if (activeInstall) return activeInstall.promise;
 
   const controller = new AbortController();

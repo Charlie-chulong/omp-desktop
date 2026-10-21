@@ -6,7 +6,7 @@ import {
   type PropsWithChildren,
   type ReactElement,
 } from "react";
-import { Text, View } from "react-native";
+import { Text, View, type PointerEvent } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ChevronRight } from "lucide-react-native";
 import type { Theme } from "@/styles/theme";
@@ -65,17 +65,26 @@ export function MenuSubTrigger({
   const isPopover = menu.presentation === "popover";
 
   const handleSelect = useCallback(() => {
-    menu.openSub({ id, depth });
-  }, [menu, id, depth]);
-
-  const handlePointerEnter = useCallback(() => {
+    // A tap or keyboard selection takes over from any pending mouse-hover intent.
     cancelHoverClose();
-    hoverOpen({ id, depth });
-  }, [cancelHoverClose, hoverOpen, id, depth]);
+    menu.openSub({ id, depth });
+  }, [cancelHoverClose, menu, id, depth]);
 
-  const handlePointerLeave = useCallback(() => {
-    hoverClose(depth);
-  }, [hoverClose, depth]);
+  const handlePointerEnter = useCallback(
+    (event: PointerEvent) => {
+      cancelHoverClose();
+      if (event.nativeEvent.pointerType !== "mouse") return;
+      hoverOpen({ id, depth }, event.nativeEvent.pointerType);
+    },
+    [cancelHoverClose, hoverOpen, id, depth],
+  );
+
+  const handlePointerLeave = useCallback(
+    (event: PointerEvent) => {
+      hoverClose(depth, event.nativeEvent.pointerType);
+    },
+    [hoverClose, depth],
+  );
 
   const trailing = useMemo(
     () => <MenuSubTrailing value={value} indicator={indicator} />,

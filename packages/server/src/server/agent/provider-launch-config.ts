@@ -151,6 +151,32 @@ export async function resolveProviderCommandPrefix(
   };
 }
 
+export function toRuntimeSettings(
+  override?: ProviderOverride,
+): ProviderRuntimeSettings | undefined {
+  if (!override?.command && !override?.env && !override?.disallowedTools) return undefined;
+  return {
+    command: override.command ? { mode: "replace", argv: override.command } : undefined,
+    env: override.env,
+    disallowedTools: override.disallowedTools,
+  };
+}
+
+export function mergeRuntimeSettings(
+  base: ProviderRuntimeSettings | undefined,
+  override: ProviderRuntimeSettings | undefined,
+): ProviderRuntimeSettings | undefined {
+  if (!base && !override) return undefined;
+  return {
+    command: override?.command ?? base?.command,
+    env: base?.env || override?.env ? { ...base?.env, ...override?.env } : undefined,
+    disallowedTools:
+      base?.disallowedTools || override?.disallowedTools
+        ? [...(base?.disallowedTools ?? []), ...(override?.disallowedTools ?? [])]
+        : undefined,
+  };
+}
+
 let cachedShellEnv: Record<string, string> | null = null;
 
 export function resolveShellEnv(): Record<string, string> {

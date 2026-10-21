@@ -325,6 +325,18 @@ function resolveHistoryPagination(
   };
 }
 
+function resolveScrollIndicatorAnimations() {
+  // Keep entry/exit animations off on Android due to RN dispatchDraw crashes
+  // tracked in react-native-reanimated#8422.
+  if (Platform.OS === "android") {
+    return { scrollIndicatorFadeIn: undefined, scrollIndicatorFadeOut: undefined };
+  }
+  return {
+    scrollIndicatorFadeIn: FadeIn.duration(200),
+    scrollIndicatorFadeOut: FadeOut.duration(200),
+  };
+}
+
 const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamViewProps>(
   function AgentStreamView(
     {
@@ -436,15 +448,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       progressKey: remoteProgressKey,
       loadOlder: loadRemoteOlder,
     } = resolveHistoryPagination(historyPagination, agentHistoryPagination);
-    // Keep entry/exit animations off on Android due to RN dispatchDraw crashes
-    // tracked in react-native-reanimated#8422.
-    const shouldDisableEntryExitAnimations = Platform.OS === "android";
-    const scrollIndicatorFadeIn = shouldDisableEntryExitAnimations
-      ? undefined
-      : FadeIn.duration(200);
-    const scrollIndicatorFadeOut = shouldDisableEntryExitAnimations
-      ? undefined
-      : FadeOut.duration(200);
+    const { scrollIndicatorFadeIn, scrollIndicatorFadeOut } = resolveScrollIndicatorAnimations();
 
     useEffect(() => {
       setIsNearBottom(true);
@@ -795,6 +799,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           <AssistantMessage
             occurrenceKey={createAssistantImageOccurrenceKey({ agentId, itemId: item.id })}
             message={item.text}
+            typographer={item.customMessage === undefined}
             timestamp={item.timestamp.getTime()}
             workspaceRoot={workspaceRoot}
             serverId={resolvedServerId}

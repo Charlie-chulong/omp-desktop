@@ -210,6 +210,44 @@ afterEach(() => {
 });
 
 describe("ReplicaCache", () => {
+  it("round-trips complete native custom originals, identity, and metadata without truncation", async () => {
+    const storage = new MemoryStorage();
+    const writer = new ReplicaCache(storage);
+    writer.setHosts([SERVER_ID]);
+    seedSession();
+    const original: StreamItem = {
+      kind: "assistant_message",
+      id: "custom-original",
+      messageId: "native-entry",
+      turnId: "origin-turn",
+      timestamp: new Date("2026-10-19T00:00:00Z"),
+      timelineCursor: { epoch: "epoch-1", seq: 12 },
+      text: `\n${"完整原文🙂\n".repeat(40_000)}\n`,
+      customMessage: {
+        customType: "omp-bridge-chatpro",
+        details: {
+          schemaVersion: 1,
+          event: "result",
+          deliveryId: "delivery",
+          requestId: "request",
+          sessionId: "session",
+          runtimeId: "runtime",
+          agentId: "main",
+          origin: { turnId: "origin-turn" },
+        },
+      },
+    };
+    useSessionStore.getState().setAgentStreamTail(SERVER_ID, new Map([["agent-1", [original]]]));
+    await writer.flush();
+    useSessionStore.getState().clearSession(SERVER_ID);
+    const reader = new ReplicaCache(storage);
+    reader.setHosts([SERVER_ID]);
+    await reader.restore();
+    expect(useSessionStore.getState().sessions[SERVER_ID]?.agentStreamTail.get("agent-1")).toEqual([
+      original,
+    ]);
+  });
+
   it("persists after user inactivity even while replica changes continue", async () => {
     vi.useFakeTimers();
     const storage = new MemoryStorage();

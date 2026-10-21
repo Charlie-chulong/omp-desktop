@@ -66,30 +66,29 @@ function dollarInlineRule(state: InlineState, silent: boolean): boolean {
     return false;
   }
 
-  let end = findUnescaped(source, "$", start + 1, state.posMax);
-  while (end >= 0) {
-    const content = source.slice(start + 1, end);
-    const next = source[end + 1] ?? "";
-    if (
-      content.length > 0 &&
-      !content.includes("\n") &&
-      !/^\s|\s$/.test(content) &&
-      source[end - 1] !== "$" &&
-      source[end + 1] !== "$" &&
-      !/\d/.test(next)
-    ) {
-      if (!silent) {
-        const token = state.push(MATH_INLINE_TOKEN, "math", 0);
-        token.content = content;
-        token.markup = "$";
-      }
-      state.pos = end + 1;
-      return true;
-    }
-    end = findUnescaped(source, "$", end + 1, state.posMax);
+  const end = findUnescaped(source, "$", start + 1, state.posMax);
+  if (end < 0) {
+    return false;
   }
-
-  return false;
+  const content = source.slice(start + 1, end);
+  // Padded TeX commands are unambiguous math; padded currency stays prose.
+  if (
+    content.trim().length === 0 ||
+    content.includes("\n") ||
+    (/^\s|\s$/.test(content) && !/\\[A-Za-z]+/.test(content)) ||
+    source[end - 1] === "$" ||
+    source[end + 1] === "$" ||
+    /\d/.test(source[end + 1] ?? "")
+  ) {
+    return false;
+  }
+  if (!silent) {
+    const token = state.push(MATH_INLINE_TOKEN, "math", 0);
+    token.content = content.trim();
+    token.markup = "$";
+  }
+  state.pos = end + 1;
+  return true;
 }
 
 interface BlockDelimiter {

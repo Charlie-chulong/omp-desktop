@@ -32,6 +32,19 @@ describe("resolveExplorerSelection", () => {
     expect(removed.activePath).toBe("a");
   });
 
+  it("retains checked entries inside collapsed folders when the last visible entry is unchecked", () => {
+    const result = resolveExplorerSelection({
+      path: "d",
+      visiblePaths,
+      selectedPaths: new Set(["folder/child.txt", "d"]),
+      anchorPath: "d",
+      additive: true,
+      range: false,
+    });
+    expect([...result.selectedPaths]).toEqual(["folder/child.txt"]);
+    expect(result.activePath).toBe("folder/child.txt");
+  });
+
   it("selects the visible range from the stable anchor in either direction", () => {
     const forward = resolveExplorerSelection({
       path: "d",

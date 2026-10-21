@@ -14,6 +14,7 @@ import { MAX_EXPLICIT_AGENT_TITLE_CHARS } from "./agent-title-limits.js";
 import { AgentProviderSchema } from "./provider-manifest.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { WORKSPACE_LABEL_COLORS } from "./workspace-labels.js";
+import { OmpStatsGetRequestMessageSchema, OmpStatsGetResponseMessageSchema } from "./omp-stats.js";
 import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
@@ -777,6 +778,29 @@ const ToolCallTimelineItemPayloadSchema: z.ZodType<ToolCallTimelineItem, unknown
     ToolCallCanceledPayloadSchema,
   ]);
 
+/** ChatPro delivery identity is interpreted only after this public metadata contract validates. */
+export const ChatProDetailsSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    event: z.enum(["receipt", "progress", "result", "error", "status"]),
+    deliveryId: z.string().min(1),
+    requestId: z.string().min(1).optional(),
+    nativeJobId: z.string().min(1).optional(),
+    sessionId: z.string().min(1),
+    runtimeId: z.string().min(1),
+    agentId: z.string().min(1),
+    origin: z
+      .object({
+        turnId: z.string().min(1),
+        clientMessageId: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    resultId: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
+  })
+  .strict();
+
 // zod-aot 0.20.4 miscompiles this as a nested discriminated union by omitting
 // the inner tool_call branch from the generated outer dispatch.
 export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknown> = z.union([
@@ -793,6 +817,12 @@ export const AgentTimelineItemPayloadSchema: z.ZodType<AgentTimelineItem, unknow
     text: z.string(),
     messageId: z.string().optional(),
     presentation: z.literal("plan").optional(),
+    customMessage: z
+      .object({
+        customType: z.string(),
+        details: z.unknown().optional(),
+      })
+      .optional(),
   }),
   z.object({
     type: z.literal("reasoning"),
@@ -2000,6 +2030,7 @@ export const OmpPluginInfoSchema = z
     version: z.string(),
     path: z.string().optional(),
     scope: z.enum(["user", "project"]).optional(),
+    shadowedBy: z.enum(["project"]).optional(),
     enabled: z.boolean().optional(),
     description: z.string().optional(),
     features: z.array(z.string()).optional(),
@@ -2036,6 +2067,7 @@ export type OmpMarketplacePluginInfo = z.infer<typeof OmpMarketplacePluginInfoSc
 export const OmpPluginListRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.list.request"),
   requestId: z.string(),
+  cwd: z.string().optional(),
 });
 
 export const OmpPluginInstallRequestMessageSchema = z.object({
@@ -2043,6 +2075,7 @@ export const OmpPluginInstallRequestMessageSchema = z.object({
   spec: z.string().trim().min(1).max(200),
   scope: z.enum(["user", "project"]).optional(),
   dryRun: z.boolean().optional(),
+  cwd: z.string().optional(),
   requestId: z.string(),
 });
 
@@ -2050,6 +2083,7 @@ export const OmpPluginUpgradeRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.upgrade.request"),
   name: z.string().trim().min(1).max(214),
   scope: z.enum(["user", "project"]).optional(),
+  cwd: z.string().optional(),
   requestId: z.string(),
 });
 
@@ -2057,6 +2091,7 @@ export const OmpPluginRemoveRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.remove.request"),
   name: z.string().trim().min(1).max(214),
   scope: z.enum(["user", "project"]).optional(),
+  cwd: z.string().optional(),
   requestId: z.string(),
 });
 
@@ -2065,18 +2100,21 @@ export const OmpPluginSetEnabledRequestMessageSchema = z.object({
   name: z.string().trim().min(1).max(214),
   scope: z.enum(["user", "project"]).optional(),
   enabled: z.boolean(),
+  cwd: z.string().optional(),
   requestId: z.string(),
 });
 
 export const OmpPluginDoctorRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.doctor.request"),
   fix: z.boolean().optional(),
+  cwd: z.string().optional(),
   requestId: z.string(),
 });
 
 export const OmpPluginMarketplaceListRequestMessageSchema = z.object({
   type: z.literal("ompPlugins.marketplace.list.request"),
   requestId: z.string(),
+  cwd: z.string().optional(),
 });
 
 export const OmpPluginMarketplaceAddRequestMessageSchema = z.object({
@@ -2084,6 +2122,7 @@ export const OmpPluginMarketplaceAddRequestMessageSchema = z.object({
   /** Marketplace source: `owner/repo`, a git URL, or a local path. */
   source: z.string().trim().min(1).max(300),
   requestId: z.string(),
+  cwd: z.string().optional(),
 });
 
 export const OmpPluginMarketplaceRemoveRequestMessageSchema = z.object({
@@ -2091,6 +2130,14 @@ export const OmpPluginMarketplaceRemoveRequestMessageSchema = z.object({
   /** Marketplace name as shown by `omp plugin marketplace list`. */
   name: z.string().trim().min(1).max(200),
   requestId: z.string(),
+  cwd: z.string().optional(),
+});
+
+export const OmpPluginMarketplaceUpdateRequestMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.update.request"),
+  name: z.string().trim().min(1).max(200),
+  requestId: z.string(),
+  cwd: z.string().optional(),
 });
 
 export const OmpPluginMarketplaceCatalogEntrySchema = z
@@ -2100,6 +2147,10 @@ export const OmpPluginMarketplaceCatalogEntrySchema = z
     version: z.string().optional(),
     category: z.string().optional(),
     keywords: z.array(z.string()).optional(),
+    source: z.unknown().optional(),
+    author: z.unknown().optional(),
+    homepage: z.string().optional(),
+    repository: z.unknown().optional(),
   })
   .passthrough();
 export type OmpPluginMarketplaceCatalogEntry = z.infer<
@@ -3598,7 +3649,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   OmpPluginMarketplaceListRequestMessageSchema,
   OmpPluginMarketplaceAddRequestMessageSchema,
   OmpPluginMarketplaceRemoveRequestMessageSchema,
+  OmpPluginMarketplaceUpdateRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
+  OmpStatsGetRequestMessageSchema,
   ResumeAgentRequestMessageSchema,
   ImportAgentRequestMessageSchema,
   RefreshAgentRequestMessageSchema,
@@ -3887,6 +3940,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceFileEditing: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
+        // Native OMP statistics are separate from provider account usage.
+        ompStats: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
         agentDetach: z.boolean().optional(),
         // COMPAT(agentThinkingUpdate): added in v0.2.4, remove gate after 2027-01-28.
@@ -5075,6 +5130,7 @@ export const DaemonGetStatusResponseSchema = z.object({
       requestId: z.string(),
       serverId: z.string(),
       version: z.string().nullable().optional(),
+      desktopDistributionIdentity: z.string().nullable().optional(),
       pid: z.number(),
       nodePath: z.string(),
       startedAt: z.string().nullable().optional(),
@@ -6461,6 +6517,12 @@ export const OmpClaudeLimitResetConsumeResultSchema = z.object({
   weeklyResetsAt: z.string().nullable(),
   cooldownUntil: z.string().nullable(),
 });
+export const OmpCodexCreditsSchema = z.object({
+  hasCredits: z.boolean(),
+  unlimited: z.boolean(),
+  // Keep the upstream decimal string intact; converting to a number can lose precision.
+  balance: z.string().nullable().optional(),
+});
 export const OmpProviderAccountQuotaSchema = z.object({
   status: z.enum(["available", "unavailable", "error"]),
   planLabel: z.string().nullable().optional(),
@@ -6509,6 +6571,7 @@ export const OmpProviderAccountQuotaSchema = z.object({
       observedAt: z.string(),
     })
     .optional(),
+  credits: OmpCodexCreditsSchema.nullable().optional(),
   resetCredits: OmpCodexResetCreditsSchema.optional(),
   limitResets: OmpClaudeLimitResetsSchema.optional(),
   subscription: OmpCodexSubscriptionSchema.optional(),
@@ -6823,6 +6886,7 @@ export const OmpPluginSetEnabledResponseMessageSchema = z.object({
     ok: z.boolean(),
     name: z.string(),
     enabled: z.boolean(),
+    output: z.string().optional(),
   }),
 });
 
@@ -6866,6 +6930,15 @@ export const OmpPluginMarketplaceAddResponseMessageSchema = z.object({
 
 export const OmpPluginMarketplaceRemoveResponseMessageSchema = z.object({
   type: z.literal("ompPlugins.marketplace.remove.response"),
+  payload: z.object({
+    requestId: z.string(),
+    ok: z.boolean(),
+    output: z.string().optional(),
+  }),
+});
+
+export const OmpPluginMarketplaceUpdateResponseMessageSchema = z.object({
+  type: z.literal("ompPlugins.marketplace.update.response"),
   payload: z.object({
     requestId: z.string(),
     ok: z.boolean(),
@@ -7536,7 +7609,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   OmpPluginMarketplaceListResponseMessageSchema,
   OmpPluginMarketplaceAddResponseMessageSchema,
   OmpPluginMarketplaceRemoveResponseMessageSchema,
+  OmpPluginMarketplaceUpdateResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
+  OmpStatsGetResponseMessageSchema,
   ListCommandsResponseSchema,
   ListTerminalsResponseSchema,
   TerminalsChangedSchema,
@@ -7716,6 +7791,7 @@ export type ProviderDiagnosticResponseMessage = z.infer<
 >;
 export type OmpProviderManagement = z.infer<typeof OmpProviderManagementSchema>;
 export type OmpProviderAccountQuota = z.infer<typeof OmpProviderAccountQuotaSchema>;
+export type OmpCodexCredits = z.infer<typeof OmpCodexCreditsSchema>;
 export type OmpCodexResetCredits = z.infer<typeof OmpCodexResetCreditsSchema>;
 export type OmpCodexSubscription = z.infer<typeof OmpCodexSubscriptionSchema>;
 export type OmpClaudeLimitResetGrant = z.infer<typeof OmpClaudeLimitResetGrantSchema>;

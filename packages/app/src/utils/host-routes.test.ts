@@ -12,6 +12,7 @@ import {
   buildProjectSettingsRoute,
   buildProjectsSettingsRoute,
   decodeFilePathFromPathSegment,
+  buildSettingsSectionRoute,
   decodeWorkspaceIdFromPathSegment,
   encodeFilePathForPathSegment,
   encodeWorkspaceIdForPathSegment,
@@ -250,6 +251,15 @@ describe("host settings section slugs", () => {
 });
 
 describe("settings section slugs", () => {
+  it("adds chat behavior without invalidating existing app settings links", () => {
+    expect(isSettingsSectionSlug("chat-behavior")).toBe(true);
+    expect(buildSettingsSectionRoute("chat-behavior")).toBe("/settings/chat-behavior");
+    for (const section of ["general", "connections", "appearance"] as const) {
+      expect(isSettingsSectionSlug(section)).toBe(true);
+      expect(buildSettingsSectionRoute(section)).toBe(`/settings/${section}`);
+    }
+  });
+
   it("includes desktop notification settings", () => {
     expect(isSettingsSectionSlug("notifications")).toBe(true);
   });

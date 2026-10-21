@@ -1,5 +1,6 @@
-import { Fragment, useMemo, type ReactElement, type ReactNode } from "react";
-import { withUnistyles } from "react-native-unistyles";
+import { Fragment, useCallback, useMemo, useRef, type ReactElement, type ReactNode } from "react";
+import { Pressable, View, type GestureResponderEvent } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import {
   Copy,
   CopyPlus,
@@ -10,6 +11,7 @@ import {
   FolderOpen,
   FolderPlus,
   MessageSquarePlus,
+  MoreHorizontal,
   Pencil,
   Trash2,
   Undo2,
@@ -21,10 +23,72 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  useContextMenu,
 } from "@/components/ui/context-menu";
+import { measureElement } from "@/components/ui/menu/menu-anchor";
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const destructiveColorMapping = (theme: Theme) => ({ color: theme.colors.destructive });
+const ThemedMoreHorizontal = withUnistyles(MoreHorizontal);
+
+/** An explicit trigger for the same menu used by right-click, outside a row's drag handle. */
+export function FileActionsMenuButton({
+  onSelect,
+  testID,
+}: {
+  onSelect?: () => void;
+  testID?: string;
+}): ReactElement {
+  const { t } = useTranslation();
+  const menu = useContextMenu();
+  const ref = useRef<View>(null);
+  const handlePress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation();
+      onSelect?.();
+      if (!ref.current) return;
+      void measureElement(ref.current).then((rect) => {
+        menu.setAnchorRect(rect);
+        return menu.setOpen(true);
+      });
+    },
+    [menu, onSelect],
+  );
+  const stopPropagation = useCallback((event: GestureResponderEvent) => {
+    event.stopPropagation();
+  }, []);
+  return (
+    <Pressable
+      ref={ref}
+      onPress={handlePress}
+      onPressIn={stopPropagation}
+      style={buttonStyles.button}
+      {...{
+        onMouseDown: (event: { preventDefault(): void; stopPropagation(): void }) => {
+          // Keep editor/browser selection intact and never begin the surrounding row's drag.
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        onPointerDown: (event: { stopPropagation(): void }) => event.stopPropagation(),
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={t("workspace.fileActions.moreActions")}
+      testID={testID}
+    >
+      <ThemedMoreHorizontal size={ICON_SIZE.md} uniProps={foregroundMutedColorMapping} />
+    </Pressable>
+  );
+}
+
+const buttonStyles = StyleSheet.create((theme) => ({
+  button: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.borderRadius.base,
+  },
+}));
 interface FileAction {
   key: string;
   label: string;
@@ -84,7 +148,7 @@ export function FileActionsContextMenuContent({
   const { t } = useTranslation();
   const actions = useMemo<FileAction[]>(() => {
     const availableFile = fileKind === "file" && fileExists;
-    const specs: Array<FileAction | null> = [
+    const specs: (FileAction | null)[] = [
       onNewFile
         ? {
             key: "new-file",

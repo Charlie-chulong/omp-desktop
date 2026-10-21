@@ -21,11 +21,11 @@ import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
 import type { HostBadgeModel } from "@/hosts/appearance";
 import { isWeb as platformIsWeb, isNative as platformIsNative } from "@/constants/platform";
 import { SIDEBAR_LIST_INSET, useIsCompactFormFactor } from "@/constants/layout";
-import { StyleSheet } from "react-native-unistyles";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type { Theme } from "@/styles/theme";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
-import { withUnistyles } from "react-native-unistyles";
 import {
   ChevronDown,
   ChevronRight,
@@ -619,14 +619,18 @@ function StatusWorkspaceRowWithMenu({
     },
     [renameMutation],
   );
-  const rename: SidebarWorkspaceRename | undefined = isRenaming
-    ? {
-        initialValue: workspace.title ?? workspace.name,
-        placeholder: workspace.name,
-        onSubmit: handleSubmitRename,
-        onCancel: handleCloseRename,
-      }
-    : undefined;
+  const rename = useMemo<SidebarWorkspaceRename | undefined>(
+    () =>
+      isRenaming
+        ? {
+            initialValue: workspace.title ?? workspace.name,
+            placeholder: workspace.name,
+            onSubmit: handleSubmitRename,
+            onCancel: handleCloseRename,
+          }
+        : undefined,
+    [handleCloseRename, handleSubmitRename, isRenaming, workspace.name, workspace.title],
+  );
   const isPinned = workspace.pinnedAt != null;
   const handleTogglePin = useCallback(() => {
     onToggleWorkspacePin(workspace);
@@ -793,6 +797,7 @@ function StatusWorkspaceRowInnerContent({
 }) {
   const isCompact = useIsCompactFormFactor();
   const isTouchPlatform = platformIsNative || isCompact;
+  const showPersistentActions = useShowPersistentActions();
   const [isPressed, setIsPressed] = useState(false);
   const {
     role: _dragRole,
@@ -845,6 +850,7 @@ function StatusWorkspaceRowInnerContent({
           hasArchiveAction: Boolean(onArchive),
           isHovered,
           isTouchPlatform,
+          showPersistentActions,
           showShortcut,
         });
         const workspaceRowStyle = getStatusWorkspaceRowStyle({
@@ -877,6 +883,8 @@ function StatusWorkspaceRowInnerContent({
               referenceContentStatus={referenceContentStatus}
               onRename={onRename}
               onMarkAsRead={onMarkAsRead}
+              onFork={canFork ? onFork : undefined}
+              forkPending={isForking}
               onArchive={onArchive}
               onDelete={onDelete}
               deleteStatus={deleteStatus}
@@ -931,6 +939,8 @@ function StatusWorkspaceRowInnerContent({
                     onTogglePin={onTogglePin}
                     onCopyPath={onCopyPath}
                     onCopyBranchName={onCopyBranchName}
+                    onReferenceContent={onReferenceContent}
+                    referenceContentStatus={referenceContentStatus}
                     onRename={onRename}
                     onMarkAsRead={onMarkAsRead}
                     onArchive={onArchive}
@@ -969,6 +979,8 @@ function StatusWorkspaceActionSlot({
   onTogglePin,
   onCopyPath,
   onCopyBranchName,
+  onReferenceContent,
+  referenceContentStatus,
   onRename,
   onMarkAsRead,
   onArchive,
@@ -996,6 +1008,8 @@ function StatusWorkspaceActionSlot({
   onTogglePin?: () => void;
   onCopyPath?: () => void;
   onCopyBranchName?: () => void;
+  onReferenceContent?: () => void;
+  referenceContentStatus?: "idle" | "pending" | "success";
   onRename?: () => void;
   onMarkAsRead?: () => void;
   onArchive?: () => void;
@@ -1039,6 +1053,11 @@ function StatusWorkspaceActionSlot({
             rootAgents={workspace.rootAgents}
             onCopyPath={onCopyPath}
             onCopyBranchName={onCopyBranchName}
+            onReferenceContent={onReferenceContent}
+            referenceContentStatus={referenceContentStatus}
+            onFork={canFork ? onFork : undefined}
+            forkPending={isForking}
+            openInFileManagerPath={workspace.workspaceDirectory}
             onRename={onRename}
             onMarkAsRead={onMarkAsRead}
             onArchive={onArchive}

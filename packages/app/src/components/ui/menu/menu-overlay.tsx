@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type RefObject,
@@ -287,6 +288,30 @@ export function AnchoredSurface({
       scrollable,
       maxHeight,
     });
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const setMeasuredRef = useCallback(
+    (node: View | null) => {
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+      if (!isWeb || !node || typeof ResizeObserver === "undefined") return;
+      const element = node as unknown as HTMLElement;
+      const observer = new ResizeObserver(measure);
+      function measure() {
+        if (resizeObserverRef.current !== observer || !element.isConnected) return;
+        const measuredWidth = element.offsetWidth;
+        const measuredHeight = element.offsetHeight;
+        if (measuredWidth === 0 || measuredHeight === 0) return;
+        onContentLayout({
+          nativeEvent: { layout: { width: measuredWidth, height: measuredHeight } },
+        });
+      }
+      observer.observe(element);
+      resizeObserverRef.current = observer;
+      // Background tabs can defer ResizeObserver's initial notification indefinitely.
+      queueMicrotask(measure);
+    },
+    [onContentLayout],
+  );
 
   useReleaseFixedMenuHeight({
     contentSize,
@@ -355,6 +380,7 @@ export function AnchoredSurface({
   const measured = (
     <View
       collapsable={false}
+      ref={setMeasuredRef}
       onLayout={onContentLayout}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}

@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   type ComponentProps,
+  type KeyboardEvent,
   type PropsWithChildren,
   type ReactNode,
 } from "react";
@@ -16,6 +17,7 @@ import {
   MessageSquareQuote,
   MoreVertical,
   Pencil,
+  Split,
   Pin,
   PinOff,
   Tag,
@@ -67,6 +69,7 @@ const ThemedArchive = withUnistyles(Archive);
 const ThemedMessageSquareQuote = withUnistyles(MessageSquareQuote);
 const ThemedPencil = withUnistyles(Pencil);
 const ThemedCircleCheck = withUnistyles(CircleCheck);
+const ThemedSplit = withUnistyles(Split);
 const ThemedPin = withUnistyles(Pin);
 const ThemedPinOff = withUnistyles(PinOff);
 const ThemedTag = withUnistyles(Tag);
@@ -84,6 +87,7 @@ const archiveLeadingIcon = <ThemedArchive size={14} uniProps={foregroundMutedCol
 const pinLeadingIcon = <ThemedPin size={14} uniProps={foregroundMutedColorMapping} />;
 const unpinLeadingIcon = <ThemedPinOff size={14} uniProps={foregroundMutedColorMapping} />;
 const deleteLeadingIcon = <ThemedTrash2 size={14} uniProps={foregroundMutedColorMapping} />;
+const forkLeadingIcon = <ThemedSplit size={14} uniProps={foregroundMutedColorMapping} />;
 const conversationsLeadingIcon = (
   <ThemedMessageSquareQuote size={14} uniProps={foregroundMutedColorMapping} />
 );
@@ -98,6 +102,10 @@ function renderTriggerIcon({ hovered }: { hovered?: boolean }) {
   );
 }
 
+function stopRowActionPropagation(event: { stopPropagation: () => void }) {
+  event.stopPropagation();
+}
+
 export interface SidebarWorkspaceMenuProps {
   workspaceKey: string;
   serverId?: string;
@@ -110,6 +118,8 @@ export interface SidebarWorkspaceMenuProps {
   referenceContentStatus?: "idle" | "pending" | "success";
   onRename?: () => void;
   onMarkAsRead?: () => void;
+  onFork?: () => void;
+  forkPending?: boolean;
   onArchive: () => void;
   onDelete?: () => void;
   deleteStatus?: "idle" | "pending" | "success";
@@ -163,6 +173,8 @@ function SidebarWorkspaceMenuItems({
   referenceContentStatus,
   onRename,
   onMarkAsRead,
+  onFork,
+  forkPending,
   onArchive,
   onDelete,
   deleteStatus,
@@ -213,7 +225,7 @@ function SidebarWorkspaceMenuItems({
           {t("sidebar.workspace.actions.copyBranchName")}
         </WorkspaceMenuItem>
       ) : null}
-      {surface === "context" && onReferenceContent ? (
+      {onReferenceContent ? (
         <WorkspaceMenuItem
           surface={surface}
           testID={`sidebar-workspace-menu-reference-content-${workspaceKey}`}
@@ -242,6 +254,17 @@ function SidebarWorkspaceMenuItems({
           onSelect={onMarkAsRead}
         >
           Mark as read
+        </WorkspaceMenuItem>
+      ) : null}
+      {onFork ? (
+        <WorkspaceMenuItem
+          surface={surface}
+          testID={`sidebar-workspace-menu-fork-${workspaceKey}`}
+          leading={forkLeadingIcon}
+          onSelect={onFork}
+          status={forkPending ? "pending" : "idle"}
+        >
+          {t("message.actions.forkInNewWorkspace")}
         </WorkspaceMenuItem>
       ) : null}
       {onTogglePin ? (
@@ -309,8 +332,12 @@ export function SidebarWorkspaceMenu({
   rootAgents = EMPTY_ROOT_AGENTS,
   onCopyPath,
   onCopyBranchName,
+  onReferenceContent,
+  referenceContentStatus,
   onRename,
   onMarkAsRead,
+  onFork,
+  forkPending,
   onArchive,
   onDelete,
   deleteStatus,
@@ -346,7 +373,9 @@ export function SidebarWorkspaceMenu({
       <DropdownMenuTrigger
         hitSlop={8}
         style={triggerStyle}
-        accessibilityRole={isWeb ? undefined : "button"}
+        accessibilityRole="button"
+        onPressIn={stopRowActionPropagation}
+        {...(isWeb ? { onPointerDown: stopRowActionPropagation } : {})}
         accessibilityLabel={t("sidebar.workspace.actions.menu")}
         testID={`sidebar-workspace-kebab-${workspaceKey}`}
       >
@@ -367,6 +396,10 @@ export function SidebarWorkspaceMenu({
           rootAgentCount={rootAgents.length}
           onCopyPath={onCopyPath}
           onCopyBranchName={onCopyBranchName}
+          onReferenceContent={onReferenceContent}
+          referenceContentStatus={referenceContentStatus}
+          onFork={onFork}
+          forkPending={forkPending}
           onRename={onRename}
           onMarkAsRead={onMarkAsRead}
           onArchive={onArchive}
@@ -406,6 +439,8 @@ export function SidebarWorkspaceContextMenu({
   referenceContentStatus,
   onRename,
   onMarkAsRead,
+  onFork,
+  forkPending,
   onArchive,
   onDelete,
   deleteStatus,
@@ -488,10 +523,22 @@ export function SidebarWorkspaceContextMenu({
     node.addEventListener("dblclick", handleDoubleClick);
     return () => node.removeEventListener("dblclick", handleDoubleClick);
   }, [contextMenuOpen, onRename, triggerProps.disabled]);
+  const handleWebKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    triggerProps.onPress?.(
+      event as unknown as Parameters<NonNullable<typeof triggerProps.onPress>>[0],
+    );
+  };
   return (
     <ContextMenu open={contextMenuOpen} onOpenChange={onContextMenuOpenChange}>
       <ContextMenuTrigger
         {...triggerProps}
+        accessibilityRole={isWeb ? "none" : triggerProps.accessibilityRole}
+        {...(isWeb ? { role: "group", onKeyDown: handleWebKeyDown } : {})}
         triggerRef={renameTriggerRef}
         enabledOnMobile={false}
         accessibilityLabel={accessibilityLabel ?? rowAccessibilityLabel}
@@ -518,6 +565,8 @@ export function SidebarWorkspaceContextMenu({
           onCopyBranchName={onCopyBranchName}
           onRename={onRename}
           onMarkAsRead={onMarkAsRead}
+          onFork={onFork}
+          forkPending={forkPending}
           onArchive={onArchive}
           onDelete={onDelete}
           deleteStatus={deleteStatus}

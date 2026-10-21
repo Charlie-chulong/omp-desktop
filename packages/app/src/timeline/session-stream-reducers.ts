@@ -699,6 +699,10 @@ function acceptOlderTimelineUnits(args: {
   };
 }
 
+function isModelAssistantMessage(item: StreamItem | undefined): item is AssistantMessageItem {
+  return item?.kind === "assistant_message" && item.customMessage === undefined;
+}
+
 function mergePrependedCanonicalTail(olderTail: StreamItem[], currentTail: StreamItem[]) {
   if (olderTail.length === 0) {
     return currentTail;
@@ -752,7 +756,7 @@ function mergePrependedCanonicalTail(olderTail: StreamItem[], currentTail: Strea
     ];
   }
 
-  if (olderLast?.kind !== "assistant_message" || currentFirst?.kind !== "assistant_message") {
+  if (!isModelAssistantMessage(olderLast) || !isModelAssistantMessage(currentFirst)) {
     return [...olderTail, ...currentTail];
   }
 
@@ -799,9 +803,10 @@ function replaceLiveAssistantWithProjectedText(params: {
   if (event.type !== "timeline" || event.item.type !== "assistant_message") {
     return null;
   }
+  if (event.item.customMessage) return null;
   const index = head.findLastIndex((item) => item.kind === "assistant_message");
   const current = head[index];
-  if (!current || current.kind !== "assistant_message") {
+  if (!isModelAssistantMessage(current)) {
     return null;
   }
   if (!event.item.text.startsWith(current.text)) {
@@ -829,6 +834,7 @@ function reconcileOverlappingProjectedAssistant(params: {
   if (
     unit.event.type !== "timeline" ||
     unit.event.item.type !== "assistant_message" ||
+    unit.event.item.customMessage !== undefined ||
     !unit.sourceSeqRanges.some(
       (range) => range.startSeq <= params.currentEndSeq && range.endSeq > params.currentEndSeq,
     )
@@ -839,7 +845,7 @@ function reconcileOverlappingProjectedAssistant(params: {
   const projectedText = unit.event.item.text;
   const projectedMessageId = unit.event.item.messageId;
   const matches = (item: StreamItem) => {
-    if (item.kind !== "assistant_message") return false;
+    if (!isModelAssistantMessage(item)) return false;
     if (projectedMessageId && item.messageId) return item.messageId === projectedMessageId;
     return projectedText.startsWith(item.text);
   };
@@ -1279,9 +1285,9 @@ function applyTimelineIncrementalPath(args: {
   };
 }
 
-export function processTimelineResponse(
+function getTerminalTimelineResponse(
   input: ProcessTimelineResponseInput,
-): ProcessTimelineResponseOutput {
+): ProcessTimelineResponseOutput | null {
   const {
     payload,
     currentTail,
@@ -1289,13 +1295,8 @@ export function processTimelineResponse(
     currentCursor,
     isInitializing,
     hasActiveInitDeferred,
-    initRequestDirection,
-    sendingClientMessageIds,
   } = input;
-
-  // ------------------------------------------------------------------
-  // Error path: reject init and leave stream state unchanged
-  // ------------------------------------------------------------------
+  // Error path: reject init and leave stream state unchanged.
   if (payload.error) {
     return {
       commit: "apply",
@@ -1311,7 +1312,6 @@ export function processTimelineResponse(
       acknowledgedClientMessageIds: [],
     };
   }
-
   // A missing provider transcript is a terminal, readable state rather than a
   // transport failure. Preserve any painted replica while resolving bootstrap.
   if (payload.historyUnavailable) {
@@ -1328,6 +1328,27 @@ export function processTimelineResponse(
       sideEffects: [],
       acknowledgedClientMessageIds: [],
     };
+  }
+  return null;
+}
+
+export function processTimelineResponse(
+  input: ProcessTimelineResponseInput,
+): ProcessTimelineResponseOutput {
+  const {
+    payload,
+    currentTail,
+    currentHead,
+    currentCursor,
+    isInitializing,
+    hasActiveInitDeferred,
+    initRequestDirection,
+    sendingClientMessageIds,
+  } = input;
+
+  const terminalResponse = getTerminalTimelineResponse(input);
+  if (terminalResponse) {
+    return terminalResponse;
   }
 
   // ------------------------------------------------------------------
