@@ -363,6 +363,9 @@ export const ru: TranslationResources = {
       reconnecting: "Повторное подключение",
       timelineSyncFailed: "Не удалось обновить историю агента.",
       timelineSyncRetrying: "Повторная попытка…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "История разговора недоступна",
       historyUnavailableMissing:
         "Агент по-прежнему существует, но файл разговора провайдера удалён. Сохранённые выше сообщения, если они есть, доступны только для чтения.",

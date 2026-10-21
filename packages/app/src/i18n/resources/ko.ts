@@ -353,6 +353,9 @@ export const ko: TranslationResources = {
       reconnecting: "다시 연결하는 중",
       timelineSyncFailed: "에이전트 기록을 새로고침할 수 없습니다.",
       timelineSyncRetrying: "재시도 중…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "대화 기록을 사용할 수 없음",
       historyUnavailableMissing:
         "이 에이전트는 남아 있지만 제공자의 대화 파일이 삭제되었습니다. 위에 캐시된 메시지가 있다면 읽기 전용입니다.",

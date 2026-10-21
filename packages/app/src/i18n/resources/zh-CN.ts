@@ -377,6 +377,9 @@ export const zhCN: TranslationResources = {
       reconnecting: "正在重连",
       timelineSyncFailed: "无法刷新代理历史记录。",
       timelineSyncRetrying: "正在重试…",
+      bundledPluginsVerifying: "正在校验内置插件…",
+      bundledPluginsPreparing: "正在准备内置插件…",
+      bundledPluginsInstalling: "正在首次安装内置插件…",
       historyUnavailableTitle: "对话记录不可用",
       historyUnavailableMissing:
         "此 Agent 仍然存在，但 Provider 对话文件已被删除。上方如有缓存消息，仅供只读查看。",

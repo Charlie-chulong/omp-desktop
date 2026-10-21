@@ -16,7 +16,7 @@ import type { Logger } from "pino";
 import { execCommand } from "../utils/spawn.js";
 import { findExecutable } from "../executable-resolution/executable-resolution.js";
 import { provisionBundledOmpPlugins, resolveOmpPluginInvocation } from "./bundled-omp-plugins.js";
-import { assertBundledOmpHost, hasBundledOmpPlugins } from "./bundled-omp-host.js";
+import { createBundledOmpHostVerifier, hasBundledOmpPlugins } from "./bundled-omp-host.js";
 import type { ProviderOverride } from "./agent/provider-launch-config.js";
 
 /**
@@ -287,14 +287,16 @@ export class OmpPluginCliService {
       env: { ...process.env, OMP_COMMAND: command },
       cwd: workingDirectory,
     });
-    await assertBundledOmpHost(invocation.command[0], invocation.env);
+    const hostVerifier = createBundledOmpHostVerifier();
+    await hostVerifier(invocation.command[0], invocation.env);
     // First-use setup must finish before native management, not before the
     // daemon begins listening. Large private runtimes may require file staging.
-    const provisioning = await provisionBundledOmpPlugins(invocation);
+    const provisioning = await provisionBundledOmpPlugins({ ...invocation, hostVerifier });
     for (const plugin of provisioning.plugins) {
       if (plugin.error)
         this.logger.error({ plugin: plugin.name, state: plugin.state }, plugin.error);
     }
+    await hostVerifier(invocation.command[0], invocation.env);
     try {
       const result = await this.runner(
         invocation.command[0],

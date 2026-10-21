@@ -353,6 +353,9 @@ export const ptBR: TranslationResources = {
       reconnecting: "Reconectando",
       timelineSyncFailed: "Não foi possível atualizar o histórico do agente.",
       timelineSyncRetrying: "Tentando novamente…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "Histórico da conversa indisponível",
       historyUnavailableMissing:
         "Este agente ainda existe, mas o arquivo de conversa do provedor foi removido. As mensagens em cache acima, se houver, são somente leitura.",

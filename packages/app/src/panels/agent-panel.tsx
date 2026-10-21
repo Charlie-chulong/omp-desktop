@@ -237,13 +237,46 @@ function AgentLoadErrorView({ message, onRetry }: { message: string; onRetry: ()
   );
 }
 
+const INITIALIZATION_PHASE_MESSAGE_KEYS = {
+  verifying: "agentPanel.states.bundledPluginsVerifying",
+  preparing: "agentPanel.states.bundledPluginsPreparing",
+  installing: "agentPanel.states.bundledPluginsInstalling",
+} as const;
+
+function AgentInitializationLoading({
+  serverId,
+  agentId,
+}: {
+  serverId: string;
+  agentId: string | undefined;
+}) {
+  const { t } = useTranslation();
+  const phase = useSessionStore((state) =>
+    agentId
+      ? (state.sessions[serverId]?.agentInitializationProgress.get(agentId)?.phase ?? null)
+      : null,
+  );
+  return (
+    <>
+      <ThemedLoadingSpinner size="large" uniProps={foregroundMutedColorMapping} />
+      {phase ? (
+        <Text style={styles.statusText} testID="agent-initialization-progress">
+          {t(INITIALIZATION_PHASE_MESSAGE_KEYS[phase])}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
 function renderChatAgentNonReadyView(args: {
   viewState: AgentScreenViewState;
   effectiveAgent: AgentScreenAgent | null;
+  serverId: string;
+  agentId: string | undefined;
   t: TFunction;
   onRetryLoad: () => void;
 }): React.ReactElement | null {
-  const { viewState, effectiveAgent, t, onRetryLoad } = args;
+  const { viewState, effectiveAgent, serverId, agentId, t, onRetryLoad } = args;
   if (viewState.tag === "not_found") {
     return (
       <View style={styles.container} testID="agent-not-found">
@@ -260,7 +293,7 @@ function renderChatAgentNonReadyView(args: {
     return (
       <View style={styles.container} testID="agent-loading">
         <View style={styles.errorContainer}>
-          <ThemedLoadingSpinner size="large" uniProps={foregroundMutedColorMapping} />
+          <AgentInitializationLoading serverId={serverId} agentId={agentId} />
         </View>
       </View>
     );
@@ -692,7 +725,7 @@ function AgentPanelBody({
     return (
       <View style={styles.container} testID="agent-loading">
         <View style={styles.errorContainer}>
-          <ThemedLoadingSpinner size="large" uniProps={foregroundMutedColorMapping} />
+          <AgentInitializationLoading serverId={serverId} agentId={agentId} />
         </View>
       </View>
     );
@@ -1113,6 +1146,8 @@ function ChatAgentContent({
   const nonReadyView = renderChatAgentNonReadyView({
     viewState,
     effectiveAgent,
+    serverId,
+    agentId,
     t,
     onRetryLoad: retryAgentLoad,
   });
@@ -1526,7 +1561,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
 
           {showHistorySyncOverlay ? (
             <View style={styles.historySyncOverlay} testID="agent-history-overlay">
-              <ThemedLoadingSpinner size="large" uniProps={foregroundMutedColorMapping} />
+              <AgentInitializationLoading serverId={serverId} agentId={agentId} />
             </View>
           ) : null}
 

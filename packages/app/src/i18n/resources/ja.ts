@@ -353,6 +353,9 @@ export const ja: TranslationResources = {
       reconnecting: "再接続中",
       timelineSyncFailed: "エージェントの履歴を更新できませんでした。",
       timelineSyncRetrying: "再試行しています…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "会話履歴を利用できません",
       historyUnavailableMissing:
         "このエージェントは存在しますが、プロバイダーの会話ファイルが削除されています。上にキャッシュ済みメッセージがある場合は読み取り専用です。",

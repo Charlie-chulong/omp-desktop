@@ -13,6 +13,7 @@ import { OmpCliRuntime, resolveOmpCodexCatalogPreloadPath } from "./cli-runtime.
 import type { OmpRuntimeLaunch } from "./runtime.js";
 import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
 import * as bundledPlugins from "../../../bundled-omp-plugins.js";
+import { subscribeBundledOmpInitialization } from "../../../bundled-omp-initialization.js";
 
 type OmpChild = ChildProcessWithoutNullStreams & {
   stdin: PassThrough;
@@ -108,6 +109,105 @@ function withoutRequestId(command: Record<string, unknown>): Record<string, unkn
 }
 
 describe("OMP CLI runtime", () => {
+  test("chat initialization ends after provisioning, before RPC spawn", async () => {
+    const phases: Array<string | null> = [];
+    const unsubscribe = subscribeBundledOmpInitialization("runtime-progress-agent", (phase) =>
+      phases.push(phase),
+    );
+    const seed = vi
+      .spyOn(bundledPlugins, "provisionBundledOmpPlugins")
+      .mockImplementation(async (input) => {
+        input?.onProgress?.("verifying");
+        await Promise.resolve();
+        input?.onProgress?.("installing");
+        return { plugins: [] };
+      });
+    const runtime = new OmpCliRuntime({
+      logger: pino({ level: "silent" }),
+      command: ["omp"],
+      spawnProcess: () => {
+        expect(phases).toEqual(["verifying", "installing", null]);
+        const replay: Array<string | null> = [];
+        const unsubscribeReplay = subscribeBundledOmpInitialization(
+          "runtime-progress-agent",
+          (phase) => replay.push(phase),
+        );
+        expect(replay).toEqual([]);
+        unsubscribeReplay();
+        return createOmpChild();
+      },
+    });
+    try {
+      const session = await runtime.startSession({
+        cwd: "/workspace",
+        env: { PASEO_AGENT_ID: "runtime-progress-agent" },
+      });
+      await session.close();
+      expect(phases).toEqual(["verifying", "installing", null]);
+    } finally {
+      seed.mockRestore();
+      unsubscribe();
+    }
+  });
+
+  test("provisioning failure closes chat progress without spawning", async () => {
+    const phases: Array<string | null> = [];
+    const unsubscribe = subscribeBundledOmpInitialization("runtime-failed-agent", (phase) =>
+      phases.push(phase),
+    );
+    const seed = vi
+      .spyOn(bundledPlugins, "provisionBundledOmpPlugins")
+      .mockImplementation(async (input) => {
+        input?.onProgress?.("verifying");
+        throw new Error("payload changed");
+      });
+    const spawnProcess = vi.fn(() => createOmpChild());
+    const runtime = new OmpCliRuntime({
+      logger: pino({ level: "silent" }),
+      command: ["omp"],
+      spawnProcess,
+    });
+    try {
+      await expect(
+        runtime.startSession({
+          cwd: "/workspace",
+          env: { PASEO_AGENT_ID: "runtime-failed-agent" },
+        }),
+      ).rejects.toThrow("payload changed");
+      expect(phases).toEqual(["verifying", null]);
+      expect(spawnProcess).not.toHaveBeenCalled();
+    } finally {
+      seed.mockRestore();
+      unsubscribe();
+    }
+  });
+
+  test("ambient agent identity does not attribute management launches to chat", async () => {
+    const previousAgentId = process.env.PASEO_AGENT_ID;
+    process.env.PASEO_AGENT_ID = "ambient-agent";
+    const phases: Array<string | null> = [];
+    const unsubscribe = subscribeBundledOmpInitialization("ambient-agent", (phase) =>
+      phases.push(phase),
+    );
+    const seed = vi
+      .spyOn(bundledPlugins, "provisionBundledOmpPlugins")
+      .mockImplementation(async (input) => {
+        expect(input?.onProgress).toBeUndefined();
+        return { plugins: [] };
+      });
+    try {
+      const runtime = createRuntime(createOmpChild());
+      const session = await runtime.startSession({ cwd: "/workspace" });
+      await session.close();
+      expect(phases).toEqual([]);
+    } finally {
+      seed.mockRestore();
+      unsubscribe();
+      if (previousAgentId === undefined) delete process.env.PASEO_AGENT_ID;
+      else process.env.PASEO_AGENT_ID = previousAgentId;
+    }
+  });
+
   test("provisions each launch with its actual provider prefix, cwd and session env before spawning", async () => {
     const seed = vi
       .spyOn(bundledPlugins, "provisionBundledOmpPlugins")

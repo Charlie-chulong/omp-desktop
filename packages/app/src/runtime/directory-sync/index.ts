@@ -2,6 +2,8 @@ import type {
   DaemonClient,
   FetchAgentsEntry,
   FetchAgentsOptions,
+  FetchAgentTimelineOptions,
+  FetchAgentTimelinePayload,
 } from "@omp-desktop/client/internal/daemon-client";
 import { fetchAgentTimelineOnce } from "@/timeline/fetch-agent-timeline-once";
 import {
@@ -159,6 +161,7 @@ export class DirectorySync {
       return false;
     }
     this.agentPublication = null;
+    useSessionStore.getState().resetAgentInitializationProgress(this.serverId);
     this.agentPublicationRefresh = null;
     this.agentPublicationRefreshRequested = false;
     this.agentReadInProgress = null;
@@ -220,6 +223,12 @@ export class DirectorySync {
   }
 
   dispose(): void {
+    useSessionStore.getState().resetAgentInitializationProgress(this.serverId);
+    this.connection = {
+      client: null,
+      status: "offline",
+      source: this.connection.source,
+    };
     this.agentPublication = null;
     this.agentPublicationRefreshRequested = false;
     this.agentReadInProgress = null;
@@ -233,11 +242,19 @@ export class DirectorySync {
 
   async fetchTimeline(
     agentId: string,
-    request: Parameters<DaemonClient["fetchAgentTimeline"]>[1],
-  ): Promise<Awaited<ReturnType<DaemonClient["fetchAgentTimeline"]>>> {
-    const { client } = this.requireOnline();
+    request: FetchAgentTimelineOptions | undefined,
+  ): Promise<FetchAgentTimelinePayload> {
+    const { client, source } = this.requireOnline();
     const token = this.agents.captureTimeline(agentId);
-    const page = await fetchAgentTimelineOnce(client, agentId, request);
+    const scope = useSessionStore
+      .getState()
+      .beginAgentInitializationProgress(this.serverId, agentId);
+    const page = await fetchAgentTimelineOnce(client, agentId, request, (progress) => {
+      if (!scope || !this.isCurrent(client, source) || !this.hasMatchingSession(client, source)) {
+        return;
+      }
+      useSessionStore.getState().updateAgentInitializationProgress(this.serverId, scope, progress);
+    });
     if (page.agent) this.agents.submitTimelineAgent(token, page.agent);
     return page;
   }
