@@ -1,21 +1,69 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { resolveBuildOptions } from "./run-electron-builder.mjs";
+import { createQualifiedPackager } from "./run-electron-builder.mjs";
 import { windowsBuildOutput } from "./windows-build-output.mjs";
 
 const require = createRequire(import.meta.url);
 const { WinPackager } = require("app-builder-lib/out/winPackager");
-const { copyFiles, getFileMatchers } = require("app-builder-lib/out/fileMatcher");
+const {
+  copyFiles,
+  getFileMatchers,
+  getMainFileMatchers,
+} = require("app-builder-lib/out/fileMatcher");
 const { Arch } = require("builder-util");
 const { Platform } = require("app-builder-lib/out/core");
 
 const scriptPath = fileURLToPath(new URL("./run-electron-builder.mjs", import.meta.url));
+
+test("absolute symlinked CLI paths still validate builds and emit private output metadata", () => {
+  const fixture = createPackagingFixture();
+  try {
+    const link = path.join(fixture.directory, "linked-scripts");
+    symlinkSync(path.dirname(scriptPath), link, process.platform === "win32" ? "junction" : "dir");
+    const build = spawnSync(
+      process.execPath,
+      [path.join(link, "run-electron-builder.mjs"), "--mac", "--arm64", "--publish", "never"],
+      {
+        cwd: fixture.directory,
+        encoding: "utf8",
+        env: { ...process.env, MINI_ELECTRON_DIST_PATH: fixture.runtimeDist },
+        timeout: 20_000,
+      },
+    );
+    expect(build.error).toBeUndefined();
+    expect(build.status).toBe(1);
+    expect(build.stderr).toContain("Cannot package darwin-arm64 with the win32-x64 runtime");
+    const output = spawnSync(
+      process.execPath,
+      [path.join(link, "windows-build-output.mjs"), "1.2.3", "--with-bundled-plugins"],
+      { cwd: fixture.directory, encoding: "utf8", timeout: 20_000 },
+    );
+    expect(output.error).toBeUndefined();
+    expect(output.status).toBe(0);
+    expect(output.stdout.trim().split("\t")).toEqual([
+      "packages/desktop/release-plugins",
+      "latest.yml",
+      "OMP-Desktop-Plugins-Setup-1.2.3.exe",
+    ]);
+  } finally {
+    fixture.dispose();
+  }
+});
 
 describe("packaging runtime compatibility", () => {
   test.each([
@@ -81,9 +129,15 @@ function createPackagingFixture(platform = "win32") {
     installerProtocol: 1,
     files: { [executable]: createHash("sha256").update(executableBytes).digest("hex") },
   };
+  writeFileSync(path.join(runtimeDist, "version.json"), JSON.stringify(runtime));
   writeFileSync(
     path.join(directory, "package.json"),
-    JSON.stringify({ name: "packaging-fixture" }),
+    JSON.stringify({
+      name: "packaging-fixture",
+      version: "1.0.0",
+      description: "Owned packaging fixture",
+      author: "OMP Desktop",
+    }),
   );
   writeFileSync(
     path.join(directory, "electron-builder.yml"),
@@ -117,7 +171,7 @@ describe("public and private packaging boundaries", () => {
   test("standard public builds require no vendor payload and retain executable editing", async () => {
     const fixture = createPackagingFixture();
     try {
-      const result = await resolveBuildOptions(
+      const result = await createQualifiedPackager(
         fixture.runtimeDist,
         fixture.runtime,
         fixture.args,
@@ -139,7 +193,7 @@ describe("public and private packaging boundaries", () => {
     const fixture = createPackagingFixture();
     try {
       await expect(
-        resolveBuildOptions(
+        createQualifiedPackager(
           fixture.runtimeDist,
           fixture.runtime,
           [...fixture.args, "--with-bundled-plugins"],
@@ -151,35 +205,34 @@ describe("public and private packaging boundaries", () => {
     }
   });
 
-  test("explicit private builds preserve public resources and mark only the packaged distribution", async () => {
-    const fixture = createPackagingFixture();
-    try {
-      mkdirSync(path.join(fixture.directory, "bundled-omp-plugins"));
-      writeFileSync(path.join(fixture.directory, "bundled-omp-plugins/manifest.json"), "{}");
-      writeFileSync(
-        path.join(fixture.directory, "bundled-omp-manager.json"),
-        JSON.stringify({
-          manager: "omp-desktop-private-plugins",
-          name: "OMP Desktop 三插件定制版",
-        }),
-      );
-      const result = await resolveBuildOptions(
-        fixture.runtimeDist,
-        fixture.runtime,
-        [...fixture.args, "--with-bundled-plugins"],
-        fixture.directory,
-      );
-      expect(result.publish).toBe("never");
-      expect(result.config.extraMetadata.ompDesktopDistribution).toBe("private-three-plugins");
-      expect(result.config.directories.output).toBe("release-plugins");
-      expect(result.config.win.artifactName).toBe(
-        "OMP-Desktop-Plugins-Setup-${version}-${arch}.${ext}",
-      );
-      expect(result.config.win.extraResources.map((resource) => resource.to)).toEqual(["icon.png"]);
-    } finally {
-      fixture.dispose();
-    }
-  });
+  test.each(["host/omp.exe", "alternate/omp-${arch}.exe"])(
+    "private builds reject a replaced host at its actual configured source: %s",
+    async (source) => {
+      const fixture = createPackagingFixture();
+      try {
+        stagePrivateFixture(fixture.directory);
+        const host = path.join(fixture.directory, source.replace("${arch}", "x64"));
+        mkdirSync(path.dirname(host), { recursive: true });
+        writeFileSync(host, "stock OMP replacement");
+        writeFileSync(
+          path.join(fixture.directory, "private.json"),
+          JSON.stringify({
+            win: { extraResources: [{ from: source, to: "bin/omp.exe" }] },
+          }),
+        );
+        await expect(
+          createQualifiedPackager(
+            fixture.runtimeDist,
+            fixture.runtime,
+            [...fixture.args, "--config", "private.json", "--with-bundled-plugins"],
+            fixture.directory,
+          ),
+        ).rejects.toThrow(`Private plugin OMP host SHA-256 mismatch: ${host}`);
+      } finally {
+        fixture.dispose();
+      }
+    },
+  );
 
   test.each([
     { args: ["--publish", "always"], message: "cannot publish" },
@@ -188,7 +241,7 @@ describe("public and private packaging boundaries", () => {
     const fixture = createPackagingFixture();
     try {
       await expect(
-        resolveBuildOptions(
+        createQualifiedPackager(
           fixture.runtimeDist,
           fixture.runtime,
           [...fixture.args, "--with-bundled-plugins", ...args],
@@ -204,7 +257,7 @@ describe("public and private packaging boundaries", () => {
     const fixture = createPackagingFixture();
     try {
       await expect(
-        resolveBuildOptions(
+        createQualifiedPackager(
           fixture.runtimeDist,
           { ...fixture.runtime, runtimeVersion: "0.1.16" },
           fixture.args,
@@ -219,7 +272,7 @@ describe("public and private packaging boundaries", () => {
   test("macOS retains explicit stable local signing options", async () => {
     const fixture = createPackagingFixture("darwin");
     try {
-      const result = await resolveBuildOptions(
+      const result = await createQualifiedPackager(
         fixture.runtimeDist,
         fixture.runtime,
         [
@@ -242,7 +295,7 @@ describe("public and private packaging boundaries", () => {
     const fixture = createPackagingFixture();
     try {
       await expect(
-        resolveBuildOptions(
+        createQualifiedPackager(
           fixture.runtimeDist,
           fixture.runtime,
           [...fixture.args, "--config.win.signAndEditExecutable=false"],
@@ -259,12 +312,110 @@ describe("public and private packaging boundaries", () => {
     try {
       writeFileSync(path.join(fixture.runtimeDist, "electron.exe"), "changed runtime");
       await expect(
-        resolveBuildOptions(fixture.runtimeDist, fixture.runtime, fixture.args, fixture.directory),
+        createQualifiedPackager(
+          fixture.runtimeDist,
+          fixture.runtime,
+          fixture.args,
+          fixture.directory,
+        ),
       ).rejects.toThrow("mini-electron executable SHA256 mismatch");
     } finally {
       fixture.dispose();
     }
   });
+});
+
+test.each(["win32", "darwin"])(
+  "the real Packager retains one effective config across build validation (%s)",
+  async (platform) => {
+    const fixture = createPackagingFixture(platform);
+    try {
+      mkdirSync(path.join(fixture.directory, "public-resources"));
+      writeFileSync(path.join(fixture.directory, "public-resources/value.txt"), "public resource");
+      writeFileSync(
+        path.join(fixture.directory, "electron-builder.yml"),
+        JSON.stringify({
+          directories: { output: "release" },
+          extraResources: [{ from: "public-resources", to: "public-resources" }],
+          win: { extraResources: [{ from: "host/omp.exe", to: "bin/omp.exe" }] },
+        }),
+      );
+      const child = spawnSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `
+            import assert from "node:assert/strict";
+            import fs from "node:fs";
+            import path from "node:path";
+            import { createRequire } from "node:module";
+            import { createQualifiedPackager } from ${JSON.stringify(new URL("./run-electron-builder.mjs", import.meta.url).href)};
+            const require = createRequire(${JSON.stringify(import.meta.url)});
+            const { copyFiles, getFileMatchers } = require("app-builder-lib/out/fileMatcher");
+            const root = ${JSON.stringify(fixture.directory)};
+            const packager = await createQualifiedPackager(
+              ${JSON.stringify(fixture.runtimeDist)}, ${JSON.stringify(fixture.runtime)},
+              ${JSON.stringify(fixture.args)}, root,
+            );
+            // This is the validation entry build() calls on the same instance.
+            await packager.validateConfig();
+            const destination = path.join(root, "out/resources");
+            fs.mkdirSync(destination, { recursive: true });
+            const options = {
+              defaultSrc: root, globalOutDir: path.join(root, "out"),
+              macroExpander: value => value,
+              customBuildOptions: packager.config[${JSON.stringify(platform === "win32" ? "win" : "mac")}] ?? {},
+            };
+            await copyFiles(getFileMatchers(packager.config, "extraResources", destination, options), null, false);
+            assert.equal(fs.readFileSync(path.join(destination, "public-resources/value.txt"), "utf8"), "public resource");
+            assert.equal(fs.existsSync(path.join(destination, "bin/omp.exe")), false);
+          `,
+        ],
+        {
+          cwd: fixture.directory,
+          encoding: "utf8",
+          env: { ...process.env, USE_HARD_LINKS: "true" },
+          timeout: 20_000,
+        },
+      );
+      expect(child.error).toBeUndefined();
+      expect(child.status, child.stderr).toBe(0);
+    } finally {
+      fixture.dispose();
+    }
+  },
+);
+
+test("an alternative no-OMP config does not regain resources from the default config", async () => {
+  const fixture = createPackagingFixture();
+  try {
+    writeFileSync(
+      path.join(fixture.directory, "no-omp.json"),
+      JSON.stringify({
+        win: { extraResources: [{ from: "assets/icon.png", to: "icon.png" }] },
+      }),
+    );
+    const packager = await createQualifiedPackager(
+      fixture.runtimeDist,
+      fixture.runtime,
+      [...fixture.args, "--config", "no-omp.json"],
+      fixture.directory,
+    );
+    await packager.validateConfig();
+    const destination = path.join(fixture.directory, "out/resources");
+    const matchers = getFileMatchers(packager.config, "extraResources", destination, {
+      defaultSrc: fixture.directory,
+      globalOutDir: path.join(fixture.directory, "out"),
+      macroExpander: (value) => value,
+      customBuildOptions: packager.config.win,
+    });
+    await copyFiles(matchers, null, false);
+    expect(readFileSync(path.join(destination, "icon.png"), "utf8")).toBe("icon fixture");
+    expect(existsSync(path.join(destination, "bin/omp.exe"))).toBe(false);
+  } finally {
+    fixture.dispose();
+  }
 });
 
 function stagePrivateFixture(directory) {
@@ -286,11 +437,11 @@ function stagePrivateFixture(directory) {
 
 describe("qualified Windows resource bytes", () => {
   test.each([false, true])(
-    "preserves sealed resources through real copy/sign passes (private=%s)",
-    async (privateMode) => {
+    "preserves sealed resources through real config/copy/sign passes (payload=%s)",
+    async (withPayloadResources) => {
       const fixture = createPackagingFixture();
       try {
-        if (privateMode) stagePrivateFixture(fixture.directory);
+        if (withPayloadResources) stagePrivateFixture(fixture.directory);
         mkdirSync(path.join(fixture.directory, "third-party"));
         writeFileSync(
           path.join(fixture.directory, "third-party/public-tool.exe"),
@@ -319,6 +470,12 @@ describe("qualified Windows resource bytes", () => {
             extraResources: [
               { from: "host/omp.exe", to: "bin/omp.exe" },
               { from: "third-party", to: "third-party" },
+              ...(withPayloadResources
+                ? [
+                    { from: "bundled-omp-plugins", to: "bundled-omp-plugins" },
+                    { from: "bundled-omp-manager.json", to: "manager.json" },
+                  ]
+                : []),
             ],
           },
         };
@@ -326,17 +483,13 @@ describe("qualified Windows resource bytes", () => {
           path.join(fixture.directory, "alternative.json"),
           JSON.stringify(alternativeConfig),
         );
-        const result = await resolveBuildOptions(
+        const result = await createQualifiedPackager(
           fixture.runtimeDist,
           fixture.runtime,
-          [
-            ...fixture.args,
-            "--config",
-            "alternative.json",
-            ...(privateMode ? ["--with-bundled-plugins"] : []),
-          ],
+          [...fixture.args, "--config", "alternative.json"],
           fixture.directory,
         );
+        await result.validateConfig();
         const appOutDir = path.join(fixture.directory, "out/win-unpacked");
         mkdirSync(appOutDir, { recursive: true });
         writeFileSync(path.join(appOutDir, "OMP Desktop.exe"), "Desktop PE fixture");
@@ -347,6 +500,8 @@ describe("qualified Windows resource bytes", () => {
         packager.info = {
           config: result.config,
           projectDir: fixture.directory,
+          buildResourcesDir: path.join(fixture.directory, "build"),
+          debugLogger: result.debugLogger,
           framework: { name: "electron" },
         };
         packager.platform = Platform.WINDOWS;
@@ -389,16 +544,24 @@ describe("qualified Windows resource bytes", () => {
         expect(signed.sort()).toEqual(
           ["OMP Desktop.exe", "public-root.exe", "resources/third-party/public-tool.exe"].sort(),
         );
-        const appMatchers = getFileMatchers(
-          result.config,
-          "files",
-          path.join(appOutDir, "resources/app"),
-          options,
+        const appDestination = path.join(appOutDir, "resources/app");
+        const appMatchers = getMainFileMatchers(
+          fixture.directory,
+          appDestination,
+          options.macroExpander,
+          result.config.win,
+          packager,
+          context.outDir,
+          false,
         );
         const appFilter = appMatchers[0].createFilter();
         const hostSource = path.join(fixture.directory, "host/omp.exe");
         expect(appFilter(hostSource, statSync(hostSource))).toBe(false);
-        if (privateMode) {
+        await copyFiles(appMatchers, null, false);
+        expect(existsSync(path.join(appDestination, "host/omp.exe"))).toBe(false);
+        writeFileSync(path.join(appOutDir, "resources/bin/omp.exe"), "changed packaged host");
+        expect(readFileSync(hostSource, "utf8")).toBe("qualified OMP host bytes");
+        if (withPayloadResources) {
           for (const file of ["manifest.json", "helper/helper.exe", "helper/LICENSE"]) {
             expect(
               readFileSync(path.join(appOutDir, "resources/bundled-omp-plugins", file)),
@@ -412,6 +575,9 @@ describe("qualified Windows resource bytes", () => {
             "bundled-omp-plugins/helper/helper.exe",
           );
           expect(appFilter(helperSource, statSync(helperSource))).toBe(false);
+          expect(
+            existsSync(path.join(appDestination, "bundled-omp-plugins/helper/helper.exe")),
+          ).toBe(false);
         }
       } finally {
         fixture.dispose();
@@ -421,57 +587,22 @@ describe("qualified Windows resource bytes", () => {
 });
 
 describe("prepackaged distribution boundary", () => {
-  test.each([
-    { privateMode: true, actualPrivate: false, publish: "never" },
-    { privateMode: false, actualPrivate: true, publish: "always" },
-    { privateMode: false, actualPrivate: false, publish: "never" },
-  ])(
-    "rejects bypassed resource/metadata staging: $privateMode / $actualPrivate",
-    async ({ privateMode, actualPrivate, publish }) => {
-      const fixture = createPackagingFixture();
-      try {
-        const unpacked = path.join(fixture.directory, "owned-unpacked");
-        mkdirSync(path.join(unpacked, "resources/app"), { recursive: true });
-        writeFileSync(
-          path.join(unpacked, "resources/app/package.json"),
-          JSON.stringify({
-            name: "actual-packaged-metadata",
-            ...(actualPrivate ? { ompDesktopDistribution: "private-three-plugins" } : {}),
-          }),
-        );
-        await expect(
-          resolveBuildOptions(
-            fixture.runtimeDist,
-            fixture.runtime,
-            [
-              ...fixture.args,
-              "--prepackaged",
-              unpacked,
-              "--publish",
-              publish,
-              ...(privateMode ? ["--with-bundled-plugins"] : []),
-            ],
-            fixture.directory,
-          ),
-        ).rejects.toThrow("--prepackaged bypasses qualified runtime/resource staging");
-      } finally {
-        fixture.dispose();
-      }
-    },
-  );
-
-  test("public --dir still builds an unpacked application through normal staging", async () => {
+  test("private prepackaged output cannot bypass qualified resource staging", async () => {
     const fixture = createPackagingFixture();
     try {
-      const result = await resolveBuildOptions(
-        fixture.runtimeDist,
-        fixture.runtime,
-        [...fixture.args, "--dir"],
-        fixture.directory,
-      );
-      expect(result.prepackaged).toBeUndefined();
-      expect(result.config.directories.output).toBe("release");
-      expect(typeof result.config.afterPack).toBe("function");
+      await expect(
+        createQualifiedPackager(
+          fixture.runtimeDist,
+          fixture.runtime,
+          [
+            ...fixture.args,
+            "--with-bundled-plugins",
+            "--prepackaged",
+            path.join(fixture.directory, "owned-unpacked"),
+          ],
+          fixture.directory,
+        ),
+      ).rejects.toThrow("--prepackaged bypasses qualified private runtime/resource staging");
     } finally {
       fixture.dispose();
     }
@@ -484,14 +615,7 @@ describe("Windows wrapper metadata boundary", () => {
     async (version) => {
       const fixture = createPackagingFixture();
       try {
-        stagePrivateFixture(fixture.directory);
         const args = [...fixture.args, "--with-bundled-plugins"];
-        const result = await resolveBuildOptions(
-          fixture.runtimeDist,
-          fixture.runtime,
-          args,
-          fixture.directory,
-        );
         const output = windowsBuildOutput(version, args);
         const selection = spawnSync(
           process.execPath,
@@ -506,7 +630,6 @@ describe("Windows wrapper metadata boundary", () => {
           output.legacyInstaller,
         ]);
         const publicOutput = windowsBuildOutput(version, fixture.args);
-        expect(path.basename(output.releaseDirectory)).toBe(result.config.directories.output);
         expect(output.legacyInstaller).toBe(`OMP-Desktop-Plugins-Setup-${version}.exe`);
         expect(output.metadataFilename).toBe(version.includes("-") ? "beta.yml" : "latest.yml");
         const privateDirectory = path.join(fixture.directory, output.releaseDirectory);

@@ -699,6 +699,10 @@ function acceptOlderTimelineUnits(args: {
   };
 }
 
+function isModelAssistantMessage(item: StreamItem | undefined): item is AssistantMessageItem {
+  return item?.kind === "assistant_message" && item.customMessage === undefined;
+}
+
 function mergePrependedCanonicalTail(olderTail: StreamItem[], currentTail: StreamItem[]) {
   if (olderTail.length === 0) {
     return currentTail;
@@ -752,7 +756,7 @@ function mergePrependedCanonicalTail(olderTail: StreamItem[], currentTail: Strea
     ];
   }
 
-  if (olderLast?.kind !== "assistant_message" || currentFirst?.kind !== "assistant_message") {
+  if (!isModelAssistantMessage(olderLast) || !isModelAssistantMessage(currentFirst)) {
     return [...olderTail, ...currentTail];
   }
 
@@ -802,10 +806,9 @@ function replaceLiveAssistantWithProjectedText(params: {
   if (event.item.customMessage) return null;
   const index = head.findLastIndex((item) => item.kind === "assistant_message");
   const current = head[index];
-  if (!current || current.kind !== "assistant_message") {
+  if (!isModelAssistantMessage(current)) {
     return null;
   }
-  if (current.customMessage) return null;
   if (!event.item.text.startsWith(current.text)) {
     return null;
   }
@@ -842,8 +845,7 @@ function reconcileOverlappingProjectedAssistant(params: {
   const projectedText = unit.event.item.text;
   const projectedMessageId = unit.event.item.messageId;
   const matches = (item: StreamItem) => {
-    if (item.kind !== "assistant_message") return false;
-    if (item.customMessage) return false;
+    if (!isModelAssistantMessage(item)) return false;
     if (projectedMessageId && item.messageId) return item.messageId === projectedMessageId;
     return projectedText.startsWith(item.text);
   };

@@ -628,7 +628,12 @@ function TreeRowItem({
 
   return (
     <ContextMenu>
-      <View style={rowStyle} onPointerEnter={showNameHover} onPointerLeave={hideNameHover}>
+      <View
+        style={rowStyle}
+        onPointerEnter={showNameHover}
+        onPointerLeave={hideNameHover}
+        dataSet={isWeb && blocksRootDrop ? FILE_EXPLORER_ROOT_DROP_BLOCKED_DATA_SET : undefined}
+      >
         <TreeRowSelectionCheckbox
           entry={entry}
           touchControls={touchControls}
@@ -649,7 +654,6 @@ function TreeRowItem({
           accessibilityState={accessibilityState}
           aria-selected={isSelected}
           testID={testID}
-          dataSet={isWeb && blocksRootDrop ? FILE_EXPLORER_ROOT_DROP_BLOCKED_DATA_SET : undefined}
         >
           <View style={styles.entryInfo}>
             <View style={styles.entryIcon}>

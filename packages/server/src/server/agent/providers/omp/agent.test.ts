@@ -8,7 +8,7 @@ import type { PaseoToolCatalog } from "../../tools/types.js";
 import type { OmpNoTurnScheduler, OmpProviderIdleScheduler } from "./agent.js";
 import type { OmpUsagePollScheduler } from "./usage-poller.js";
 import { OmpHarness } from "./test-utils/omp-harness.js";
-import type { OmpAgentMessage } from "./rpc-types.js";
+import type { OmpAgentMessage, OmpRpcSlashCommand } from "./rpc-types.js";
 import { OmpReadyTimeoutError } from "./cli-runtime.js";
 
 const OMP_PLAN_TURN_DIRECTIVE = `<system-directive>
@@ -24,6 +24,16 @@ function planTurnPrompt(prompt: string): string {
 
 function standardTurnPrompt(prompt: string): string {
   return `${OMP_STANDARD_TURN_DIRECTIVE}\n\n${prompt}`;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 class ManualIdleScheduler implements OmpProviderIdleScheduler {
@@ -2051,6 +2061,129 @@ describe("OMP agent client and session", () => {
       expect(omp.completedTurnCount()).toBe(1);
     },
   );
+
+  test.each(["user", "replacement"] as const)(
+    "settles a %s cancellation before native command discovery returns",
+    async (reason) => {
+      const commands: OmpRpcSlashCommand[] = [{ name: "wechat", source: "extension" }];
+      const omp = new OmpHarness();
+      omp.queueCommands(commands);
+      await omp.start();
+      const discovery = deferred<OmpRpcSlashCommand[]>();
+      const enteredDiscovery = deferred<void>();
+      const getCommands = vi.spyOn(omp.runtime(), "getCommands").mockImplementationOnce(() => {
+        enteredDiscovery.resolve();
+        return discovery.promise;
+      });
+      try {
+        const admission = omp.startTurn("/wechat status");
+        await enteredDiscovery.promise;
+        await omp.interrupt(reason);
+        const { turnId } = await admission;
+        expect(omp.streamEvents().filter((event) => event.type === "turn_canceled")).toEqual([
+          { type: "turn_canceled", provider: "omp", reason, turnId },
+        ]);
+        expect(omp.completedTurnCount()).toBe(0);
+        expect(omp.failedTurnCount()).toBe(0);
+        expect(omp.recordedPrompts()).toEqual([]);
+
+        discovery.resolve(commands);
+        await waitForImmediate();
+        expect(omp.recordedPrompts()).toEqual([]);
+        await omp.runPromptWithoutTurn("/wechat status");
+        expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+      } finally {
+        discovery.resolve(commands);
+        getCommands.mockRestore();
+        await omp.close();
+      }
+    },
+  );
+
+  test("a canceled discovery cannot register a ChatPro request or disturb its replacement", async () => {
+    const commands: OmpRpcSlashCommand[] = [{ name: "chatpro", source: "extension" }];
+    const requestId = "e15ab05a-b98c-4bca-9b05-09fed58f4e8c";
+    const prompt = `/chatpro ask --json ${JSON.stringify({ requestId, text: "review" })}`;
+    const omp = new OmpHarness();
+    await omp.start();
+    const oldDiscovery = deferred<OmpRpcSlashCommand[]>();
+    const newDiscovery = deferred<OmpRpcSlashCommand[]>();
+    const enteredOldDiscovery = deferred<void>();
+    const enteredNewDiscovery = deferred<void>();
+    const getCommands = vi
+      .spyOn(omp.runtime(), "getCommands")
+      .mockImplementationOnce(() => {
+        enteredOldDiscovery.resolve();
+        return oldDiscovery.promise;
+      })
+      .mockImplementationOnce(() => {
+        enteredNewDiscovery.resolve();
+        return newDiscovery.promise;
+      });
+    try {
+      const oldAdmission = omp.startTurn(prompt);
+      await enteredOldDiscovery.promise;
+      await omp.interrupt("replacement");
+      const oldTurn = await oldAdmission;
+      const newAdmission = omp.startTurn(prompt);
+      await enteredNewDiscovery.promise;
+
+      oldDiscovery.resolve(commands);
+      await waitForImmediate();
+      expect(omp.recordedPrompts()).toEqual([]);
+      await expect(omp.startTurn("overlapping turn")).rejects.toThrow(
+        "An OMP turn is already active",
+      );
+
+      newDiscovery.resolve(commands);
+      const newTurn = await newAdmission;
+      expect(newTurn.turnId).not.toBe(oldTurn.turnId);
+      expect(omp.recordedPrompts()).toHaveLength(1);
+      const ask = JSON.parse(
+        omp.recordedPrompts()[0]!.message.slice("/chatpro ask --json ".length),
+      );
+      expect(ask).toMatchObject({ requestId, origin: { turnId: newTurn.turnId } });
+      await omp.interrupt();
+      expect(omp.cancellationReasons()).toEqual(["replacement", "user"]);
+      expect(omp.failedTurnCount()).toBe(0);
+      expect(omp.completedTurnCount()).toBe(0);
+    } finally {
+      oldDiscovery.resolve(commands);
+      newDiscovery.resolve(commands);
+      getCommands.mockRestore();
+      await omp.close();
+    }
+  });
+
+  test("rejects overlapping admission and releases command discovery failures for retry", async () => {
+    const commands: OmpRpcSlashCommand[] = [{ name: "wechat", source: "extension" }];
+    const omp = new OmpHarness();
+    omp.queueCommands(commands);
+    await omp.start();
+    const discovery = deferred<OmpRpcSlashCommand[]>();
+    const enteredDiscovery = deferred<void>();
+    const getCommands = vi.spyOn(omp.runtime(), "getCommands").mockImplementationOnce(() => {
+      enteredDiscovery.resolve();
+      return discovery.promise;
+    });
+    try {
+      const admission = omp.startTurn("/wechat status");
+      await enteredDiscovery.promise;
+      await expect(omp.startTurn("overlapping turn")).rejects.toThrow(
+        "An OMP turn is already active",
+      );
+      const rejected = expect(admission).rejects.toThrow("command discovery unavailable");
+      discovery.reject(new Error("command discovery unavailable"));
+      await rejected;
+      expect(omp.recordedPrompts()).toEqual([]);
+      await omp.runPromptWithoutTurn("/wechat status");
+      expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+    } finally {
+      discovery.resolve(commands);
+      getCommands.mockRestore();
+      await omp.close();
+    }
+  });
 
   test("a restored native extension command does not consume the next ordinary prompt's stale-plan reset", async () => {
     const omp = new OmpHarness();

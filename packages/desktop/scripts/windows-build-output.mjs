@@ -1,4 +1,4 @@
-import path from "node:path";
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 export function windowsBuildOutput(version, args) {
@@ -11,7 +11,10 @@ export function windowsBuildOutput(version, args) {
   };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   const [version, ...args] = process.argv.slice(2);
   const output = windowsBuildOutput(version, args);
   console.log(

@@ -263,21 +263,30 @@ async function atomicJson(file: string, value: unknown, assertHeld: () => void):
   }
 }
 
-async function ownedNamespace(profileRoot: string): Promise<string> {
+async function ownedNamespace(profileRoot: string, assertHeld: () => void): Promise<string> {
   await mkdir(profileRoot, { recursive: true });
   const canonicalRoot = await realpath(profileRoot);
   const namespace = join(canonicalRoot, NAMESPACE);
   try {
-    await mkdir(namespace, { mode: 0o700 });
-    const marker = await open(join(namespace, "owner"), "wx", 0o600);
-    try {
-      await marker.writeFile(OWNER);
-      await marker.sync();
-    } finally {
-      await marker.close();
-    }
+    await lstat(namespace);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (!isMissing(error)) throw error;
+    const stage = join(canonicalRoot, `.${NAMESPACE}-${randomUUID()}.tmp`);
+    await mkdir(stage, { mode: 0o700 });
+    try {
+      const marker = await open(join(stage, "owner"), "wx", 0o600);
+      try {
+        await marker.writeFile(OWNER);
+        await marker.sync();
+      } finally {
+        await marker.close();
+      }
+      // Publish only a fully owned namespace; interrupted writes stay unpublished.
+      assertHeld();
+      await rename(stage, namespace);
+    } finally {
+      await rm(stage, { recursive: true, force: true });
+    }
   }
   await assertDirectory(namespace);
   const markerPath = await regularPath(namespace, "owner");
@@ -756,7 +765,7 @@ export async function provisionBundledOmpPlugins(
   const lease = await acquireProvisioningLease(command, env, cwd, listed.paths);
   try {
     lease.assertHeld();
-    const namespace = await ownedNamespace(profileRoot);
+    const namespace = await ownedNamespace(profileRoot, lease.assertHeld);
     lease.assertHeld();
     // Another process may have seeded while this invocation waited for its lease.
     listed = await listNative(command, env, cwd, lease.signal);
