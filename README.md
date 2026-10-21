@@ -695,6 +695,10 @@ leading `launch` in that provider command is omitted for management commands onl
 scope when enabling or disabling retains the native runtime's unique-scope inference; explicit
 user and project scopes remain exact.
 
+Busy actions, including **Remove** while its confirmation is open, retain their original button
+dimensions and adjacent-control spacing. Progress indicators overlay the normal icon/text
+footprint without replacing caller-defined sizing or spacing.
+
 Visible extension replies retain their persisted native entry IDs, original text and metadata
 in live conversations and history, even without a model `agent_start`. Custom replies do not
 complete a turn: native RPC acknowledgements and model lifecycle events own completion.
