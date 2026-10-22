@@ -79,6 +79,7 @@ import { useFileDownload } from "@/hooks/use-file-download";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
+import { getShortcutOs } from "@/utils/shortcut-platform";
 import { buildWorkspaceExplorerStateKey } from "@/file-explorer/state-key";
 import { usePanelStore, type ExpandedPathsUpdate, type SortOption } from "@/stores/panel-store";
 import { formatTimeAgo } from "@/utils/time";
@@ -122,7 +123,8 @@ function getExplorerPressModifiers(event: GestureResponderEvent): ExplorerPressM
     shiftKey?: boolean;
   };
   return {
-    additive: nativeEvent.ctrlKey === true || nativeEvent.metaKey === true,
+    additive:
+      getShortcutOs() === "mac" ? nativeEvent.metaKey === true : nativeEvent.ctrlKey === true,
     range: nativeEvent.shiftKey === true,
   };
 }
@@ -322,6 +324,7 @@ function TreeRowSelectionCheckbox({
 }: TreeRowTouchActionProps & { isSelected: boolean }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
+  const touchSized = useShowPersistentActions();
   const accessibilityState = useMemo(() => ({ checked: isSelected }), [isSelected]);
   const handleToggleSelection = useCallback(
     (event: GestureResponderEvent) => {
@@ -338,7 +341,7 @@ function TreeRowSelectionCheckbox({
       {...explorerSelectionPointerBlockers}
       onPress={handleToggleSelection}
       onPressIn={stopExplorerActionPropagation}
-      style={styles.rowAction}
+      style={[styles.rowAction, !touchSized && styles.compactRowAction]}
       accessibilityRole="checkbox"
       accessibilityState={accessibilityState}
       aria-checked={isSelected}
@@ -356,6 +359,7 @@ function TreeRowSelectionCheckbox({
 
 function TreeRowMoveButton({ entry, touchControls, testID }: TreeRowTouchActionProps) {
   const { t } = useTranslation();
+  const touchSized = useShowPersistentActions();
   const handleMoveHere = useCallback(
     (event: GestureResponderEvent) => {
       event.stopPropagation();
@@ -373,7 +377,11 @@ function TreeRowMoveButton({ entry, touchControls, testID }: TreeRowTouchActionP
       onPressIn={stopExplorerActionPropagation}
       disabled={disabled}
       accessibilityRole="button"
-      style={[styles.rowAction, disabled && styles.disabledAction]}
+      style={[
+        styles.rowAction,
+        !touchSized && styles.compactRowAction,
+        disabled && styles.disabledAction,
+      ]}
       testID={testID ? `${testID}-move-here` : undefined}
     >
       <Text style={styles.retryButtonText}>{t("workspace.fileExplorer.actions.moveHere")}</Text>
@@ -397,6 +405,7 @@ type TreeRowMenuProps = Pick<
   | "onRenameEntry"
   | "onDuplicateEntry"
   | "onDeleteEntry"
+  | "selectedEntries"
   | "testID"
 >;
 
@@ -415,10 +424,15 @@ function TreeRowMenu({
   onRenameEntry,
   onDuplicateEntry,
   onDeleteEntry,
+  selectedEntries,
   testID,
 }: TreeRowMenuProps) {
   const { t } = useTranslation();
   const isDirectory = entry.kind === "directory";
+  const selectionCount = selectedEntries?.some((selected) => selected.path === entry.path)
+    ? selectedEntries.length
+    : 1;
+  const isBatchSelection = selectionCount > 1;
   const canAddToChat = isDirectory ? Boolean(onAddDirectoryToChat) : Boolean(onAddToChat);
   const handleCopy = useCallback(() => {
     onCopyPath(entry.path);
@@ -486,17 +500,29 @@ function TreeRowMenu({
       fileKind={entry.kind}
       onCopyPath={handleCopy}
       onCopyRelativePath={handleCopyRelativePath}
-      onReveal={onRevealEntry ? handleReveal : undefined}
+      onReveal={!isBatchSelection && onRevealEntry ? handleReveal : undefined}
       revealTargetName={revealTargetName}
-      onDownload={handleDownload}
-      onAddToChat={canAddToChat ? handleAddToChat : undefined}
-      onNewFile={onNewEntry ? handleNewFile : undefined}
-      onNewFolder={onNewEntry ? handleNewFolder : undefined}
-      onCollapseFolder={isDirectory && isExpanded ? handleCollapseDirectory : undefined}
-      onRename={onRenameEntry ? handleRename : undefined}
-      onDuplicate={onDuplicateEntry ? handleDuplicate : undefined}
+      onDownload={!isBatchSelection ? handleDownload : undefined}
+      onAddToChat={!isBatchSelection && canAddToChat ? handleAddToChat : undefined}
+      onNewFile={!isBatchSelection && onNewEntry ? handleNewFile : undefined}
+      onNewFolder={!isBatchSelection && onNewEntry ? handleNewFolder : undefined}
+      onCollapseFolder={
+        !isBatchSelection && isDirectory && isExpanded ? handleCollapseDirectory : undefined
+      }
+      onRename={!isBatchSelection && onRenameEntry ? handleRename : undefined}
+      onDuplicate={!isBatchSelection && onDuplicateEntry ? handleDuplicate : undefined}
       onDelete={onDeleteEntry ? handleDelete : undefined}
-      header={metaHeader}
+      header={
+        isBatchSelection ? (
+          <View style={styles.contextMetaBlock}>
+            <Text style={styles.contextMetaValue}>
+              {t("workspace.fileExplorer.actions.selectedCount", { count: selectionCount })}
+            </Text>
+          </View>
+        ) : (
+          metaHeader
+        )
+      }
       testIDPrefix={testID}
     />
   );
@@ -529,7 +555,6 @@ function TreeRowItem({
   touchControls,
   testID,
 }: TreeRowItemProps) {
-  const showPersistentActions = useShowPersistentActions();
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const showNameHover = useCallback(() => setIsHovered(true), []);
@@ -576,6 +601,9 @@ function TreeRowItem({
 
   const handlePress = useCallback(
     (event: GestureResponderEvent) => {
+      // Control-click belongs to the OS context menu on macOS, even if a click also arrives.
+      const nativeEvent = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean };
+      if (getShortcutOs() === "mac" && nativeEvent.ctrlKey) return;
       const modifiers = getExplorerPressModifiers(event);
       const selection = isWeb ? window.getSelection() : null;
       if (
@@ -596,23 +624,10 @@ function TreeRowItem({
     onSelectEntry(entry);
   }, [entry, onSelectEntry]);
 
-  const handleContextMenu = useCallback(
-    (event: unknown) => {
-      const mouseEvent = event as GestureResponderEvent & { nativeEvent: MouseEvent };
-      // macOS sends Control+left-click as contextmenu, without a click event.
-      if (mouseEvent.nativeEvent.button === 0 && mouseEvent.nativeEvent.ctrlKey) {
-        mouseEvent.preventDefault();
-        mouseEvent.stopPropagation();
-        onEntryPress(entry, mouseEvent);
-        return;
-      }
-      handleSelect();
-    },
-    [entry, handleSelect, onEntryPress],
-  );
-
   const handleSelectionMouseDown = useCallback((event: ReactMouseEvent) => {
-    if (event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+    const isMac = getShortcutOs() === "mac";
+    const additive = isMac ? event.metaKey : event.ctrlKey;
+    if (event.button === 0 && (additive || event.shiftKey) && !(isMac && event.ctrlKey)) {
       // Range selection belongs to the tree, not the browser's text selection.
       event.preventDefault();
     }
@@ -644,7 +659,7 @@ function TreeRowItem({
           triggerRef={entryDragRef}
           onPress={handlePress}
           onLongPress={getIsElectronRuntime() ? undefined : handleSelect}
-          onContextMenu={handleContextMenu}
+          onContextMenu={handleSelect}
           {...(isWeb ? { onMouseDown: handleSelectionMouseDown } : {})}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -677,7 +692,7 @@ function TreeRowItem({
           </View>
         </ContextMenuTrigger>
         <TreeRowMoveButton entry={entry} touchControls={touchControls} testID={testID} />
-        {showPersistentActions && !touchControls.onMoveToDirectory ? (
+        {!touchControls.onMoveToDirectory ? (
           <FileActionsMenuButton
             onSelect={handleSelect}
             testID={testID ? `${testID}-more` : undefined}
@@ -699,6 +714,7 @@ function TreeRowItem({
         onRenameEntry={onRenameEntry}
         onDuplicateEntry={onDuplicateEntry}
         onDeleteEntry={onDeleteEntry}
+        selectedEntries={selectedEntries}
         testID={testID}
       />
     </ContextMenu>
@@ -726,7 +742,6 @@ function removeMovedExplorerEntries(
 }
 
 interface ExplorerSelectionToolbarProps {
-  showPersistentActions: boolean;
   selectionMode: boolean;
   selectedCount: number;
   selectedDragEntryCount: number;
@@ -741,7 +756,6 @@ interface ExplorerSelectionToolbarProps {
 }
 
 function ExplorerSelectionToolbar({
-  showPersistentActions,
   selectionMode,
   selectedCount,
   selectedDragEntryCount,
@@ -755,7 +769,6 @@ function ExplorerSelectionToolbar({
   onCancelMove,
 }: ExplorerSelectionToolbarProps) {
   const { t } = useTranslation();
-  if (!showPersistentActions && !selectionMode && selectedCount <= 1) return null;
 
   const rootMoveDisabled = moving || !canMoveToRoot;
   return (
@@ -776,7 +789,7 @@ function ExplorerSelectionToolbar({
           )}
         </Text>
       </Pressable>
-      {selectionMode ? (
+      {selectionMode || selectedCount > 1 ? (
         <Text style={styles.retryButtonText}>
           {t("workspace.fileExplorer.actions.selectedCount", {
             count: moveEntries?.length ?? selectedCount,
@@ -839,7 +852,6 @@ export function FileExplorerPane({
 }: FileExplorerPaneProps) {
   const { t } = useTranslation();
   const isCompact = useIsCompactFormFactor();
-  const showPersistentActions = useShowPersistentActions();
 
   const normalizedWorkspaceRoot = useMemo(() => workspaceRoot.trim(), [workspaceRoot]);
   const workspaceStateKey = useMemo(
@@ -1077,18 +1089,22 @@ export function FileExplorerPane({
 
   const handleCopyPath = useCallback(
     async (path: string) => {
+      const selection = selectedEntryPathsRef.current;
+      const paths = selection.has(path) ? [...selection] : [path];
       await Clipboard.setStringAsync(
-        buildAbsoluteExplorerPath({
-          workspaceRoot: normalizedWorkspaceRoot,
-          entryPath: path,
-        }),
+        paths
+          .map((entryPath) =>
+            buildAbsoluteExplorerPath({ workspaceRoot: normalizedWorkspaceRoot, entryPath }),
+          )
+          .join("\n"),
       );
     },
     [normalizedWorkspaceRoot],
   );
 
   const handleCopyRelativePath = useCallback(async (path: string) => {
-    await Clipboard.setStringAsync(path);
+    const selection = selectedEntryPathsRef.current;
+    await Clipboard.setStringAsync(selection.has(path) ? [...selection].join("\n") : path);
   }, []);
 
   const handleAddDirectoryToChat = useCallback(
@@ -1609,7 +1625,6 @@ export function FileExplorerPane({
     (entry: ExplorerEntry) => {
       if (!hasWorkspaceScope) return;
       if (selectedEntryPathsRef.current.has(entry.path)) {
-        selectionAnchorPathRef.current = entry.path;
         selectExplorerEntry(entry.path);
         return;
       }
@@ -1821,7 +1836,6 @@ export function FileExplorerPane({
       style={styles.container}
     >
       <ExplorerSelectionToolbar
-        showPersistentActions={showPersistentActions}
         selectionMode={selectionMode}
         selectedCount={selectedEntryPaths.size}
         selectedDragEntryCount={selectedDragEntries.length}
@@ -2628,6 +2642,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: theme.spacing[1],
+  },
+  compactRowAction: {
+    minWidth: 28,
+    minHeight: 20,
   },
   disabledAction: {
     opacity: 0.4,
