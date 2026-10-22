@@ -1287,7 +1287,11 @@ function ComposerContentImpl({
       if (!attachment) {
         return;
       }
-      setSelectedAttachments((current) => appendWorkspaceFileAttachment(current, attachment));
+      setSelectedAttachments((current) =>
+        attachment.kind === "directory"
+          ? appendDirectoryAttachment(current, attachment)
+          : appendWorkspaceFileAttachment(current, attachment),
+      );
       focusInput();
     },
     [focusInput, serverId, setSelectedAttachments, workspaceId],

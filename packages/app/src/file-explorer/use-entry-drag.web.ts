@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type RefCallback } from "react";
 import type { View } from "react-native";
-import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 import {
   serializeWorkspaceFileDragPayload,
   WORKSPACE_FILE_DRAG_MIME,
@@ -70,7 +69,7 @@ export function useExplorerEntryDrag({
       return;
     }
 
-    const sourceEnabled = Boolean(source && (source.moveEnabled || source.includeChatAttachment));
+    const sourceEnabled = Boolean(source && (source.moveEnabled || source.chatAttachment));
     element.draggable = sourceEnabled;
 
     function handleDragStart(event: DragEvent) {
@@ -78,7 +77,7 @@ export function useExplorerEntryDrag({
         return;
       }
       if (source.moveEnabled) {
-        event.dataTransfer.effectAllowed = source.includeChatAttachment ? "copyMove" : "move";
+        event.dataTransfer.effectAllowed = source.chatAttachment ? "copyMove" : "move";
       } else {
         event.dataTransfer.effectAllowed = "copy";
       }
@@ -89,19 +88,16 @@ export function useExplorerEntryDrag({
           serializeExplorerEntryDragPayload(source.payload),
         );
       }
-      if (source.includeChatAttachment) {
-        const chatEntry = source.payload.entries.find((entry) => entry.kind === "file");
-        if (chatEntry) {
-          event.dataTransfer.setData(
-            WORKSPACE_FILE_DRAG_MIME,
-            serializeWorkspaceFileDragPayload({
-              version: 1,
-              serverId: source.payload.serverId,
-              workspaceId: source.payload.workspaceId,
-              attachment: createWorkspaceFileAttachment({ path: chatEntry.path }),
-            }),
-          );
-        }
+      if (source.chatAttachment) {
+        event.dataTransfer.setData(
+          WORKSPACE_FILE_DRAG_MIME,
+          serializeWorkspaceFileDragPayload({
+            version: 1,
+            serverId: source.payload.serverId,
+            workspaceId: source.payload.workspaceId,
+            attachment: source.chatAttachment,
+          }),
+        );
       }
     }
 

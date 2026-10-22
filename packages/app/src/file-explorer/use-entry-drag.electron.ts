@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefCallback } from "react";
 import type { View } from "react-native";
-import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 import {
   WORKSPACE_FILE_POINTER_DRAG_EVENT,
   type WorkspaceFileDragPayload,
@@ -156,9 +155,9 @@ export function useExplorerEntryDrag({
     function handlePointerDown(event: PointerEvent) {
       if (event.button !== 0 || event.pointerType !== "mouse") return;
       const source = sourceRef.current;
-      if (!source || (!source.moveEnabled && !source.includeChatAttachment)) return;
+      if (!source || (!source.moveEnabled && !source.chatAttachment)) return;
       cancelActiveDrag?.();
-      const { payload, moveEnabled, includeChatAttachment } = source;
+      const { payload, moveEnabled, chatAttachment } = source;
       const pointerId = event.pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
@@ -240,16 +239,13 @@ export function useExplorerEntryDrag({
         if (!dragging) {
           if (Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
           dragging = true;
-          if (includeChatAttachment) {
-            const entry = payload.entries.find((entry) => entry.kind === "file");
-            if (entry) {
-              workspaceFilePayload = {
-                version: 1,
-                serverId: payload.serverId,
-                workspaceId: payload.workspaceId,
-                attachment: createWorkspaceFileAttachment({ path: entry.path }),
-              };
-            }
+          if (chatAttachment) {
+            workspaceFilePayload = {
+              version: 1,
+              serverId: payload.serverId,
+              workspaceId: payload.workspaceId,
+              attachment: chatAttachment,
+            };
           }
           preview = createDragPreview(dragElement, payload.entries.length, view);
           dragElement.setPointerCapture(pointerId);
@@ -312,7 +308,7 @@ export function useExplorerEntryDrag({
 
     function preventNativeDrag(event: DragEvent) {
       const source = sourceRef.current;
-      if (source && (source.moveEnabled || source.includeChatAttachment)) event.preventDefault();
+      if (source && (source.moveEnabled || source.chatAttachment)) event.preventDefault();
     }
 
     dragElement.addEventListener("pointerdown", handlePointerDown);
