@@ -213,7 +213,7 @@ export const providerUsage = {
     claudeEntry: "Claude 额度",
     accountNotSelected: "当前会话未提供实际账户信息，以下分别显示已登录账户的额度",
     usageUnknown: "用量暂不可查询",
-    limitReached: "额度已满",
+    limitReached: "额度已用尽",
     awaitingVerification: "等待服务端核验",
     previousObservation: "上次观测用量；最新查询失败",
     queryRetryAt: "用量查询可于 {{time}} 后重试（非额度重置时间）",
