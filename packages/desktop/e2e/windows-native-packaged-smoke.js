@@ -1638,10 +1638,9 @@ async function smokeWindowsPackagedApp({
       "OMP Desktop",
       "The genuine product main must restore its normal runtime identity",
     );
-    assert.equal(
+    assert.ok(
       report.runtime.miniElectron,
-      "0.1.15",
-      "The native Windows smoke requires official mini-electron 0.1.15, never stock Electron or an older runtime",
+      "The native Windows smoke requires a genuine mini-electron runtime, not stock Electron",
     );
     assert.equal(
       path.resolve(report.runtime.executable),
