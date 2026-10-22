@@ -26,6 +26,7 @@ import {
   useContextMenu,
 } from "@/components/ui/context-menu";
 import { measureElement } from "@/components/ui/menu/menu-anchor";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const destructiveColorMapping = (theme: Theme) => ({ color: theme.colors.destructive });
@@ -41,6 +42,7 @@ export function FileActionsMenuButton({
 }): ReactElement {
   const { t } = useTranslation();
   const menu = useContextMenu();
+  const touchSized = useShowPersistentActions();
   const ref = useRef<View>(null);
   const handlePress = useCallback(
     (event: GestureResponderEvent) => {
@@ -62,7 +64,7 @@ export function FileActionsMenuButton({
       ref={ref}
       onPress={handlePress}
       onPressIn={stopPropagation}
-      style={buttonStyles.button}
+      style={[buttonStyles.button, !touchSized && buttonStyles.compactButton]}
       {...{
         onMouseDown: (event: { preventDefault(): void; stopPropagation(): void }) => {
           // Keep editor/browser selection intact and never begin the surrounding row's drag.
@@ -87,6 +89,10 @@ const buttonStyles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.borderRadius.base,
+  },
+  compactButton: {
+    minWidth: 28,
+    minHeight: 20,
   },
 }));
 interface FileAction {

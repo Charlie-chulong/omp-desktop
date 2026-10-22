@@ -1,5 +1,5 @@
-import React, { act } from "react";
-import type { ComponentProps } from "react";
+import React, { act, type ReactNode } from "react";
+import type { StyleProp, View as NativeView, ViewStyle } from "react-native";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -13,8 +13,6 @@ import type {
 import { buildWorkspaceExplorerStateKey } from "@/file-explorer/state-key";
 import { EXPLORER_ENTRY_DRAG_MIME } from "@/file-explorer/entry-drag";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/attachments/workspace-file-drag";
-import { MenuRoot } from "@/components/ui/menu/menu-root";
-import { useMenuContext } from "@/components/ui/menu/menu-context";
 import { FileExplorerPane } from "./file-explorer-pane";
 
 const fixture = vi.hoisted(() => ({
@@ -40,12 +38,20 @@ const fixture = vi.hoisted(() => ({
   toggleExplorerShowHiddenFiles: vi.fn(),
   download: vi.fn(),
   toastError: vi.fn(),
+  shortcutOs: "mac" as "mac" | "non-mac",
+  copyText: vi.fn(),
+  openFile: vi.fn(),
 }));
 
-// Keep the pane, row controls, context trigger, RN web DOM, and drag hook real.
-// Replace daemon/persistence boundaries and unrelated search/menu presentation.
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
+// Keep the pane, menus, RN web DOM, and drag hook real; replace daemon/persistence boundaries.
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: { count?: number }) =>
+      values?.count === undefined ? key : `${key}: ${values.count}`,
+  }),
+}));
+vi.mock("expo-clipboard", () => ({ setStringAsync: fixture.copyText }));
+vi.mock("@/utils/shortcut-platform", () => ({ getShortcutOs: () => fixture.shortcutOs }));
 vi.mock("@/stores/session-store", () => ({
   useSessionStore: (selector: (state: { sessions: typeof fixture.sessions }) => unknown) =>
     selector({ sessions: fixture.sessions }),
@@ -81,7 +87,6 @@ vi.mock("@/hooks/use-file-explorer-actions", () => ({
 }));
 vi.mock("@/hooks/use-file-download", () => ({ useFileDownload: () => fixture.download }));
 vi.mock("@/hooks/use-is-local-daemon", () => ({ useIsLocalDaemon: () => false }));
-vi.mock("@/hooks/use-fine-pointer", () => ({ useShowPersistentActions: () => true }));
 vi.mock("@/workspace/desktop-open-targets", () => ({
   useDesktopOpenTargets: () => ({ targets: [] }),
   openDesktopTarget: vi.fn(),
@@ -97,15 +102,32 @@ vi.mock("@/components/file-explorer-content-search", () => ({
 vi.mock("@/components/ui/overlay-scrollbar/use-overlay-flat-list-scrollbar", () => ({
   useOverlayFlatListScrollbar: () => ({ enabled: false, overlay: null }),
 }));
-vi.mock("@/components/ui/menu", () => ({
-  MenuRoot: (props: ComponentProps<typeof MenuRoot>) => <MenuRoot {...props} />,
-  useMenuContext: (componentName: string) => useMenuContext(componentName),
-  MenuSurface: () => null,
-  MenuItem: () => null,
-  MenuLabel: () => null,
-  MenuHint: () => null,
-  MenuSeparator: () => null,
-}));
+
+// Keep real actions/focus without Reanimated's frame. This hoisted mock must load its
+// rendering dependencies inside the factory: static imports are not initialized yet.
+vi.mock("@/components/ui/floating", async () => {
+  const { forwardRef } = await import("react");
+  const { ScrollView, View } = await import("react-native");
+  return {
+    FloatingSurface: forwardRef<
+      NativeView,
+      {
+        children?: ReactNode;
+        frameStyle?: StyleProp<ViewStyle>;
+        nativeID?: string;
+        style?: StyleProp<ViewStyle>;
+        testID?: string;
+      }
+    >(function StaticFloatingSurface({ children, frameStyle, nativeID, style, testID }, ref) {
+      return (
+        <View ref={ref} nativeID={nativeID} style={[style, frameStyle]} testID={testID}>
+          {children}
+        </View>
+      );
+    }),
+    FloatingScrollView: ScrollView,
+  };
+});
 
 let container: HTMLDivElement;
 let root: Root;
@@ -158,6 +180,7 @@ function dispatchDrag(
 beforeEach(async () => {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  fixture.shortcutOs = "mac";
   fixture.directories.clear();
   fixture.directories.set(".", {
     path: ".",
@@ -215,6 +238,7 @@ beforeEach(async () => {
           serverId="server-1"
           workspaceId="workspace-1"
           workspaceRoot="/workspace"
+          onOpenFile={fixture.openFile}
         />
       </QueryClientProvider>,
     ),
@@ -228,6 +252,86 @@ afterEach(async () => {
   container.remove();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("file explorer selection and menus", () => {
+  it("keeps Mac Control-click as a menu gesture without opening or toggling the file", async () => {
+    await act(async () => {
+      await userEvent.click(row("source.ts"), { modifiers: ["Meta"] });
+      await userEvent.click(row("other.ts"), { modifiers: ["Meta"] });
+    });
+    await act(async () => {
+      row("source.ts").dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true,
+        }),
+      );
+    });
+    expect(row("source.ts").getAttribute("aria-selected")).toBe("true");
+    expect(row("other.ts").getAttribute("aria-selected")).toBe("true");
+    expect(fixture.openFile).not.toHaveBeenCalled();
+    const copy = document.querySelector<HTMLElement>('[data-testid$="-copy-relative-path"]')!;
+    await act(async () => userEvent.click(copy));
+    expect(fixture.copyText).toHaveBeenCalledExactlyOnceWith("src/source.ts\nsrc/other.ts");
+  });
+
+  it("offers checkbox selection and an explicit menu without a modifier or secondary click", async () => {
+    fixture.setExpandedPathsForWorkspace.mockClear();
+    await act(async () => userEvent.click(requireElement("files-toggle-selection")));
+    await act(async () => {
+      await userEvent.click(siblingAction("archive", "select"));
+      await userEvent.click(siblingAction("source.ts", "select"));
+    });
+    await act(async () => userEvent.click(siblingAction("source.ts", "more")));
+    expect(document.body.textContent).toContain("workspace.fileExplorer.actions.selectedCount: 2");
+    expect(document.querySelector('[data-testid$="-download"]')).toBeNull();
+    expect(fixture.setExpandedPathsForWorkspace).not.toHaveBeenCalled();
+    expect(fixture.openFile).not.toHaveBeenCalled();
+    await act(async () =>
+      userEvent.click(document.querySelector<HTMLElement>('[data-testid$="-copy-path"]')!),
+    );
+    expect(fixture.copyText).toHaveBeenCalledExactlyOnceWith(
+      "/workspace/archive\n/workspace/src/source.ts",
+    );
+  });
+
+  it("retargets an unselected row's menu without retaining the previous batch", async () => {
+    await act(async () => {
+      await userEvent.click(row("source.ts"), { modifiers: ["Meta"] });
+      await userEvent.click(row("other.ts"), { modifiers: ["Meta"] });
+      await userEvent.click(siblingAction("root.txt", "more"));
+    });
+    expect(row("source.ts").getAttribute("aria-selected")).toBe("false");
+    expect(row("other.ts").getAttribute("aria-selected")).toBe("false");
+    expect(row("root.txt").getAttribute("aria-selected")).toBe("true");
+    await act(async () =>
+      userEvent.click(document.querySelector<HTMLElement>('[data-testid$="-copy-relative-path"]')!),
+    );
+    expect(fixture.copyText).toHaveBeenCalledExactlyOnceWith("root.txt");
+  });
+
+  it.each(["mac", "non-mac"] as const)("selects ranges without opening files on %s", async (os) => {
+    fixture.shortcutOs = os;
+    // Dispatch modifiers independently of the host OS's Control-click conversion.
+    await act(async () => {
+      row("other.ts").dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          metaKey: os === "mac",
+          ctrlKey: os === "non-mac",
+        }),
+      );
+    });
+    await act(async () => userEvent.click(row("root.txt"), { modifiers: ["Shift"] }));
+    for (const name of ["other.ts", "source.ts", "root.txt"]) {
+      expect(row(name).getAttribute("aria-selected")).toBe("true");
+    }
+    expect(row("src").getAttribute("aria-selected")).toBe("false");
+    expect(fixture.openFile).not.toHaveBeenCalled();
+  });
 });
 
 describe("file explorer row drop ownership", () => {
