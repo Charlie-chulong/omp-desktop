@@ -19,11 +19,12 @@ Windows `no omp` installers preserve an existing bundled runtime during upgrades
 `no omp` installation requires `omp` on `PATH`.
 
 The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime
-versions are released independently. Windows x64 uses runtime **0.1.15**, while the
-Apple Silicon channel currently provides runtime **0.1.16**. Windows discovers updates
-through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform
-latest pointer. Packaging validates the selected distribution's platform, architecture,
-and Electron API metadata.
+versions are released independently. Windows x64 discovers updates through
+`runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform
+latest pointer. Packaging accepts newer native runtime releases without a script
+update, validating the selected distribution's platform, architecture, installer
+protocol, Electron API metadata, and executable SHA-256 instead of pinning a release
+number.
 Main-process code keeps Electron-compatible `electron` imports; the stock
 `electron` package is retained only for TypeScript declarations. Project scripts
 do not download or substitute its runtime.
@@ -1419,11 +1420,40 @@ architecture (including when Node runs under Rosetta), and rejects a different t
 OS or architecture. `MINI_ELECTRON_DIST_PATH` must point to an extracted distribution
 for the requested target; it cannot reuse the host's runtime for another platform.
 
-Before packaging, refresh an existing installation with
-`npx mini-electron --update-runtime`. Normal dependency installation reuses an
+Packaging uses the installed runtime (or `MINI_ELECTRON_DIST_PATH`) without downloading
+or downgrading it to a fixed release. Before packaging, refresh an existing installation
+with `npx mini-electron --update-runtime`. Normal dependency installation reuses an
 already valid native runtime; updating the npm installer alone does not refresh it.
-The macOS channel currently selects `0.1.16`; verify the installed native version in
+Verify the selected native version in
 `node_modules/@iriscat/mini-electron/dist/version.json`.
+
+On macOS, every renderer must service native AppKit application events even
+though it is a windowless `LSUIElement` process. JavaScript and daemon requests
+can remain live while Activity Monitor marks that renderer as not responding.
+Before packaging a locally repaired runtime, run its
+`test/macos-renderer-responsiveness-smoke.js` with the bundled `Electron.app`.
+The regression checks WindowServer responsiveness after targeted native events,
+sandbox isolation and renderer shutdown; changing Dock visibility or adding a
+JavaScript heartbeat is not a substitute for the native event loop.
+
+Desktop/web status rings, synchronized loaders, and the homepage WebGPU poster
+stop scheduling animation while their retained panel or application is inactive.
+The homepage route supplies its navigation focus to the retained-panel context,
+so opening Settings also stops the covered poster while the window stays focused.
+Retained poster resources are reused within the mounted component and released
+on unmount or when the existing home-effects switch is disabled. Loaders share
+one timer at the six visible step boundaries per 950 ms cycle, not a permanent
+display-rate worklet. Reduced-motion preferences remain respected.
+
+The local macOS idle-scheduling runtime additionally replaces the fixed 10 ms
+AppKit/libuv poll with native events, backend I/O readiness and timer deadlines.
+It propagates physical visibility to Blink/Viz, including BrowserViews and guests,
+while preserving hidden first-frame preparation and `backgroundThrottling: false`.
+Select that rebuilt runtime with `MINI_ELECTRON_DIST_PATH`; rebuilding only the
+frontend does not add these native changes. Run its `macos-idle-pump-smoke.js`,
+`macos-idle-visibility-smoke.js`, and `macos-threaded-animation-smoke.js` alongside
+the responsiveness regression. A visible animated homepage is still active GPU
+work, not a zero-CPU idle page.
 
 QQ clipboard compatibility requires native runtime `0.1.12` or newer: QQ can
 advertise PNG bytes as TIFF, so the runtime must identify the actual encoding.

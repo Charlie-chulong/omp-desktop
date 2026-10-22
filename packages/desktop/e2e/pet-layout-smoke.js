@@ -11,7 +11,7 @@ if (!process.versions.electron) {
   assert.equal(
     process.platform,
     "win32",
-    "This native smoke targets the official Windows mini-electron 0.1.15 release",
+    "This native smoke targets the official Windows mini-electron runtime",
   );
   const {
     isolatedEnvironment,
@@ -91,10 +91,9 @@ if (!process.versions.electron) {
 
 async function runNativeSmoke() {
   const { app, BrowserWindow, protocol, screen } = require("electron");
-  assert.equal(
+  assert.ok(
     process.versions.miniElectron,
-    "0.1.15",
-    "Pet layout smoke requires official Windows mini-electron 0.1.15",
+    "Pet layout smoke requires a genuine mini-electron runtime, not stock Electron",
   );
   const desktopRoot = process.env.OMP_PET_LAYOUT_SOURCE_ROOT;
   assert.ok(desktopRoot, "The owned launch must supply the actual product module directory");

@@ -20,7 +20,12 @@ const { copyFiles, getFileMatchers } = require("app-builder-lib/out/fileMatcher"
 const { resolveFunction } = require("app-builder-lib/out/util/resolve");
 const { Arch, copyFile, statOrNull } = require("builder-util");
 const desktopRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const runtimeVersions = { "win32-x64": "0.1.15", "darwin-arm64": "0.1.16" };
+// Native releases advance independently of the npm installer. Qualify the
+// distribution's target and protocol, not a frozen runtime release number.
+const runtimeExecutables = {
+  "win32-x64": "electron.exe",
+  "darwin-arm64": "Electron.app/Contents/MacOS/Electron",
+};
 
 async function verifyPrivateHost(file) {
   if ((await sha256RegularFile(file)) !== BUNDLED_OMP_HOST.sha256) {
@@ -127,16 +132,10 @@ async function qualifyRuntime(runtimeDist, runtime, normalized) {
     }
   }
   const target = `${runtime.platform}-${runtime.arch}`;
-  const expectedVersion = runtimeVersions[target];
-  if (!expectedVersion || runtime.runtimeVersion !== expectedVersion) {
-    throw new Error(
-      `Packaging ${target} requires mini-electron ${expectedVersion ?? "for a supported target"}; ` +
-        `got ${runtime.runtimeVersion ?? "no runtime version"} at ${runtimeDist}. ` +
-        "macOS mini-electron 0.1.16 is not a Windows runtime.",
-    );
+  const executable = runtimeExecutables[target];
+  if (!executable) {
+    throw new Error(`Unsupported mini-electron target ${target} at ${runtimeDist}.`);
   }
-  const executable =
-    runtime.platform === "win32" ? "electron.exe" : "Electron.app/Contents/MacOS/Electron";
   const expectedHash = runtime.files?.[executable];
   if (runtime.installerProtocol !== 1 || !/^[a-f0-9]{64}$/.test(expectedHash ?? "")) {
     throw new Error(
@@ -228,7 +227,12 @@ export async function createQualifiedPackager(
   const options = configureBuildCommand(createYargs()).parseSync(
     args.filter((arg) => arg !== "--with-bundled-plugins"),
   );
-  if (!["x64", "arm64"].includes(runtime.arch) || !runtime.electronApiVersion) {
+  if (
+    !["x64", "arm64"].includes(runtime.arch) ||
+    !runtime.electronApiVersion ||
+    typeof runtime.runtimeVersion !== "string" ||
+    !runtime.runtimeVersion
+  ) {
     throw new Error(`Invalid mini-electron runtime metadata at ${runtimeDist}/version.json`);
   }
 

@@ -94,7 +94,7 @@ describe("packaging runtime compatibility", () => {
       try {
         writeFileSync(
           path.join(runtimeDist, "version.json"),
-          JSON.stringify({ ...runtime, electronApiVersion: "41.2.0" }),
+          JSON.stringify({ ...runtime, runtimeVersion: "0.1.17", electronApiVersion: "41.2.0" }),
         );
         const result = spawnSync(process.execPath, [scriptPath, ...args, "--publish", "never"], {
           cwd: path.resolve(path.dirname(scriptPath), ".."),
@@ -112,9 +112,40 @@ describe("packaging runtime compatibility", () => {
       }
     },
   );
+
+  test.each([
+    {
+      name: "installer protocol",
+      overrides: { installerProtocol: 2 },
+      message: "executable metadata",
+    },
+    { name: "executable inventory", overrides: { files: {} }, message: "executable metadata" },
+    {
+      name: "runtime version",
+      overrides: { runtimeVersion: undefined },
+      message: "runtime metadata",
+    },
+  ])("rejects incompatible or missing $name on a newer runtime", async ({ overrides, message }) => {
+    const fixture = createPackagingFixture("darwin");
+    try {
+      await expect(
+        createQualifiedPackager(
+          fixture.runtimeDist,
+          { ...fixture.runtime, ...overrides },
+          fixture.args,
+          fixture.directory,
+        ),
+      ).rejects.toThrow(message);
+    } finally {
+      fixture.dispose();
+    }
+  });
 });
 
-function createPackagingFixture(platform = "win32") {
+function createPackagingFixture(
+  platform = "win32",
+  runtimeVersion = platform === "win32" ? "0.1.18" : "0.1.17",
+) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "omp-build-options-"));
   const executable = platform === "win32" ? "electron.exe" : "Electron.app/Contents/MacOS/Electron";
   const runtimeDist = path.join(directory, "runtime");
@@ -124,7 +155,7 @@ function createPackagingFixture(platform = "win32") {
   const runtime = {
     platform,
     arch: platform === "win32" ? "x64" : "arm64",
-    runtimeVersion: platform === "win32" ? "0.1.15" : "0.1.16",
+    runtimeVersion,
     electronApiVersion: "41.2.0",
     installerProtocol: 1,
     files: { [executable]: createHash("sha256").update(executableBytes).digest("hex") },
@@ -253,22 +284,6 @@ describe("public and private packaging boundaries", () => {
     }
   });
 
-  test("Windows refuses the macOS runtime version even when the platform field says Windows", async () => {
-    const fixture = createPackagingFixture();
-    try {
-      await expect(
-        createQualifiedPackager(
-          fixture.runtimeDist,
-          { ...fixture.runtime, runtimeVersion: "0.1.16" },
-          fixture.args,
-          fixture.directory,
-        ),
-      ).rejects.toThrow("requires mini-electron 0.1.15");
-    } finally {
-      fixture.dispose();
-    }
-  });
-
   test("macOS retains explicit stable local signing options", async () => {
     const fixture = createPackagingFixture("darwin");
     try {
@@ -307,28 +322,39 @@ describe("public and private packaging boundaries", () => {
     }
   });
 
-  test("a changed runtime executable cannot be packaged as the qualified runtime", async () => {
-    const fixture = createPackagingFixture();
-    try {
-      writeFileSync(path.join(fixture.runtimeDist, "electron.exe"), "changed runtime");
-      await expect(
-        createQualifiedPackager(
-          fixture.runtimeDist,
-          fixture.runtime,
-          fixture.args,
-          fixture.directory,
-        ),
-      ).rejects.toThrow("mini-electron executable SHA256 mismatch");
-    } finally {
-      fixture.dispose();
-    }
-  });
+  test.each(["win32", "darwin"])(
+    "a changed %s runtime executable cannot be packaged as the qualified runtime",
+    async (platform) => {
+      const fixture = createPackagingFixture(platform);
+      try {
+        writeFileSync(
+          path.join(fixture.runtimeDist, Object.keys(fixture.runtime.files)[0]),
+          "changed runtime",
+        );
+        await expect(
+          createQualifiedPackager(
+            fixture.runtimeDist,
+            fixture.runtime,
+            fixture.args,
+            fixture.directory,
+          ),
+        ).rejects.toThrow("mini-electron executable SHA256 mismatch");
+      } finally {
+        fixture.dispose();
+      }
+    },
+  );
 });
 
-test.each(["win32", "darwin"])(
-  "the real Packager retains one effective config across build validation (%s)",
-  async (platform) => {
-    const fixture = createPackagingFixture(platform);
+test.each([
+  { platform: "win32", runtimeVersion: "0.1.18" },
+  { platform: "darwin", runtimeVersion: "0.1.17" },
+  { platform: "win32", runtimeVersion: "1.0.0" },
+  { platform: "darwin", runtimeVersion: "1.0.0" },
+])(
+  "runtime $runtimeVersion retains qualified resource staging across build validation ($platform)",
+  async ({ platform, runtimeVersion }) => {
+    const fixture = createPackagingFixture(platform, runtimeVersion);
     try {
       mkdirSync(path.join(fixture.directory, "public-resources"));
       writeFileSync(path.join(fixture.directory, "public-resources/value.txt"), "public resource");
