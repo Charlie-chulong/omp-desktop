@@ -106,6 +106,8 @@ import {
 import { deleteExplorerSelectionPaths, resolveExplorerSelection } from "@/file-explorer/selection";
 import { useExplorerEntryDrag } from "@/file-explorer/use-entry-drag";
 import { moveExplorerSelection } from "@/file-explorer/move-selection";
+import { createDirectoryComposerAttachment } from "@/attachments/directory";
+import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 
 const FILE_EXPLORER_ROW_SELECTOR = '[data-testid^="file-explorer-row-"]';
 const FILE_EXPLORER_ROOT_DROP_BLOCKED_SELECTOR = '[data-explorer-root-drop-blocked="true"]';
@@ -174,6 +176,7 @@ interface ExplorerTouchControls {
 interface TreeRowItemProps {
   serverId: string;
   workspaceId?: string | null;
+  workspaceRoot: string;
   entry: ExplorerEntry;
   depth: number;
   isExpanded: boolean;
@@ -531,6 +534,7 @@ function TreeRowMenu({
 function TreeRowItem({
   serverId,
   workspaceId,
+  workspaceRoot,
   entry,
   depth,
   isExpanded,
@@ -576,11 +580,24 @@ function TreeRowItem({
                 selectedEntries: selectedEntries ?? [],
               }),
             },
-            includeChatAttachment: !isDirectory,
+            chatAttachment: isDirectory
+              ? createDirectoryComposerAttachment(
+                  buildAbsoluteExplorerPath({ workspaceRoot, entryPath: entry.path }),
+                )
+              : createWorkspaceFileAttachment({ path: entry.path }),
             moveEnabled: Boolean(onMoveEntry),
           }
         : undefined,
-    [entry.kind, entry.path, isDirectory, onMoveEntry, selectedEntries, serverId, workspaceId],
+    [
+      entry.kind,
+      entry.path,
+      isDirectory,
+      onMoveEntry,
+      selectedEntries,
+      serverId,
+      workspaceId,
+      workspaceRoot,
+    ],
   );
   const dragTarget = useMemo(
     () =>
@@ -1739,6 +1756,7 @@ export function FileExplorerPane({
         <TreeRowDispatcher
           serverId={serverId}
           workspaceId={workspaceId}
+          workspaceRoot={normalizedWorkspaceRoot}
           row={info.item.row}
           index={info.index}
           expandedPaths={expandedPaths}
@@ -1794,6 +1812,7 @@ export function FileExplorerPane({
       onAddDirectoryToChat,
       serverId,
       workspaceId,
+      normalizedWorkspaceRoot,
     ],
   );
 
@@ -2414,6 +2433,7 @@ function toggleDirectory({
 function TreeRowDispatcher({
   serverId,
   workspaceId,
+  workspaceRoot,
   row,
   index,
   expandedPaths,
@@ -2439,6 +2459,7 @@ function TreeRowDispatcher({
 }: {
   serverId: string;
   workspaceId?: string | null;
+  workspaceRoot: string;
   row: ExplorerTreeRow;
   index: number;
   expandedPaths: Set<string>;
@@ -2473,6 +2494,7 @@ function TreeRowDispatcher({
     <TreeRowItem
       serverId={serverId}
       workspaceId={workspaceId}
+      workspaceRoot={workspaceRoot}
       entry={entry}
       depth={depth}
       isExpanded={isExpanded}

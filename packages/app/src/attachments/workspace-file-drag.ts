@@ -1,4 +1,5 @@
-import type { WorkspaceFileComposerAttachment } from "./types";
+import type { DirectoryComposerAttachment, WorkspaceFileComposerAttachment } from "./types";
+import { isDirectoryComposerAttachment } from "./directory";
 import { isWorkspaceFileComposerAttachment } from "./workspace-file";
 
 export const WORKSPACE_FILE_DRAG_MIME = "application/x-paseo-workspace-file+json";
@@ -7,7 +8,7 @@ export interface WorkspaceFileDragPayload {
   version: 1;
   serverId: string;
   workspaceId: string;
-  attachment: WorkspaceFileComposerAttachment;
+  attachment: WorkspaceFileComposerAttachment | DirectoryComposerAttachment;
 }
 
 export const WORKSPACE_FILE_POINTER_DRAG_EVENT = "paseo:workspace-file-pointer-drag";
@@ -38,7 +39,8 @@ export function parseWorkspaceFileDragPayload(serialized: string): WorkspaceFile
     record.serverId.length === 0 ||
     typeof record.workspaceId !== "string" ||
     record.workspaceId.length === 0 ||
-    !isWorkspaceFileComposerAttachment(record.attachment)
+    (!isWorkspaceFileComposerAttachment(record.attachment) &&
+      !isDirectoryComposerAttachment(record.attachment))
   ) {
     return null;
   }
@@ -54,7 +56,7 @@ export function resolveWorkspaceFileDrop(input: {
   payload: WorkspaceFileDragPayload;
   serverId: string;
   workspaceId: string;
-}): WorkspaceFileComposerAttachment | null {
+}): WorkspaceFileDragPayload["attachment"] | null {
   return input.payload.serverId === input.serverId &&
     input.payload.workspaceId === input.workspaceId
     ? input.payload.attachment

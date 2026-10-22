@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/attachments/workspace-file-drag";
 import { EXPLORER_ENTRY_DRAG_MIME, type ExplorerEntryMoveRequest } from "./entry-drag";
 import { useExplorerEntryDrag } from "./use-entry-drag";
+import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
+import { createDirectoryComposerAttachment } from "@/attachments/directory";
 
 interface MountedHarness {
   root: Root;
@@ -46,7 +48,12 @@ function DragHarness({
         workspaceId: "workspace-1",
         entries,
       },
-      includeChatAttachment: entries.some((entry) => entry.kind === "file"),
+      chatAttachment:
+        entries[0]?.kind === "directory"
+          ? createDirectoryComposerAttachment(`/workspace/${entries[0].path}`)
+          : entries[0]
+            ? createWorkspaceFileAttachment({ path: entries[0].path })
+            : undefined,
       moveEnabled: true,
     }),
     [entries],
@@ -95,7 +102,6 @@ function RootRoutingHarness({
         workspaceId: "workspace-1",
         entries: [{ path: "src/nested", kind: "directory" as const }],
       },
-      includeChatAttachment: false,
       moveEnabled: true,
     }),
     [],
