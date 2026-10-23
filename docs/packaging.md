@@ -56,6 +56,42 @@ packages/desktop/release/mac-arm64/OMP Desktop.app
 
 For local installer builds, pass `--publish never` to avoid uploading release artifacts.
 
+## GitHub Actions release packaging
+
+The [`Package release`](../.github/workflows/release.yml) workflow builds **Windows x64, both bundled-OMP and no-OMP variants**, by default. It runs when a `v*` tag is pushed or through **Actions → Package release → Run workflow**.
+
+- The root and desktop package versions must match. A tag build also requires the exact tag `v<packages/desktop/package.json version>`; the workflow does not bump versions.
+- Each successful build uploads a `release-windows-x64`, `release-windows-x64-no-omp`, or optional `release-darwin-arm64` Actions artifact, retained for 14 days. These contain installers, ZIPs, and blockmaps when generated, not unpacked apps or builder diagnostics. Bundled-OMP builds also include update YAML metadata.
+- The no-OMP job runs `npm run build:windows:no-omp` and skips the OMP download. Its installer and ZIP filenames contain `No-OMP`, so both variants can coexist in the release. Its update YAML is deliberately excluded: both Windows variants generate the same channel metadata filename, and the public auto-update feed must continue pointing to the standard bundled-OMP build. This does not create a separate no-OMP update channel.
+- Once all selected platforms succeed, a tag build uploads the assets to a **draft GitHub Release**. Reruns replace same-named assets only in a draft, preserve its notes, and refuse to modify an already published release. A failed upload leaves the release drafted; rerun after resolving the failure.
+- A manual run on a branch only creates Actions artifacts. A manual run with a tag selected also creates or updates its release draft.
+- Review the draft, add release notes, and perform the native packaged-application checks before publishing. Building installers does not verify native application behavior.
+
+For example, after setting matching package versions to `0.5.3` and committing the changes:
+
+```bash
+git tag v0.5.3
+git push origin v0.5.3
+```
+
+The workflow uses the repository's `GITHUB_TOKEN`; no personal access token is required. Repository or organization policy must permit the release job's `contents: write` permission. Windows artifacts are unsigned, so Windows may display SmartScreen warnings.
+
+### Enable macOS CI packaging
+
+macOS requires a Developer ID certificate and notarization credentials; fresh hosted runners do not have the local `OMP Desktop Local` identity. Configure these repository Actions secrets:
+
+| Secret                        | Value                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `MACOS_CSC_LINK`              | Base64-encoded Developer ID Application `.p12` certificate, including its private key |
+| `MACOS_CSC_KEY_PASSWORD`      | Password for that `.p12` certificate                                                  |
+| `APPLE_ID`                    | Apple developer account email                                                         |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization                                                |
+| `APPLE_TEAM_ID`               | Apple developer team ID                                                               |
+
+Set the repository Actions **variable** `MACOS_RELEASE_ENABLED=true` to include macOS arm64 in tag and manual builds, or check the `macos` input for a single manual run. Missing credentials fail the macOS job rather than silently producing an unsigned release. The existing macOS helper verifies the code signature, stapled ticket, and Gatekeeper assessment.
+
+CI uses Node.js from `.tool-versions`, installs dependencies with `npm ci`, and downloads the selected platform's checksum-verified OMP binary. The lockfile pins the mini-electron installer, but the installer selects its current native runtime and the OMP downloader selects the latest upstream release; rebuilding a tag later is not guaranteed to reproduce identical binaries.
+
 ## Native runtime selection
 
 The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime versions are released independently. Windows x64 discovers updates through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform latest pointer.
