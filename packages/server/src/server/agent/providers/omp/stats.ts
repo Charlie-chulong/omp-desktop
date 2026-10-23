@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, promises as fs } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -6,7 +7,14 @@ import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { OmpStatsRange, OmpStatsResult } from "@omp-desktop/protocol/omp-stats";
-import type { ProviderRuntimeSettings } from "../../provider-launch-config.js";
+import {
+  createProviderEnv,
+  type ProviderRuntimeSettings,
+  type ResolvedProviderLaunch,
+} from "../../provider-launch-config.js";
+import { assertBundledOmpHost } from "../../../bundled-omp-host.js";
+import { spawnProcess } from "../../../../utils/spawn.js";
+import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
 
 const moduleRequire = createRequire(import.meta.url);
 const PROFILE_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -26,10 +34,19 @@ const SCOPE_ENV_KEYS: Record<string, true | undefined> = {
 // The Stats RPC uses the client's 60-second default. Leave time to return a
 // sanitized failure instead of leaving an abandoned SQL scan behind it.
 const STATS_WORKER_TIMEOUT_MS = 15_000;
+const STATS_REFRESH_TIMEOUT_MS = 40_000;
+const STATS_CLEANUP_TIMEOUT_MS = 2_000;
+type StatsRefreshFailure = "index_refresh_failed" | "index_refresh_timeout";
+const pendingRefreshes = new Map<string, Promise<StatsRefreshFailure | null>>();
 
 interface StatsSource {
   path: string;
   profile: string;
+}
+
+interface ResolvedStatsScope {
+  source: StatsSource;
+  scope: StatsScopeContext;
 }
 
 interface StatsScopeContext {
@@ -289,19 +306,25 @@ function resolveStatsDataRoot(
   return existsSync(candidate) ? candidate : configRoot;
 }
 
+interface StatsSourceOptions {
+  env: NodeJS.ProcessEnv;
+  command?: ProviderRuntimeSettings["command"];
+  home?: string;
+  cwd?: string;
+  platform?: NodeJS.Platform;
+}
+
 /**
  * Mirrors v18.12.1 utils/dirs.ts getStatsDbPath (rootSubdir, not agentSubdir).
  * A custom PI_CODING_AGENT_DIR changes sessions/auth but never relocates stats.db;
  * it only disables XDG redirection. OMP_AGENT_DIR is not a native dirs.ts key.
  * The host-level catalog/management runtime launches from home, not a workspace.
  */
-export function resolveOmpStatsSource(options: {
-  env: NodeJS.ProcessEnv;
-  command?: ProviderRuntimeSettings["command"];
-  home?: string;
-  cwd?: string;
-  platform?: NodeJS.Platform;
-}): StatsSource {
+export function resolveOmpStatsSource(options: StatsSourceOptions): StatsSource {
+  return resolveStatsScope(options).source;
+}
+
+function resolveStatsScope(options: StatsSourceOptions): ResolvedStatsScope {
   const platform = options.platform ?? process.platform;
   const launchEnv = normalizeScopeEnv(options.env, platform, "launch");
   const home =
@@ -328,16 +351,212 @@ export function resolveOmpStatsSource(options: {
   scope.env = mergeNativeScopeEnv(scope.env, directoryEnvs);
   const directories = resolveStatsDirectories(scope);
   return {
-    path: join(resolveStatsDataRoot(scope, directories), "stats.db"),
-    profile: profile ?? "default",
+    source: {
+      path: join(resolveStatsDataRoot(scope, directories), "stats.db"),
+      profile: profile ?? "default",
+    },
+    scope,
   };
 }
 
+function assertSafeStatsCommand(command: ProviderRuntimeSettings["command"]): void {
+  let args: readonly string[] = [];
+  if (command?.mode === "replace") {
+    // A script/interpreter wrapper can reinterpret even a safe-looking prefix.
+    if (!/^omp(?:\.exe)?$/i.test(basename(command.argv[0]!))) {
+      throw new Error("Unknown OMP statistics executable");
+    }
+    args = command.argv.slice(1);
+  } else if (command?.mode === "append") {
+    args = command.args ?? [];
+  }
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    if (arg === "--profile" && args[index + 1] && !args[index + 1]!.startsWith("-")) {
+      index++;
+    } else if (!arg.startsWith("--profile=") || arg.length === "--profile=".length) {
+      throw new Error("Unknown OMP statistics executable arguments");
+    }
+  }
+}
+
+async function runNativeStatsRefresh(
+  launch: ResolvedProviderLaunch,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  onStopped: () => void,
+): Promise<StatsRefreshFailure | null> {
+  const { promise, resolve: resolveResult } = Promise.withResolvers<StatsRefreshFailure | null>();
+  const { promise: exited, resolve: markExited } = Promise.withResolvers<void>();
+  let child: ChildProcess | undefined;
+  let finishing = false;
+  const deadline = setTimeout(() => {
+    void finish("index_refresh_timeout");
+  }, STATS_REFRESH_TIMEOUT_MS);
+
+  async function finish(reason: StatsRefreshFailure | null): Promise<void> {
+    if (finishing) return;
+    finishing = true;
+    clearTimeout(deadline);
+    const releaseFlight = () => {
+      child?.off("error", onError);
+      child?.off("exit", onExit);
+      onStopped();
+    };
+    if (reason && child?.pid && child.exitCode === null && child.signalCode === null) {
+      const writer = child;
+      const cleanup = (async () => {
+        try {
+          await terminateWithTreeKill(writer, {
+            gracefulTimeoutMs: 250,
+            forceTimeoutMs: 1_000,
+          });
+        } catch {
+          try {
+            writer.kill("SIGKILL");
+          } catch {
+            // Retain this failed flight until the writer actually exits.
+          }
+        }
+        await exited;
+        releaseFlight();
+      })();
+      // Bound the RPC even when OS cleanup fails, without allowing another
+      // writer or a stale SQL read while the owned process may still be alive.
+      let cleanupDeadline: NodeJS.Timeout | undefined;
+      await Promise.race([
+        cleanup,
+        new Promise<void>((finishCleanupWait) => {
+          cleanupDeadline = setTimeout(finishCleanupWait, STATS_CLEANUP_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(cleanupDeadline);
+    } else {
+      releaseFlight();
+    }
+    resolveResult(reason);
+  }
+  function onError(): void {
+    void finish("index_refresh_failed");
+  }
+  function onExit(code: number | null, signal: NodeJS.Signals | null): void {
+    markExited();
+    void finish(code === 0 && signal === null ? null : "index_refresh_failed");
+  }
+
+  void assertBundledOmpHost(launch.command, env)
+    .then(() => {
+      // Verification may outlast the deadline; never spawn after reporting timeout.
+      if (finishing) return undefined;
+      child = spawnProcess(launch.command, [...launch.args, "stats", "--summary"], {
+        env,
+        cwd,
+        shell: false,
+        stdio: "ignore",
+      });
+      child.on("error", onError);
+      child.once("exit", onExit);
+      return undefined;
+    })
+    .catch(onError);
+  return promise;
+}
+
 /**
- * Read only the native /stats index. Never invoke `omp stats --json`: that command
- * ingests transcripts and writes user prose. No transcript or prose columns are read here.
- * Facts match stats/rollup.ts v18.12.1 but read raw numeric rows, avoiding stale rollups
- * during native reindexing. Each ingested request is counted exactly once by the native index.
+ * Refresh the configured native index before the numeric-only SQL reader runs.
+ * No CLI output is captured, and a failed refresh never reports stale totals.
+ */
+export async function refreshAndReadOmpStats(
+  options: Pick<StatsSourceOptions, "env" | "command" | "cwd"> & {
+    range: OmpStatsRange;
+    resolveLaunch: () => Promise<ResolvedProviderLaunch>;
+  },
+): Promise<OmpStatsResult> {
+  const env = createProviderEnv({ baseEnv: options.env });
+  const sourceOptions = { ...options, env };
+  let resolved: ResolvedStatsScope;
+  const metadata = {
+    range: options.range,
+    fetchedAt: new Date().toISOString(),
+    source: "omp_stats_db" as const,
+    scope: { kind: "host_profile" as const, profile: "default" },
+  };
+  try {
+    // In particular, read-only source resolution alone is insufficient to
+    // authorize executing arbitrary extra flags such as --print or --mode.
+    assertSafeStatsCommand(options.command);
+    resolved = resolveStatsScope(sourceOptions);
+    metadata.scope.profile = resolved.source.profile;
+  } catch {
+    return { ...metadata, status: "unavailable", reason: "scope_unavailable" };
+  }
+  let launch: ResolvedProviderLaunch;
+  try {
+    launch = await options.resolveLaunch();
+  } catch {
+    return { ...metadata, status: "error", reason: "index_refresh_failed" };
+  }
+  try {
+    const command = { mode: "replace" as const, argv: [launch.command, ...launch.args] };
+    assertSafeStatsCommand(command);
+    let configuredArgs: readonly string[] = [];
+    if (options.command?.mode === "replace") {
+      configuredArgs = options.command.argv.slice(1);
+    } else if (options.command?.mode === "append") {
+      configuredArgs = options.command.args ?? [];
+    }
+    if (
+      (options.command?.mode === "replace" && launch.command !== options.command.argv[0]) ||
+      launch.args.length !== configuredArgs.length ||
+      launch.args.some((arg, index) => arg !== configuredArgs[index])
+    ) {
+      throw new Error("Unknown OMP statistics launch invocation");
+    }
+    const launched = resolveStatsScope({ ...sourceOptions, command });
+    if (
+      launched.source.path !== resolved.source.path ||
+      launched.source.profile !== resolved.source.profile
+    ) {
+      throw new Error("Unknown OMP statistics launch scope");
+    }
+    resolved = launched;
+  } catch {
+    return { ...metadata, status: "unavailable", reason: "scope_unavailable" };
+  }
+  // Hash the full invocation/env rather than retaining credentials in map keys.
+  // Include native dotenv scope too: matching DB paths alone do not imply that
+  // two different session directories should share a refresh.
+  const key = createHash("sha256")
+    .update(
+      JSON.stringify([
+        resolved.source,
+        resolved.scope.home,
+        resolved.scope.cwd,
+        resolved.scope.platform,
+        Object.entries(resolved.scope.env).sort(([left], [right]) => left.localeCompare(right)),
+        launch.command,
+        launch.args,
+        Object.entries(env).sort(([left], [right]) => left.localeCompare(right)),
+      ]),
+    )
+    .digest("hex");
+  let pending = pendingRefreshes.get(key);
+  if (!pending) {
+    pending = runNativeStatsRefresh(launch, env, resolved.scope.cwd, () => {
+      pendingRefreshes.delete(key);
+    });
+    pendingRefreshes.set(key, pending);
+  }
+  const reason = await pending;
+  if (reason) return { ...metadata, status: "error", reason };
+  return readOmpStatsFromSource({ range: options.range }, resolved.source);
+}
+
+/**
+ * Read only the native /stats index; callers may also use this reader separately
+ * without refreshing. No transcript or prose columns are read here. Facts match
+ * stats/rollup.ts v18.12.1 but use raw numeric rows, avoiding stale rollups.
+ * Each ingested request is counted exactly once by the native index.
  */
 export async function readOmpStats(options: {
   range: OmpStatsRange;
@@ -362,6 +581,20 @@ export async function readOmpStats(options: {
   } catch {
     return { ...metadata, status: "unavailable", reason: "scope_unavailable" };
   }
+  return readOmpStatsFromSource(options, source);
+}
+
+async function readOmpStatsFromSource(
+  options: { range: OmpStatsRange; now?: number },
+  source: StatsSource,
+): Promise<OmpStatsResult> {
+  const now = options.now ?? Date.now();
+  const metadata = {
+    range: options.range,
+    fetchedAt: new Date(now).toISOString(),
+    source: "omp_stats_db" as const,
+    scope: { kind: "host_profile" as const, profile: source.profile },
+  };
   try {
     await fs.stat(source.path);
   } catch (error) {

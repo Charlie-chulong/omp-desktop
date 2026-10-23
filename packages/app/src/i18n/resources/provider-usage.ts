@@ -3,9 +3,9 @@ const en = {
     title: "OMP native statistics (/stats)",
     scope: "This host · profile: {{profile}}",
     defaultProfile: "Default",
-    loading: "Loading native statistics…",
+    loading: "Updating the native index and loading statistics…",
     refresh: "Refresh statistics",
-    refreshing: "Refreshing statistics…",
+    refreshing: "Updating the native index…",
     retry: "Try again",
     errorTitle: "Native statistics unavailable",
     hostUnavailable: "Connect to this host to see its native statistics",
@@ -14,7 +14,7 @@ const en = {
     refreshFailed: "Refresh failed. The previous indexed snapshot is still shown.",
     empty: "No indexed requests in this time range",
     indexNotice:
-      "Read-only view of this host profile's native /stats index across projects, including main, subagent and advisor requests. Native /stats manages indexing; recent activity may not yet be indexed. Refresh only rereads the index.",
+      "Statistics for this host profile across projects, including main, subagent and advisor requests. Opening or refreshing runs OMP's local incremental index sync before reading totals. The first sync may take longer; Desktop receives aggregate metrics, not transcript text.",
     costNotice:
       "Costs are OMP's recorded API-equivalent USD amounts, not subscription charges or invoices. Account quotas and the current session are not added to these totals.",
     transcriptNotice:
@@ -52,9 +52,9 @@ const en = {
     breakdown: "{{requests}} requests · {{tokens}} tokens · {{cost}}",
     reasons: {
       missing:
-        "No native statistics index exists yet. Open /stats in OMP on this host/profile to index its activity.",
+        "No native statistics index was found after synchronization. Check the configured OMP runtime and profile on this host.",
       unsupported_schema:
-        "This native statistics index has an unsupported schema. Open /stats with the bundled OMP version to update its index.",
+        "The synchronized native index has an unsupported schema. Update Desktop to match the configured OMP runtime.",
       scope_unavailable:
         "The configured OMP command's statistics scope could not be determined safely. View /stats in that runtime instead.",
       provider_unavailable: "The OMP provider is disabled or does not support native statistics",
@@ -62,6 +62,10 @@ const en = {
         "The native index could not be read. It may be busy, inaccessible or corrupt; no zero totals have been substituted.",
       invalid_data:
         "The native index contains invalid statistics. No partial or estimated totals are shown.",
+      index_refresh_failed:
+        "OMP could not update its native statistics index. Retry or check /stats in the configured runtime; the old index is not presented as current usage.",
+      index_refresh_timeout:
+        "Updating the native statistics index timed out. Retry to continue synchronization; the old index is not presented as current usage.",
     },
   },
   title: "Plan usage",
@@ -139,9 +143,9 @@ export const providerUsage = {
       title: "OMP 原生统计（/stats）",
       scope: "此主机 · 配置：{{profile}}",
       defaultProfile: "默认配置",
-      loading: "正在加载原生统计…",
+      loading: "正在同步原生索引并加载统计…",
       refresh: "刷新统计",
-      refreshing: "正在刷新统计…",
+      refreshing: "正在同步原生索引…",
       retry: "重试",
       errorTitle: "原生统计暂不可用",
       hostUnavailable: "连接此主机后可查看其原生统计",
@@ -150,7 +154,7 @@ export const providerUsage = {
       refreshFailed: "刷新失败，当前仍显示上次读取的索引快照。",
       empty: "此时间范围内暂无已索引请求",
       indexNotice:
-        "只读显示此主机配置下跨项目的原生 /stats 索引，包含主代理、子代理与顾问代理请求。索引由原生 /stats 管理，近期活动可能尚未收录；刷新只会重新读取索引。",
+        "显示此主机配置下跨项目的原生统计，包含主代理、子代理与顾问代理请求。打开或刷新时先由 OMP 在本机增量同步索引，再读取总计；首次同步可能稍慢。Desktop 仅接收汇总指标，不接收会话正文。",
       costNotice:
         "费用为 OMP 记录的 API 等价美元金额，不代表订阅扣费或账单。服务商账户额度与当前会话用量不会重复加到这些总计中。",
       transcriptNotice:
@@ -187,12 +191,15 @@ export const providerUsage = {
       agentTypes: { main: "主代理", subagent: "子代理", advisor: "顾问代理" },
       breakdown: "{{requests}} 次请求 · {{tokens}} 词元 · {{cost}}",
       reasons: {
-        missing: "尚无原生统计索引。请在此主机的对应配置下打开 OMP 的 /stats，以收录使用记录。",
-        unsupported_schema: "原生统计索引结构不受支持。请使用随包 OMP 打开 /stats，更新其索引。",
+        missing: "尚无原生统计索引。原生命令同步后仍未找到索引，请检查此主机配置的 OMP 运行环境。",
+        unsupported_schema: "同步后的原生统计索引结构不受支持，请更新 Desktop 以匹配所配置的 OMP。",
         scope_unavailable: "无法安全确定所配置 OMP 命令的统计范围，请在该运行环境内查看 /stats。",
         provider_unavailable: "OMP 服务商已禁用，或不支持原生统计",
         unreadable: "无法读取原生索引，可能正忙、无访问权限或已损坏；未使用零值代替。",
         invalid_data: "原生索引包含无效统计数据，未显示不完整或估算的总计。",
+        index_refresh_failed:
+          "OMP 未能更新原生统计索引。请重试或在对应运行环境检查 /stats；未将旧索引当作最新统计。",
+        index_refresh_timeout: "原生统计索引同步超时。请重试以继续同步；未将旧索引当作最新统计。",
       },
     },
     title: "套餐用量",

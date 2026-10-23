@@ -101,7 +101,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("renders source-backed counts, cost, scope and all fixed labels in Chinese", async () => {
+it("renders source-backed counts, cost and scope after the initial load", async () => {
   let resolve: (payload: StatsPayload) => void = () => {
     throw new Error("No pending request");
   };
@@ -114,7 +114,8 @@ it("renders source-backed counts, cost, scope and all fixed labels in Chinese", 
     ),
   };
   render(page());
-  expect(screen.getByText("正在加载原生统计…")).toBeTruthy();
+  expect(screen.queryByTestId("omp-native-stats-summary")).toBeNull();
+  expect(screen.getByTestId("omp-native-stats-refresh").getAttribute("aria-disabled")).toBe("true");
   resolve({ requestId: "stats", stats: snapshot() });
   const section = await screen.findByTestId("omp-native-stats-summary");
   expect(within(section).getByText("此主机 · 配置：默认配置")).toBeTruthy();
@@ -138,7 +139,6 @@ it("renders source-backed counts, cost, scope and all fixed labels in Chinese", 
   );
   expect(screen.getByTestId("omp-native-stats-fetchedAt").textContent).toContain("索引读取时间：");
   const content = screen.getByTestId("omp-native-stats-section").textContent;
-  expect(content).toContain("索引由原生 /stats 管理");
   expect(content).toContain("不代表订阅扣费或账单");
   expect(content).not.toMatch(
     /Loading|Refresh|Requests|Input tokens|Main agent|Subagent|Unavailable/,
@@ -303,6 +303,37 @@ it("marks a failed refresh instead of silently presenting an old snapshot as fre
   await screen.findByText("刷新失败，当前仍显示上次读取的索引快照。");
   expect(screen.getByTestId("omp-native-stats-requests").textContent).toBe("2");
   expect(screen.queryByText(/private raw/)).toBeNull();
+});
+
+it("does not present cached zero use as fresh after native indexing times out", async () => {
+  const read = vi
+    .fn<NonNullable<typeof runtime.clients.first>["getOmpStats"]>()
+    .mockResolvedValueOnce({ requestId: "stats", stats: snapshot(0) })
+    .mockResolvedValueOnce({
+      requestId: "stats",
+      stats: {
+        status: "error",
+        reason: "index_refresh_timeout",
+        range: "24h",
+        source: "omp_stats_db",
+        fetchedAt: "2026-10-23T12:00:00.000Z",
+        scope: { kind: "host_profile", profile: "default" },
+      },
+    })
+    .mockResolvedValueOnce({ requestId: "stats", stats: snapshot(4) });
+  runtime.clients.first = { getOmpStats: read };
+  render(page());
+  await screen.findByTestId("omp-native-stats-summary");
+  expect(screen.getByTestId("omp-native-stats-requests").textContent).toBe("0");
+  fireEvent.click(screen.getByTestId("omp-native-stats-refresh"));
+  const error = await screen.findByRole("alert");
+  expect(screen.queryByTestId("omp-native-stats-summary")).toBeNull();
+  expect(error.textContent).not.toContain("providerUsage.nativeStats");
+  fireEvent.click(within(error).getByRole("button", { name: "重试" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("omp-native-stats-requests").textContent).toBe("4"),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("shows connection/upgrade requirements without requesting native data", async () => {
