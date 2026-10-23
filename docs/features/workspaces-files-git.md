@@ -61,6 +61,8 @@ The header bottom-panel button and **Cmd+Shift+\\** on macOS toggle terminals. H
 
 Desktop scroll surfaces use compact terminal-style scrollbars. Sidebar and vertical splitters have two-pixel accent hover highlights without reducing invisible drag targets. Hit areas sit above adjacent panes, including horizontal terminal splits, and opt out of native window dragging so overhanging edges resize rather than move the window. Divider movement follows pointer distance even beside hidden panes; hidden panes retain stored sizes for restoration.
 
+Adding or removing split panes invalidates saved resize weights with a different pane count. The current layout's sizes apply instead, keeping the Files divider draggable in both directions after opening a second side-by-side conversation. Compatible saved weights, including those of temporarily hidden panes, remain in use.
+
 ## File selection and moves
 
 - **Ctrl/Cmd-click** toggles individual file/folder selection. **Shift-click** selects a contiguous range from the anchor; **Ctrl/Cmd+Shift-click** adds that range. These select without opening files or expanding folders.
