@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../.."
 
 # mini-electron currently publishes a Windows x64 runtime only.
 read -r -a arches <<<"${WINDOWS_ARCHES:-x64}"
@@ -59,17 +59,11 @@ for arch in "${arches[@]}"; do
   test -f "$package_dir/keyring.win32-${arch}-msvc.node"
 done
 
-# Do not leave a stale universal installer in release/ after splitting builds.
+# Keep private artifacts and update metadata entirely in release-plugins/.
 version="$(node -p "require('./packages/desktop/package.json').version")"
-channel="latest"
-if [[ "$version" == *-* ]]; then
-  channel="${version#*-}"
-  channel="${channel%%.*}"
-fi
-metadata_filename="$channel.yml"
-rm -f \
-  "packages/desktop/release/OMP-Desktop-Setup-$version.exe" \
-  "packages/desktop/release/OMP-Desktop-Setup-$version.exe.blockmap"
+build_output="$(node packages/desktop/scripts/windows-build-output.mjs "$version" "$@")"
+IFS=$'\t' read -r release_dir metadata_filename legacy_installer <<<"$build_output"
+rm -f "$release_dir/$legacy_installer" "$release_dir/$legacy_installer.blockmap"
 
 metadata_dir="$tmp_dir/update-metadata"
 mkdir -p "$metadata_dir"
@@ -78,11 +72,11 @@ metadata_files=()
 for arch in "${arches[@]}"; do
   npm run build:desktop -- --win "--$arch" --publish never "$@"
   cp \
-    "packages/desktop/release/$metadata_filename" \
-    "$metadata_dir/$channel-$arch.yml"
-  metadata_files+=("$metadata_dir/$channel-$arch.yml")
+    "$release_dir/$metadata_filename" \
+    "$metadata_dir/$arch-$metadata_filename"
+  metadata_files+=("$metadata_dir/$arch-$metadata_filename")
 done
 
-node scripts/merge-windows-update-metadata.mjs \
-  "packages/desktop/release/$metadata_filename" \
+node scripts/packaging/merge-windows-update-metadata.mjs \
+  "$release_dir/$metadata_filename" \
   "${metadata_files[@]}"

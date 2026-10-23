@@ -16,6 +16,13 @@ export function getSyncedLoaderStep(nowMs: number): number {
   return Math.floor((elapsedMs * SYNCED_LOADER_DOT_COUNT) / SYNCED_LOADER_DURATION_MS);
 }
 
+export function getSyncedLoaderStepDelayMs(nowMs: number): number {
+  const elapsedMs = nowMs % SYNCED_LOADER_DURATION_MS;
+  const nextBoundaryMs =
+    ((getSyncedLoaderStep(nowMs) + 1) * SYNCED_LOADER_DURATION_MS) / SYNCED_LOADER_DOT_COUNT;
+  return Math.max(1, Math.ceil(nextBoundaryMs - elapsedMs));
+}
+
 export function getSyncedLoaderDotOpacity(step: number, dot: number): number {
   "worklet";
   return SYNCED_LOADER_OPACITY_STATES[step]?.[dot] ?? 0;

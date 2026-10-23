@@ -37,6 +37,8 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
+import { QueuedConversationOrder } from "@/composer/queued-conversation-order";
+import { QueuedMessageTrack } from "@/composer/queued-message-track";
 import { resolveModelBrowserProviderNamespaceId } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpAccountFeatureSelection } from "@/components/omp-provider-accounts";
 import { useImageAttachmentPicker } from "@/hooks/use-image-attachment-picker";
@@ -62,8 +64,6 @@ import {
   editQueuedComposerMessage,
   findGithubItemByOption,
   isAttachmentSelectedForGithubItem,
-  moveQueuedComposerMessage,
-  moveQueuedComposerMessageTo,
   openComposerAttachment,
   pickAndPersistImages,
   queueComposerMessage,
@@ -76,7 +76,6 @@ import {
   type QueueWriter,
   type QueuedComposerMessage,
 } from "@/composer/actions";
-import { QueuedMessageList } from "@/composer/queued-message-list";
 import { useToast } from "@/contexts/toast-context";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Shortcut } from "@/components/ui/shortcut";
@@ -1097,20 +1096,6 @@ function ComposerContentImpl({
   const queuedMessages = queuedMessagesRaw ?? EMPTY_ARRAY;
 
   const setQueuedMessages = useSessionStore((state) => state.setQueuedMessages);
-  const { queuePosition, queueCount } = useSessionStore(
-    useShallow((state) => {
-      const session = state.sessions[serverId];
-      let position = 0;
-      let count = 0;
-      for (const queuedAgentId of session?.queuedAgentOrder ?? []) {
-        if ((session?.queuedMessages.get(queuedAgentId)?.length ?? 0) === 0) continue;
-        count += 1;
-        if (queuedAgentId === agentId) position = count;
-      }
-      return { queuePosition: position, queueCount: count };
-    }),
-  );
-  const moveQueuedAgent = useSessionStore((state) => state.moveQueuedAgent);
 
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompactLayout = resolveCompactLayout(isCompactLayoutOverride, isCompactFormFactor);
@@ -1302,7 +1287,11 @@ function ComposerContentImpl({
       if (!attachment) {
         return;
       }
-      setSelectedAttachments((current) => appendWorkspaceFileAttachment(current, attachment));
+      setSelectedAttachments((current) =>
+        attachment.kind === "directory"
+          ? appendDirectoryAttachment(current, attachment)
+          : appendWorkspaceFileAttachment(current, attachment),
+      );
       focusInput();
     },
     [focusInput, serverId, setSelectedAttachments, workspaceId],
@@ -1801,35 +1790,6 @@ function ComposerContentImpl({
     [agentId, queueWriter, replaceUserInput, serverId, setSelectedAttachments],
   );
 
-  const handleMoveQueuedMessage = useCallback(
-    (id: string, offset: -1 | 1) => {
-      moveQueuedComposerMessage({ agentId, messageId: id, offset, queue: queueWriter });
-    },
-    [agentId, queueWriter],
-  );
-
-  const handleReorderQueuedMessage = useCallback(
-    (id: string, targetId: string) => {
-      moveQueuedComposerMessageTo({
-        agentId,
-        messageId: id,
-        targetMessageId: targetId,
-        queue: queueWriter,
-      });
-    },
-    [agentId, queueWriter],
-  );
-
-  const handleMoveQueuedAgentEarlier = useCallback(() => {
-    moveQueuedAgent(serverId, agentId, -1);
-    getHostRuntimeStore().reevaluateQueuedAgentMessages(serverId);
-  }, [agentId, moveQueuedAgent, serverId]);
-
-  const handleMoveQueuedAgentLater = useCallback(() => {
-    moveQueuedAgent(serverId, agentId, 1);
-    getHostRuntimeStore().reevaluateQueuedAgentMessages(serverId);
-  }, [agentId, moveQueuedAgent, serverId]);
-
   const handleSendQueuedNow = useCallback(
     async (id: string) => {
       if (!sendAgentMessageRef.current && !onSubmitMessageRef.current) return;
@@ -2211,33 +2171,6 @@ function ComposerContentImpl({
     [handleOpenAttachment, handleRemoveAttachment, isComposerLocked, selectedAttachments, t],
   );
 
-  const queueList = useMemo(
-    () => (
-      <QueuedMessageList
-        queuedMessages={queuedMessages}
-        queuePosition={queuePosition}
-        queueCount={queueCount}
-        onEdit={handleEditQueuedMessage}
-        onSendNow={handleSendQueuedNow}
-        onMove={handleMoveQueuedMessage}
-        onReorder={handleReorderQueuedMessage}
-        onMoveConversationEarlier={handleMoveQueuedAgentEarlier}
-        onMoveConversationLater={handleMoveQueuedAgentLater}
-      />
-    ),
-    [
-      handleEditQueuedMessage,
-      handleMoveQueuedAgentEarlier,
-      handleMoveQueuedMessage,
-      handleReorderQueuedMessage,
-      handleMoveQueuedAgentLater,
-      handleSendQueuedNow,
-      queueCount,
-      queuedMessages,
-      queuePosition,
-    ],
-  );
-
   const messageInputContainerRef = useRef<View>(null);
 
   const isSubmitLoadingVisible =
@@ -2290,7 +2223,14 @@ function ComposerContentImpl({
         >
           <ComposerFileDropRegistration sink={fileDropSink} />
           <View style={styles.inputAreaContent}>
-            {queueList}
+            <QueuedConversationOrder serverId={serverId} />
+            <QueuedMessageTrack
+              agentId={agentId}
+              messages={queuedMessages}
+              queue={queueWriter}
+              onEdit={handleEditQueuedMessage}
+              onSendNow={handleSendQueuedNow}
+            />
             {sendErrorNode}
 
             <View ref={messageInputContainerRef} style={styles.messageInputContainer}>

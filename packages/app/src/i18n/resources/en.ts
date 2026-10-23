@@ -150,6 +150,14 @@ export const en = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Queued conversations",
+      hint: "Hold and drag a handle. Running turns continue.",
+      dragConversation: "Reorder {{title}}",
+      dragMessage: "Reorder queued message: {{text}}",
+      messageCount: "Queued messages: {{count}}",
+      untitledConversation: "Untitled conversation · {{id}}",
+    },
     placeholders: {
       desktop: "Message the agent, tag @files, or use /commands and /skills",
       mobile: "Message, @files, /commands",
@@ -187,14 +195,9 @@ export const en = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Edit queued message",
       sendQueuedMessageNow: "Send queued message now",
-      moveQueuedMessageEarlier: "Move queued message earlier",
-      moveQueuedMessageLater: "Move queued message later",
-      dragQueuedMessage: "Drag queued message to reorder",
       dragQueuedMessageHint:
         "Press Space to pick up, use arrow keys to move, Space to drop, or Escape to cancel.",
       queuedConversationPosition: "Queued conversation {{position}} of {{count}}",
-      moveQueuedConversationEarlier: "Move queued conversation earlier",
-      moveQueuedConversationLater: "Move queued conversation later",
       openImage: "Open image attachment",
       removeImage: "Remove image attachment",
       removeFile: "Remove file attachment",
@@ -374,6 +377,9 @@ export const en = {
       reconnecting: "Reconnecting",
       timelineSyncFailed: "Couldn't refresh agent history.",
       timelineSyncRetrying: "Retrying…",
+      bundledPluginsVerifying: "Verifying bundled plugins…",
+      bundledPluginsPreparing: "Preparing bundled plugins…",
+      bundledPluginsInstalling: "Installing bundled plugins for the first time…",
       historyUnavailableTitle: "Conversation history unavailable",
       historyUnavailableMissing:
         "This agent still exists, but its provider conversation file was removed. Any cached messages above are read-only.",
@@ -649,6 +655,14 @@ export const en = {
         refreshing: "Refreshing files",
         hideHiddenFiles: "Hide hidden files",
         showHiddenFiles: "Show hidden files",
+        selectEntries: "Select files",
+        finishSelection: "Done selecting",
+        selectedCount: "{{count}} selected",
+        moveSelection: "Move selected",
+        chooseDestination: "Choose a destination folder",
+        moveHere: "Move here",
+        cancelMove: "Cancel move",
+        selectEntry: "Select {{name}}",
       },
       empty: {
         noFiles: "No files",
@@ -2168,7 +2182,8 @@ export const en = {
     groupInfo: "About {{title}}",
     sections: {
       general: "General",
-      connections: "Connections",
+      connections: "Host connections",
+      chatBehavior: "Chat behavior",
       appearance: "Appearance",
       editor: "Editor",
       shortcuts: "Shortcuts",
@@ -2956,11 +2971,50 @@ export const en = {
         installTitle: "Install",
         installSpecLabel: "Plugin spec",
         installPlaceholder: "Package, path, or Git URL",
-        browsePackages: "Browse packages on pi.dev ↗",
+        browsePackages: "Official OMP plugin guide ↗",
         dryRunLabel: "Dry run",
         toggleLabel: "Toggle {{id}}",
         doctorTitle: "Health check",
         doctorHint: "Verifies the omp plugin installation and flags broken entries.",
+        trustWarning:
+          "Plugins execute code with OMP's OS permissions. Only install sources you trust. Project scope is not a sandbox. Catalog metadata is untrusted publisher text.",
+        runtimeHint:
+          "This page reads and saves disk configuration, not active-agent runtime state. /reload-plugins reloads supported tools, hooks, and commands; MCP servers, settings, and plugin agents require a new session or OMP restart. Active agents are never restarted automatically.",
+        manualScopeHint:
+          "Marketplace name@marketplace specs use the selected scope above. Other package, Git, and path installs are user-wide; --scope does not apply.",
+        removeConfirmTitle: "Remove {{id}}?",
+        removeConfirmMessage:
+          "Remove the {{scope}} copy in this host context: {{cwd}}? Other scope copies are kept.",
+        context: {
+          title: "Host / project context",
+          directory: "Project directory on this host",
+          placeholder: "Absolute host directory; empty for user view",
+          apply: "Apply context",
+          project: "Applied project directory: {{cwd}}",
+          user: "Host user view (host home directory; no project selected)",
+        },
+        scope: {
+          title: "Marketplace install scope",
+          user: "User",
+          project: "Project",
+          hint: "User is the default. Project scope requires an applied host directory. Catalog actions target only the selected scope; installed-row actions target the scope shown on that row.",
+          shadowed: "Shadowed by enabled project copy",
+          effectiveProject: "Enabled project copy takes precedence over user copy",
+        },
+        metadata: {
+          source: "Source",
+          author: "Author",
+          repository: "Repository",
+          homepage: "Homepage",
+        },
+        notices: {
+          applied:
+            "Saved to disk. Existing agents were not restarted. Use /reload-plugins for supported tools, hooks, and commands; start a new session or restart OMP for MCP servers, settings, and plugin agents.",
+          preview:
+            "Dry run completed. Nothing was installed or changed; the spec and target are preserved.",
+          catalogRefreshed:
+            "Marketplace catalog refreshed. Installed plugin code was not upgraded; use Upgrade on the desired scope's copy.",
+        },
         actions: {
           install: "Install",
           upgrade: "Upgrade",
@@ -2982,14 +3036,18 @@ export const en = {
           addPlaceholder: "owner/repo, Git URL, or local path",
           searchPlaceholder: "Search plugins…",
           searchClear: "Clear search",
+          refreshHint:
+            "Refresh updates marketplace catalog metadata only; it does not upgrade installed plugin code.",
           actions: {
             add: "Add",
             browse: "Browse ({{count}})",
             hide: "Hide",
+            refresh: "Refresh catalog",
           },
           feedback: {
             addFailed: "Could not add marketplace",
             removeFailed: "Could not remove {{id}}",
+            refreshFailed: "Could not refresh {{id}}",
           },
         },
         states: {

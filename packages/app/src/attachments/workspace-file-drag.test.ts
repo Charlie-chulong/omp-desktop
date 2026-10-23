@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createWorkspaceFileAttachment } from "./workspace-file";
+import { createDirectoryComposerAttachment } from "./directory";
 import {
   parseWorkspaceFileDragPayload,
   resolveWorkspaceFileDrop,
@@ -26,6 +27,21 @@ describe("workspace file drag payload", () => {
     );
   });
 
+  it("accepts directory references and rejects empty directory paths", () => {
+    const dragged: WorkspaceFileDragPayload = {
+      ...payload(),
+      attachment: createDirectoryComposerAttachment("/workspace/src"),
+    };
+    expect(parseWorkspaceFileDragPayload(serializeWorkspaceFileDragPayload(dragged))).toEqual(
+      dragged,
+    );
+    expect(
+      parseWorkspaceFileDragPayload(
+        JSON.stringify({ ...dragged, attachment: { kind: "directory", path: " " } }),
+      ),
+    ).toBeNull();
+  });
+
   it("rejects malformed and invalid payloads", () => {
     expect(parseWorkspaceFileDragPayload("not json")).toBeNull();
     expect(
@@ -42,21 +58,33 @@ describe("workspace file drag payload", () => {
     ).toBeNull();
   });
 
-  it("accepts drops only within the originating server and workspace", () => {
-    const dragged = payload();
-    expect(
-      resolveWorkspaceFileDrop({
-        payload: dragged,
-        serverId: "server-1",
-        workspaceId: "workspace-1",
-      }),
-    ).toEqual(dragged.attachment);
-    expect(
-      resolveWorkspaceFileDrop({
-        payload: dragged,
-        serverId: "server-1",
-        workspaceId: "workspace-2",
-      }),
-    ).toBeNull();
-  });
+  it.each([
+    payload(),
+    { ...payload(), attachment: createDirectoryComposerAttachment("/workspace/src") },
+  ])(
+    "accepts $attachment.kind drops only within the originating server and workspace",
+    (dragged) => {
+      expect(
+        resolveWorkspaceFileDrop({
+          payload: dragged,
+          serverId: "server-1",
+          workspaceId: "workspace-1",
+        }),
+      ).toEqual(dragged.attachment);
+      expect(
+        resolveWorkspaceFileDrop({
+          payload: dragged,
+          serverId: "server-1",
+          workspaceId: "workspace-2",
+        }),
+      ).toBeNull();
+      expect(
+        resolveWorkspaceFileDrop({
+          payload: dragged,
+          serverId: "server-2",
+          workspaceId: "workspace-1",
+        }),
+      ).toBeNull();
+    },
+  );
 });

@@ -50,6 +50,120 @@ describe("fetchCodexAccountQuota", () => {
     );
   });
 
+  it.each([
+    {
+      label: "missing",
+      credits: undefined,
+      expected: null,
+    },
+    { label: "null", credits: null, expected: null },
+    {
+      label: "exact decimal balance",
+      credits: { has_credits: true, unlimited: false, balance: "9007199254740993.000001" },
+      expected: { hasCredits: true, unlimited: false, balance: "9007199254740993.000001" },
+    },
+    {
+      label: "zero",
+      credits: { has_credits: false, unlimited: false, balance: "0" },
+      expected: { hasCredits: false, unlimited: false, balance: "0" },
+    },
+    {
+      label: "unlimited",
+      credits: { has_credits: true, unlimited: true, balance: null },
+      expected: { hasCredits: true, unlimited: true, balance: null },
+    },
+    {
+      label: "disabled",
+      credits: { has_credits: false, unlimited: false },
+      expected: { hasCredits: false, unlimited: false, balance: null },
+    },
+    {
+      label: "unknown balance",
+      credits: { has_credits: true, unlimited: false, balance: null },
+      expected: { hasCredits: true, unlimited: false, balance: null },
+    },
+    {
+      label: "numeric balance",
+      credits: { has_credits: true, unlimited: false, balance: 25 },
+      expected: { hasCredits: true, unlimited: false, balance: null },
+    },
+    {
+      label: "blank balance",
+      credits: { has_credits: true, unlimited: false, balance: "" },
+      expected: { hasCredits: true, unlimited: false, balance: null },
+    },
+    {
+      label: "malformed balance",
+      credits: { has_credits: true, unlimited: false, balance: "not-a-balance" },
+      expected: { hasCredits: true, unlimited: false, balance: null },
+    },
+    {
+      label: "malformed flags",
+      credits: { has_credits: "true", unlimited: false, balance: "25" },
+      expected: null,
+    },
+    { label: "missing flags", credits: { balance: "25" }, expected: null },
+  ])(
+    "keeps $label credits distinct from quota windows and reset cards",
+    async ({ credits, expected }) => {
+      const fetchApi = vi.fn(async (url: RequestInfo | URL) =>
+        jsonResponse(
+          url === CODEX_USAGE_ENDPOINT
+            ? {
+                plan_type: "plus",
+                rate_limit: {
+                  primary_window: { used_percent: 20 },
+                  secondary_window: { used_percent: 35 },
+                },
+                credits,
+              }
+            : { available_count: 2, credits: [] },
+        ),
+      );
+      const quota = await fetchCodexAccountQuota({
+        credential: { accessToken: "access-token" },
+        fetch: fetchApi,
+        now: () => NOW,
+      });
+      expect(quota.credits).toEqual(expected);
+      expect(quota).toMatchObject({
+        status: "available",
+        fiveHourUsedPct: 20,
+        weeklyUsedPct: 35,
+        resetCredits: { status: "available", availableCount: 2 },
+      });
+      expect(fetchApi.mock.calls.filter(([url]) => url === CODEX_USAGE_ENDPOINT)).toHaveLength(1);
+      expect(fetchApi).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("retains returned credits when usage windows are unavailable", async () => {
+    const quota = await fetchCodexAccountQuota({
+      credential: { accessToken: "access-token" },
+      fetch: async () =>
+        jsonResponse({
+          rate_limit: null,
+          credits: { has_credits: true, unlimited: false, balance: "12.50" },
+        }),
+      now: () => NOW,
+    });
+    expect(quota.status).toBe("error");
+    expect(quota.fiveHourUsedPct).toBeNull();
+    expect(quota.credits).toEqual({ hasCredits: true, unlimited: false, balance: "12.50" });
+  });
+
+  it("does not invent credits or request usage without account credentials", async () => {
+    const fetchApi = vi.fn<typeof fetch>();
+    const quota = await fetchCodexAccountQuota({
+      credential: { accessToken: "" },
+      fetch: fetchApi,
+      now: () => NOW,
+    });
+    expect(quota.status).toBe("unavailable");
+    expect(quota.credits).toBeUndefined();
+    expect(fetchApi).not.toHaveBeenCalled();
+  });
+
   it("maps the Pro primary window as total quota without a five-hour quota", async () => {
     const fetchApi = vi.fn(async () =>
       jsonResponse({

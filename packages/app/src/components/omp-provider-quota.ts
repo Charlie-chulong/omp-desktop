@@ -1,3 +1,22 @@
+import type { TFunction } from "i18next";
+import type { OmpProviderAccountQuota } from "@omp-desktop/protocol/messages";
+
+export function formatOmpCodexCreditBalance(
+  credits: OmpProviderAccountQuota["credits"],
+  t: TFunction,
+): string {
+  if (credits?.unlimited) {
+    return t("settings.providers.omp.codexQuota.creditsUnlimited");
+  }
+  if (credits?.balance != null) {
+    return t("settings.providers.omp.codexQuota.creditsBalance", { balance: credits.balance });
+  }
+  if (credits?.hasCredits === false) {
+    return t("settings.providers.omp.codexQuota.creditsDisabled");
+  }
+  return t("settings.providers.omp.codexQuota.creditsUnavailable");
+}
+
 export function resolveOmpRemainingQuotaPct(usedPct: number | null | undefined): number | null {
   if (typeof usedPct !== "number" || !Number.isFinite(usedPct)) {
     return null;

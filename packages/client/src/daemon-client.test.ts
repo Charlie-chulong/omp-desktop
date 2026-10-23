@@ -1169,6 +1169,111 @@ test("preserves legacy fetchAgent id overload", async () => {
   await expect(responsePromise).rejects.toThrow("legacy fetch sentinel");
 });
 
+test.each(["success", "response-error", "rpc-error", "timeout", "disconnect"] as const)(
+  "timeline initialization observers match requests and clean up after %s",
+  async (outcome) => {
+    useHeartbeatClock();
+    const mock = createMockTransport();
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger: createMockLogger(),
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+    const progress = vi.fn();
+    const emitProgress = (agentId: string, requestId: string, phase: string | null) => {
+      mock.triggerMessage(
+        wrapSessionMessage({
+          type: "status",
+          payload: { status: "agent_initialization_progress", agentId, requestId, phase },
+        }),
+      );
+    };
+    const send = mock.transport.send;
+    mock.transport.send = (data) => {
+      send(data);
+      if (typeof data === "string" && data.includes("fetch_agent_timeline_request")) {
+        emitProgress("progress-agent", "progress-request", "verifying");
+      }
+    };
+    const response = client.fetchAgentTimeline("progress-agent", {
+      requestId: "progress-request",
+      timeout: 20,
+      onInitializationProgress: progress,
+    });
+    expect(progress.mock.calls.map(([payload]) => payload.phase)).toEqual(["verifying"]);
+    emitProgress("other-agent", "progress-request", "installing");
+    emitProgress("progress-agent", "other-request", "installing");
+    emitProgress("progress-agent", "progress-request", "invalid-phase");
+    expect(progress).toHaveBeenCalledTimes(1);
+    emitProgress("progress-agent", "progress-request", "preparing");
+    emitProgress("progress-agent", "progress-request", null);
+    emitProgress("progress-agent", "progress-request", "installing");
+
+    const completion =
+      outcome === "success"
+        ? expect(response).resolves.toMatchObject({ error: null, entries: [] })
+        : expect(response).rejects.toThrow();
+    if (outcome === "timeout") {
+      await vi.advanceTimersByTimeAsync(20);
+    } else if (outcome === "disconnect") {
+      mock.triggerClose({ code: 1006, reason: "connection lost" });
+    } else if (outcome === "rpc-error") {
+      mock.triggerMessage(
+        wrapSessionMessage({
+          type: "rpc_error",
+          payload: { requestId: "progress-request", error: "restore failed" },
+        }),
+      );
+    } else {
+      mock.triggerMessage(
+        wrapSessionMessage({
+          type: "fetch_agent_timeline_response",
+          payload: {
+            requestId: "progress-request",
+            agentId: "progress-agent",
+            agent: null,
+            direction: "tail",
+            projection: "projected",
+            epoch: "",
+            reset: false,
+            staleCursor: false,
+            gap: false,
+            window: { minSeq: 0, maxSeq: 0, nextSeq: 0 },
+            startCursor: null,
+            endCursor: null,
+            hasOlder: false,
+            hasNewer: false,
+            entries: [],
+            error: outcome === "response-error" ? "restore failed" : null,
+          },
+        }),
+      );
+    }
+    await completion;
+    expect(progress.mock.calls.map(([payload]) => payload.phase)).toEqual([
+      "verifying",
+      "preparing",
+      null,
+      "installing",
+      null,
+    ]);
+    expect(progress).toHaveBeenLastCalledWith({
+      status: "agent_initialization_progress",
+      agentId: "progress-agent",
+      requestId: "progress-request",
+      phase: null,
+    });
+    emitProgress("progress-agent", "progress-request", "verifying");
+    expect(progress).toHaveBeenCalledTimes(5);
+  },
+);
+
 test("honors explicit fetchAgentTimeline timeout below the session RPC default", async () => {
   useHeartbeatClock();
   const logger = createMockLogger();
@@ -6163,6 +6268,65 @@ test("sends provider.usage.list.request and resolves provider.usage.list.respons
       },
     ],
   });
+});
+
+test("correlates native OMP statistics without a session or filesystem path", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connected = client.connect();
+  mock.triggerOpen();
+  await connected;
+  const pending = client.getOmpStats({ requestId: "native-stats", range: "7d" });
+  expect(JSON.parse(assertStr(mock.sent[0]))).toEqual({
+    type: "session",
+    message: { type: "omp.stats.get.request", requestId: "native-stats", range: "7d" },
+  });
+  const metrics = {
+    totalRequests: 1,
+    failedRequests: 0,
+    totalInputTokens: 10,
+    totalOutputTokens: 20,
+    totalCacheReadTokens: 30,
+    totalCacheWriteTokens: 40,
+    totalTokens: 160,
+    totalCostUsd: 1.25,
+    unpricedRequests: 0,
+    transcriptCount: 1,
+    firstTimestamp: 1_792_300_000_000,
+    lastTimestamp: 1_792_300_000_000,
+  };
+  const stats = {
+    status: "available" as const,
+    range: "7d" as const,
+    source: "omp_stats_db" as const,
+    fetchedAt: "2026-10-18T12:00:00.000Z",
+    scope: { kind: "host_profile" as const, profile: "default" },
+    indexedThrough: metrics.lastTimestamp,
+    overall: metrics,
+    byProvider: [{ ...metrics, provider: "fixture-provider" }],
+    byModel: [{ ...metrics, provider: "fixture-provider", model: "fixture-model" }],
+    byAgentType: [{ ...metrics, agentType: "main" as const }],
+  };
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "omp.stats.get.response",
+      payload: { requestId: "another-request", stats },
+    }),
+  );
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "omp.stats.get.response",
+      payload: { requestId: "native-stats", stats },
+    }),
+  );
+  await expect(pending).resolves.toEqual({ requestId: "native-stats", stats });
 });
 
 test("sends close_items_request and resolves close_items_response", async () => {

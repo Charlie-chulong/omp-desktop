@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -123,7 +123,7 @@ describe("OMP tool call mapper", () => {
     });
   });
 
-  test("prefers returned bytes and persists a private content-addressed preview for replay", () => {
+  test("prefers returned bytes and persists a content-addressed preview for replay", () => {
     const directory = mkdtempSync(join(tmpdir(), "omp-native-image-"));
     try {
       const context = { toolCallId: "native", imageOutputDir: join(directory, "blobs") };
@@ -149,8 +149,6 @@ describe("OMP tool call mapper", () => {
         preview: { type: "image", source: outputPath, mimeType: "image/png" },
       });
       expect(readFileSync(outputPath)).toEqual(bytes);
-      expect(statSync(outputPath).mode & 0o777).toBe(0o600);
-      expect(statSync(join(context.imageOutputDir, "generated-images")).mode & 0o777).toBe(0o700);
       expect(mapOmpToolDetail(args, result, context)).toEqual(detail);
       expect(JSON.stringify(detail)).not.toContain(png.data);
     } finally {

@@ -45,11 +45,19 @@ export function getMarketplacePluginState(
   entry: OmpPluginMarketplaceCatalogEntry,
   marketplace: string,
   installedPlugins: OmpPluginInfo[],
+  scope?: "user" | "project",
 ) {
   const id = `${entry.name}@${marketplace}`;
-  // The runtime's effective installation wins when a project shadows a user install.
-  const matches = installedPlugins.filter((plugin) => plugin.id === id);
-  const installed = matches.find((plugin) => plugin.scope === "project") ?? matches[0];
+  // Disabled project copies do not shadow an enabled user copy.
+  const matches = installedPlugins.filter(
+    (plugin) => plugin.id === id && (scope === undefined || plugin.scope === scope),
+  );
+  const installed = scope
+    ? matches[0]
+    : (matches.find((plugin) => plugin.scope === "project" && plugin.enabled === true) ??
+      matches.find((plugin) => plugin.scope === "user" && plugin.enabled === true) ??
+      matches.find((plugin) => plugin.scope === "project") ??
+      matches[0]);
   return {
     installed,
     updateAvailable:

@@ -104,6 +104,11 @@ export type DesktopContextMenuAction =
 
 export type DesktopContextMenuInput =
   | {
+      kind: "composer-input";
+      hasSelection: boolean;
+      isEditable: boolean;
+    }
+  | {
       kind: "terminal";
       hasSelection?: boolean;
       clearLabel?: string;

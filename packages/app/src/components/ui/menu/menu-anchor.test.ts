@@ -1,5 +1,35 @@
-import { describe, expect, it } from "vitest";
-import { computePosition, getTransformOrigin, type Rect } from "./menu-anchor";
+import type { View } from "react-native";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { computePosition, getTransformOrigin, measureElement, type Rect } from "./menu-anchor";
+
+vi.mock("@/constants/platform", () => ({ isWeb: false }));
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("measureElement", () => {
+  it("measures native anchors when the runtime lacks Promise.withResolvers", async () => {
+    vi.stubGlobal(
+      "Promise",
+      new Proxy(Promise, {
+        get(target, key) {
+          return key === "withResolvers" ? undefined : Reflect.get(target, key);
+        },
+      }),
+    );
+    const anchor = {
+      measureInWindow(callback: (x: number, y: number, width: number, height: number) => void) {
+        queueMicrotask(() => callback(12, 34, 56, 78));
+      },
+    } as View;
+
+    await expect(measureElement(anchor)).resolves.toEqual({
+      x: 12,
+      y: 34,
+      width: 56,
+      height: 78,
+    });
+  });
+});
 
 const DISPLAY: Rect = { x: 0, y: 0, width: 1000, height: 800 };
 const TRIGGER: Rect = { x: 100, y: 100, width: 40, height: 20 };

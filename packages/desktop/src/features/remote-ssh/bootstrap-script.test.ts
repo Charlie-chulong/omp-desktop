@@ -11,7 +11,9 @@ describe("buildRemoteInstallScript", () => {
       bundleHash: "a".repeat(64),
       relayAddress: "wss://relay.example.test/ws",
     });
-    const result = spawnSync("/bin/sh", ["-n"], { input: script, encoding: "utf8" });
+    const shell = process.platform === "win32" ? "sh.exe" : "/bin/sh";
+    const result = spawnSync(shell, ["-n"], { input: script, encoding: "utf8" });
+    expect(result.error).toBeUndefined();
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(script).not.toMatch(/daemon start .*--relay/u);

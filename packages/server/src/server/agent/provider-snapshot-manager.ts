@@ -5,6 +5,7 @@ import type {
   OmpMemorySettingsPatch,
   OmpProviderLoginCompletedMessage,
 } from "@omp-desktop/protocol/messages";
+import type { OmpStatsRange, OmpStatsResult } from "@omp-desktop/protocol/omp-stats";
 
 import { withTimeout } from "../../utils/promise-timeout.js";
 import {
@@ -472,6 +473,22 @@ export class ProviderSnapshotManager {
         this.ompProviderManagementRead = null;
       }
     }
+  }
+
+  async getOmpStats(range: OmpStatsRange): Promise<OmpStatsResult> {
+    const definition = this.providerRegistry.omp;
+    if (definition?.enabled) {
+      const client = this.ensureClient("omp", definition);
+      if (client.getOmpStats) return client.getOmpStats(range);
+    }
+    return {
+      status: "unavailable",
+      reason: "provider_unavailable",
+      range,
+      fetchedAt: new Date().toISOString(),
+      source: "omp_stats_db",
+      scope: { kind: "host_profile", profile: "default" },
+    };
   }
 
   async consumeOmpCodexResetCredit(

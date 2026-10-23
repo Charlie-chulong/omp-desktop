@@ -98,5 +98,5 @@ function firstVisibleSelectedPath(
   for (const path of visiblePaths) {
     if (selectedPaths.has(path)) return path;
   }
-  return null;
+  return selectedPaths.values().next().value ?? null;
 }

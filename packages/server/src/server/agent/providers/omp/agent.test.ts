@@ -8,7 +8,7 @@ import type { PaseoToolCatalog } from "../../tools/types.js";
 import type { OmpNoTurnScheduler, OmpProviderIdleScheduler } from "./agent.js";
 import type { OmpUsagePollScheduler } from "./usage-poller.js";
 import { OmpHarness } from "./test-utils/omp-harness.js";
-import type { OmpAgentMessage } from "./rpc-types.js";
+import type { OmpAgentMessage, OmpRpcSlashCommand } from "./rpc-types.js";
 import { OmpReadyTimeoutError } from "./cli-runtime.js";
 
 const OMP_PLAN_TURN_DIRECTIVE = `<system-directive>
@@ -24,6 +24,16 @@ function planTurnPrompt(prompt: string): string {
 
 function standardTurnPrompt(prompt: string): string {
   return `${OMP_STANDARD_TURN_DIRECTIVE}\n\n${prompt}`;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 class ManualIdleScheduler implements OmpProviderIdleScheduler {
@@ -768,7 +778,7 @@ describe("OMP agent client and session", () => {
     expect(omp.recordedPrompts()).toEqual([]);
   });
 
-  test("registers native host tools", async () => {
+  test("registers native host tools and exposes their capabilities", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask" }, createToolCatalog());
 
@@ -1725,6 +1735,69 @@ describe("OMP agent client and session", () => {
     expect(omp.completedTurnCount()).toBe(1);
   });
 
+  test.each(["fresh", "resumed"] as const)(
+    "retains an idle plugin original in a %s session without a model turn",
+    async (phase) => {
+      const omp = new OmpHarness();
+      if (phase === "resumed") {
+        await omp.resume({
+          user: { id: "previous-user", text: "previous request" },
+          assistant: { id: "previous-answer", text: "previous answer" },
+        });
+      } else {
+        await omp.start();
+      }
+      const text = '{\n  "state": "stopped",\n  "upstreamEnabled": false\n}\n';
+      const details = { event: "status", schemaVersion: 1 };
+      omp.runtime().emit({
+        type: "message_end",
+        message: {
+          role: "custom",
+          customType: "omp-workbuddy-plugin",
+          content: text,
+          display: true,
+          entryId: "native-idle-status",
+          details,
+        },
+      });
+      expect(omp.timeline()).toEqual([
+        {
+          type: "assistant_message",
+          text,
+          messageId: "native-idle-status",
+          customMessage: { customType: "omp-workbuddy-plugin", details },
+        },
+      ]);
+      expect(omp.recordedPrompts()).toEqual([]);
+      expect(omp.completedTurnCount()).toBe(0);
+    },
+  );
+
+  test("a plugin original cannot finish a foreground prompt before its native acknowledgement", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    await omp.requireStartTurn("unrelated foreground task");
+    omp.runtime().emit({
+      type: "message_end",
+      message: {
+        role: "custom",
+        customType: "omp-workbuddy-plugin",
+        content: "background service is stopped",
+        display: true,
+        entryId: "native-late-status",
+      },
+    });
+    await waitForImmediate();
+    expect(omp.timeline()).toContainEqual({
+      type: "assistant_message",
+      text: "background service is stopped",
+      messageId: "native-late-status",
+      customMessage: { customType: "omp-workbuddy-plugin" },
+    });
+    expect(omp.completedTurnCount()).toBe(0);
+    await omp.interrupt();
+  });
+
   test("omits live custom messages when display is false", async () => {
     const omp = new OmpHarness();
     await omp.start();
@@ -1975,6 +2048,160 @@ describe("OMP agent client and session", () => {
         messageId: "assistant-history",
       },
     ]);
+  });
+
+  test.each(["standard", "enhanced", "plan", "goal"])(
+    "native extension status remains a command rather than a %s workflow prompt",
+    async (workflow) => {
+      const omp = new OmpHarness();
+      omp.queueCommands([{ name: "wechat", source: "extension" }]);
+      await omp.start({ featureValues: { workflow_mode: workflow } });
+      await omp.runPromptWithoutTurn("/wechat status");
+      expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+      expect(omp.completedTurnCount()).toBe(1);
+    },
+  );
+
+  test.each(["user", "replacement"] as const)(
+    "settles a %s cancellation before native command discovery returns",
+    async (reason) => {
+      const commands: OmpRpcSlashCommand[] = [{ name: "wechat", source: "extension" }];
+      const omp = new OmpHarness();
+      omp.queueCommands(commands);
+      await omp.start();
+      const discovery = deferred<OmpRpcSlashCommand[]>();
+      const enteredDiscovery = deferred<void>();
+      const getCommands = vi.spyOn(omp.runtime(), "getCommands").mockImplementationOnce(() => {
+        enteredDiscovery.resolve();
+        return discovery.promise;
+      });
+      try {
+        const admission = omp.startTurn("/wechat status");
+        await enteredDiscovery.promise;
+        await omp.interrupt(reason);
+        const { turnId } = await admission;
+        expect(omp.streamEvents().filter((event) => event.type === "turn_canceled")).toEqual([
+          { type: "turn_canceled", provider: "omp", reason, turnId },
+        ]);
+        expect(omp.completedTurnCount()).toBe(0);
+        expect(omp.failedTurnCount()).toBe(0);
+        expect(omp.recordedPrompts()).toEqual([]);
+
+        discovery.resolve(commands);
+        await waitForImmediate();
+        expect(omp.recordedPrompts()).toEqual([]);
+        await omp.runPromptWithoutTurn("/wechat status");
+        expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+      } finally {
+        discovery.resolve(commands);
+        getCommands.mockRestore();
+        await omp.close();
+      }
+    },
+  );
+
+  test("a canceled discovery cannot register a ChatPro request or disturb its replacement", async () => {
+    const commands: OmpRpcSlashCommand[] = [{ name: "chatpro", source: "extension" }];
+    const requestId = "e15ab05a-b98c-4bca-9b05-09fed58f4e8c";
+    const prompt = `/chatpro ask --json ${JSON.stringify({ requestId, text: "review" })}`;
+    const omp = new OmpHarness();
+    await omp.start();
+    const oldDiscovery = deferred<OmpRpcSlashCommand[]>();
+    const newDiscovery = deferred<OmpRpcSlashCommand[]>();
+    const enteredOldDiscovery = deferred<void>();
+    const enteredNewDiscovery = deferred<void>();
+    const getCommands = vi
+      .spyOn(omp.runtime(), "getCommands")
+      .mockImplementationOnce(() => {
+        enteredOldDiscovery.resolve();
+        return oldDiscovery.promise;
+      })
+      .mockImplementationOnce(() => {
+        enteredNewDiscovery.resolve();
+        return newDiscovery.promise;
+      });
+    try {
+      const oldAdmission = omp.startTurn(prompt);
+      await enteredOldDiscovery.promise;
+      await omp.interrupt("replacement");
+      const oldTurn = await oldAdmission;
+      const newAdmission = omp.startTurn(prompt);
+      await enteredNewDiscovery.promise;
+
+      oldDiscovery.resolve(commands);
+      await waitForImmediate();
+      expect(omp.recordedPrompts()).toEqual([]);
+      await expect(omp.startTurn("overlapping turn")).rejects.toThrow(
+        "An OMP turn is already active",
+      );
+
+      newDiscovery.resolve(commands);
+      const newTurn = await newAdmission;
+      expect(newTurn.turnId).not.toBe(oldTurn.turnId);
+      expect(omp.recordedPrompts()).toHaveLength(1);
+      const ask = JSON.parse(
+        omp.recordedPrompts()[0]!.message.slice("/chatpro ask --json ".length),
+      );
+      expect(ask).toMatchObject({ requestId, origin: { turnId: newTurn.turnId } });
+      await omp.interrupt();
+      expect(omp.cancellationReasons()).toEqual(["replacement", "user"]);
+      expect(omp.failedTurnCount()).toBe(0);
+      expect(omp.completedTurnCount()).toBe(0);
+    } finally {
+      oldDiscovery.resolve(commands);
+      newDiscovery.resolve(commands);
+      getCommands.mockRestore();
+      await omp.close();
+    }
+  });
+
+  test("rejects overlapping admission and releases command discovery failures for retry", async () => {
+    const commands: OmpRpcSlashCommand[] = [{ name: "wechat", source: "extension" }];
+    const omp = new OmpHarness();
+    omp.queueCommands(commands);
+    await omp.start();
+    const discovery = deferred<OmpRpcSlashCommand[]>();
+    const enteredDiscovery = deferred<void>();
+    const getCommands = vi.spyOn(omp.runtime(), "getCommands").mockImplementationOnce(() => {
+      enteredDiscovery.resolve();
+      return discovery.promise;
+    });
+    try {
+      const admission = omp.startTurn("/wechat status");
+      await enteredDiscovery.promise;
+      await expect(omp.startTurn("overlapping turn")).rejects.toThrow(
+        "An OMP turn is already active",
+      );
+      const rejected = expect(admission).rejects.toThrow("command discovery unavailable");
+      discovery.reject(new Error("command discovery unavailable"));
+      await rejected;
+      expect(omp.recordedPrompts()).toEqual([]);
+      await omp.runPromptWithoutTurn("/wechat status");
+      expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+    } finally {
+      discovery.resolve(commands);
+      getCommands.mockRestore();
+      await omp.close();
+    }
+  });
+
+  test("a restored native extension command does not consume the next ordinary prompt's stale-plan reset", async () => {
+    const omp = new OmpHarness();
+    omp.queueCommands([{ name: "wechat", source: "extension" }]);
+    await omp.resume({
+      user: { id: "old-plan", text: planTurnPrompt("draft the migration") },
+      assistant: { id: "old-plan-answer", text: "migration planned" },
+    });
+    await omp.runPromptWithoutTurn("/wechat status");
+    expect(omp.recordedPrompts().map((prompt) => prompt.message)).toEqual(["/wechat status"]);
+    omp.runtime().promptAck = {};
+    await omp.runPrompt("implement the migration", "implementation complete");
+    expect(omp.recordedPrompts().at(-1)?.message).toBe(
+      standardTurnPrompt("implement the migration"),
+    );
+    expect(omp.timeline().findLast((item) => item.type === "assistant_message")).toMatchObject({
+      text: "implementation complete",
+    });
   });
 
   test("expires stale plan directives when continuing a resumed standard session", async () => {

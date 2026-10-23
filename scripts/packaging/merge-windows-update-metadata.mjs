@@ -50,7 +50,7 @@ async function main(args) {
   const [destinationPath, ...sourcePaths] = args;
   if (!destinationPath || sourcePaths.length === 0) {
     throw new Error(
-      "Usage: node scripts/merge-windows-update-metadata.mjs <destination> <source...>",
+      "Usage: node scripts/packaging/merge-windows-update-metadata.mjs <destination> <source...>",
     );
   }
 

@@ -78,6 +78,7 @@ function isSameTextStream(previous: PendingTextEntry, next: PendingTextEntry): b
     return false;
   }
   if (previous.item.type === "assistant_message" && next.item.type === "assistant_message") {
+    if (previous.item.customMessage || next.item.customMessage) return false;
     return (
       previous.item.messageId === next.item.messageId &&
       previous.item.presentation === next.item.presentation

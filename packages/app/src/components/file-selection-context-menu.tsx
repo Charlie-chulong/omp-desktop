@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useMemo, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
-import { withUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { ClipboardPaste, Copy, ListChecks, Scissors, type LucideIcon } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,6 +14,8 @@ import {
 import { isWeb } from "@/constants/platform";
 import { ICON_SIZE, type Theme } from "@/styles/theme";
 import { resolveWorkspaceFilePaths } from "@/workspace/file-open";
+import { FileActionsMenuButton } from "@/components/file-actions-menu";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 
 const copyIconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
@@ -80,6 +82,7 @@ function FileSelectionContextTarget({
   relativeReference: string | null;
 }) {
   const contextMenu = useContextMenu();
+  const showPersistentActions = useShowPersistentActions();
   const handleContextMenu = useCallback(
     (event: WebContextMenuEvent) => {
       if (!isWeb || !selection || (!absoluteReference && !relativeReference)) return;
@@ -103,6 +106,11 @@ function FileSelectionContextTarget({
       style={styles.target}
       testID="file-selection-context-target"
     >
+      {showPersistentActions && selection && (absoluteReference || relativeReference) ? (
+        <View style={styles.selectionActions}>
+          <FileActionsMenuButton testID="file-selection-actions" />
+        </View>
+      ) : null}
       {children}
     </View>
   );
@@ -211,6 +219,12 @@ function FileSelectionMenuItem({
   );
 }
 
-const styles = {
+const styles = StyleSheet.create((theme) => ({
   target: { flex: 1, minHeight: 0 },
-} as const;
+  selectionActions: {
+    alignItems: "flex-end",
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface2,
+  },
+}));

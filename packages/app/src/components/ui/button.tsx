@@ -35,25 +35,17 @@ type LeftIcon =
   | null;
 
 interface ButtonIconProps {
-  loading: boolean;
+  hidden: boolean;
   leftIcon?: LeftIcon;
   iconSize: number;
   iconColor: string;
 }
 
-function ButtonIcon({ loading, leftIcon, iconSize, iconColor }: ButtonIconProps) {
-  if (loading) {
-    return (
-      <View>
-        <LoadingSpinner size="small" color={iconColor} />
-      </View>
-    );
-  }
-
+function ButtonIcon({ hidden, leftIcon, iconSize, iconColor }: ButtonIconProps) {
   if (!leftIcon) return null;
 
   if (typeof leftIcon === "object" && "type" in leftIcon) {
-    return <View>{leftIcon}</View>;
+    return <View style={hidden ? styles.hiddenContent : undefined}>{leftIcon}</View>;
   }
 
   if (
@@ -61,18 +53,28 @@ function ButtonIcon({ loading, leftIcon, iconSize, iconColor }: ButtonIconProps)
     !leftIcon.prototype?.isReactComponent &&
     leftIcon.length > 0
   ) {
-    return <View>{(leftIcon as (color: string) => ReactElement)(iconColor)}</View>;
+    return (
+      <View style={hidden ? styles.hiddenContent : undefined}>
+        {(leftIcon as (color: string) => ReactElement)(iconColor)}
+      </View>
+    );
   }
 
   const Icon = leftIcon as ComponentType<{ color: string; size: number }>;
   return (
-    <View>
+    <View style={hidden ? styles.hiddenContent : undefined}>
       <Icon color={iconColor} size={iconSize} />
     </View>
   );
 }
 
 const ThemedButtonIcon = withUnistyles(ButtonIcon);
+
+function ButtonLoadingIndicator({ iconColor }: { iconColor: string }) {
+  return <LoadingSpinner size="small" color={iconColor} />;
+}
+
+const ThemedButtonLoadingIndicator = withUnistyles(ButtonLoadingIndicator);
 
 const foregroundIconMapping = (theme: Theme) => ({ iconColor: theme.colors.foreground });
 const foregroundMutedIconMapping = (theme: Theme) => ({
@@ -156,6 +158,18 @@ const styles = StyleSheet.create((theme) => {
     textGhostHovered: {
       color: theme.colors.foreground,
     },
+    hiddenContent: {
+      opacity: 0,
+    },
+    loadingOverlay: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      alignItems: "center",
+      justifyContent: "center",
+    },
   };
 });
 
@@ -235,8 +249,9 @@ export function Button({
       variant === "ghost" ? styles.textGhost : null,
       textStyle,
       isGhostHovered ? styles.textGhostHovered : null,
+      loading ? styles.hiddenContent : null,
     ],
-    [size, variant, textStyle, isGhostHovered],
+    [size, variant, textStyle, isGhostHovered, loading],
   );
 
   const accessibilityState = useMemo(
@@ -262,19 +277,25 @@ export function Button({
       {...props}
       accessibilityRole={accessibilityRole ?? "button"}
       accessibilityState={accessibilityState}
+      aria-busy={loading}
       disabled={isDisabled}
       onHoverIn={handleHoverIn}
       onHoverOut={handleHoverOut}
       style={pressableStyle}
     >
       <ThemedButtonIcon
-        loading={loading}
+        hidden={loading}
         leftIcon={leftIcon}
         iconSize={buttonIconSize[size]}
         uniProps={resolveIconMapping()}
       />
       {children != null ? <Text style={resolvedTextStyle}>{children}</Text> : null}
       {trailing}
+      {loading ? (
+        <View style={styles.loadingOverlay} pointerEvents="none" aria-hidden>
+          <ThemedButtonLoadingIndicator uniProps={resolveIconMapping()} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }

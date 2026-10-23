@@ -102,19 +102,21 @@ export interface OmpRuntime {
   startSession(input: OmpStartSessionInput): Promise<OmpRuntimeSession>;
 }
 
+export function resolveOmpRuntimeCommand(
+  command: readonly [string, ...string[]],
+  runtimeSettings?: ProviderRuntimeSettings,
+): [string, ...string[]] {
+  const configured = runtimeSettings?.command;
+  if (configured?.mode === "replace") return [configured.argv[0]!, ...configured.argv.slice(1)];
+  return configured?.mode === "append" ? [...command, ...(configured.args ?? [])] : [...command];
+}
+
 export function buildOmpLaunch(input: {
   command: [string, ...string[]];
   runtimeSettings?: ProviderRuntimeSettings;
   session: OmpStartSessionInput;
 }): OmpRuntimeLaunch {
-  const configuredCommand = input.runtimeSettings?.command;
-  let command: readonly string[] = input.command;
-  if (configuredCommand?.mode === "replace" && configuredCommand.argv[0]) {
-    command = configuredCommand.argv;
-  } else if (configuredCommand?.mode === "append") {
-    command = [...input.command, ...(configuredCommand.args ?? [])];
-  }
-  const argv = [...command];
+  const argv = resolveOmpRuntimeCommand(input.command, input.runtimeSettings);
 
   const protocolMode = input.session.protocolMode ?? "rpc";
   const systemPrompt = input.session.systemPrompt?.trim();

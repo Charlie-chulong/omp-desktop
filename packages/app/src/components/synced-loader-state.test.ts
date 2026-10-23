@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { getSyncedLoaderDotOpacity, getSyncedLoaderStep } from "./synced-loader-state";
+import {
+  SYNCED_LOADER_DOT_COUNT,
+  getSyncedLoaderDotOpacity,
+  getSyncedLoaderStep,
+  getSyncedLoaderStepDelayMs,
+} from "./synced-loader-state";
 
 describe("synced loader state", () => {
   test("advances through six wall-clock-aligned steps every 950 milliseconds", () => {
@@ -8,6 +13,15 @@ describe("synced loader state", () => {
     const steps = sampleTimes.map(getSyncedLoaderStep);
 
     expect(steps).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 0]);
+  });
+
+  test("waits until the next visible step across boundaries and clock rollover", () => {
+    for (const now of [0, 158, 159, 633, 949, 950, Date.UTC(2026, 9, 22) + 51]) {
+      const step = getSyncedLoaderStep(now);
+      const delay = getSyncedLoaderStepDelayMs(now);
+      expect(getSyncedLoaderStep(now + delay - 1)).toBe(step);
+      expect(getSyncedLoaderStep(now + delay)).toBe((step + 1) % SYNCED_LOADER_DOT_COUNT);
+    }
   });
 
   test("preserves the six visible snake states", () => {

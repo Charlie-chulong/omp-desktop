@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from "node:path";
 import type { AgentProvider, AgentStreamEvent } from "../../agent-sdk-types.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
 import { OmpHistoryMapper, type OmpCapturedUserMessageEntry } from "./message-history.js";
-import type { OmpAgentMessage } from "./rpc-types.js";
+import { OmpAgentMessageSchema, type OmpAgentMessage } from "./rpc-types.js";
 import type { OmpRuntimeSession } from "./runtime.js";
 import { OMP_HISTORY_MAPPER_HOOKS } from "./history-hooks.js";
 import { resolveOmpDiagnosticPaths } from "./provider-config.js";
@@ -350,13 +350,27 @@ export async function readActiveOmpEntryChain(
 }
 
 function mapEntryMessage(entry: OmpSessionEntry): OmpAgentMessage | null {
+  // Native JSONL persists custom messages at the top level, unlike live role:custom messages.
+  // `custom` entries are plugin state, not visible messages, and remain filtered below.
+  if (entry.type === "custom_message") {
+    if (typeof entry.customType !== "string") return null;
+    const parsed = OmpAgentMessageSchema.safeParse({
+      ...entry,
+      role: "custom",
+      entryId: entry.id,
+    });
+    return parsed.success ? parsed.data : null;
+  }
   const message = entry.message;
   if (message && typeof message.role === "string") {
     if (message.role === "system" || message.role === "developer") {
       return null;
     }
     if (["user", "assistant", "toolResult", "custom", "bashExecution"].includes(message.role)) {
-      return message as unknown as OmpAgentMessage;
+      return {
+        ...message,
+        ...(message.role === "custom" ? { entryId: entry.id } : {}),
+      } as unknown as OmpAgentMessage;
     }
     return visibleFallback(message.role, message);
   }
@@ -379,7 +393,6 @@ function isControlEntryType(type: string): boolean {
     type === "model_usage" ||
     type === "credential_pin" ||
     type === "ttsr_injection" ||
-    type === "custom_message" ||
     type === "thinking_level_change" ||
     type === "service_tier_change" ||
     type === "tool_execution" ||

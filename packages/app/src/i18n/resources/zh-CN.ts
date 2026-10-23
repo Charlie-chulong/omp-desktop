@@ -151,6 +151,14 @@ export const zhCN: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "排队会话",
+      hint: "按住手柄拖动调整顺序，不会中断正在运行的对话。",
+      dragConversation: "调整「{{title}}」的排队顺序",
+      dragMessage: "调整排队消息顺序：{{text}}",
+      messageCount: "排队消息：{{count}}",
+      untitledConversation: "未命名会话 · {{id}}",
+    },
     placeholders: {
       desktop: "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills",
       mobile: "发消息，@files，/commands",
@@ -188,13 +196,8 @@ export const zhCN: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "编辑排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
-      moveQueuedMessageEarlier: "将排队消息前移",
-      moveQueuedMessageLater: "将排队消息后移",
-      dragQueuedMessage: "拖动以调整排队消息顺序",
       dragQueuedMessageHint: "按空格键拾起，使用方向键移动，再按空格键放下，或按 Escape 取消。",
       queuedConversationPosition: "排队会话第 {{position}} 个，共 {{count}} 个",
-      moveQueuedConversationEarlier: "将排队会话前移",
-      moveQueuedConversationLater: "将排队会话后移",
       openImage: "打开图片附件",
       removeImage: "移除图片附件",
       removeFile: "Remove file attachment",
@@ -374,6 +377,9 @@ export const zhCN: TranslationResources = {
       reconnecting: "正在重连",
       timelineSyncFailed: "无法刷新代理历史记录。",
       timelineSyncRetrying: "正在重试…",
+      bundledPluginsVerifying: "正在校验内置插件…",
+      bundledPluginsPreparing: "正在准备内置插件…",
+      bundledPluginsInstalling: "正在首次安装内置插件…",
       historyUnavailableTitle: "对话记录不可用",
       historyUnavailableMissing:
         "此 Agent 仍然存在，但 Provider 对话文件已被删除。上方如有缓存消息，仅供只读查看。",
@@ -648,6 +654,14 @@ export const zhCN: TranslationResources = {
         refreshing: "正在刷新文件",
         hideHiddenFiles: "隐藏隐藏文件",
         showHiddenFiles: "显示隐藏文件",
+        selectEntries: "多选文件",
+        finishSelection: "完成选择",
+        selectedCount: "已选 {{count}} 项",
+        moveSelection: "移动所选项目",
+        chooseDestination: "选择目标文件夹",
+        moveHere: "移动到此处",
+        cancelMove: "取消移动",
+        selectEntry: "选择 {{name}}",
       },
       empty: {
         noFiles: "没有文件",
@@ -2135,7 +2149,8 @@ export const zhCN: TranslationResources = {
     groupInfo: "关于 {{title}}",
     sections: {
       general: "通用",
-      connections: "连接",
+      connections: "主机连接",
+      chatBehavior: "聊天行为",
       appearance: "外观",
       editor: "编辑器",
       shortcuts: "快捷键",
@@ -2855,11 +2870,49 @@ export const zhCN: TranslationResources = {
         installTitle: "安装",
         installSpecLabel: "插件标识",
         installPlaceholder: "包名、路径或 Git URL",
-        browsePackages: "在 pi.dev 浏览更多插件 ↗",
+        browsePackages: "OMP 官方插件指南 ↗",
         dryRunLabel: "仅检查",
         toggleLabel: "切换 {{id}}",
         doctorTitle: "健康检查",
         doctorHint: "检查 omp 插件安装状态,并标记损坏的条目。",
+        trustWarning:
+          "插件会以 OMP 的操作系统权限执行代码。请只安装可信来源。项目作用域不是沙箱；市场元数据是发布者提供的非可信文本。",
+        runtimeHint:
+          "此页读取并保存磁盘配置，不代表正在运行的 Agent 状态。/reload-plugins 可重载支持的工具、钩子和命令；MCP 服务器、设置及插件 Agent 需要新会话或重启 OMP。不会自动重启现有 Agent。",
+        manualScopeHint:
+          "市场 name@marketplace 标识使用上方所选作用域。其他包、Git 或路径安装属于用户级，--scope 不适用。",
+        removeConfirmTitle: "移除 {{id}}？",
+        removeConfirmMessage:
+          "移除此主机上下文（{{cwd}}）中的「{{scope}}」副本？其他作用域的副本会保留。",
+        context: {
+          title: "主机 / 项目上下文",
+          directory: "此主机上的项目目录",
+          placeholder: "主机绝对路径；留空查看用户级",
+          apply: "应用上下文",
+          project: "已应用项目目录：{{cwd}}",
+          user: "主机用户视图（主目录；未选择项目）",
+        },
+        scope: {
+          title: "市场安装作用域",
+          user: "用户级",
+          project: "项目级",
+          hint: "默认使用用户级。应用主机目录后才可选项目级。市场操作只针对所选作用域；已安装行的操作只针对该行显示的副本。",
+          shadowed: "被已启用的项目副本覆盖",
+          effectiveProject: "已启用的项目副本优先于用户副本",
+        },
+        metadata: {
+          source: "来源",
+          author: "作者",
+          repository: "仓库",
+          homepage: "主页",
+        },
+        notices: {
+          applied:
+            "已保存到磁盘，未重启现有 Agent。支持的工具、钩子和命令可用 /reload-plugins 重载；MCP 服务器、设置及插件 Agent 需新会话或重启 OMP。",
+          preview: "仅检查已完成，未安装或更改任何内容，插件标识和目标上下文已保留。",
+          catalogRefreshed:
+            "市场目录已刷新，已安装插件代码没有升级；请对所需作用域的副本点击「升级」。",
+        },
         actions: {
           install: "安装",
           upgrade: "升级",
@@ -2881,14 +2934,17 @@ export const zhCN: TranslationResources = {
           addPlaceholder: "owner/repo、Git URL 或本地路径",
           searchPlaceholder: "搜索插件…",
           searchClear: "清除搜索",
+          refreshHint: "刷新只更新市场目录元数据，不会升级已安装的插件代码。",
           actions: {
             add: "添加",
             browse: "浏览({{count}})",
             hide: "收起",
+            refresh: "刷新目录",
           },
           feedback: {
             addFailed: "无法添加插件市场",
             removeFailed: "无法移除 {{id}}",
+            refreshFailed: "无法刷新 {{id}}",
           },
         },
         states: {

@@ -12,6 +12,10 @@ declare module "vitest/browser" {
 }
 
 const mounted: { root: Root; container: HTMLDivElement }[] = [];
+const splitStyles = {
+  horizontal: { width: 400, height: 300, flexDirection: "row" as const },
+  vertical: { width: 400, height: 300, flexDirection: "column" as const },
+};
 
 afterEach(() => {
   for (const { root, container } of mounted.splice(0)) {
@@ -35,14 +39,6 @@ for (const direction of ["horizontal", "vertical"] as const) {
           visibleSizeTotal / 2,
           1 - visibleSizeTotal,
         ]);
-        const groupStyle = useMemo(
-          () => ({
-            width: 400,
-            height: 300,
-            flexDirection: direction === "horizontal" ? ("row" as const) : ("column" as const),
-          }),
-          [],
-        );
         const firstPaneStyle = useMemo(
           () => ({ flex: sizes[0] / visibleSizeTotal, minWidth: 0, minHeight: 0 }),
           [sizes],
@@ -51,9 +47,9 @@ for (const direction of ["horizontal", "vertical"] as const) {
           () => ({ flex: sizes[1] / visibleSizeTotal, minWidth: 0, minHeight: 0 }),
           [sizes],
         );
-        const resize = useCallback((_group: string, next: number[]) => setSizes(next), []);
+        const handleResize = useCallback((_group: string, next: number[]) => setSizes(next), []);
         return (
-          <View style={groupStyle}>
+          <View style={splitStyles[direction]}>
             <View testID="first-pane" style={firstPaneStyle} />
             <ResizeHandle
               testID="divider"
@@ -62,8 +58,8 @@ for (const direction of ["horizontal", "vertical"] as const) {
               index={0}
               sizes={sizes}
               visibleSizeTotal={visibleSizeTotal}
-              onPreviewResizeSplit={resize}
-              onResizeSplit={resize}
+              onPreviewResizeSplit={handleResize}
+              onResizeSplit={handleResize}
             />
             <View style={secondPaneStyle} />
           </View>

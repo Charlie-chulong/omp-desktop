@@ -37,6 +37,7 @@ import type {
   ServerInfoStatusPayload,
   ProjectPlacementPayload,
   AgentHistoryUnavailable,
+  AgentInitializationProgressStatusPayload,
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
 } from "@omp-desktop/protocol/messages";
@@ -446,6 +447,9 @@ export interface SessionState {
 
   // Initializing agents (used for UI loading state)
   initializingAgents: Map<string, boolean>;
+  // Transient bundled-plugin progress; never included in SessionReplica.
+  agentInitializationProgress: Map<string, AgentInitializationProgressStatusPayload>;
+  agentInitializationProgressScopes: Map<string, object>;
 
   // Agents
   agents: Map<string, Agent>;
@@ -491,6 +495,13 @@ interface SessionStoreActions {
   updateSessionClient: (serverId: string, client: DaemonClient, clientGeneration?: number) => void;
   setViewedTimelineSync: (serverId: string, sync: ViewedTimelineUiBridge | null) => void;
   updateSessionServerInfo: (serverId: string, info: DaemonServerInfo) => void;
+  beginAgentInitializationProgress: (serverId: string, agentId: string) => object | undefined;
+  resetAgentInitializationProgress: (serverId: string, agentId?: string) => void;
+  updateAgentInitializationProgress: (
+    serverId: string,
+    scope: object,
+    progress: AgentInitializationProgressStatusPayload,
+  ) => void;
 
   // Focus
   setFocusedAgentId: (serverId: string, agentId: string | null) => void;
@@ -662,7 +673,7 @@ interface SessionStoreActions {
       | Map<string, QueuedMessageState[]>
       | ((prev: Map<string, QueuedMessageState[]>) => Map<string, QueuedMessageState[]>),
   ) => void;
-  moveQueuedAgent: (serverId: string, agentId: string, offset: -1 | 1) => void;
+  reorderQueuedAgents: (serverId: string, agentIds: readonly string[]) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -708,6 +719,8 @@ function createInitialSessionState(
     agentAuthoritativeHistoryApplied: new Map(),
     agentHistoryUnavailable: new Map(),
     initializingAgents: new Map(),
+    agentInitializationProgress: new Map(),
+    agentInitializationProgressScopes: new Map(),
     agents: new Map(),
     workspaceAgentActivity: new Map(),
     agentDetails: new Map(),
@@ -917,7 +930,84 @@ export const useSessionStore = create<SessionStore>()(
                 ...session,
                 client,
                 clientGeneration,
+                agentInitializationProgress: new Map(),
+                agentInitializationProgressScopes: new Map(),
               },
+            },
+          };
+        });
+      },
+
+      beginAgentInitializationProgress: (serverId, agentId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session || session.agentInitializationProgressScopes.has(agentId)) return prev;
+          const scopes = new Map(session.agentInitializationProgressScopes);
+          scopes.set(agentId, {});
+          return {
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, agentInitializationProgressScopes: scopes },
+            },
+          };
+        });
+        return get().sessions[serverId]?.agentInitializationProgressScopes.get(agentId);
+      },
+
+      resetAgentInitializationProgress: (serverId, agentId) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) return prev;
+          if (
+            agentId !== undefined &&
+            !session.agentInitializationProgressScopes.has(agentId) &&
+            !session.agentInitializationProgress.has(agentId)
+          ) {
+            return prev;
+          }
+          const progress = new Map(session.agentInitializationProgress);
+          const scopes = new Map(session.agentInitializationProgressScopes);
+          if (agentId === undefined) {
+            progress.clear();
+            scopes.clear();
+          } else {
+            progress.delete(agentId);
+            scopes.delete(agentId);
+          }
+          return {
+            sessions: {
+              ...prev.sessions,
+              [serverId]: {
+                ...session,
+                agentInitializationProgress: progress,
+                agentInitializationProgressScopes: scopes,
+              },
+            },
+          };
+        });
+      },
+
+      updateAgentInitializationProgress: (serverId, scope, progress) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (
+            !session ||
+            session.agentInitializationProgressScopes.get(progress.agentId) !== scope
+          ) {
+            return prev;
+          }
+          const current = session.agentInitializationProgress.get(progress.agentId);
+          if (progress.phase === null && current?.requestId !== progress.requestId) return prev;
+          if (current?.requestId === progress.requestId && current.phase === progress.phase) {
+            return prev;
+          }
+          const next = new Map(session.agentInitializationProgress);
+          if (progress.phase === null) next.delete(progress.agentId);
+          else next.set(progress.agentId, progress);
+          return {
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, agentInitializationProgress: next },
             },
           };
         });
@@ -2024,25 +2114,33 @@ export const useSessionStore = create<SessionStore>()(
         });
       },
 
-      moveQueuedAgent: (serverId, agentId, offset) => {
+      reorderQueuedAgents: (serverId, agentIds) => {
         set((prev) => {
           const session = prev.sessions[serverId];
           if (!session) return prev;
-          const index = session.queuedAgentOrder.indexOf(agentId);
-          const target = index + offset;
-          if (index < 0 || target < 0 || target >= session.queuedAgentOrder.length) {
+
+          if (
+            agentIds.length === session.queuedAgentOrder.length &&
+            agentIds.every((agentId, index) => session.queuedAgentOrder[index] === agentId)
+          ) {
             return prev;
           }
-          const queuedAgentOrder = [...session.queuedAgentOrder];
-          [queuedAgentOrder[index], queuedAgentOrder[target]] = [
-            queuedAgentOrder[target]!,
-            queuedAgentOrder[index]!,
-          ];
+
+          const activeAgentIds = new Set<string>();
+          for (const [agentId, queue] of session.queuedMessages) {
+            if (queue.length > 0) activeAgentIds.add(agentId);
+          }
+          // A drag may finish after a conversation drained or joined the queue.
+          if (agentIds.length !== activeAgentIds.size) return prev;
+          for (const agentId of agentIds) {
+            if (!activeAgentIds.delete(agentId)) return prev;
+          }
+
           return {
             ...prev,
             sessions: {
               ...prev.sessions,
-              [serverId]: { ...session, queuedAgentOrder },
+              [serverId]: { ...session, queuedAgentOrder: [...agentIds] },
             },
           };
         });
