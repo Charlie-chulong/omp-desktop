@@ -1,18 +1,32 @@
 import { createWorkChatter } from "./work-chatter.js";
+import { createPetBubbleController } from "./bubble.js";
 
 // Static trusted document: descriptors and labels arrive only over the isolated preload bridge.
 export const PET_HTML = String.raw`<!doctype html>
 <html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src omp-desktop:; style-src 'unsafe-inline'; script-src 'nonce-omp-pet-renderer'; connect-src 'none'"><style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;user-select:none;font-family:'Segoe UI',sans-serif}
 #mascot{position:absolute;right:8px;bottom:8px;touch-action:none;cursor:grab}#mascot.dragging{cursor:grabbing}
-#bubble{position:absolute;z-index:1;right:8px;max-width:calc(100% - 16px);padding:9px 12px;border:1px solid #F6A9C6;border-radius:14px 14px 3px 14px;background:#FFF0E4;color:#42436B;font-family:inherit;font-size:12px;font-weight:600;line-height:1.4;cursor:pointer;box-sizing:border-box;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bubble{position:absolute;z-index:1;right:8px;max-width:calc(100% - 16px);padding:var(--bubble-padding-y,9px) var(--bubble-padding-x,12px);border:1px solid var(--bubble-border,#F6A9C6);border-radius:var(--bubble-radius,14px) var(--bubble-radius,14px) 3px var(--bubble-radius,14px);background:var(--bubble-background,#FFF0E4);color:var(--bubble-foreground,#42436B);font-family:inherit;font-size:var(--bubble-font-size,12px);font-weight:var(--bubble-font-weight,600);line-height:1.4;cursor:pointer;box-sizing:border-box;text-align:left;white-space:nowrap}
+#bubble-text{display:block;overflow:hidden;text-overflow:ellipsis}
+#bubble[data-shape="rounded"]{border-radius:var(--bubble-radius,14px)}
+#bubble[data-shape="thought"]{border-radius:999px}
+#bubble[data-shape="thought"]::before,#bubble[data-shape="thought"]::after{content:"";position:absolute;background:var(--bubble-background);border:1px solid var(--bubble-border);border-radius:50%}
+#bubble[data-shape="thought"]::before{width:6px;height:6px;right:14px;bottom:-8px}
+#bubble[data-shape="thought"]::after{width:3px;height:3px;right:8px;bottom:-13px}
+#bubble[data-entry="fade"]:not([hidden]){animation:pet-bubble-fade 180ms ease-out}
+#bubble[data-entry="pop"]:not([hidden]){animation:pet-bubble-pop 180ms ease-out;transform-origin:bottom right}
+@keyframes pet-bubble-fade{from{opacity:0}to{opacity:1}}
+@keyframes pet-bubble-pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){#bubble[data-entry]{animation:none}}
 #bubble:focus-visible{outline:2px solid #DFAB4D;outline-offset:2px}
-</style></head><body><button id="bubble" type="button" hidden></button><canvas id="mascot"></canvas><script nonce="omp-pet-renderer">
-const bridge=window.ompPet, canvas=document.getElementById('mascot'), bubble=document.getElementById('bubble');
+</style></head><body><button id="bubble" type="button" hidden><span id="bubble-text"></span></button><canvas id="mascot"></canvas><script nonce="omp-pet-renderer">
+const bridge=window.ompPet, canvas=document.getElementById('mascot'), bubble=document.getElementById('bubble'),bubbleText=document.getElementById('bubble-text');
 const ctx=canvas.getContext('2d',{willReadFrequently:true}), motion=matchMedia('(prefers-reduced-motion: reduce)');
 const sizes={small:112,medium:152,large:200},holds={idle:6000,needs_input:6000,ready:7000,blocked:9000};
 const frameInterval=1000/30,transitionDuration=210,patDuration=850,motionEpoch=performance.now();
 const chatter=(${createWorkChatter.toString()})();
+const createBubble=(${createPetBubbleController.toString()});
+let customBubble=null,bubbleProfileKey='',bubbleAnimating=false;
 let state=null,image=null,imageUrl='',loadGeneration=0,animationKey='',animationStarted=0;
 let poseImage=null,poseDescriptor=null,transition=null,patStarted=-1;
 let dragging=false,pointerStart=null,moved=false,interactive=null,pointer={x:-1,y:-1};
@@ -36,19 +50,28 @@ function hitTest(){
 }
 function renderBubble(){
   const activity=state.activity,task=activity.tasks[0];
-  const count=activity.tasks.length>1?' · '+activity.labels.taskCount.replace('{{count}}',String(activity.tasks.length)):'';
-  bubble.textContent=chatter.line?chatter.line.text:(task?activity.labels[task.status]:(activity.connected?activity.labels.idle:activity.labels.offline))+count;
-  bubble.style.whiteSpace=chatter.line?'normal':'nowrap';
+  if(customBubble){
+    bubbleText.textContent=customBubble.line||'';
+    bubble.style.whiteSpace='normal';
+    bubble.hidden=customBubble.line===null||!image;
+  }else{
+    const count=activity.tasks.length>1?' · '+activity.labels.taskCount.replace('{{count}}',String(activity.tasks.length)):'';
+    bubbleText.textContent=chatter.line?chatter.line.text:(task?activity.labels[task.status]:(activity.connected?activity.labels.idle:activity.labels.offline))+count;
+    bubble.style.whiteSpace=chatter.line?'normal':'nowrap';
+    bubble.hidden=false;
+  }
   bubble.title=task?task.title:activity.labels.openApp;
   bubble.setAttribute('aria-label',task?activity.labels.openTask+': '+task.title:activity.labels.openApp);
-  bubble.hidden=false;
   refreshHitBounds();checkPointerAfterDraw=true;
 }
 function syncChatter(now){
   const enabled=!!image&&state.descriptor.builtIn&&state.descriptor.id==='iris'&&!dragging&&patStarted<0;
-  const changed=chatter.update(state.activity,now,enabled);
-  if(chatter.nextAt!==chatterDue){
-    clearTimeout(chatterTimer);chatterTimer=null;chatterDue=chatter.nextAt;
+  const changed=customBubble
+    ?customBubble.update(state.activity,now,{dragging,petting:patStarted>=0&&now-patStarted<patDuration})
+    :chatter.update(state.activity,now,enabled);
+  const nextAt=customBubble?customBubble.nextAt:chatter.nextAt;
+  if(nextAt!==chatterDue){
+    clearTimeout(chatterTimer);chatterTimer=null;chatterDue=nextAt;
     if(Number.isFinite(chatterDue))chatterTimer=setTimeout(onChatterTimer,Math.ceil(Math.max(0,chatterDue-now)));
   }
   return changed;
@@ -67,7 +90,7 @@ function frameAt(animation,key,started,now){
 function syncPose(now){
   if(!state||!image)return;
   const descriptor=state.descriptor,key=dragging&&descriptor.animations.dragging?'dragging':
-    patStarted>=0&&now-patStarted<patDuration?'ready':chatter.line?.animation||state.activity.tasks[0]?.status||'idle';
+    patStarted>=0&&now-patStarted<patDuration?'ready':(!customBubble&&chatter.line?.animation)||state.activity.tasks[0]?.status||'idle';
   const animation=descriptor.animations[key],previous=poseDescriptor?.animations[animationKey];
   const changed=!poseDescriptor||poseImage!==image||poseDescriptor.id!==descriptor.id||animationKey!==key||
     poseDescriptor.frameWidth!==descriptor.frameWidth||poseDescriptor.frameHeight!==descriptor.frameHeight||
@@ -129,7 +152,7 @@ function draw(now){
   if(!motion.matches)ctx.resetTransform();
   ctx.globalAlpha=1;
   if(patStarted>=0){
-    ctx.fillStyle='#CE5D8A';
+    ctx.fillStyle=state.descriptor.bubble?.appearance.border||'#CE5D8A';
     for(let i=0;i<3;i++){
       const heartAge=age-i*90;
       if(!motion.matches&&heartAge<0)continue;
@@ -141,6 +164,7 @@ function draw(now){
     ctx.globalAlpha=1;
   }
   // Only sample alpha when a real pointer overlaps moving art, never for the idle loop alone.
+  if(bubbleAnimating)refreshHitBounds();
   const pointerOnArt=pointer.x>=canvasLeft&&pointer.x<canvasRight&&pointer.y>=canvasTop&&pointer.y<canvasBottom;
   const pointerOnBubble=!bubble.hidden&&pointer.x>=bubbleLeft&&pointer.x<bubbleRight&&pointer.y>=bubbleTop&&pointer.y<bubbleBottom;
   if(checkPointerAfterDraw||(!motion.matches&&!dragging&&!pointerOnBubble&&pointerOnArt))hitTest();
@@ -156,8 +180,26 @@ function advance(){
     timerDue=patStarted+patDuration;animationTimer=setTimeout(advance,Math.ceil(Math.max(0,timerDue-performance.now())));
   }
 }
+function syncBubbleProfile(){
+  const profile=state.descriptor.bubble,key=profile?state.descriptor.id+'|'+state.descriptor.spriteUrl:'';
+  if(key===bubbleProfileKey)return;
+  bubbleProfileKey=key;customBubble=profile?createBubble(profile):null;
+  chatter.update(state.activity,performance.now(),false);
+  const style=profile?.appearance;
+  bubble.dataset.shape=style?.shape||'speech';bubble.dataset.entry=style?.animation||'none';
+  const properties={
+    '--bubble-background':style?.background,'--bubble-foreground':style?.foreground,'--bubble-border':style?.border,
+    '--bubble-radius':style?style.borderRadius+'px':null,'--bubble-font-size':style?style.fontSize+'px':null,
+    '--bubble-font-weight':style?.fontWeight,'--bubble-padding-x':style?style.padding+'px':null,
+    '--bubble-padding-y':style?style.padding+'px':null,
+  };
+  for(const [name,value] of Object.entries(properties)){
+    if(value==null)bubble.style.removeProperty(name);else bubble.style.setProperty(name,value);
+  }
+}
 function update(next){
   state=next;
+  syncBubbleProfile();
   const activity=state.activity;
   document.body.style.fontFamily=activity.fontFamily+", 'Segoe UI', sans-serif";
   const size=sizes[state.size],ratio=state.descriptor.frameHeight/state.descriptor.frameWidth;
@@ -167,11 +209,14 @@ function update(next){
   canvas.style.width=width+'px';canvas.style.height=height+'px';
   // Keep the pet-side corner anchored: longer captions must grow away from the face.
   const bubbleRight=8+width-Math.min(40,width/4);
-  bubble.style.right=bubbleRight+'px';bubble.style.maxWidth='calc(100% - '+(bubbleRight+8)+'px)';
-  bubble.style.bottom=Math.round(height*.8+10)+'px';
+  const bubbleBottom=Math.round(height*.8+10),appearance=state.descriptor.bubble?.appearance;
+  bubble.style.right=bubbleRight+'px';
+  bubble.style.maxWidth=appearance?'min('+appearance.maxWidth+'px, calc(100% - '+(bubbleRight+8)+'px))':'calc(100% - '+(bubbleRight+8)+'px)';
+  bubble.style.bottom=bubbleBottom+'px';
+  bubbleText.style.maxHeight=Math.max(20,innerHeight-bubbleBottom-12-(appearance?.padding||9)*2-2)+'px';
   if(imageUrl!==state.descriptor.spriteUrl){
     imageUrl=state.descriptor.spriteUrl;image=null;const generation=++loadGeneration;
-    const pending=new Image();pending.onload=()=>{if(generation===loadGeneration){image=pending;const now=performance.now();if(syncChatter(now))renderBubble();syncPose(now);requestDraw()}};
+    const pending=new Image();pending.onload=()=>{if(generation===loadGeneration){image=pending;const now=performance.now();syncChatter(now);renderBubble();syncPose(now);requestDraw()}};
     pending.onerror=()=>{if(generation===loadGeneration)fail(new Error('Cannot load selected companion spritesheet'))};
     // The pet has its own origin; keep canvas pixels readable for alpha hit-testing.
     const spriteUrl=new URL(imageUrl);spriteUrl.host=location.host;pending.src=spriteUrl.href;
@@ -183,6 +228,10 @@ bridge.onState(update);bridge.onPointer(point=>{pointer=point;hitTest()});
 bridge.ready().then(update).catch(fail);
 addEventListener('resize',()=>{if(state)update(state)});
 bubble.addEventListener('click',()=>bridge.open().catch(fail));
+bubble.addEventListener('animationstart',()=>{bubbleAnimating=true;requestDraw()});
+function finishBubbleAnimation(){bubbleAnimating=false;refreshHitBounds();checkPointerAfterDraw=true;requestDraw()}
+bubble.addEventListener('animationend',finishBubbleAnimation);
+bubble.addEventListener('animationcancel',finishBubbleAnimation);
 document.addEventListener('contextmenu',event=>{event.preventDefault();bridge.menu().catch(fail)});
 canvas.addEventListener('pointerdown',event=>{
   if(event.button!==0||pointerStart)return;

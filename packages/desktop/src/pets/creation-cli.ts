@@ -108,8 +108,13 @@ export async function tryRunPetCreationCli(): Promise<boolean> {
       throw new TypeError("pet.json must be a regular file no larger than 64 KiB.");
     }
     const manifest = parsePetManifest(JSON.parse(await readFile(manifestPath, "utf8")) as unknown);
-    await app.whenReady();
     const imageMarker = process.argv.indexOf("--input-image", marker + 2);
+    if (imageMarker !== -1 && !manifest.bubble) {
+      throw new TypeError(
+        "New pet image authoring requires a complete bubble profile in pet.json (appearance and all eight state rules). Start a new 'Create with OMP' workspace for the updated hatch-pet instructions; existing artwork can be reused.",
+      );
+    }
+    await app.whenReady();
     if (imageMarker !== -1) {
       const imageArgument = process.argv[imageMarker + 1];
       if (!imageArgument)
