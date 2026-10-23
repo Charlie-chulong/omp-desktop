@@ -91,13 +91,9 @@
       ) {
         -webkit-app-region: no-drag !important;
       }
-      /* Normal windows stay on Chromium's native drag path. Maximized frameless
-         windows temporarily switch to the manual restore path. */
+      /* The operating system owns normal and maximized titlebar gestures. */
       [data-window-drag-region="native"] {
         -webkit-app-region: drag !important;
-      }
-      [data-window-drag-region="manual"] {
-        -webkit-app-region: no-drag !important;
       }
 
       /* Suppress the browser's default focus outline — it appears on mouse

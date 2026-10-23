@@ -18,72 +18,6 @@ const WINDOW_STATE_SAVE_DEBOUNCE_MS = 400;
 const MAC_TRAFFIC_LIGHT_POSITION = { x: 16, y: 14 } as const;
 const MAX_TRAFFIC_LIGHT_OFFSET_Y = 10;
 
-export interface WindowDragPoint {
-  x: number;
-  y: number;
-}
-
-export interface WindowDragState {
-  offsetX: number;
-  offsetY: number;
-}
-
-interface WindowDragTarget {
-  isMaximized(): boolean;
-  unmaximize(): void;
-  getBounds(): Electron.Rectangle;
-  setPosition(x: number, y: number, animate?: boolean): void;
-}
-
-export function readWindowDragPoint(input: unknown): WindowDragPoint | null {
-  if (typeof input !== "object" || input === null) {
-    return null;
-  }
-  const x = Reflect.get(input, "screenX");
-  const y = Reflect.get(input, "screenY");
-  if (
-    typeof x !== "number" ||
-    typeof y !== "number" ||
-    !Number.isFinite(x) ||
-    !Number.isFinite(y)
-  ) {
-    return null;
-  }
-  return { x: Math.round(x), y: Math.round(y) };
-}
-
-export function beginWindowDrag(win: WindowDragTarget, point: WindowDragPoint): WindowDragState {
-  const initialBounds = win.getBounds();
-  if (!win.isMaximized()) {
-    return {
-      offsetX: point.x - initialBounds.x,
-      offsetY: point.y - initialBounds.y,
-    };
-  }
-
-  const horizontalRatio = Math.min(
-    1,
-    Math.max(0, (point.x - initialBounds.x) / initialBounds.width),
-  );
-  const offsetY = Math.max(0, point.y - initialBounds.y);
-  win.unmaximize();
-  const restoredBounds = win.getBounds();
-  const state = {
-    offsetX: Math.round(restoredBounds.width * horizontalRatio),
-    offsetY: Math.min(offsetY, Math.max(0, restoredBounds.height - 1)),
-  };
-  win.setPosition(point.x - state.offsetX, point.y - state.offsetY, false);
-  return state;
-}
-
-export function moveWindowDrag(
-  win: Pick<WindowDragTarget, "setPosition">,
-  state: WindowDragState,
-  point: WindowDragPoint,
-): void {
-  win.setPosition(point.x - state.offsetX, point.y - state.offsetY, false);
-}
-
 export function readBadgeCount(input: unknown): number {
   if (typeof input !== "number" || !Number.isSafeInteger(input) || input < 0) {
     return 0;
@@ -273,7 +207,6 @@ export function applyMacWindowControlsUpdate(input: {
 
 export function registerWindowManager(): void {
   const overlayStateByWindow = new WeakMap<BrowserWindow, WindowControlsOverlayState>();
-  const windowDragStateByWindow = new WeakMap<BrowserWindow, WindowDragState>();
 
   ipcMain.handle("paseo:window:toggleMaximize", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -282,28 +215,6 @@ export function registerWindowManager(): void {
       win.unmaximize();
     } else {
       win.maximize();
-    }
-  });
-
-  ipcMain.handle("paseo:window:beginDrag", (event, input: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const point = readWindowDragPoint(input);
-    if (!win || !point) return;
-    windowDragStateByWindow.set(win, beginWindowDrag(win, point));
-  });
-
-  ipcMain.on("paseo:window:moveDrag", (event, input: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const point = readWindowDragPoint(input);
-    const state = win ? windowDragStateByWindow.get(win) : null;
-    if (!win || !point || !state) return;
-    moveWindowDrag(win, state, point);
-  });
-
-  ipcMain.on("paseo:window:endDrag", (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (win) {
-      windowDragStateByWindow.delete(win);
     }
   });
 
