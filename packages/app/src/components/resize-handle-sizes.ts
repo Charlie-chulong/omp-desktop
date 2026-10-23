@@ -1,5 +1,10 @@
 import { MIN_SPLIT_SIZE } from "@/stores/workspace-layout-constants";
 
+/** A cached resize belongs to the group only while its pane count still matches. */
+export function resolveSplitGroupSizes(layoutSizes: number[], storedSizes?: number[]): number[] {
+  return storedSizes?.length === layoutSizes.length ? storedSizes : layoutSizes;
+}
+
 interface ComputeResizeHandleSizesInput {
   sizes: number[];
   index: number;

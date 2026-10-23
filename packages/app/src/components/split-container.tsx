@@ -36,6 +36,7 @@ import Animated, {
 import { useTranslation } from "react-i18next";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { ResizeHandle } from "@/components/resize-handle";
+import { resolveSplitGroupSizes } from "@/components/resize-handle-sizes";
 import { RetainedPanel } from "@/components/retained-panel";
 import { resolveSplitContainerRoot } from "@/components/split-container-focus";
 import { shouldFocusPaneFromEventTarget } from "@/components/split-container-pane-focus";
@@ -959,8 +960,10 @@ function SplitNodeView({
     groupId ? state.splitSizesByWorkspace[workspaceKey]?.[groupId] : undefined,
   );
   const groupChildren = node.kind === "group" ? node.group.children : EMPTY_SPLIT_NODES;
-  const groupSizes =
-    storedGroupSizes ?? (node.kind === "group" ? node.group.sizes : EMPTY_SPLIT_SIZES);
+  const groupSizes = resolveSplitGroupSizes(
+    node.kind === "group" ? node.group.sizes : EMPTY_SPLIT_SIZES,
+    storedGroupSizes,
+  );
   const { flex: visibleFlex, visibleSizeTotal } = useMemo(
     () => resolveVisibleGroupFlex(groupChildren, groupSizes),
     [groupChildren, groupSizes],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeResizeHandleSizes } from "@/components/resize-handle-sizes";
+import { computeResizeHandleSizes, resolveSplitGroupSizes } from "@/components/resize-handle-sizes";
 
 describe("computeResizeHandleSizes", () => {
   it("clamps right-edge drags to the adjacent pane minimum", () => {
@@ -63,5 +63,30 @@ describe("computeResizeHandleSizes", () => {
         deltaRatio: 0.25,
       }),
     ).toEqual([0.25, 0, 0, 0.75]);
+  });
+});
+
+describe("split group resize cache", () => {
+  it.each([-0.05, 0.05])(
+    "resizes the file pane in either direction after adding a second conversation (%s)",
+    (deltaRatio) => {
+      const sizes = resolveSplitGroupSizes([0.375, 0.375, 0.25], [0.8, 0.2]);
+      const resized = computeResizeHandleSizes({ sizes, index: 1, deltaRatio });
+
+      expect(resized[0]).toBe(0.375);
+      expect(resized[1]).toBeCloseTo(0.375 + deltaRatio);
+      expect(resized[2]).toBeCloseTo(0.25 - deltaRatio);
+      expect(resized.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1);
+    },
+  );
+
+  it("discards removed-pane weights when returning to two panes", () => {
+    const sizes = resolveSplitGroupSizes([0.75, 0.25], [0.4, 0.35, 0.25]);
+    expect(computeResizeHandleSizes({ sizes, index: 0, deltaRatio: -0.1 })).toEqual([0.65, 0.35]);
+  });
+
+  it("retains a compatible saved resize, including weights of hidden panes", () => {
+    const stored = [0.4, 0.35, 0.25];
+    expect(resolveSplitGroupSizes([0.375, 0.375, 0.25], stored)).toBe(stored);
   });
 });
