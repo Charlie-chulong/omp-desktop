@@ -398,6 +398,7 @@ function nativeProbe({
   env,
   screenshot = false,
   minimized = false,
+  chromeHitTests = false,
 }) {
   const screenshotPath = screenshot ? path.join(evidence, `${label}-native.png`) : null;
   if (screenshot)
@@ -413,6 +414,7 @@ function nativeProbe({
       handle: window.handle,
       captureTarget: "main",
       screenshot: screenshotPath,
+      chromeHitTests,
     },
     label,
     evidence,
@@ -528,9 +530,104 @@ async function smokeWindows({ command, page, evidence, control, env, report }) {
   });
   assert.equal(focus.focused, true, "One-time owned caption input must acquire main foreground");
   const initial = await checkViewport({ ...options, label: "main-initial", maximized: false });
+  const chrome = nativeProbe({
+    ...initial,
+    label: "main-native-resize-hit-tests",
+    evidence,
+    control,
+    env,
+    chromeHitTests: true,
+  });
+  assert.equal(chrome.chromeHitTests?.length, 4, "Probe all four real native resize edges");
+  for (const hit of chrome.chromeHitTests)
+    assert.equal(
+      hit.hit,
+      hit.expected,
+      `${hit.name}: the real normal-window edge must remain resizable`,
+    );
   for (let cycle = 1; cycle <= 2; cycle += 1) {
     await page.evaluate(() => window.paseoDesktop.window.getCurrentWindow().toggleMaximize());
     await checkViewport({ ...options, label: `main-maximized-${cycle}`, maximized: true });
+    if (cycle === 1) {
+      const state = await command({ action: "inspect" });
+      const snap = nativeHelper({
+        script: "windows-native-restore-snap.ps1",
+        request: { pid: state.pid, handle: mainWindow(state).handle },
+        label: "main-continuous-restore-snap",
+        evidence,
+        control,
+        env,
+      });
+      // This is physical caption input, not a JS setPosition or an isolated
+      // final screenshot. Persist the full button/geometry/GUI-thread trace
+      // before asserting so an unsafe environment or a failed Snap is visible.
+      report.windowGestures = {
+        restoreSnap: snap,
+        notExercised: [
+          "physical ordinary normal-window drag and titlebar double-click",
+          "visual Snap preview and transition ghosting (this helper records no desktop pixels)",
+          "other displays/DPI transitions beyond the owned window's current monitor",
+        ],
+      };
+      assert.equal(
+        snap.passed,
+        true,
+        `Continuous owned native restore/Snap failed: ${snap.failure}`,
+      );
+      assert.equal(snap.captionHit, 2, "Physical left down must target actual native HTCAPTION");
+      assert.equal(
+        snap.downCount,
+        1,
+        "Both gesture legs must share exactly one physical left down",
+      );
+      assert.equal(snap.upCount, 1, "The only physical left up must follow the top hold");
+      assert.equal(snap.leftReleased, true, "Always release the injected left button");
+      assert.equal(snap.cursorRestored, true, "Restore the unchanged injected cursor");
+      const held = snap.samples.filter(
+        (sample) => sample.phase !== "before-down" && sample.phase !== "released-at-top",
+      );
+      assert.ok(
+        held.every((sample) => sample.leftHeld),
+        "No intermediate physical left up is allowed",
+      );
+      for (const phase of ["restored-held", "top-held"]) {
+        const samples = held.filter((sample) => sample.phase === phase);
+        assert.ok(
+          samples.length >= 2,
+          `${phase}: observe the button and move loop across the pause`,
+        );
+        assert.ok(samples.at(-1).ms > samples[0].ms, `${phase}: held observations must span time`);
+        assert.ok(
+          samples.every(
+            (sample) =>
+              sample.inMoveSize &&
+              sample.moveSizeHandle === snap.handle &&
+              !sample.maximized &&
+              sample.ms >= snap.downMs &&
+              sample.ms <= snap.upMs,
+          ),
+          `${phase}: the same held HWND must remain restored in the actual OS move loop`,
+        );
+      }
+      const released = snap.samples.at(-1);
+      assert.equal(released.phase, "released-at-top");
+      assert.equal(released.leftHeld, false);
+      assert.equal(released.inMoveSize, false, "Release must end the native system move loop");
+      assert.equal(
+        released.maximized,
+        true,
+        "The same continuous native gesture must Snap on release",
+      );
+      assert.equal(
+        snap.finalMaximized,
+        true,
+        "Native IsZoomed must prove successful top-edge Snap",
+      );
+      await checkViewport({ ...options, label: "main-continuous-snap-maximized", maximized: true });
+      report.checks.push(
+        "physical native HTCAPTION maximize→restore→hold→return to current monitor top without left-up→hold→release Snap; owned GUI_INMOVESIZE/button/geometry trace and release IsZoomed",
+      );
+    }
     await page.evaluate(() => window.paseoDesktop.window.getCurrentWindow().toggleMaximize());
     const restored = await checkViewport({
       ...options,
@@ -569,7 +666,7 @@ async function smokeWindows({ command, page, evidence, control, env, report }) {
     "Native minimize/restore must recover the original real client dimensions",
   );
   report.checks.push(
-    "real preload maximize/restore twice plus native minimize/restore; DOM/runtime/OS geometry; renderer and guarded owned-foreground native surface screenshots",
+    "real preload maximize/restore twice plus native minimize/restore; four real normal-window resize-edge hit-tests; DOM/runtime/OS geometry; renderer and guarded owned-foreground native surface screenshots (interactive no-drag CSS is covered separately by browser tests)",
   );
 }
 

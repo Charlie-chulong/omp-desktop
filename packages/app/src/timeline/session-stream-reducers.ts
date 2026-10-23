@@ -15,10 +15,8 @@ import {
   reduceStreamUpdate,
   upsertUserMessageAcrossStream,
 } from "@/types/stream";
-import { isWindowDragActive } from "@/desktop/window-drag-activity";
 
 const AGENT_STREAM_REDUCER_FLUSH_DELAY_MS = 16 * 3;
-const WINDOW_DRAG_FLUSH_RETRY_MS = 16;
 const scheduledAgentStreamFlushes = new Map<number, ReturnType<typeof setTimeout>>();
 let nextAgentStreamFlushId = 1;
 
@@ -1940,10 +1938,6 @@ export function scheduleAgentStreamReducerFlush(callback: () => void): number {
   const id = nextAgentStreamFlushId;
   nextAgentStreamFlushId += 1;
   const run = () => {
-    if (isWindowDragActive()) {
-      scheduledAgentStreamFlushes.set(id, setTimeout(run, WINDOW_DRAG_FLUSH_RETRY_MS));
-      return;
-    }
     scheduledAgentStreamFlushes.delete(id);
     callback();
   };

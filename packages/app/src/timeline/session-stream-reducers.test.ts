@@ -7,7 +7,6 @@ import {
   type AgentToolCallItem,
   type StreamItem,
 } from "@/types/stream";
-import { beginWindowDragActivity, endWindowDragActivity } from "@/desktop/window-drag-activity";
 import {
   createAgentStreamReducerQueue,
   cancelAgentStreamReducerFlush,
@@ -4746,22 +4745,21 @@ describe("createAgentStreamReducerQueue", () => {
   });
 });
 
-describe("window-drag-aware stream scheduling", () => {
-  it("holds render commits until a manual window drag ends", () => {
+describe("stream reducer scheduling", () => {
+  it("cancels one scheduled commit without delaying another", () => {
     vi.useFakeTimers();
+    const canceledCallback = vi.fn();
     const callback = vi.fn();
-    const token = beginWindowDragActivity();
+    const canceledId = scheduleAgentStreamReducerFlush(canceledCallback);
     const id = scheduleAgentStreamReducerFlush(callback);
     try {
-      vi.advanceTimersByTime(48);
-      expect(callback).not.toHaveBeenCalled();
-
-      endWindowDragActivity(token);
-      vi.advanceTimersByTime(16);
+      cancelAgentStreamReducerFlush(canceledId);
+      vi.runAllTimers();
+      expect(canceledCallback).not.toHaveBeenCalled();
       expect(callback).toHaveBeenCalledOnce();
     } finally {
+      cancelAgentStreamReducerFlush(canceledId);
       cancelAgentStreamReducerFlush(id);
-      endWindowDragActivity(token);
       vi.useRealTimers();
     }
   });
