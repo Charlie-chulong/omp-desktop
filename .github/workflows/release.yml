@@ -3,7 +3,7 @@ name: Package release
 on:
   push:
     tags:
-      - "v*"
+      - "[0-9]*"
   workflow_dispatch:
     inputs:
       macos:
@@ -47,8 +47,8 @@ jobs:
             if (root.version !== desktop.version) {
               throw new Error('Root and desktop package versions must match');
             }
-            if (context.ref.startsWith('refs/tags/') && context.ref !== `refs/tags/v${desktop.version}`) {
-              throw new Error(`Release tag must be v${desktop.version}`);
+            if (context.ref.startsWith('refs/tags/') && context.ref !== `refs/tags/${desktop.version}`) {
+              throw new Error(`Release tag must be ${desktop.version}`);
             }
             const include = [
               { os: 'windows-2022', target: 'windows-x64', bundle: true, artifact: `OMP-Desktop-Setup-${desktop.version}-x64` },
