@@ -674,7 +674,7 @@ describe("Windows wrapper metadata boundary", () => {
         );
         const destination = path.join(privateDirectory, output.metadataFilename);
         const mergeScript = fileURLToPath(
-          new URL("../../../scripts/merge-windows-update-metadata.mjs", import.meta.url),
+          new URL("../../../scripts/packaging/merge-windows-update-metadata.mjs", import.meta.url),
         );
         const merged = spawnSync(process.execPath, [mergeScript, destination, snapshot], {
           encoding: "utf8",
