@@ -52,6 +52,31 @@ Desktop/web status rings, synchronized loaders, and the homepage WebGPU poster s
 
 The frontend Babel pipeline resolves Lucide's actual named exports to individual icon modules, including legacy aliases; public type imports remain unchanged. Electron web exports use UTF-8 instead of ASCII-escaped strings. Protocol validator generation shares repeated, non-mutating IR containers without removing validation, defaults, transforms, or fallback schema behavior; see the [protocol code generator guide](../packages/protocol/codegen/README.md).
 
+### Changes renderer memory
+
+Wrapped diff lines search for each endpoint with exponential local bounds before
+binary search, rather than repeatedly measuring the entire remaining line.
+Rejected candidates produce advances only; per-grapheme geometry is materialized
+for the selected fragment. Keep each fragment's own shaping context: subtracting
+full-line prefix widths would change ligatures and contextual-script metrics.
+
+Checkout-diff replicas are observer-owned. After the last observer leaves, React
+Query collects the snapshot on its next GC turn (`gcTime: 0`), including old keys
+from workspace, comparison, and expanded-path changes. Mounted retained panels,
+even when disabled, still own their snapshots. Resubscribing receives a fresh
+daemon snapshot; other replica domains keep their existing cache lifetime.
+
+Run the targeted regressions from the repository root:
+
+```bash
+npm run test --workspace=@omp-desktop/app -- --project unit src/git/diff-document/model.test.ts src/git/diff-document/text-measurement.test.ts src/data/query.test.tsx src/data/push-router.test.ts
+```
+
+These changes address allocation amplification and orphaned snapshot retention,
+not a proven attribution of [issue #107](https://github.com/iris-cat-dev/omp/issues/107).
+Native qualification still needs an isolated sandboxed renderer and OS process
+commit sampling; bucketized `performance.memory` is not a precise live heap peak.
+
 ## Verification policy
 
 ```bash
