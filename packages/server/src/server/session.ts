@@ -630,8 +630,8 @@ function workspaceLabelErrorCode(error: unknown): string {
 }
 
 // Covers request preparation before agent/terminal managers register their runtimes,
-// shared across client sessions using the same daemon registry.
-const workspaceContentMutations = new WeakMap<WorkspaceRegistry, number>();
+// shared across client sessions. Unresolved ownership conservatively protects all workspaces.
+const workspaceContentMutations = new WeakMap<WorkspaceRegistry, Map<string | undefined, number>>();
 const WORKSPACE_CONTENT_MUTATION_TYPES: Partial<Record<SessionInboundMessage["type"], true>> = {
   create_agent_request: true,
   resume_agent_request: true,
@@ -1812,11 +1812,19 @@ export class Session {
    */
   public async handleMessage(msg: SessionInboundMessage, source?: object): Promise<void> {
     const createsWorkspaceContent = WORKSPACE_CONTENT_MUTATION_TYPES[msg.type] === true;
+    const mutationWorkspaceId =
+      msg.type !== "hub.execution.agent.create.request" &&
+      "workspaceId" in msg &&
+      typeof msg.workspaceId === "string"
+        ? msg.workspaceId
+        : undefined;
     if (createsWorkspaceContent) {
-      workspaceContentMutations.set(
-        this.workspaceRegistry,
-        (workspaceContentMutations.get(this.workspaceRegistry) ?? 0) + 1,
-      );
+      let mutations = workspaceContentMutations.get(this.workspaceRegistry);
+      if (!mutations) {
+        mutations = new Map();
+        workspaceContentMutations.set(this.workspaceRegistry, mutations);
+      }
+      mutations.set(mutationWorkspaceId, (mutations.get(mutationWorkspaceId) ?? 0) + 1);
     }
     this.inflightRequests++;
     if (this.inflightRequests > this.peakInflightRequests) {
@@ -1882,9 +1890,11 @@ export class Session {
     } finally {
       this.inflightRequests--;
       if (createsWorkspaceContent) {
-        const remaining = (workspaceContentMutations.get(this.workspaceRegistry) ?? 1) - 1;
-        if (remaining === 0) workspaceContentMutations.delete(this.workspaceRegistry);
-        else workspaceContentMutations.set(this.workspaceRegistry, remaining);
+        const mutations = workspaceContentMutations.get(this.workspaceRegistry)!;
+        const remaining = mutations.get(mutationWorkspaceId)! - 1;
+        if (remaining === 0) mutations.delete(mutationWorkspaceId);
+        else mutations.set(mutationWorkspaceId, remaining);
+        if (mutations.size === 0) workspaceContentMutations.delete(this.workspaceRegistry);
       }
     }
   }
@@ -6899,7 +6909,8 @@ export class Session {
             agentStorage: this.agentStorage,
             agentManager: this.agentManager,
             hasWorkspaceActivity: (workspaceId) =>
-              (workspaceContentMutations.get(this.workspaceRegistry) ?? 0) > 0 ||
+              (workspaceContentMutations.get(this.workspaceRegistry)?.get(undefined) ?? 0) > 0 ||
+              (workspaceContentMutations.get(this.workspaceRegistry)?.get(workspaceId) ?? 0) > 0 ||
               this.workspaceSetupRuntime.isRunning(workspaceId) ||
               (this.scriptRuntimeStore?.listForWorkspace(workspaceId).length ?? 0) > 0,
             killTerminalsForWorkspace: (workspaceId) =>
