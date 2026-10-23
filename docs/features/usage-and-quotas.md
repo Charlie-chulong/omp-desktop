@@ -13,7 +13,7 @@ For the selected host, **Settings → Usage** includes native OMP `/stats`, prov
 
 ## Native OMP statistics
 
-The read-only Usage view uses OMP's existing native `stats.db` for the resolved host/profile, not only Desktop-created agents. Labels/explanations follow the interface language, including Chinese. It does not invoke CLI reindexing, import transcripts, or expose prompts, transcript paths, credentials, or raw database errors.
+The Usage view reads OMP's native `stats.db` for the resolved host/profile, across projects rather than only Desktop-created agents. Before an uncached read or refresh, Desktop runs the configured OMP's `stats --summary` to synchronize its local index, using the same environment and profile. This performs native transcript indexing, not model requests; Desktop receives numeric aggregates and never exposes prompts, transcript paths, credentials, CLI output, or raw database errors. Labels/explanations follow the interface language, including Chinese.
 
 Ranges are 1 hour, 24 hours, 7 days, 30 days, 90 days, and all indexed time. Counts, failures, input/output/cache tokens, native total tokens, and API-equivalent USD costs include provider, model, and agent-type breakdowns.
 
@@ -25,7 +25,9 @@ Interpret these values carefully:
 - Unpriced requests remain unknown; recorded zero cost remains zero.
 - Provider quotas and current-session usage are separate.
 
-Refresh rereads the existing index and invalidates the host's cached ranges; it does not make the index more current. Latest indexed-request time and index-read time are shown separately. Missing, unsupported, or unreadable sources are not shown as zero use. SQLite scans run in a short-lived child with a 15-second deadline, not on the daemon event loop.
+Refresh synchronizes the native index and invalidates the host's cached ranges. Concurrent requests share a synchronization only when their scope and invocation match. Only direct OMP commands with no prefix arguments other than `--profile` are eligible; ambiguous wrappers or other flags return scope unavailable instead of executing a possible model request.
+
+Latest indexed-request time and index-read time are shown separately. Missing, unsupported, unreadable, failed-refresh, and timed-out sources are not shown as zero use. Native synchronization has a 40-second deadline with up to 2 seconds waiting for process-tree cleanup; if cleanup cannot finish, the failed flight remains reserved until the writer exits rather than starting another writer. Only a successful synchronization proceeds to the numeric SQLite scan, which runs in a short-lived child with a 15-second deadline, not on the daemon event loop.
 
 ## Zhipu Coding Plan
 

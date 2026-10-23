@@ -11,6 +11,7 @@ const { smokeBundledPlugins } = require("./windows-native-plugins-smoke.js");
 // required for the owned-window surface screenshots; no Inspector/CDP is used.
 const TIMEOUT_MS = 480_000;
 const COMMAND_TIMEOUT_MS = 30_000;
+const STATS_COMMAND_TIMEOUT_MS = 65_000;
 const BRIDGE_KEYS = [
   "platform",
   "invoke",
@@ -309,10 +310,10 @@ function makeController({ child, control, deadline, getAbort }) {
     const current = ++sequence;
     writeJson(path.join(control, `${current}.request.json`), request);
     const responsePath = path.join(control, `${current}.response.json`);
-    const commandDeadline = Math.min(
-      deadline,
-      Date.now() + (request.action === "plugins" ? 90_000 : COMMAND_TIMEOUT_MS),
-    );
+    let timeoutMs = COMMAND_TIMEOUT_MS;
+    if (request.action === "plugins") timeoutMs = 90_000;
+    else if (request.action === "stats") timeoutMs = STATS_COMMAND_TIMEOUT_MS;
+    const commandDeadline = Math.min(deadline, Date.now() + timeoutMs);
     while (Date.now() < commandDeadline) {
       if (getAbort()) throw getAbort();
       const failure = readJson(path.join(control, "bootstrap-failure.json"));
@@ -887,38 +888,45 @@ const STATS_RANGES = {
   all: null,
 };
 
-function insertStatsFixtureRows(database, rows) {
-  const insert = database.prepare(`INSERT INTO messages (
-    session_file, entry_id, folder, model, provider, api, timestamp, stop_reason,
-    input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens,
-    premium_requests, cost_input, cost_output, cost_cache_read, cost_cache_write,
-    cost_total, cost_unpriced, agent_type
-  ) VALUES (?, ?, 'synthetic-stats-fixture', ?, ?, 'synthetic-fixture', ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0, ?, ?, ?)`);
-  database.exec("PRAGMA busy_timeout = 1000; BEGIN IMMEDIATE");
-  try {
-    for (const row of rows)
-      insert.run(
-        row.session,
-        row.entry,
-        row.model,
-        row.provider,
-        row.timestamp,
-        row.stop,
-        row.input,
-        row.output,
-        row.cacheRead,
-        row.cacheWrite,
-        row.totalTokens,
-        row.costUsd,
-        row.costUsd,
-        row.unpriced,
-        row.agent,
-      );
-    database.exec("COMMIT");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+const STATS_FIXTURE_BODY = "SYNTHETIC_STATS_ASSISTANT_BODY_DO_NOT_EXPOSE";
+const STATS_FIXTURE_ERROR = "SYNTHETIC_STATS_ERROR_DO_NOT_EXPOSE";
+
+function statsFixtureEntry(row, parentId) {
+  return {
+    type: "message",
+    id: row.entry,
+    parentId,
+    timestamp: new Date(row.timestamp).toISOString(),
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text: STATS_FIXTURE_BODY }],
+      api: "synthetic-fixture",
+      provider: row.provider,
+      model: row.model,
+      usage: {
+        input: row.input,
+        output: row.output,
+        cacheRead: row.cacheRead,
+        cacheWrite: row.cacheWrite,
+        totalTokens: row.totalTokens,
+        premiumRequests: 0,
+        cost: { input: 0, output: row.costUsd, cacheRead: 0, cacheWrite: 0, total: row.costUsd },
+      },
+      stopReason: row.stop,
+      ...(row.stop === "error" ? { errorMessage: STATS_FIXTURE_ERROR } : {}),
+      timestamp: row.timestamp,
+    },
+  };
+}
+
+function appendStatsFixtureEntry(fixture, row) {
+  const previous = fixture.rows.findLast((entry) => entry.session === row.session);
+  assert.ok(previous, "Refresh must append to an existing controlled native transcript");
+  fs.appendFileSync(
+    path.join(fixture.sessionsPath, row.session),
+    `${JSON.stringify(statsFixtureEntry(row, previous.entry))}\n`,
+  );
+  fixture.rows.push(row);
 }
 
 function seedStatsFixture(profile) {
@@ -928,12 +936,19 @@ function seedStatsFixture(profile) {
     false,
     "Only a newly owned empty profile may receive synthetic smoke statistics",
   );
-  const { DatabaseSync } = require("node:sqlite");
+  const sessionsPath = path.join(
+    profile,
+    ".omp",
+    "agent",
+    "sessions",
+    "--synthetic-stats-fixture--",
+  );
+  assert.equal(fs.existsSync(sessionsPath), false, "Never overwrite an existing native transcript");
   const baseTime = Date.now();
-  // Explicit numeric TEST DATA, never imported user usage or model responses.
-  // Native v18.12.1 schema: can1357/oh-my-pi@291e055, packages/stats/src/db.ts.
-  // total_tokens intentionally differs from the sum of four buckets: the native
-  // index owns that independent total (parser.ts), and the production SQL must too.
+  // Owned synthetic assistant JSONL, never copied user transcripts or model calls.
+  // Native parser.ts consumes message.usage and classifies agents by file depth:
+  // <project>/<file>.jsonl = main; nested = subagent; __advisor.jsonl = advisor.
+  // Provider-reported totalTokens deliberately differs from the four bucket sum.
   const rows = [
     {
       entry: "fixture-1",
@@ -953,7 +968,7 @@ function seedStatsFixture(profile) {
     },
     {
       entry: "fixture-2",
-      session: "fixture-worker.jsonl",
+      session: "fixture-main/fixture-worker.jsonl",
       provider: "fixture-beta",
       model: "fixture-slow",
       agent: "subagent",
@@ -969,7 +984,7 @@ function seedStatsFixture(profile) {
     },
     {
       entry: "fixture-3",
-      session: "fixture-worker.jsonl",
+      session: "fixture-main/fixture-worker.jsonl",
       provider: "xai-oauth",
       model: "fixture-unpriced",
       agent: "subagent",
@@ -985,7 +1000,7 @@ function seedStatsFixture(profile) {
     },
     {
       entry: "fixture-4",
-      session: "fixture-advisor.jsonl",
+      session: "fixture-main/__advisor.jsonl",
       provider: "fixture-alpha",
       model: "fixture-fast",
       agent: "advisor",
@@ -1049,32 +1064,45 @@ function seedStatsFixture(profile) {
     },
   ];
   for (const row of rows) row.timestamp = baseTime + row.offsetMs;
-  const database = new DatabaseSync(statsPath);
-  try {
-    database.exec(`CREATE TABLE messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, session_file TEXT NOT NULL,
-      entry_id TEXT NOT NULL, folder TEXT NOT NULL, model TEXT NOT NULL,
-      provider TEXT NOT NULL, api TEXT NOT NULL, timestamp INTEGER NOT NULL,
-      duration INTEGER, ttft INTEGER, stop_reason TEXT NOT NULL, error_message TEXT,
-      input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
-      cache_read_tokens INTEGER NOT NULL, cache_write_tokens INTEGER NOT NULL,
-      total_tokens INTEGER NOT NULL, premium_requests REAL NOT NULL,
-      cost_input REAL NOT NULL, cost_output REAL NOT NULL, cost_cache_read REAL NOT NULL,
-      cost_cache_write REAL NOT NULL, cost_total REAL NOT NULL, cost_no_cache_input REAL,
-      cost_unpriced INTEGER NOT NULL DEFAULT 0, agent_type TEXT NOT NULL DEFAULT 'main',
-      service_tier TEXT, UNIQUE(session_file, entry_id)
-    ); CREATE INDEX idx_messages_timestamp ON messages(timestamp);`);
-    insertStatsFixtureRows(database, rows);
-  } finally {
-    database.close();
+  for (const session of new Set(rows.map((row) => row.session))) {
+    const entries = rows
+      .filter((row) => row.session === session)
+      .sort((left, right) => left.timestamp - right.timestamp);
+    const sessionPath = path.join(sessionsPath, session);
+    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+    const header = {
+      type: "session",
+      version: 3,
+      id: `synthetic-stats-${path.basename(session, ".jsonl")}`,
+      timestamp: new Date(entries[0].timestamp).toISOString(),
+      cwd: profile,
+    };
+    fs.writeFileSync(
+      sessionPath,
+      `${[
+        header,
+        ...entries.map((row, index) => statsFixtureEntry(row, entries[index - 1]?.entry ?? null)),
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n")}\n`,
+      { flag: "wx" },
+    );
   }
+  assert.equal(
+    fs.existsSync(statsPath),
+    false,
+    "Fixture creation must not prebuild the native index",
+  );
   return {
-    kind: "explicit-synthetic-numeric-native-index",
+    kind: "controlled-native-session-jsonl-with-missing-index",
     statsPath,
+    sessionsPath,
     baseTime,
     rows,
-    schemaSource:
-      "https://github.com/can1357/oh-my-pi/blob/291e055836c210f314af3f73f53244e8e9d09de8/packages/stats/src/db.ts#L149-L181",
+    parserSource: "packages/stats/src/parser.ts:47-55,227-303",
+    ingestCommand:
+      "configured bundled omp --profile default stats --summary (through real Stats RPC)",
+    initialIndex: "missing",
   };
 }
 
@@ -1148,7 +1176,8 @@ function readStatsSource(profile) {
         .all()
         .map((column) => column.name),
       ...database
-        .prepare(`SELECT COUNT(*) AS requests, COALESCE(SUM(total_tokens), 0) AS totalTokens,
+        .prepare(`SELECT COUNT(*) AS requests, COUNT(DISTINCT entry_id) AS uniqueEntries,
+        COUNT(DISTINCT session_file) AS transcripts, COALESCE(SUM(total_tokens), 0) AS totalTokens,
         TOTAL(cost_total) AS cost, MAX(timestamp) AS indexedThrough FROM messages`)
         .get(),
     };
@@ -1237,9 +1266,15 @@ async function smokeUsage({
     route,
     fixture,
     ranges: {},
+    nativeIndexer: {
+      binaryPath: report.cli.omp.binaryPath,
+      version: report.cli.omp.version,
+      args: ["--profile", "default", "stats", "--summary"],
+      invokedBy: "real Desktop Stats RPC",
+    },
     notExercised: [
-      "missing/unsupported native index (this run intentionally supplies a valid controlled index)",
-      "user credentials, provider quotas, transcript ingestion, paid/model requests",
+      "unsupported native schema and forced native index refresh failure/timeout",
+      "real user credentials/transcripts, provider quotas, paid/model requests",
     ],
   };
   const readRpc = async (range) => {
@@ -1259,7 +1294,7 @@ async function smokeUsage({
     assert.equal(
       result.stats?.status,
       "available",
-      "The real Stats RPC must read the owned native SQLite fixture",
+      "The real Stats RPC must ingest the owned JSONL before reading the native index",
     );
     assert.deepEqual(result.stats?.scope, { kind: "host_profile", profile: "default" });
     assert.ok(
@@ -1272,6 +1307,49 @@ async function smokeUsage({
         result.stats[key],
         expected[key],
         `${range}: production SQL/RPC ${key} must match independent fixture facts`,
+      );
+    }
+    assert.deepEqual(
+      Object.keys(result.stats).sort(),
+      [
+        "source",
+        "scope",
+        "range",
+        "status",
+        "fetchedAt",
+        "indexedThrough",
+        "overall",
+        "byModel",
+        "byProvider",
+        "byAgentType",
+      ].sort(),
+      "Stats DTO must expose only aggregate numeric facts and approved metadata",
+    );
+    for (const row of [
+      result.stats.overall,
+      ...result.stats.byModel,
+      ...result.stats.byProvider,
+      ...result.stats.byAgentType,
+    ]) {
+      for (const key of Object.keys(expected.overall)) {
+        assert.ok(
+          row[key] === null || (typeof row[key] === "number" && Number.isFinite(row[key])),
+          `${range}: ${key} must be a numeric fact or an empty timestamp, never transcript data`,
+        );
+      }
+    }
+    const serialized = JSON.stringify(result.stats);
+    for (const privateValue of [
+      STATS_FIXTURE_BODY,
+      STATS_FIXTURE_ERROR,
+      fixture.statsPath,
+      fixture.sessionsPath,
+      ...fixture.rows.map((row) => row.entry),
+    ]) {
+      assert.equal(
+        serialized.includes(privateValue),
+        false,
+        "Native transcript bodies, errors, entry IDs and filesystem paths must not enter Stats DTOs",
       );
     }
     return { rpc: result, expected };
@@ -1405,24 +1483,31 @@ async function smokeUsage({
           snapshot.indexedThrough === formatted.indexedThrough
         );
       },
+      STATS_COMMAND_TIMEOUT_MS,
     );
     return snapshot;
   };
+  report.usage.indexBeforePage = { exists: fs.existsSync(fixture.statsPath) };
+  assert.equal(
+    report.usage.indexBeforePage.exists,
+    false,
+    "Opening Usage must build the missing index; no helper may pre-sync it",
+  );
+  await navigateChinese(page, route);
+  // Observe the real renderer before issuing any auxiliary Stats RPC. Otherwise
+  // that RPC's native sync could hide a broken page-open indexing path.
+  report.usage.opened = await checkUi("24h", expectedStatsFixture(fixture, "24h"));
   report.usage.sourceBefore = readStatsSource(profile);
   assert.equal(report.usage.sourceBefore.requests, 7);
+  assert.equal(report.usage.sourceBefore.uniqueEntries, 7);
+  assert.equal(report.usage.sourceBefore.transcripts, 5);
   assert.equal(report.usage.sourceBefore.totalTokens, 1665);
   assert.equal(report.usage.sourceBefore.cost, 7.5);
-  await navigateChinese(page, route);
-  await until("mandatory real Chinese Usage controls", async () => {
-    const snapshot = await inspect();
-    report.usage.lastDom = snapshot;
-    return snapshot.summary && !snapshot.busy;
-  });
   // Verify default 24h, every actual range control, and all RPC breakdowns.
   for (const range of ["24h", "1h", "7d", "30d", "90d", "all"]) {
     if (range !== "24h") await click(`omp-native-stats-range-${range}`);
+    const snapshot = await checkUi(range, expectedStatsFixture(fixture, range));
     const result = await readRpc(range);
-    const snapshot = await checkUi(range, result.expected);
     report.usage.ranges[range] = { ...result, snapshot };
     if (range === "24h" || range === "all")
       await page.snapshot(`usage-${range}-zh-cn-renderer.png`);
@@ -1445,34 +1530,55 @@ async function smokeUsage({
     costUsd: 0.25,
     unpriced: 0,
   };
-  const { DatabaseSync } = require("node:sqlite");
-  const database = new DatabaseSync(fixture.statsPath);
-  try {
-    insertStatsFixtureRows(database, [refreshRow]);
-  } finally {
-    database.close();
-  }
-  fixture.rows.push(refreshRow);
-  // No navigation/cache replacement after insertion: only the genuine refresh
-  // control may cause the already mounted renderer to observe the new request.
+  appendStatsFixtureEntry(fixture, refreshRow);
+  report.usage.sourceAfterAppend = readStatsSource(profile);
+  assert.deepEqual(
+    report.usage.sourceAfterAppend,
+    report.usage.sourceBefore,
+    "Appending JSONL must leave a genuinely stale index until the real refresh",
+  );
+  // No navigation/cache replacement or auxiliary Stats RPC after the append:
+  // only this real Refresh click may sync the new request into the mounted UI.
   await click("omp-native-stats-refresh");
+  const refreshedDom = await checkUi("24h", expectedStatsFixture(fixture, "24h"));
+  report.usage.sourceAfterRefresh = readStatsSource(profile);
+  assert.equal(report.usage.sourceAfterRefresh.requests, 8);
+  assert.equal(report.usage.sourceAfterRefresh.uniqueEntries, 8);
+  assert.equal(report.usage.sourceAfterRefresh.totalTokens, 1764);
+  assert.equal(report.usage.sourceAfterRefresh.indexedThrough, refreshRow.timestamp);
   const refreshed = await readRpc("24h");
-  const refreshedDom = await checkUi("24h", refreshed.expected);
   assert.equal(refreshed.expected.overall.totalRequests, 4);
   assert.equal(refreshed.expected.overall.totalTokens, 1619);
   assert.equal(refreshed.expected.overall.totalCostUsd, 4);
   report.usage.refresh = { ...refreshed, snapshot: refreshedDom };
   await click("omp-native-stats-range-all");
+  const allDom = await checkUi("all", expectedStatsFixture(fixture, "all"));
   const allAfterRefresh = await readRpc("all");
-  const allDom = await checkUi("all", allAfterRefresh.expected);
   assert.equal(allAfterRefresh.expected.overall.totalRequests, 8);
   assert.equal(allAfterRefresh.expected.overall.totalTokens, 1764);
   assert.equal(allAfterRefresh.expected.overall.totalCostUsd, 7.75);
   report.usage.allAfterRefresh = { ...allAfterRefresh, snapshot: allDom };
   report.usage.sourceAfter = readStatsSource(profile);
   assert.equal(report.usage.sourceAfter.requests, 8);
+  assert.equal(report.usage.sourceAfter.uniqueEntries, 8);
   assert.equal(report.usage.sourceAfter.totalTokens, 1764);
   assert.equal(report.usage.sourceAfter.indexedThrough, refreshRow.timestamp);
+  assert.deepEqual(
+    report.usage.sourceAfter,
+    report.usage.sourceAfterRefresh,
+    "Subsequent Stats RPC syncs must not duplicate native indexed requests",
+  );
+  report.usage.repeatReads = [];
+  for (let iteration = 1; iteration <= 2; iteration++) {
+    const repeated = await readRpc("all");
+    const source = readStatsSource(profile);
+    assert.deepEqual(
+      source,
+      report.usage.sourceAfter,
+      "Repeated native index syncs/reads must preserve unique requests, tokens and costs",
+    );
+    report.usage.repeatReads.push({ iteration, ...repeated, source });
+  }
   report.usage.surface = await checkViewport({
     command,
     page,
@@ -1485,7 +1591,7 @@ async function smokeUsage({
   report.usage.status = "passed";
   writeJson(path.join(evidence, "usage-zh-cn.json"), report.usage);
   report.checks.push(
-    "mandatory real Stats feature/SQL/RPC and Chinese Usage; controlled native SQLite fixture; six ranges, independent native total_tokens, model/provider/agent breakdowns, unpriced costs; insert then genuine refresh",
+    "mandatory real Stats native JSONL ingestion/SQL/RPC and Chinese Usage; missing index built on open; six ranges, independent native total_tokens, model/provider/main/subagent/advisor breakdowns, unpriced costs, numeric-only DTOs; append JSONL then genuine Refresh before auxiliary RPC; repeat syncs without duplicate requests",
   );
 }
 
@@ -1686,7 +1792,10 @@ async function smokeWindowsPackagedApp({
       kind: fixture.kind,
       seededRequests: fixture.rows.length,
       statsPath: fixture.statsPath,
-      schemaSource: fixture.schemaSource,
+      sessionsPath: fixture.sessionsPath,
+      initialIndex: fixture.initialIndex,
+      parserSource: fixture.parserSource,
+      ingestCommand: fixture.ingestCommand,
       evidence: path.join(evidence, "stats-fixture.json"),
     };
     writeJson(report.statsFixture.evidence, fixture);

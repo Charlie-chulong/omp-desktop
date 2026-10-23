@@ -30,7 +30,7 @@ const snapshot = {
 };
 
 describe("native statistics RPC", () => {
-  it("validates the read-only range request and rejects local path input", () => {
+  it("validates the range request and rejects local path input", () => {
     expect(
       SessionInboundMessageSchema.parse({
         type: "omp.stats.get.request",
@@ -67,6 +67,27 @@ describe("native statistics RPC", () => {
         reason: "missing",
       }),
     ).not.toHaveProperty("overall");
+    for (const reason of ["index_refresh_failed", "index_refresh_timeout"]) {
+      const response = SessionOutboundMessageSchema.parse({
+        type: "omp.stats.get.response",
+        payload: {
+          requestId: "stats",
+          stats: {
+            source: snapshot.source,
+            range: snapshot.range,
+            fetchedAt: snapshot.fetchedAt,
+            scope: snapshot.scope,
+            status: "error",
+            reason,
+            overall: metrics,
+            stderr: "private native diagnostic",
+          },
+        },
+      });
+      expect(response).toMatchObject({ payload: { stats: { status: "error", reason } } });
+      expect(response).not.toHaveProperty("payload.stats.overall");
+      expect(response).not.toHaveProperty("payload.stats.stderr");
+    }
   });
 
   it("rejects invalid unknown aggregate facts and agent types", () => {
