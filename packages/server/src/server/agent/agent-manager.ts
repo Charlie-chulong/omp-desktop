@@ -717,7 +717,7 @@ export class AgentManager {
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
   private readonly backgroundTasks = new Set<Promise<void>>();
-  private readonly agentRegistrationTasks = new Set<Promise<void>>();
+  private readonly agentRegistrationTasks = new Map<Promise<void>, string | undefined>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
   private readonly lifecycleMutationTails = new Map<string, Promise<void>>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
@@ -1217,8 +1217,11 @@ export class AgentManager {
     return this.providerSubagents.fetchTimeline(parentAgentId, subagentId, options);
   }
 
-  hasPendingAgentRegistrations(): boolean {
-    return this.agentRegistrationTasks.size > 0;
+  hasPendingAgentRegistrations(workspaceId: string): boolean {
+    for (const owner of this.agentRegistrationTasks.values()) {
+      if (owner === undefined || owner === workspaceId) return true;
+    }
+    return false;
   }
 
   createAgent(
@@ -1228,6 +1231,7 @@ export class AgentManager {
   ): Promise<ManagedAgent> {
     return this.trackAgentRegistrationOperation(
       this.createAgentWithWorkspaceRootGuard(config, agentId, options),
+      options.workspaceId,
     );
   }
 
@@ -1394,6 +1398,7 @@ export class AgentManager {
   ): Promise<ManagedAgent> {
     return this.trackAgentRegistrationOperation(
       this.resumeAgentFromPersistenceInternal(handle, overrides, agentId, options, resumeOptions),
+      options?.workspaceId,
     );
   }
 
@@ -1456,7 +1461,10 @@ export class AgentManager {
     workspaceId: string;
     labels?: Record<string, string>;
   }): Promise<ManagedAgent> {
-    return this.trackAgentRegistrationOperation(this.importProviderSessionInternal(input));
+    return this.trackAgentRegistrationOperation(
+      this.importProviderSessionInternal(input),
+      input.workspaceId,
+    );
   }
 
   private async importProviderSessionInternal(input: {
@@ -1535,6 +1543,7 @@ export class AgentManager {
   ): Promise<ManagedAgent> {
     return this.trackAgentRegistrationOperation(
       this.reloadAgentSessionInternal(agentId, overrides, options),
+      this.agents.get(agentId)?.workspaceId,
     );
   }
 
@@ -4973,12 +4982,15 @@ export class AgentManager {
     });
   }
 
-  private trackAgentRegistrationOperation<T>(result: Promise<T>): Promise<T> {
+  private trackAgentRegistrationOperation<T>(
+    result: Promise<T>,
+    workspaceId: string | undefined,
+  ): Promise<T> {
     const settled = result.then(
       () => undefined,
       () => undefined,
     );
-    this.agentRegistrationTasks.add(settled);
+    this.agentRegistrationTasks.set(settled, workspaceId);
     void settled.then(() => {
       this.agentRegistrationTasks.delete(settled);
       return undefined;
@@ -5010,7 +5022,7 @@ export class AgentManager {
       (options.includeAgentRegistrations && this.agentRegistrationTasks.size > 0)
     ) {
       const pending = options.includeAgentRegistrations
-        ? [...this.backgroundTasks, ...this.agentRegistrationTasks]
+        ? [...this.backgroundTasks, ...this.agentRegistrationTasks.keys()]
         : [...this.backgroundTasks];
       await Promise.allSettled(pending);
     }

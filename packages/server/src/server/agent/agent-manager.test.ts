@@ -1687,6 +1687,31 @@ function fakeCodexEmitting(args: FakeCodexEmitterArgs): AgentClient {
 
 const logger = createTestLogger();
 
+test.each(["creating-workspace", undefined])(
+  "pending registrations protect their owner, conservatively including unresolved ownership: %s",
+  async (workspaceId) => {
+    const client = new HeldAgentCreationClient();
+    const manager = new AgentManager({ clients: { codex: client }, logger });
+    const creation = manager.createAgent({ provider: "codex", cwd: process.cwd() }, undefined, {
+      workspaceId,
+    });
+    try {
+      await client.waitForCreationToStart();
+      expect(manager.hasPendingAgentRegistrations("creating-workspace")).toBe(true);
+      expect(manager.hasPendingAgentRegistrations("empty-workspace")).toBe(
+        workspaceId === undefined,
+      );
+    } finally {
+      client.finishCreating();
+      const agent = await creation;
+      await manager.closeAgent(agent.id);
+      await manager.flushForShutdown();
+    }
+    expect(manager.hasPendingAgentRegistrations("creating-workspace")).toBe(false);
+    expect(manager.hasPendingAgentRegistrations("empty-workspace")).toBe(false);
+  },
+);
+
 test("does not register a session that finishes starting after shutdown begins", async () => {
   const client = new HeldAgentCreationClient();
   const manager = new AgentManager({

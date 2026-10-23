@@ -51,6 +51,8 @@ Sidebar draft deletion retires its workspace once no other content tab hosts it.
 
 If the deleted workspace owns the current route, navigation follows a surviving focused conversation. Draft tabs with missing workspace records are pruned when layouts load. The daemon rechecks emptiness before archiving.
 
+Conditional cleanup scopes in-flight content changes and agent registration to their owning workspace. Creating a conversation or renaming another workspace—even from another client on the same host—does not leave a deleted empty draft behind as a branch-named row. Operations whose workspace ownership is not yet known still conservatively prevent cleanup until they finish.
+
 ## Terminals and split panes
 
 Side-by-side conversations respond to their pane width, not whole-window width. If an expanded task rail leaves insufficient room for a complete compact conversation/composer, both rail and toggle hide until space returns, restoring expansion. Resizing/maximizing keeps text and controls within the pane.

@@ -1,15 +1,19 @@
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { getFullAccessConfig } from "./daemon-e2e/agent-configs.js";
 import {
   createDaemonTestContext,
-  DaemonClient,
   type DaemonTestContext,
-} from "./test-utils/index.js";
+} from "./test-utils/daemon-test-context.js";
+import { DaemonClient } from "./test-utils/daemon-client.js";
+import type { AgentClient } from "./agent/agent-sdk-types.js";
+import { createTestAgentClients } from "./test-utils/fake-agent-client.js";
+import { FileBackedWorkspaceRegistry } from "./workspace-registry.js";
 
 // Model B archive is scoped to a single workspace RECORD (by workspaceId), not
 // to a directory on disk. A directory can back multiple workspaces, so archiving
@@ -19,16 +23,18 @@ import {
 // supplied disk flag.
 
 let ctx: DaemonTestContext;
+let agentClients: Record<string, AgentClient>;
 const tempRoots: string[] = [];
 
 beforeEach(async () => {
-  ctx = await createDaemonTestContext();
+  agentClients = createTestAgentClients();
+  ctx = await createDaemonTestContext({ agentClients });
 });
 
 afterEach(async () => {
   await ctx.cleanup();
   for (const tempRoot of tempRoots.splice(0)) {
-    rmSync(tempRoot, { recursive: true, force: true });
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
 
@@ -115,6 +121,104 @@ function collectWorkspaceTitles(client: DaemonClient): {
   });
   return { workspaces, stop };
 }
+
+test("conditional archive ignores another client's pending workspace rename", async () => {
+  const cwd = createGitRepo();
+  const empty = await createLocalWorkspace(cwd, "");
+  const renaming = await createLocalWorkspace(cwd, "");
+  const observer = new DaemonClient({
+    url: `ws://127.0.0.1:${ctx.daemon.port}/ws`,
+    reconnect: { enabled: false },
+  });
+  await observer.connect();
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const update = FileBackedWorkspaceRegistry.prototype.update;
+  const heldUpdate = vi
+    .spyOn(FileBackedWorkspaceRegistry.prototype, "update")
+    .mockImplementation(async function (this: FileBackedWorkspaceRegistry, workspaceId, updater) {
+      if (workspaceId === renaming) {
+        entered();
+        await gate;
+      }
+      return update.call(this, workspaceId, updater);
+    });
+  const rename = observer.setWorkspaceTitle(renaming, "Keep this conversation");
+  try {
+    await started;
+    await ctx.client.getCheckoutStatus(cwd);
+    expect(await ctx.client.archiveWorkspace(renaming, { onlyIfEmpty: true })).toMatchObject({
+      skipped: true,
+      archivedAt: null,
+      error: null,
+    });
+    expect(await ctx.client.archiveWorkspace(empty, { onlyIfEmpty: true })).toMatchObject({
+      skipped: false,
+      archivedAt: expect.any(String),
+      error: null,
+    });
+    expect(await activeWorkspaceIds()).toEqual(new Set([renaming]));
+    expect(existsSync(cwd)).toBe(true);
+  } finally {
+    release();
+    await rename;
+    heldUpdate.mockRestore();
+    await observer.close();
+  }
+});
+
+test("conditional archive isolates pending agent registration to its owning workspace", async () => {
+  const cwd = makeTempDir("workspace-archive-pending-agent-");
+  const empty = await createLocalWorkspace(cwd, "");
+  const creating = await createLocalWorkspace(cwd, "");
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const client = agentClients.codex!;
+  const createSession = client.createSession.bind(client);
+  const heldCreate = vi.spyOn(client, "createSession").mockImplementation(async (...args) => {
+    entered();
+    await gate;
+    return createSession(...args);
+  });
+  const creation = ctx.client.createAgent({
+    provider: "codex",
+    cwd,
+    workspaceId: creating,
+  });
+  try {
+    await started;
+    expect(await ctx.client.archiveWorkspace(creating, { onlyIfEmpty: true })).toMatchObject({
+      skipped: true,
+      archivedAt: null,
+      error: null,
+    });
+    expect(await ctx.client.archiveWorkspace(empty, { onlyIfEmpty: true })).toMatchObject({
+      skipped: false,
+      archivedAt: expect.any(String),
+      error: null,
+    });
+    expect(await activeWorkspaceIds()).toEqual(new Set([creating]));
+  } finally {
+    release();
+    await creation;
+    heldCreate.mockRestore();
+  }
+  expect((await ctx.client.fetchAgents()).entries.map((entry) => entry.agent.workspaceId)).toEqual([
+    creating,
+  ]);
+});
 
 test("archiving one of two workspaces sharing a cwd spares the sibling and the directory", async () => {
   const cwd = makeTempDir("workspace-archive-shared-cwd-");

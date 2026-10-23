@@ -104,7 +104,7 @@ export async function archiveUnusedWorkspace(
       !workspace.pinnedAt &&
       !workspace.labels?.length &&
       !dependencies.agentStorage.hasWorkspaceHistory(workspaceId) &&
-      !dependencies.agentManager.hasPendingAgentRegistrations() &&
+      !dependencies.agentManager.hasPendingAgentRegistrations(workspaceId) &&
       !dependencies.agentManager
         .listAgents({ includeInternal: true })
         .some((agent) => agent.workspaceId === workspaceId) &&
