@@ -400,7 +400,7 @@ export class OmpHarness {
     return await run;
   }
 
-  async runPromptWithoutTurn(input: string): Promise<unknown> {
+  async runPromptWithoutTurn(input: AgentPromptInput): Promise<unknown> {
     const session = this.requireSession();
     this.omp.latestSession().promptAck = { agentInvoked: false };
     return await session.run(input);
@@ -537,6 +537,10 @@ export class OmpHarness {
     return this.events.map((event) => event.type);
   }
 
+  streamEvents(): readonly AgentStreamEvent[] {
+    return this.events;
+  }
+
   permissionEvents() {
     return this.events.filter(
       (event) => event.type === "permission_requested" || event.type === "permission_resolved",
@@ -652,9 +656,13 @@ export class OmpHarness {
     await this.requireSession().interrupt();
   }
 
-  async requireStartTurn(message: string, options?: AgentRunOptions): Promise<string> {
+  async startTurn(message: AgentPromptInput, options?: AgentRunOptions) {
+    return this.requireSession().startTurn(message, options);
+  }
+
+  async requireStartTurn(message: AgentPromptInput, options?: AgentRunOptions): Promise<string> {
     const promptStarted = this.omp.latestSession().nextPrompt();
-    const { turnId } = await this.requireSession().startTurn(message, options);
+    const { turnId } = await this.startTurn(message, options);
     await promptStarted;
     return turnId;
   }

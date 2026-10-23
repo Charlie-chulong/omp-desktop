@@ -23,6 +23,7 @@ import type {
 import { isZhipuProviderBaseUrl } from "../../../services/quota-fetcher/providers/zhipu.js";
 import { expandTilde } from "../../../utils/path.js";
 import { discoverOmpProviderModels } from "./omp-model-discovery.js";
+import { OmpStatsResultSchema } from "@omp-desktop/protocol/omp-stats";
 
 // COMPAT(customModeIcons): the only mode icons known to clients before v0.1.84. Any
 // other icon name is downgraded to "ShieldCheck" for those clients.
@@ -1083,6 +1084,32 @@ export class ProviderCatalogSession {
           requestType: msg.type,
           error: `Failed to log out OMP provider: ${err.message}`,
           code: "omp_provider_logout_failed",
+        },
+      });
+    }
+  }
+
+  async handleOmpStatsGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "omp.stats.get.request" }>,
+  ): Promise<void> {
+    try {
+      const stats = OmpStatsResultSchema.parse(
+        await this.providerSnapshotManager.getOmpStats(msg.range),
+      );
+      this.host.emit({
+        type: "omp.stats.get.response",
+        payload: { requestId: msg.requestId, stats },
+      });
+    } catch {
+      // Neither SQLite errors nor rejected source payloads belong in the renderer.
+      this.logger.error("Failed to read OMP statistics");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: "Failed to read OMP statistics",
+          code: "omp_stats_read_failed",
         },
       });
     }

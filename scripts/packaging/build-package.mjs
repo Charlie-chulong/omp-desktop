@@ -32,10 +32,10 @@ const nativeWindows = target === "windows" && process.platform === "win32";
 const scriptPath = fileURLToPath(
   new URL(
     target === "mac"
-      ? "../build-mac.sh"
+      ? "./build-mac.sh"
       : nativeWindows
-        ? "../build-windows.ps1"
-        : "../build-windows.sh",
+        ? "./build-windows.ps1"
+        : "./build-windows.sh",
     import.meta.url,
   ),
 );

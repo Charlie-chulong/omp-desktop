@@ -18,10 +18,10 @@ import { useTranslation } from "react-i18next";
 import { Code, Maximize2, Minimize2, Scan, Workflow, ZoomIn, ZoomOut } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
-import { useIsCompactFormFactor } from "@/constants/layout";
+import { useShowPersistentActions } from "@/hooks/use-fine-pointer";
 import type { Theme } from "@/styles/theme";
 import type { MarkdownFenceRendererProps } from "../types";
-import type { MermaidRenderRequest } from "./render-model";
+import type { MermaidRenderRequest, RenderedDiagram } from "./render-model";
 import { parseMermaidRuntimeMessage, type MermaidRuntimeRenderMessage } from "./runtime/messages";
 import { MermaidRuntimeRequestDriver } from "./runtime/request-driver";
 import { useMermaidRenderModel } from "./use-render-model";
@@ -172,8 +172,59 @@ function MermaidIframeRuntime({
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 8;
 
-// The host intentionally coordinates the renderer lifecycle and one interactive canvas state.
-// eslint-disable-next-line complexity
+function useMermaidPresentation(
+  textStyle: MarkdownFenceRendererProps["textStyle"],
+  canShowDiagram: boolean,
+  showSource: boolean,
+  viewerOpen: boolean,
+  visible: RenderedDiagram | null,
+) {
+  const sourceView = useMemo(() => {
+    const { marginTop, marginBottom, marginVertical, ...sourceTextStyle } = textStyle;
+    const margins: ViewStyle = {
+      marginTop: marginTop ?? marginVertical,
+      marginBottom: marginBottom ?? marginVertical,
+    };
+    const text: TextStyle = sourceTextStyle;
+    return {
+      container: [margins, sourceContainerStyle],
+      text,
+    };
+  }, [textStyle]);
+  const diagramBoxStyle = getDiagramBoxStyle(textStyle);
+  const diagramVisible = canShowDiagram && !showSource;
+  const sourceVisible = !canShowDiagram || showSource;
+  const fullscreenOpen = viewerOpen && canShowDiagram;
+  let rootStyle: StyleProp<ViewStyle> = sourceContainerStyle;
+  if (fullscreenOpen) {
+    rootStyle = controlStyles.viewer;
+  } else if (diagramVisible) {
+    rootStyle = [diagramBoxStyle, containerStyle];
+  } else if (showSource) {
+    rootStyle = sourceView.container;
+  }
+  const sourceTextStyle = showSource ? sourceView.text : textStyle;
+  let viewportStyle = measuringRuntimeStyle;
+  if (diagramVisible) {
+    viewportStyle = fullscreenOpen ? fullscreenViewportDomStyle : viewportDomStyle;
+  }
+  const transformedContentStyle = useMemo<React.CSSProperties>(() => {
+    if (fullscreenOpen && visible) {
+      return { ...contentDomStyle, width: Math.max(visible.width, 1) };
+    }
+    return contentDomStyle;
+  }, [fullscreenOpen, visible]);
+  return {
+    diagramBoxStyle,
+    diagramVisible,
+    sourceVisible,
+    fullscreenOpen,
+    rootStyle,
+    sourceTextStyle,
+    viewportStyle,
+    transformedContentStyle,
+  };
+}
 function MermaidFenceHostImpl({
   code,
   phase,
@@ -209,6 +260,7 @@ function MermaidFenceHostImpl({
   const visible = state.visible;
   const canShowDiagram = visible !== null && hasRuntimeContent;
   const runtimeHeight = Math.max(visible?.height ?? 240, 1);
+  const spacerStyle = useMemo<ViewStyle>(() => ({ height: runtimeHeight }), [runtimeHeight]);
   const initialRuntimeRequest = useMemo<MermaidRenderRequest | null>(
     () =>
       visible
@@ -294,20 +346,25 @@ function MermaidFenceHostImpl({
     return () => viewport.removeEventListener("wheel", zoomWithWheel);
   }, [applyTransform, visible]);
 
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || event.pointerType !== "mouse") {
-      return;
-    }
-    const transform = transformRef.current;
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: transform.x,
-      originY: transform.y,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, []);
+  const [showSource, setShowSource] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || dragRef.current || (event.pointerType !== "mouse" && !viewerOpen)) {
+        return;
+      }
+      const transform = transformRef.current;
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: transform.x,
+        originY: transform.y,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [viewerOpen],
+  );
   const onPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const drag = dragRef.current;
@@ -350,8 +407,6 @@ function MermaidFenceHostImpl({
   const zoomInPress = useCallback(() => zoomBy(1.25), [zoomBy]);
   const zoomOutPress = useCallback(() => zoomBy(0.8), [zoomBy]);
 
-  const [showSource, setShowSource] = useState(false);
-  const [viewerOpen, setViewerOpen] = useState(false);
   const showSourcePress = useCallback(() => setShowSource(true), []);
   const showDiagramPress = useCallback(() => setShowSource(false), []);
   const openViewer = useCallback(() => {
@@ -366,8 +421,8 @@ function MermaidFenceHostImpl({
   const [isHovered, setIsHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setIsHovered(true), []);
   const handlePointerLeave = useCallback(() => setIsHovered(false), []);
-  const isCompact = useIsCompactFormFactor();
-  const controlsVisible = viewerOpen || isHovered || isCompact || isFocusWithin;
+  const showPersistentActions = useShowPersistentActions();
+  const controlsVisible = viewerOpen || isHovered || showPersistentActions || isFocusWithin;
 
   useEffect(() => {
     if (!showSource && contentRef.current) {
@@ -375,47 +430,16 @@ function MermaidFenceHostImpl({
     }
   }, [applyTransformToElement, showSource]);
 
-  const sourceView = useMemo(() => {
-    const { marginTop, marginBottom, marginVertical, ...sourceTextStyle } = textStyle;
-    const margins: ViewStyle = {
-      marginTop: marginTop ?? marginVertical,
-      marginBottom: marginBottom ?? marginVertical,
-    };
-    const text: TextStyle = sourceTextStyle;
-    return {
-      container: [margins, sourceContainerStyle],
-      text,
-    };
-  }, [textStyle]);
-  const diagramBoxStyle = getDiagramBoxStyle(textStyle);
-
-  const diagramVisible = canShowDiagram && !showSource;
-  const sourceVisible = !canShowDiagram || showSource;
-  const fullscreenOpen = viewerOpen && canShowDiagram;
-  let rootStyle: StyleProp<ViewStyle> = sourceContainerStyle;
-  if (fullscreenOpen) {
-    rootStyle = controlStyles.viewer;
-  } else if (diagramVisible) {
-    rootStyle = [diagramBoxStyle, containerStyle];
-  } else if (showSource) {
-    rootStyle = sourceView.container;
-  }
-  const sourceTextStyle = showSource ? sourceView.text : textStyle;
-  let viewportStyle = measuringRuntimeStyle;
-  if (diagramVisible) {
-    viewportStyle = fullscreenOpen ? fullscreenViewportDomStyle : viewportDomStyle;
-  }
-  const transformedContentStyle = useMemo<React.CSSProperties>(
-    () =>
-      fullscreenOpen && visible
-        ? { ...contentDomStyle, width: Math.max(visible.width, 1) }
-        : contentDomStyle,
-    [fullscreenOpen, visible],
-  );
-  const runtimePlaceholderStyle = useMemo<ViewStyle>(
-    () => ({ height: runtimeHeight }),
-    [runtimeHeight],
-  );
+  const {
+    diagramBoxStyle,
+    diagramVisible,
+    sourceVisible,
+    fullscreenOpen,
+    rootStyle,
+    sourceTextStyle,
+    viewportStyle,
+    transformedContentStyle,
+  } = useMermaidPresentation(textStyle, canShowDiagram, showSource, viewerOpen, visible);
 
   const runtime = (
     <MermaidIframeRuntime
@@ -454,6 +478,7 @@ function MermaidFenceHostImpl({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
         onDoubleClick={resetTransform}
       >
         <div ref={setContentRef} style={transformedContentStyle}>
@@ -516,7 +541,7 @@ function MermaidFenceHostImpl({
   return (
     <>
       <View style={[diagramBoxStyle, containerStyle]}>
-        <View style={runtimePlaceholderStyle} />
+        <View style={spacerStyle} />
       </View>
       <Modal visible animationType="fade" onRequestClose={closeViewer}>
         <View style={controlStyles.viewerBackdrop}>{content}</View>
@@ -608,6 +633,7 @@ const fullscreenViewportDomStyle: React.CSSProperties = {
   overflow: "hidden",
   cursor: "grab",
   userSelect: "none",
+  touchAction: "none",
 };
 const contentDomStyle: React.CSSProperties = { transformOrigin: "0 0" };
 const measuringRuntimeStyle: React.CSSProperties = {

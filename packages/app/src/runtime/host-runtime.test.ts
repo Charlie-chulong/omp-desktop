@@ -23,7 +23,7 @@ import {
   type HostRuntimeStorage,
 } from "./host-runtime";
 import { ReplicaCache } from "./replica-cache";
-import { moveQueuedComposerMessage, type QueueWriter } from "@/composer/actions";
+import { moveQueuedComposerMessageTo, type QueueWriter } from "@/composer/actions";
 
 class FakeDaemonClient {
   private state: ConnectionState = { status: "idle" };
@@ -3267,7 +3267,7 @@ describe("HostRuntimeStore", () => {
         ["second", [{ id: "message-second", text: "run second", attachments: [] }]],
       ]),
     );
-    sessionStore.moveQueuedAgent(host.serverId, "second", -1);
+    sessionStore.reorderQueuedAgents(host.serverId, ["second", "first"]);
 
     store.drainQueuedAgentMessage(host.serverId, "first");
     expect(fakeClient.sentAgentMessages).toEqual([]);
@@ -3294,6 +3294,77 @@ describe("HostRuntimeStore", () => {
 
     expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["second", "first"]);
 
+    useSessionStore.getState().clearSession(host.serverId);
+  });
+
+  it("dispatches a dragged queue order without interrupting a running conversation", async () => {
+    const host = makeHost({ serverId: "srv_dragged_queue" });
+    const fakeClient = new FakeDaemonClient();
+    const store = new HostRuntimeStore();
+    const sessionStore = useSessionStore.getState();
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    const entries = ["first", "second", "third"].map((id) =>
+      makeFetchAgentsEntry({ id, cwd: "/repo", updatedAt: "2026-07-12T10:00:00.000Z" }),
+    );
+    sessionStore.setAgents(
+      host.serverId,
+      new Map(
+        entries.map((entry) => [
+          entry.agent.id,
+          {
+            ...replicaAgent(entry.agent, host.serverId),
+            status: entry.agent.id === "first" ? ("running" as const) : ("idle" as const),
+          },
+        ]),
+      ),
+    );
+    sessionStore.setQueuedMessages(
+      host.serverId,
+      new Map(
+        entries.map((entry) => [
+          entry.agent.id,
+          [{ id: `message-${entry.agent.id}`, text: `run ${entry.agent.id}`, attachments: [] }],
+        ]),
+      ),
+    );
+    sessionStore.reorderQueuedAgents(host.serverId, ["third", "second", "first"]);
+
+    store.reevaluateQueuedAgentMessages(host.serverId);
+    await fakeClient.waitForSentMessages(1);
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third"]);
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("third")).toBe(
+        false,
+      );
+    });
+
+    store.drainQueuedAgentMessage(host.serverId, "third");
+    await fakeClient.waitForSentMessages(2);
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third", "second"]);
+    await vi.waitFor(() => {
+      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("second")).toBe(
+        false,
+      );
+    });
+
+    store.drainQueuedAgentMessage(host.serverId, "second");
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third", "second"]);
+    sessionStore.setAgents(
+      host.serverId,
+      new Map(
+        entries.map((entry) => [
+          entry.agent.id,
+          { ...replicaAgent(entry.agent, host.serverId), status: "idle" as const },
+        ]),
+      ),
+    );
+    store.drainQueuedAgentMessage(host.serverId, "first");
+    await fakeClient.waitForSentMessages(3);
+    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual([
+      "third",
+      "second",
+      "first",
+    ]);
     useSessionStore.getState().clearSession(host.serverId);
   });
 
@@ -3342,8 +3413,12 @@ describe("HostRuntimeStore", () => {
         useSessionStore.getState().sessions[host.serverId]!.queuedMessages.get(id) ?? [],
       write: (update) => sessionStore.setQueuedMessages(host.serverId, update),
     };
-    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: -1, queue });
-    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: -1, queue });
+    moveQueuedComposerMessageTo({
+      agentId: "agent",
+      messageId: "C",
+      targetMessageId: "A",
+      queue,
+    });
     store.reevaluateQueuedAgentMessages(host.serverId);
 
     expect(queue.read("agent")).toEqual([messages[2], messages[0], messages[1]]);
@@ -3373,7 +3448,12 @@ describe("HostRuntimeStore", () => {
       messages[2]!.attachments[0]!.attachment,
     ]);
     expect(queue.read("agent")).toEqual([]);
-    moveQueuedComposerMessage({ agentId: "agent", messageId: "C", offset: 1, queue });
+    moveQueuedComposerMessageTo({
+      agentId: "agent",
+      messageId: "B",
+      targetMessageId: "C",
+      queue,
+    });
     store.reevaluateQueuedAgentMessages(host.serverId);
     expect(fakeClient.sentAgentMessages).toHaveLength(3);
     expect(queue.read("agent")).toEqual([]);

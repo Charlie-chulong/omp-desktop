@@ -163,7 +163,7 @@ describe("native desktop pet settings", () => {
       await waitFor(() => expect(result.current.isLoading).toBe(false));
       let saving: Promise<void> | undefined;
       act(() => {
-        saving = result.current.updateSettings({ pet: { size: "small" } }).catch(() => {});
+        saving = result.current.updateSettings({ pet: { size: "small" } });
       });
       await waitFor(() => expect(service.resolvePatch).not.toBeNull());
       const olderPatch = service.current;
@@ -177,7 +177,11 @@ describe("native desktop pet settings", () => {
       await act(async () => {
         if (outcome === "success") service.resolvePatch?.(olderPatch);
         else service.rejectPatch?.(new Error("Unable to persist"));
-        await saving;
+        try {
+          await saving;
+        } catch {
+          // The failure path is reported by the settings hook and asserted below.
+        }
       });
       await waitFor(() => expect(result.current.settings.pet).toEqual(native.pet));
       if (outcome === "failure") expect(service.report).toHaveBeenCalledOnce();

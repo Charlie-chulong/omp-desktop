@@ -4,7 +4,7 @@ const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { setTimeout: delay } = require("node:timers/promises");
-const { chromium } = require("playwright");
+const { stripVTControlCharacters } = require("node:util");
 
 const EXECUTABLE_NAME = "OMP Desktop";
 const SMOKE_TIMEOUT_MS = 60_000;
@@ -26,8 +26,8 @@ const REQUIRED_DESKTOP_BRIDGE_KEYS = [
   "menu",
 ];
 
-function createTempDir(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+function createTempDir(prefix, root = os.tmpdir()) {
+  return fs.mkdtempSync(path.join(root, prefix));
 }
 
 function assertExecutable(filePath, label) {
@@ -133,17 +133,13 @@ function shellQuoteCliArg(value) {
 }
 
 function getTerminalHookSmokeCommand(marker) {
-  if (process.platform === "win32") {
-    return `Write-Output '${marker}'`;
-  }
-
   return `echo ${marker}`;
 }
 
-function getShellCommand(script) {
+function getShellCommand(script, env) {
   if (process.platform === "win32") {
     return {
-      command: "cmd.exe",
+      command: path.join(env.SystemRoot || "C:\\Windows", "System32", "cmd.exe"),
       // Generated batch helpers are UTF-8 and embed the installation path.
       args: ["/d", "/c", `chcp 65001>nul && ${script}`],
     };
@@ -155,11 +151,8 @@ function getShellCommand(script) {
   };
 }
 
-function createDefaultDaemonEnv(extraEnv) {
-  const env = {
-    ...process.env,
-    ...extraEnv,
-  };
+function createDefaultDaemonEnv(extraEnv = process.env) {
+  const env = { ...extraEnv };
 
   delete env.PASEO_HOME;
   delete env.PASEO_LISTEN;
@@ -385,8 +378,9 @@ async function removeTempDir(tempDir) {
       return;
     } catch (error) {
       if (!["EBUSY", "ENOTEMPTY", "EPERM"].includes(error?.code) || attempt === 4) {
-        console.warn(`Packaged desktop smoke: failed to remove temp dir ${tempDir}: ${error}`);
-        return;
+        throw new Error(`Packaged desktop smoke failed to remove temp dir ${tempDir}`, {
+          cause: error,
+        });
       }
       await delay(250);
     }
@@ -406,6 +400,7 @@ async function connectToPackagedApp({
   daemonHome,
   deadline,
 }) {
+  const { chromium } = require("playwright");
   let lastError = null;
 
   while (Date.now() < deadline) {
@@ -518,15 +513,17 @@ async function waitForRendererStartedDaemon({
   );
 }
 
-function runShellCommand({ script, env, label }) {
+function runShellCommand({ script, env, label, timeoutMs = SMOKE_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const shell = getShellCommand(script);
+    const shell = getShellCommand(script, env);
     const child = spawn(shell.command, shell.args, {
       detached: process.platform !== "win32",
       env,
+      cwd: env.HOME || undefined,
       stdio: ["ignore", "pipe", "pipe"],
       windowsVerbatimArguments: process.platform === "win32",
+      windowsHide: true,
     });
     const stdout = [];
     const stderr = [];
@@ -551,7 +548,7 @@ function runShellCommand({ script, env, label }) {
           }`,
         ),
       );
-    }, SMOKE_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout.on("data", (chunk) => stdout.push(chunk.toString()));
     child.stderr.on("data", (chunk) => stderr.push(chunk.toString()));
@@ -586,7 +583,7 @@ function getCliShimScript(cliShimPath, args) {
   return `${shellQuote(cliShimPath)} ${commandArgs}`;
 }
 
-async function runCliShimCommand({ appPath, env, args, label }) {
+async function runCliShimCommand({ appPath, env, args, label, timeoutMs }) {
   const cliShimPath = getCliShimPath(appPath);
   assertExecutable(cliShimPath, "Bundled CLI shim");
 
@@ -594,6 +591,7 @@ async function runCliShimCommand({ appPath, env, args, label }) {
     script: getCliShimScript(cliShimPath, args),
     env,
     label,
+    timeoutMs,
   });
 }
 
@@ -623,12 +621,19 @@ async function smokeBundledOmpRuntime({ appPath, env, executableName }) {
   const version = spawnSync(binaryPath, ["--version"], {
     encoding: "utf8",
     env,
+    cwd: env.HOME || undefined,
+    timeout: SMOKE_TIMEOUT_MS,
   });
   if (version.error || version.status !== 0) {
     throw new Error(
       `Bundled OMP version check failed (status ${version.status}): ${
         version.error || version.stderr?.trim() || version.stdout?.trim() || "<empty>"
       }`,
+    );
+  }
+  if (!/\d+\.\d+\.\d+/.test(version.stdout)) {
+    throw new Error(
+      `Bundled OMP did not report a usable version: ${version.stdout.trim() || "<empty>"}`,
     );
   }
 
@@ -695,6 +700,9 @@ try {
     env,
     args: ["provider", "diagnostic", "omp"],
     label: "Bundled OMP provider diagnostic",
+    // A cold private profile stages its complete runtimes before the catalog.
+    // Preserve the real 180s diagnostic RPC deadline plus CLI startup allowance.
+    timeoutMs: 180_000 + SMOKE_TIMEOUT_MS,
   });
   if (!diagnostic.stdout.includes(binaryPath)) {
     throw new Error(
@@ -709,6 +717,7 @@ try {
     label: "Bundled OMP provider models",
   });
   console.log("Packaged desktop smoke: bundled OMP runtime started through the daemon");
+  return { binaryPath, version: version.stdout.trim(), diagnostic: diagnostic.stdout };
 }
 
 async function smokeCliShim({ appPath, env }) {
@@ -716,29 +725,56 @@ async function smokeCliShim({ appPath, env }) {
   const result = await runCliShimCommand({
     appPath,
     env,
-    args: ["daemon", "status"],
+    args: ["daemon", "status", "--json"],
     label: "Bundled CLI shim daemon status",
   });
   assertCleanDaemonStatusOutput(`${result.stdout}\n${result.stderr}`);
+  const status = JSON.parse(result.stdout.trim());
+  if (
+    status.localDaemon !== "running" ||
+    status.connectedDaemon !== "reachable" ||
+    (env.PASEO_HOME && path.resolve(status.home) !== path.resolve(env.PASEO_HOME)) ||
+    (env.PASEO_LISTEN && status.listen !== env.PASEO_LISTEN)
+  ) {
+    throw new Error(
+      `Bundled CLI shim did not reach the isolated running daemon: ${JSON.stringify(status)}`,
+    );
+  }
+  return { ...result, status };
 }
 
-async function smokeColdCliDaemonStart({ appPath }) {
-  const home = createTempDir("omp-desktop-smoke-cli-daemon-home-");
+async function smokeColdCliDaemonStart({ appPath, env: isolatedEnv }) {
+  const home = createTempDir("omp-desktop-smoke-cli-daemon-home-", isolatedEnv?.TEMP);
   const pidPath = path.join(home, "omp-desktop.pid");
   const port = await reserveLocalTcpPort();
   const listen = `127.0.0.1:${port}`;
-  const env = createDefaultDaemonEnv();
-
+  const env = createDefaultDaemonEnv(isolatedEnv);
+  env.OMP_DESKTOP_HOME = home;
+  // An explicit host forbids the connector's normal localhost fallback.
+  env.PASEO_HOST = listen;
+  configureIsolatedDaemonHome(home, listen);
+  const report = { listen };
+  let failure;
   try {
     console.log("Packaged desktop smoke: cold-starting daemon through bundled CLI shim");
     await runCliShimCommand({
       appPath,
       env,
-      args: ["daemon", "start", "--home", home, "--listen", listen, "--no-mcp", "--no-inject-mcp"],
+      args: [
+        "daemon",
+        "start",
+        "--home",
+        home,
+        "--listen",
+        listen,
+        "--no-relay",
+        "--no-mcp",
+        "--no-inject-mcp",
+        "--no-web-ui",
+      ],
       label: "Bundled CLI shim cold daemon start",
     });
-
-    await smokeCliShim({
+    report.status = await smokeCliShim({
       appPath,
       env: { ...env, PASEO_HOME: home, PASEO_LISTEN: listen },
     });
@@ -746,19 +782,48 @@ async function smokeColdCliDaemonStart({ appPath }) {
       const { pid } = JSON.parse(fs.readFileSync(pidPath, "utf8"));
       assertDarwinDockVisibility(pid);
     }
+  } catch (error) {
+    failure = error;
   } finally {
-    if (fs.existsSync(pidPath)) {
-      await runCliShimCommand({
+    try {
+      report.stop = await runCliShimJsonCommand({
         appPath,
         env,
         args: ["daemon", "stop", "--home", home, "--force"],
         label: "Bundled CLI shim cold daemon stop",
-      }).catch((error) => {
-        console.warn(`Packaged desktop smoke: failed to stop cold CLI daemon: ${error}`);
       });
+      report.stopped = await runCliShimJsonCommand({
+        appPath,
+        env: { ...env, PASEO_HOME: home, PASEO_LISTEN: listen },
+        args: ["daemon", "status", "--home", home],
+        label: "Bundled CLI shim cold stopped daemon status",
+      });
+      if (
+        report.stopped.localDaemon !== "stopped" ||
+        report.stopped.connectedDaemon === "reachable"
+      ) {
+        const stopError = new Error(
+          `Cold CLI daemon did not actually stop: ${JSON.stringify(report.stopped)}`,
+        );
+        failure = failure
+          ? new AggregateError([failure, stopError], "Cold CLI smoke and daemon cleanup failed")
+          : stopError;
+      }
+    } catch (error) {
+      failure = failure
+        ? new AggregateError([failure, error], "Cold CLI smoke and daemon cleanup failed")
+        : error;
     }
-    await removeTempDir(home);
+    try {
+      await removeTempDir(home);
+    } catch (error) {
+      failure = failure
+        ? new AggregateError([failure, error], "Cold CLI smoke and sandbox cleanup failed")
+        : error;
+    }
   }
+  if (failure) throw failure;
+  return report;
 }
 
 function assertCleanDaemonStatusOutput(output) {
@@ -774,20 +839,25 @@ function assertCleanDaemonStatusOutput(output) {
   }
 }
 
-async function smokeCliTerminal({ appPath, env }) {
-  const cwd = createTempDir("omp-desktop-smoke-terminal-cwd-");
+async function smokeCliTerminal({ appPath, env, createTerminal }) {
+  const cwd = createTempDir(
+    "omp-desktop-smoke-terminal-cwd-",
+    process.platform === "win32" ? env.TEMP : undefined,
+  );
   const marker = `omp-desktop-packaged-terminal-smoke-${Date.now()}`;
   const name = `packaged-smoke-${process.pid}-${Date.now()}`;
   let terminalId = null;
 
   try {
-    console.log("Packaged desktop smoke: creating terminal through bundled CLI shim");
-    const created = await runCliShimJsonCommand({
-      appPath,
-      env,
-      args: ["terminal", "create", "--cwd", cwd, "--name", name],
-      label: "Bundled CLI shim terminal create",
-    });
+    console.log("Packaged desktop smoke: creating real isolated terminal");
+    const created = createTerminal
+      ? await createTerminal({ cwd, name })
+      : await runCliShimJsonCommand({
+          appPath,
+          env,
+          args: ["terminal", "create", "--cwd", cwd, "--name", name],
+          label: "Bundled CLI shim terminal create",
+        });
     if (!created || typeof created.id !== "string" || created.id.length === 0) {
       throw new Error(`Terminal create returned unexpected payload: ${JSON.stringify(created)}`);
     }
@@ -818,9 +888,12 @@ async function smokeCliTerminal({ appPath, env }) {
         label: "Bundled CLI shim terminal capture",
       });
       const lines = Array.isArray(capture?.lines) ? capture.lines : [];
-      if (lines.join("\n").includes(marker)) {
+      const outputLines = lines.map((line) =>
+        stripVTControlCharacters(String(line)).replace(/\r/g, "").trim(),
+      );
+      if (outputLines.includes(marker)) {
         console.log("Packaged desktop smoke: terminal hook command completed");
-        return;
+        return { terminalId, marker, lines: outputLines };
       }
 
       if (attempt < TERMINAL_CAPTURE_ATTEMPTS) {
@@ -830,17 +903,18 @@ async function smokeCliTerminal({ appPath, env }) {
 
     throw new Error(`Timed out waiting for terminal capture marker ${marker}`);
   } finally {
-    if (terminalId) {
-      await runCliShimJsonCommand({
-        appPath,
-        env,
-        args: ["terminal", "kill", terminalId],
-        label: "Bundled CLI shim terminal kill",
-      }).catch((error) => {
-        console.warn(`Packaged desktop smoke: failed to kill terminal ${terminalId}: ${error}`);
-      });
+    try {
+      if (terminalId) {
+        await runCliShimJsonCommand({
+          appPath,
+          env,
+          args: ["terminal", "kill", terminalId],
+          label: "Bundled CLI shim terminal kill",
+        });
+      }
+    } finally {
+      await removeTempDir(cwd);
     }
-    await removeTempDir(cwd);
   }
 }
 
@@ -864,6 +938,18 @@ async function smokePetCreationHelper({ page, appPath, env }) {
       description: "Packaged pet installer lifetime regression",
     }),
   );
+  const workspaceRoot = fs.realpathSync(
+    path.join(env.PASEO_ELECTRON_USER_DATA_DIR, "pet-workspaces"),
+  );
+  const workspaceRelative = path.relative(workspaceRoot, fs.realpathSync(workspace.cwd));
+  if (
+    !workspaceRelative ||
+    workspaceRelative === ".." ||
+    workspaceRelative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(workspaceRelative)
+  ) {
+    throw new Error("The generated pet workspace escaped the isolated desktop user-data directory");
+  }
   const imagePath = path.join(workspace.cwd, "iris-reference.png");
   const image = fs.readFileSync(imagePath);
   const animation = { row: 0, frames: 1, fps: 1 };
@@ -920,9 +1006,27 @@ async function smokePetCreationHelper({ page, appPath, env }) {
   console.log(
     "Packaged desktop smoke: pet installed without stopping the daemon or changing selection",
   );
+  return { installed: true, daemonPid: after.pid, selectedId: settingsAfter.pet.selectedId };
 }
 
 async function smokePackagedDesktopApp({ appPath, executableName }) {
+  if (process.platform === "win32") {
+    const { smokeWindowsPackagedApp } = require("./windows-native-packaged-smoke");
+    return smokeWindowsPackagedApp({
+      appPath,
+      executableName: executableName ?? EXECUTABLE_NAME,
+      reserveLocalTcpPort,
+      configureIsolatedDaemonHome,
+      runColdCli: smokeColdCliDaemonStart,
+      runCliChecks: async ({ appPath: stagedAppPath, env, createTerminal }) => ({
+        status: await smokeCliShim({ appPath: stagedAppPath, env }),
+        omp: await smokeBundledOmpRuntime({ appPath: stagedAppPath, env }),
+        terminal: await smokeCliTerminal({ appPath: stagedAppPath, env, createTerminal }),
+      }),
+      runPetCreation: smokePetCreationHelper,
+      stopDaemon: stopCliDaemon,
+    });
+  }
   const executablePath = getExecutablePath(appPath, executableName);
   assertExecutable(executablePath, "Packaged app executable");
   ensureLinuxSandboxPermissions(appPath);
@@ -1062,7 +1166,9 @@ if (require.main === module) {
   const appIndex = process.argv.indexOf("--app");
   const appPath = appIndex >= 0 ? process.argv[appIndex + 1] : null;
   if (!appPath) {
-    process.stderr.write("Usage: node smoke-packaged-desktop-app.js --app <OMP Desktop.app>\n");
+    process.stderr.write(
+      "Usage: node packages/desktop/e2e/packaged-app-smoke.js --app <packaged-app-directory>\n",
+    );
     process.exit(2);
   }
 

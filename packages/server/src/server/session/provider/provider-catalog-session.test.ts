@@ -730,3 +730,52 @@ describe("ProviderCatalogSession", () => {
     expect(cancelOmpInstall).toHaveBeenCalledOnce();
   });
 });
+
+describe("native OMP statistics requests", () => {
+  it("passes the requested range to the host-owned provider and returns a validated result", async () => {
+    const stats = {
+      status: "unavailable" as const,
+      reason: "missing" as const,
+      range: "30d" as const,
+      source: "omp_stats_db" as const,
+      fetchedAt: "2026-10-18T12:00:00.000Z",
+      scope: { kind: "host_profile" as const, profile: "work" },
+    };
+    const read = vi.fn(async () => stats);
+    const { subsystem, emitted } = makeSubsystem({ snapshot: { getOmpStats: read } });
+    await subsystem.handleOmpStatsGetRequest({
+      type: "omp.stats.get.request",
+      requestId: "stats",
+      range: "30d",
+    });
+    expect(read).toHaveBeenCalledWith("30d");
+    expect(findByType(emitted, "omp.stats.get.response")?.payload).toEqual({
+      requestId: "stats",
+      stats,
+    });
+  });
+
+  it("sanitizes source errors and rejects invalid provider payloads", async () => {
+    for (const read of [
+      async () => {
+        throw new Error("/private/path/stats.db: private contents");
+      },
+      async () => ({ status: "available", overall: { totalRequests: "untrusted" } }),
+    ]) {
+      const { subsystem, emitted } = makeSubsystem({ snapshot: { getOmpStats: read } });
+      await subsystem.handleOmpStatsGetRequest({
+        type: "omp.stats.get.request",
+        requestId: "stats",
+        range: "24h",
+      });
+      expect(findByType(emitted, "rpc_error")?.payload).toEqual({
+        requestId: "stats",
+        requestType: "omp.stats.get.request",
+        code: "omp_stats_read_failed",
+        error: "Failed to read OMP statistics",
+      });
+      expect(JSON.stringify(emitted)).not.toContain("private");
+      expect(findByType(emitted, "omp.stats.get.response")).toBeUndefined();
+    }
+  });
+});

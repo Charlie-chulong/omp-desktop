@@ -23,11 +23,50 @@ export const ompPluginSettings = {
   installTitle: "Install",
   installSpecLabel: "Plugin spec",
   installPlaceholder: "Package, path, or Git URL",
-  browsePackages: "Browse packages on pi.dev ↗",
+  browsePackages: "Official OMP plugin guide ↗",
   dryRunLabel: "Dry run",
   toggleLabel: "Toggle {{id}}",
   doctorTitle: "Health check",
   doctorHint: "Verifies the omp plugin installation and flags broken entries.",
+  trustWarning:
+    "Plugins execute code with OMP's OS permissions. Only install sources you trust. Project scope is not a sandbox. Catalog metadata is untrusted publisher text.",
+  runtimeHint:
+    "This page reads and saves disk configuration, not active-agent runtime state. /reload-plugins reloads supported tools, hooks, and commands; MCP servers, settings, and plugin agents require a new session or OMP restart. Active agents are never restarted automatically.",
+  manualScopeHint:
+    "Marketplace name@marketplace specs use the selected scope below. Other package, Git, and path installs are user-wide; --scope does not apply.",
+  removeConfirmTitle: "Remove {{id}}?",
+  removeConfirmMessage:
+    "Remove the {{scope}} copy in this host context: {{cwd}}? Other scope copies are kept.",
+  context: {
+    title: "Host / project context",
+    directory: "Project directory on this host",
+    placeholder: "Absolute host directory; empty for user view",
+    apply: "Apply context",
+    project: "Applied project directory: {{cwd}}",
+    user: "Host user view (host home directory; no project selected)",
+  },
+  scope: {
+    title: "Marketplace install scope",
+    user: "User",
+    project: "Project",
+    hint: "User is the default. Project scope requires an applied host directory. Catalog actions target only the selected scope; installed-row actions target the scope shown on that row.",
+    shadowed: "Shadowed by enabled project copy",
+    effectiveProject: "Enabled project copy takes precedence over user copy",
+  },
+  metadata: {
+    source: "Source",
+    author: "Author",
+    repository: "Repository",
+    homepage: "Homepage",
+  },
+  notices: {
+    applied:
+      "Saved to disk. Existing agents were not restarted. Use /reload-plugins for supported tools, hooks, and commands; start a new session or restart OMP for MCP servers, settings, and plugin agents.",
+    preview:
+      "Dry run completed. Nothing was installed or changed; the spec and target are preserved.",
+    catalogRefreshed:
+      "Marketplace catalog refreshed. Installed plugin code was not upgraded; use Upgrade on the desired scope's copy.",
+  },
   actions: {
     install: "Install",
     upgrade: "Upgrade",
@@ -49,14 +88,18 @@ export const ompPluginSettings = {
     addPlaceholder: "owner/repo, Git URL, or local path",
     searchPlaceholder: "Search plugins…",
     searchClear: "Clear search",
+    refreshHint:
+      "Refresh updates marketplace catalog metadata only; it does not upgrade installed plugin code.",
     actions: {
       add: "Add",
       browse: "Browse ({{count}})",
       hide: "Hide",
+      refresh: "Refresh catalog",
     },
     feedback: {
       addFailed: "Could not add marketplace",
       removeFailed: "Could not remove {{id}}",
+      refreshFailed: "Could not refresh {{id}}",
     },
   },
   states: {

@@ -35,6 +35,7 @@ import type {
   ProviderProfileModel,
   ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
+import { mergeRuntimeSettings, toRuntimeSettings } from "./provider-launch-config.js";
 import { ToolPolicyUnsupportedError, validateProviderOptions } from "./provider-options.js";
 import { OmpAgentClient } from "./providers/omp/agent.js";
 import type { OmpRuntime } from "./providers/omp/runtime.js";
@@ -183,47 +184,6 @@ function getProviderClientFactory(provider: string): ProviderClientFactory {
     throw new Error(`No provider client factory registered for '${provider}'`);
   }
   return factory;
-}
-
-function toRuntimeSettings(override?: ProviderOverride): ProviderRuntimeSettings | undefined {
-  if (!override?.command && !override?.env && !override?.disallowedTools) {
-    return undefined;
-  }
-
-  return {
-    command: override.command
-      ? {
-          mode: "replace",
-          argv: override.command,
-        }
-      : undefined,
-    env: override.env,
-    disallowedTools: override.disallowedTools,
-  };
-}
-
-function mergeRuntimeSettings(
-  base: ProviderRuntimeSettings | undefined,
-  override: ProviderRuntimeSettings | undefined,
-): ProviderRuntimeSettings | undefined {
-  if (!base && !override) {
-    return undefined;
-  }
-
-  return {
-    command: override?.command ?? base?.command,
-    env:
-      base?.env || override?.env
-        ? {
-            ...base?.env,
-            ...override?.env,
-          }
-        : undefined,
-    disallowedTools:
-      base?.disallowedTools || override?.disallowedTools
-        ? [...(base?.disallowedTools ?? []), ...(override?.disallowedTools ?? [])]
-        : undefined,
-  };
 }
 
 function applyOverrideToDefinition(

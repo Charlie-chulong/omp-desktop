@@ -1,5 +1,6 @@
 import type { RefCallback } from "react";
 import type { View } from "react-native";
+import type { WorkspaceFileDragPayload } from "@/attachments/workspace-file-drag";
 import type {
   ExplorerEntryDragPayload,
   ExplorerEntryMoveRequest,
@@ -7,7 +8,7 @@ import type {
 
 export interface ExplorerEntryDragSource {
   payload: ExplorerEntryDragPayload;
-  includeChatAttachment: boolean;
+  chatAttachment?: WorkspaceFileDragPayload["attachment"];
   moveEnabled: boolean;
 }
 

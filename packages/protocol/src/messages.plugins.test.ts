@@ -192,11 +192,13 @@ describe("plugin protocol compatibility", () => {
         name: "context7@official",
         scope: "project",
         enabled: false,
+        cwd: "D:/work/project",
       }),
     ).toMatchObject({
       type: "ompPlugins.setEnabled.request",
       name: "context7@official",
       scope: "project",
+      cwd: "D:/work/project",
     });
     expect(
       SessionInboundMessageSchema.parse({
@@ -299,6 +301,17 @@ describe("plugin protocol compatibility", () => {
         name: "probe",
       }).type,
     ).toBe("ompPlugins.marketplace.remove.request");
+    expect(
+      SessionInboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.update.request",
+        requestId: "refresh",
+        name: " probe ",
+      }),
+    ).toEqual({
+      type: "ompPlugins.marketplace.update.request",
+      requestId: "refresh",
+      name: "probe",
+    });
     const list = SessionOutboundMessageSchema.parse({
       type: "ompPlugins.marketplace.list.response",
       payload: {
@@ -307,7 +320,17 @@ describe("plugin protocol compatibility", () => {
           {
             name: "probe-mkt",
             source: "D:/mp",
-            plugins: [{ name: "probe-plugin", description: "d", version: "1.0.0" }],
+            plugins: [
+              {
+                name: "probe-plugin",
+                description: "d",
+                version: "1.0.0",
+                source: { source: "https://example.com/plugin.git", type: "git" },
+                author: { name: "Publisher" },
+                homepage: "https://example.com",
+                repository: { url: "https://example.com/source" },
+              },
+            ],
             extraFutureField: true,
           },
         ],
@@ -315,7 +338,20 @@ describe("plugin protocol compatibility", () => {
     });
     expect(list).toMatchObject({
       payload: {
-        marketplaces: [{ name: "probe-mkt", plugins: [{ name: "probe-plugin" }] }],
+        marketplaces: [
+          {
+            name: "probe-mkt",
+            plugins: [
+              {
+                name: "probe-plugin",
+                source: { source: "https://example.com/plugin.git", type: "git" },
+                author: { name: "Publisher" },
+                homepage: "https://example.com",
+                repository: { url: "https://example.com/source" },
+              },
+            ],
+          },
+        ],
       },
     });
     expect(
@@ -324,6 +360,15 @@ describe("plugin protocol compatibility", () => {
         payload: { requestId: "m1", ok: true, marketplace: null, output: "done" },
       }).type,
     ).toBe("ompPlugins.marketplace.add.response");
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.update.response",
+        payload: { requestId: "refresh", ok: false, output: "repository unavailable" },
+      }),
+    ).toEqual({
+      type: "ompPlugins.marketplace.update.response",
+      payload: { requestId: "refresh", ok: false, output: "repository unavailable" },
+    });
   });
 
   it("rejects ompPlugins marketplace requests missing the source", () => {
@@ -339,6 +384,13 @@ describe("plugin protocol compatibility", () => {
         type: "ompPlugins.marketplace.remove.request",
         requestId: "m",
         name: "",
+      }),
+    ).toThrow();
+    expect(() =>
+      SessionInboundMessageSchema.parse({
+        type: "ompPlugins.marketplace.update.request",
+        requestId: "refresh",
+        name: " ",
       }),
     ).toThrow();
   });

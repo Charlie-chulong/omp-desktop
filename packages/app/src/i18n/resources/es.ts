@@ -136,6 +136,14 @@ export const es: TranslationResources = {
     },
   },
   composer: {
+    queueOrder: {
+      title: "Conversaciones en cola",
+      hint: "Mantén pulsado y arrastra un asa. Los turnos en curso continúan.",
+      dragConversation: "Reordenar {{title}}",
+      dragMessage: "Reordenar el mensaje en cola: {{text}}",
+      messageCount: "Mensajes en cola: {{count}}",
+      untitledConversation: "Conversación sin título · {{id}}",
+    },
     placeholders: {
       desktop: "Envíe un mensaje al agente, etiquete@fileso use/commandsy/skills",
       mobile: "Mensaje,@files,/commands",
@@ -173,14 +181,9 @@ export const es: TranslationResources = {
       dropFilesHere: "Drop files here",
       editQueuedMessage: "Editar mensaje en cola",
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
-      moveQueuedMessageEarlier: "Adelantar el mensaje en cola",
-      moveQueuedMessageLater: "Retrasar el mensaje en cola",
-      dragQueuedMessage: "Arrastrar para reordenar el mensaje en cola",
       dragQueuedMessageHint:
         "Pulsa Espacio para seleccionar, las flechas para mover, Espacio para soltar o Escape para cancelar.",
       queuedConversationPosition: "Conversación en cola {{position}} de {{count}}",
-      moveQueuedConversationEarlier: "Adelantar la conversación en cola",
-      moveQueuedConversationLater: "Retrasar la conversación en cola",
       openImage: "Abrir imagen adjunta",
       removeImage: "Quitar imagen adjunta",
       removeFile: "Remove file attachment",
@@ -350,6 +353,9 @@ export const es: TranslationResources = {
       reconnecting: "Reconectando",
       timelineSyncFailed: "No se pudo actualizar el historial del agente.",
       timelineSyncRetrying: "Reintentando…",
+      bundledPluginsVerifying: en.agentPanel.states.bundledPluginsVerifying,
+      bundledPluginsPreparing: en.agentPanel.states.bundledPluginsPreparing,
+      bundledPluginsInstalling: en.agentPanel.states.bundledPluginsInstalling,
       historyUnavailableTitle: "El historial de conversación no está disponible",
       historyUnavailableMissing:
         "Este agente aún existe, pero se eliminó el archivo de conversación del proveedor. Los mensajes almacenados en caché arriba son de solo lectura.",
@@ -630,6 +636,14 @@ export const es: TranslationResources = {
         refreshing: "Actualizar archivos",
         hideHiddenFiles: "Ocultar archivos ocultos",
         showHiddenFiles: "Mostrar archivos ocultos",
+        selectEntries: "Seleccionar archivos",
+        finishSelection: "Terminar selección",
+        selectedCount: "{{count}} seleccionados",
+        moveSelection: "Mover selección",
+        chooseDestination: "Elegir carpeta de destino",
+        moveHere: "Mover aquí",
+        cancelMove: "Cancelar traslado",
+        selectEntry: "Seleccionar {{name}}",
       },
       empty: {
         noFiles: "Sin archivos",
@@ -2098,7 +2112,8 @@ export const es: TranslationResources = {
     groupInfo: "Acerca de{{title}}",
     sections: {
       general: "General",
-      connections: "Conexiones",
+      connections: "Conexiones de hosts",
+      chatBehavior: "Comportamiento del chat",
       appearance: "Apariencia",
       editor: "Editor",
       shortcuts: "Atajos",
@@ -2228,7 +2243,8 @@ export const es: TranslationResources = {
       },
       showTurnFileChanges: {
         label: "Mostrar archivos después de cada respuesta",
-        description: "Mostrar los archivos modificados sobre las estadísticas de la respuesta completada",
+        description:
+          "Mostrar los archivos modificados sobre las estadísticas de la respuesta completada",
       },
       autoExpandReasoning: {
         label: "Siempre expandir razonamiento",

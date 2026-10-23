@@ -53,6 +53,13 @@ class FakeBrowserRuntime implements ExternalAppRuntime {
   }
 }
 
+function createSpawnedProcess(): EventEmitter & ExternalSpawnedProcess {
+  const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
+  child.unref = vi.fn();
+  queueMicrotask(() => child.emit("spawn"));
+  return child;
+}
+
 describe("browser targets", () => {
   it("lists platform browsers and marks only installed targets available", async () => {
     const chromePath = "C:/Users/test/AppData/Local/Google/Chrome/Application/chrome.exe";
@@ -133,12 +140,7 @@ describe("browser targets", () => {
   ] as const)(
     "launches custom %s executables through the runtime without a shell",
     async (platform, executable) => {
-      const spawn = vi.fn(() => {
-        const child = new EventEmitter() as EventEmitter & ExternalSpawnedProcess;
-        child.unref = vi.fn();
-        queueMicrotask(() => child.emit("spawn"));
-        return child;
-      });
+      const spawn = vi.fn(createSpawnedProcess);
       const runtime = createExternalAppRuntime({ platform, env: {}, spawn });
       const openSystemUrl = vi.fn(async () => {});
       const url = 'https://example.com/a b?q="quoted"&other=中文#é';

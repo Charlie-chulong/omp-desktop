@@ -92,6 +92,8 @@ import {
   isMainWindowSender,
   registerMainWindow,
   selectMainWindow,
+  getMainWindowDocumentVersion,
+  markMainWindowDocumentLoaded,
   markMainWindowContentReady,
   showMainWindow,
   beginMainWindowShutdown,
@@ -113,7 +115,6 @@ const closeChoiceRequests = new CloseChoiceRequestBroker();
 let petController: DesktopPetController | null = null;
 let ownsDesktopInstance = false;
 let mainWindowsQuitting = false;
-const mainWindowDocuments = new WeakMap<Electron.WebContents, number>();
 const presentedMainWindows = new WeakSet<BrowserWindow>();
 const restoreWindowStateByWindow = new WeakMap<BrowserWindow, boolean>();
 
@@ -233,19 +234,19 @@ ipcMain.handle("paseo:window:content-ready", async (event) => {
   }
   const window = getMainWindows().find((candidate) => candidate.webContents === event.sender);
   if (!window) return;
-  const documentVersion = mainWindowDocuments.get(event.sender);
+  const documentVersion = getMainWindowDocumentVersion(window);
   try {
     if (process.platform === "darwin") {
       const contents = event.sender as Electron.WebContents & { prepareToShow(): Promise<void> };
       await contents.prepareToShow();
     }
-    if (mainWindowsQuitting || documentVersion !== mainWindowDocuments.get(event.sender)) return;
+    if (mainWindowsQuitting || documentVersion !== getMainWindowDocumentVersion(window)) return;
     if (isMainWindowSender(event.sender) && event.senderFrame === event.sender.mainFrame) {
       markMainWindowContentReady(window);
       presentedMainWindows.add(window);
     }
   } catch (error) {
-    if (documentVersion === mainWindowDocuments.get(event.sender)) {
+    if (documentVersion === getMainWindowDocumentVersion(window)) {
       failInitialWindowPresentation(window, error);
     }
     throw error;
@@ -387,6 +388,11 @@ function getWorkAreasPrimaryFirst(): Electron.Rectangle[] {
   return [primary, ...others].map((display) => display.workArea);
 }
 
+function getInitialWindowUrl(initialRoute?: string | null): string {
+  if (app.isPackaged) return `${APP_SCHEME}://app${initialRoute ?? "/"}`;
+  return initialRoute ? new URL(initialRoute, `${DEV_SERVER_URL}/`).toString() : DEV_SERVER_URL;
+}
+
 function assertWindowCreationAllowed(canCreate?: () => boolean): void {
   if (mainWindowsQuitting || (canCreate && !canCreate())) {
     throw new Error("Window creation was canceled because the application is closing");
@@ -441,11 +447,13 @@ async function createWindow(
   }
   registerMainWindow(mainWindow);
   restoreWindowStateByWindow.set(mainWindow, restoreWindowState);
-  mainWindowDocuments.set(mainWindow.webContents, 0);
+  mainWindow.on("show", () => presentedMainWindows.add(mainWindow));
   registerWallpaperWindow(mainWindow);
   backgroundModeController.registerWindow(mainWindow);
 
   const webContentsId = mainWindow.webContents.id;
+  let initialDocumentVersion: number | undefined;
+  let captureInitialNavigation = false;
   mainWindow.webContents.once("destroyed", () => petController?.clearActivity(webContentsId));
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     petController?.clearActivity(webContentsId);
@@ -464,11 +472,12 @@ async function createWindow(
   pendingOpenProjectStore.set(webContentsId, options.pendingOpenProjectPath);
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
     if (isMainFrame && !isSameDocument) {
-      mainWindowDocuments.set(
-        mainWindow.webContents,
-        (mainWindowDocuments.get(mainWindow.webContents) ?? 0) + 1,
-      );
       markMainWindowLoading(mainWindow);
+      // Keep the initial request's generation, never a replacement navigation's.
+      if (captureInitialNavigation) {
+        initialDocumentVersion = getMainWindowDocumentVersion(mainWindow);
+        captureInitialNavigation = false;
+      }
       agentNavigationInbox.windowLoading(webContentsId);
       petController?.clearActivity(webContentsId);
     }
@@ -498,13 +507,13 @@ async function createWindow(
   });
 
   try {
-    if (!app.isPackaged) {
-      const initialUrl = options.initialRoute
-        ? new URL(options.initialRoute, `${DEV_SERVER_URL}/`).toString()
-        : DEV_SERVER_URL;
-      await mainWindow.loadURL(initialUrl);
-    } else {
-      await mainWindow.loadURL(`${APP_SCHEME}://app${options.initialRoute ?? "/"}`);
+    const initialUrl = getInitialWindowUrl(options.initialRoute);
+    initialDocumentVersion = getMainWindowDocumentVersion(mainWindow);
+    captureInitialNavigation = process.platform === "win32";
+    await mainWindow.loadURL(initialUrl);
+    captureInitialNavigation = false;
+    if (process.platform === "win32") {
+      markMainWindowDocumentLoaded(mainWindow, initialDocumentVersion);
     }
     return mainWindow;
   } catch (error) {

@@ -30,6 +30,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { FloatingSurface } from "@/components/ui/floating";
 import { isWeb } from "@/constants/platform";
 import { getOverlayRoot, OVERLAY_Z } from "@/lib/overlay-root";
+import { measureElement } from "@/components/ui/menu/menu-anchor";
 
 type Side = "top" | "bottom" | "left" | "right";
 type Align = "start" | "center" | "end";
@@ -82,6 +83,13 @@ function shouldOpenOnFocus(): boolean {
   return !isWeb || lastInputWasKeyboard;
 }
 
+function isTouchPointerEvent(event: unknown): boolean {
+  if (!event || typeof event !== "object") return false;
+  const nativeEvent = Reflect.get(event, "nativeEvent");
+  const pointerEvent = nativeEvent && typeof nativeEvent === "object" ? nativeEvent : event;
+  return Reflect.get(pointerEvent, "pointerType") === "touch";
+}
+
 function isCallable(fn: unknown): fn is (...args: unknown[]) => void {
   return typeof fn === "function";
 }
@@ -118,14 +126,6 @@ function useControllableOpenState({
     [isControlled, onOpenChange],
   );
   return [value, setValue];
-}
-
-function measureElement(element: View): Promise<Rect> {
-  return new Promise((resolve) => {
-    element.measureInWindow((x, y, width, height) => {
-      resolve({ x, y, width, height });
-    });
-  });
 }
 
 function resolveActualSide(args: {
@@ -228,6 +228,7 @@ export function Tooltip({
   open,
   defaultOpen,
   onOpenChange,
+  openOnPress,
   delayDuration = 0,
   enabledOnDesktop = true,
   enabledOnMobile = false,
@@ -236,6 +237,7 @@ export function Tooltip({
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  openOnPress?: boolean;
   delayDuration?: number;
   enabledOnDesktop?: boolean;
   enabledOnMobile?: boolean;
@@ -256,10 +258,10 @@ export function Tooltip({
       setOpen: setIsOpen,
       triggerRef,
       enabled,
-      openOnPress: isCompact,
+      openOnPress: openOnPress ?? isCompact,
       delayDuration,
     }),
-    [isOpen, setIsOpen, enabled, isCompact, delayDuration],
+    [isOpen, setIsOpen, enabled, isCompact, openOnPress, delayDuration],
   );
 
   return <TooltipContext.Provider value={value}>{children}</TooltipContext.Provider>;
@@ -317,17 +319,19 @@ export function TooltipTrigger({
   const handleHoverIn = useCallback(
     (e?: unknown) => {
       if (isCallable(onHoverIn)) onHoverIn(e);
+      if (ctx.openOnPress && isTouchPointerEvent(e)) return;
       scheduleOpen();
     },
-    [onHoverIn, scheduleOpen],
+    [onHoverIn, scheduleOpen, ctx.openOnPress],
   );
 
   const handleHoverOut = useCallback(
     (e?: unknown) => {
       if (isCallable(onHoverOut)) onHoverOut(e);
+      if (ctx.openOnPress && isTouchPointerEvent(e)) return;
       close();
     },
-    [onHoverOut, close],
+    [onHoverOut, close, ctx.openOnPress],
   );
 
   const handleFocus = useCallback(
@@ -357,7 +361,7 @@ export function TooltipTrigger({
       }
       if (ctx.openOnPress) {
         clearOpenTimer();
-        ctx.setOpen(true);
+        ctx.setOpen(!ctx.open);
         return;
       }
       close();

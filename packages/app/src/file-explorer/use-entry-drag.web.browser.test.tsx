@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WORKSPACE_FILE_DRAG_MIME } from "@/attachments/workspace-file-drag";
 import { EXPLORER_ENTRY_DRAG_MIME, type ExplorerEntryMoveRequest } from "./entry-drag";
 import { useExplorerEntryDrag } from "./use-entry-drag";
+import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
+import { createDirectoryComposerAttachment } from "@/attachments/directory";
 
 interface MountedHarness {
   root: Root;
@@ -38,19 +40,23 @@ function DragHarness({
     (requests: ExplorerEntryMoveRequest[]) => moves.push(...requests),
     [moves],
   );
-  const source = useMemo(
-    () => ({
+  const source = useMemo(() => {
+    const firstEntry = entries[0];
+    return {
       payload: {
         version: 1 as const,
         serverId: "server-1",
         workspaceId: "workspace-1",
         entries,
       },
-      includeChatAttachment: entries.some((entry) => entry.kind === "file"),
+      chatAttachment:
+        firstEntry &&
+        (firstEntry.kind === "directory"
+          ? createDirectoryComposerAttachment(`/workspace/${firstEntry.path}`)
+          : createWorkspaceFileAttachment({ path: firstEntry.path })),
       moveEnabled: true,
-    }),
-    [entries],
-  );
+    };
+  }, [entries]);
   const target = useMemo(
     () => ({
       serverId: "server-1",
@@ -95,7 +101,6 @@ function RootRoutingHarness({
         workspaceId: "workspace-1",
         entries: [{ path: "src/nested", kind: "directory" as const }],
       },
-      includeChatAttachment: false,
       moveEnabled: true,
     }),
     [],

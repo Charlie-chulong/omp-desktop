@@ -5,6 +5,7 @@ import type {
 } from "@omp-desktop/protocol/messages";
 import { formatOmpAccountSelectionLabel } from "@/components/omp-provider-accounts";
 import {
+  formatOmpCodexCreditBalance,
   resolveOmpRemainingQuotaPct,
   shouldShowOmpFiveHourQuota,
 } from "@/components/omp-provider-quota";
@@ -13,14 +14,20 @@ import type { ProviderUsage, ProviderUsageView, ProviderUsageWindow } from "./ty
 
 type OmpLoginProvider = OmpProviderManagement["loginProviders"][number];
 
-export interface OmpAccountUsageCopy {
-  providerId: "openai-codex" | "anthropic";
+export type OmpAccountUsageCopy = {
   providerName: string;
   accountFallback: (number: number) => string;
   fiveHour: string;
   weekly: string;
   modelWeekly: (model: string) => string;
-}
+} & (
+  | {
+      providerId: "openai-codex";
+      codexCreditsLabel: string;
+      codexCreditsSummary: (credits: OmpProviderAccountQuota["credits"]) => string;
+    }
+  | { providerId: "anthropic" }
+);
 
 export function formatOmpModelQuotaLabel(model: string, t: TFunction): string {
   const name = model === "opus" || model === "sonnet" ? t(`providerUsage.models.${model}`) : model;
@@ -31,13 +38,25 @@ export function createOmpAccountUsageCopy(
   providerId: OmpAccountUsageCopy["providerId"],
   t: TFunction,
 ): OmpAccountUsageCopy {
+  if (providerId === "anthropic") {
+    return {
+      providerId,
+      providerName: "Claude",
+      accountFallback: (number) => t("agentControls.quota.account", { number }),
+      fiveHour: t("agentControls.quota.fiveHour"),
+      weekly: t("agentControls.quota.weekly"),
+      modelWeekly: (model) => formatOmpModelQuotaLabel(model, t),
+    };
+  }
   return {
     providerId,
-    providerName: providerId === "anthropic" ? "Claude" : "OpenAI Codex",
+    providerName: "OpenAI Codex",
     accountFallback: (number) => t("agentControls.quota.account", { number }),
     fiveHour: t("agentControls.quota.fiveHour"),
     weekly: t("agentControls.quota.weekly"),
     modelWeekly: (model) => formatOmpModelQuotaLabel(model, t),
+    codexCreditsLabel: t("settings.providers.omp.codexQuota.credits"),
+    codexCreditsSummary: (credits) => formatOmpCodexCreditBalance(credits, t),
   };
 }
 
@@ -190,7 +209,16 @@ export function buildOmpAccountProviderUsage(
       fetchedAt: quota?.fetchedAt ?? source.updatedAt,
       windows: accountWindows(quota, copy),
       balances: [],
-      details: [],
+      details:
+        copy.providerId === "openai-codex"
+          ? [
+              {
+                id: "codex_credits",
+                label: copy.codexCreditsLabel,
+                value: copy.codexCreditsSummary(quota?.credits),
+              },
+            ]
+          : [],
       extraUsage: quota?.extraUsage,
       accountQuota: accountQuotaObservation(source, copy, quota),
       error: source.error ?? quota?.error ?? null,

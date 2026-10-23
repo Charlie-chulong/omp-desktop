@@ -1,3 +1,4 @@
+import type { OmpStatsGetResponseMessage, OmpStatsRange } from "@omp-desktop/protocol/omp-stats";
 import type { z } from "zod";
 import { CLIENT_CAPS, type ClientCapability } from "@omp-desktop/protocol/client-capabilities";
 import type { AgentAttentionNotificationPayload } from "@omp-desktop/protocol/agent-attention-notification";
@@ -5,6 +6,7 @@ import {
   AgentCreateFailedStatusPayloadSchema,
   AgentCreatedStatusPayloadSchema,
   AgentRefreshedStatusPayloadSchema,
+  AgentInitializationProgressStatusPayloadSchema,
   AgentResumedStatusPayloadSchema,
   CheckoutRenameBranchResponseSchema,
   parseServerInfoStatusPayload,
@@ -14,6 +16,7 @@ import {
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
   type ActiveTurnBehavior,
+  type AgentInitializationProgressStatusPayload,
   type ServerInfoStatusPayload,
 } from "@omp-desktop/protocol/messages";
 import type {
@@ -531,6 +534,7 @@ type ForgeAuthLogoutPayload = ForgeAuthLogoutResponse["payload"];
 type OmpInstallStatusPayload = OmpInstallStatusResponseMessage["payload"];
 type OmpInstallPayload = OmpInstallResponseMessage["payload"];
 type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
+type OmpStatsGetPayload = OmpStatsGetResponseMessage["payload"];
 type DaemonStatusPayload = DaemonGetStatusResponse["payload"];
 type DaemonPairingOfferPayload = DaemonGetPairingOfferResponse["payload"];
 type DiagnosticsPayload = DiagnosticsResponse["payload"];
@@ -624,6 +628,7 @@ export interface FetchAgentTimelineOptions {
   mergeWindow?: boolean;
   requestId?: string;
   timeout?: number;
+  onInitializationProgress?: (progress: AgentInitializationProgressStatusPayload) => void;
 }
 
 export type AgentTimelinePromptIndexPayload = Extract<
@@ -2962,38 +2967,59 @@ export class DaemonClient {
     options: FetchAgentTimelineOptions = {},
   ): Promise<FetchAgentTimelinePayload> {
     const resolvedRequestId = this.createRequestId(options.requestId);
-    const message = SessionInboundMessageSchema.parse({
-      type: "fetch_agent_timeline_request",
-      agentId,
-      requestId: resolvedRequestId,
-      ...(options.direction ? { direction: options.direction } : {}),
-      ...(options.cursor ? { cursor: options.cursor } : {}),
-      ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
-      ...(options.projection ? { projection: options.projection } : {}),
-      ...(options.mergeWindow === true ? { mergeWindow: true } : {}),
-    });
+    const unsubscribe = options.onInitializationProgress
+      ? this.on("status", (status) => {
+          const progress = AgentInitializationProgressStatusPayloadSchema.safeParse(status.payload);
+          if (
+            progress.success &&
+            progress.data.agentId === agentId &&
+            progress.data.requestId === resolvedRequestId
+          ) {
+            options.onInitializationProgress?.(progress.data);
+          }
+        })
+      : undefined;
+    try {
+      const message = SessionInboundMessageSchema.parse({
+        type: "fetch_agent_timeline_request",
+        agentId,
+        requestId: resolvedRequestId,
+        ...(options.direction ? { direction: options.direction } : {}),
+        ...(options.cursor ? { cursor: options.cursor } : {}),
+        ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
+        ...(options.projection ? { projection: options.projection } : {}),
+        ...(options.mergeWindow === true ? { mergeWindow: true } : {}),
+      });
+      const payload = await this.sendRequest({
+        requestId: resolvedRequestId,
+        message,
+        timeout: options.timeout,
+        options: { skipQueue: true },
+        select: (msg) => {
+          if (msg.type !== "fetch_agent_timeline_response") {
+            return null;
+          }
+          if (msg.payload.requestId !== resolvedRequestId) {
+            return null;
+          }
+          return msg.payload;
+        },
+      });
 
-    const payload = await this.sendRequest({
-      requestId: resolvedRequestId,
-      message,
-      timeout: options.timeout,
-      options: { skipQueue: true },
-      select: (msg) => {
-        if (msg.type !== "fetch_agent_timeline_response") {
-          return null;
-        }
-        if (msg.payload.requestId !== resolvedRequestId) {
-          return null;
-        }
-        return msg.payload;
-      },
-    });
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
 
-    if (payload.error) {
-      throw new Error(payload.error);
+      return payload;
+    } finally {
+      unsubscribe?.();
+      options.onInitializationProgress?.({
+        status: "agent_initialization_progress",
+        agentId,
+        requestId: resolvedRequestId,
+        phase: null,
+      });
     }
-
-    return payload;
   }
 
   async listAgentTimelinePrompts(
@@ -5184,6 +5210,16 @@ export class DaemonClient {
     });
   }
 
+  async getOmpStats(options?: {
+    requestId?: string;
+    range?: OmpStatsRange;
+  }): Promise<OmpStatsGetPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options?.requestId,
+      message: { type: "omp.stats.get.request", range: options?.range ?? "24h" },
+    });
+  }
+
   async listCommands(options: ListCommandsOptions): Promise<ListCommandsPayload>;
   async listCommands(agentId: string, requestId?: string): Promise<ListCommandsPayload>;
   async listCommands(
@@ -5243,7 +5279,7 @@ export class DaemonClient {
     return payload.plugins;
   }
 
-  async listOmpPlugins(): Promise<{
+  async listOmpPlugins(cwd?: string): Promise<{
     requestId: string;
     plugins: OmpPluginInfo[];
     marketplace: OmpMarketplacePluginInfo[];
@@ -5252,8 +5288,9 @@ export class DaemonClient {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.list.request" },
+      message: { type: "ompPlugins.list.request", cwd },
       responseType: "ompPlugins.list.response",
+      timeout: 70 * 1000,
     });
   }
 
@@ -5261,6 +5298,7 @@ export class DaemonClient {
     spec: string;
     scope?: "user" | "project";
     dryRun?: boolean;
+    cwd?: string;
   }): Promise<{
     requestId: string;
     ok: boolean;
@@ -5272,6 +5310,7 @@ export class DaemonClient {
       requestId,
       message: { type: "ompPlugins.install.request", ...input },
       responseType: "ompPlugins.install.response",
+      timeout: 16 * 60 * 1000,
     });
     return { ...payload, plugin: payload.plugin ?? null };
   }
@@ -5279,11 +5318,12 @@ export class DaemonClient {
   async upgradeOmpPlugin(
     name: string,
     scope?: "user" | "project",
+    cwd?: string,
   ): Promise<{ requestId: string; ok: boolean; output?: string }> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.upgrade.request", name, scope },
+      message: { type: "ompPlugins.upgrade.request", name, scope, cwd },
       responseType: "ompPlugins.upgrade.response",
       // Allow the CLI's 15-minute install window plus response delivery.
       timeout: 16 * 60 * 1000,
@@ -5293,12 +5333,14 @@ export class DaemonClient {
   async removeOmpPlugin(
     name: string,
     scope?: "user" | "project",
+    cwd?: string,
   ): Promise<{ requestId: string; ok: boolean; output?: string }> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.remove.request", name, scope },
+      message: { type: "ompPlugins.remove.request", name, scope, cwd },
       responseType: "ompPlugins.remove.response",
+      timeout: 70 * 1000,
     });
   }
 
@@ -5306,16 +5348,21 @@ export class DaemonClient {
     name: string,
     enabled: boolean,
     scope?: "user" | "project",
-  ): Promise<{ requestId: string; ok: boolean; name: string; enabled: boolean }> {
+    cwd?: string,
+  ): Promise<{ requestId: string; ok: boolean; name: string; enabled: boolean; output?: string }> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.setEnabled.request", name, enabled, scope },
+      message: { type: "ompPlugins.setEnabled.request", name, enabled, scope, cwd },
       responseType: "ompPlugins.setEnabled.response",
+      timeout: 130 * 1000,
     });
   }
 
-  async runOmpPluginDoctor(fix?: boolean): Promise<{
+  async runOmpPluginDoctor(
+    fix?: boolean,
+    cwd?: string,
+  ): Promise<{
     requestId: string;
     checks: OmpPluginDoctorCheck[];
     rawOutput?: string;
@@ -5323,12 +5370,13 @@ export class DaemonClient {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.doctor.request", ...(fix ? { fix: true } : {}) },
+      message: { type: "ompPlugins.doctor.request", cwd, ...(fix ? { fix: true } : {}) },
       responseType: "ompPlugins.doctor.response",
+      timeout: 130 * 1000,
     });
   }
 
-  async listOmpPluginMarketplaces(): Promise<{
+  async listOmpPluginMarketplaces(cwd?: string): Promise<{
     requestId: string;
     marketplaces: OmpPluginMarketplaceInfo[];
     rawOutput?: string;
@@ -5336,12 +5384,15 @@ export class DaemonClient {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.marketplace.list.request" },
+      message: { type: "ompPlugins.marketplace.list.request", cwd },
       responseType: "ompPlugins.marketplace.list.response",
     });
   }
 
-  async addOmpPluginMarketplace(source: string): Promise<{
+  async addOmpPluginMarketplace(
+    source: string,
+    cwd?: string,
+  ): Promise<{
     requestId: string;
     ok: boolean;
     marketplace: OmpPluginMarketplaceInfo | null;
@@ -5350,20 +5401,36 @@ export class DaemonClient {
     const requestId = this.createRequestId();
     const payload = await this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.marketplace.add.request", source },
+      message: { type: "ompPlugins.marketplace.add.request", source, cwd },
       responseType: "ompPlugins.marketplace.add.response",
+      timeout: 11 * 60 * 1000,
     });
     return { ...payload, marketplace: payload.marketplace ?? null };
   }
 
   async removeOmpPluginMarketplace(
     name: string,
+    cwd?: string,
   ): Promise<{ requestId: string; ok: boolean; output?: string }> {
     const requestId = this.createRequestId();
     return this.sendCorrelatedSessionRequest({
       requestId,
-      message: { type: "ompPlugins.marketplace.remove.request", name },
+      message: { type: "ompPlugins.marketplace.remove.request", name, cwd },
       responseType: "ompPlugins.marketplace.remove.response",
+      timeout: 70 * 1000,
+    });
+  }
+
+  async updateOmpPluginMarketplace(
+    name: string,
+    cwd?: string,
+  ): Promise<{ requestId: string; ok: boolean; output?: string }> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "ompPlugins.marketplace.update.request", name, cwd },
+      responseType: "ompPlugins.marketplace.update.response",
+      timeout: 11 * 60 * 1000,
     });
   }
 

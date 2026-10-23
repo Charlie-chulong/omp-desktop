@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $BuilderArgs = $args
+$RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 # Windows PowerShell 5.1 does not turn native command failures into exceptions.
 function Invoke-CheckedCommand {
@@ -27,7 +28,7 @@ foreach ($Arch in $Arches) {
 
 $PreviousStaging = $env:OMP_DESKTOP_WINDOWS_KEYRING_STAGING
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) "omp-desktop-windows-$([guid]::NewGuid().ToString('N'))"
-Push-Location -LiteralPath $PSScriptRoot
+Push-Location -LiteralPath $RepositoryRoot
 try {
     $KeyringStaging = Join-Path $TempDir "keyring-packages"
     New-Item -ItemType Directory -Path $KeyringStaging -Force | Out-Null
@@ -47,14 +48,13 @@ try {
         }
     }
 
-    # Do not leave a stale universal installer in release/ after splitting builds.
+    # Keep private artifacts and update metadata entirely in release-plugins/.
     $Version = Invoke-CheckedCommand "node" @("-p", "require('./packages/desktop/package.json').version")
-    $Channel = "latest"
-    if ($Version.Contains("-")) {
-        $Channel = ($Version -split '-', 2)[1].Split('.')[0]
-    }
-    $ReleaseDir = Join-Path $PSScriptRoot "packages/desktop/release"
-    foreach ($Name in @("OMP-Desktop-Setup-$Version.exe", "OMP-Desktop-Setup-$Version.exe.blockmap")) {
+    $BuildOutput = (Invoke-CheckedCommand "node" (@("packages/desktop/scripts/windows-build-output.mjs", $Version) + $BuilderArgs)).Split("`t")
+    $ReleaseDir = Join-Path $RepositoryRoot $BuildOutput[0]
+    $MetadataFilename = $BuildOutput[1]
+    $LegacyInstaller = $BuildOutput[2]
+    foreach ($Name in @($LegacyInstaller, "$LegacyInstaller.blockmap")) {
         $StalePath = Join-Path $ReleaseDir $Name
         if (Test-Path -LiteralPath $StalePath) {
             Remove-Item -LiteralPath $StalePath -Force
@@ -63,16 +63,16 @@ try {
 
     $MetadataDir = Join-Path $TempDir "update-metadata"
     New-Item -ItemType Directory -Path $MetadataDir -Force | Out-Null
-    $MetadataPath = Join-Path $ReleaseDir "$Channel.yml"
+    $MetadataPath = Join-Path $ReleaseDir $MetadataFilename
     $MetadataFiles = @()
     foreach ($Arch in $Arches) {
         Invoke-CheckedCommand "npm.cmd" (@("run", "build:desktop", "--", "--win", "--$Arch", "--publish", "never") + $BuilderArgs)
-        $SnapshotPath = Join-Path $MetadataDir "$Channel-$Arch.yml"
+        $SnapshotPath = Join-Path $MetadataDir "$Arch-$MetadataFilename"
         Copy-Item -LiteralPath $MetadataPath -Destination $SnapshotPath
         $MetadataFiles += $SnapshotPath
     }
 
-    Invoke-CheckedCommand "node" (@("scripts/merge-windows-update-metadata.mjs", $MetadataPath) + $MetadataFiles)
+    Invoke-CheckedCommand "node" (@("scripts/packaging/merge-windows-update-metadata.mjs", $MetadataPath) + $MetadataFiles)
 } finally {
     $env:OMP_DESKTOP_WINDOWS_KEYRING_STAGING = $PreviousStaging
     if (Test-Path -LiteralPath $TempDir) {

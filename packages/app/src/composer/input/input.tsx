@@ -50,6 +50,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useComposerHeight } from "./height";
+import { attachComposerContextMenu } from "./context-menu";
 import { resolveComposerInputMode, type ComposerInputMode } from "@/composer/input-mode";
 import type { NativePastedFile } from "@/composer/native-pasted-image";
 import {
@@ -382,6 +383,7 @@ function getTextInputNativeElement(current: ComposerTextInputHandle | null): HTM
 
 interface PasteAttachmentsEffectArgs {
   getWebTextArea: () => TextAreaHandle | null;
+  readOnly: boolean;
   isConnected: boolean;
   disabled: boolean;
   onAddImages: ((images: ImageAttachment[]) => void) | undefined;
@@ -391,10 +393,10 @@ interface PasteAttachmentsEffectArgs {
 function usePasteAttachmentsEffect(args: PasteAttachmentsEffectArgs): void {
   const argsRef = useRef(args);
   argsRef.current = args;
-  const { getWebTextArea } = args;
+  const { getWebTextArea, readOnly } = args;
 
   useEffect(() => {
-    if (!isWeb) return;
+    if (!isWeb || readOnly) return;
 
     const textarea = getWebTextArea() as
       | (TextAreaHandle & {
@@ -442,7 +444,7 @@ function usePasteAttachmentsEffect(args: PasteAttachmentsEffectArgs): void {
     return () => {
       textarea.removeEventListener?.("paste", handlePaste);
     };
-  }, [getWebTextArea]);
+  }, [getWebTextArea, readOnly]);
 }
 
 function useAutoFocusOnWebEffect(
@@ -865,12 +867,6 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
   };
 }
 
-function extractErrorMessage(error: unknown): string | null {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return null;
-}
-
 export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
   function MessageInput(props, ref) {
     const {
@@ -1082,10 +1078,18 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       if (isWeb) {
         webTextareaRef.current = getWebTextArea() as HTMLElement | null;
       }
-    }, [getWebTextArea]);
+    }, [getWebTextArea, readOnly]);
+
+    useEffect(() => {
+      if (!isWeb || readOnly) return;
+      const textarea = getWebTextArea();
+      if (!(textarea instanceof HTMLTextAreaElement)) return;
+      return attachComposerContextMenu(textarea);
+    }, [getWebTextArea, readOnly]);
 
     usePasteAttachmentsEffect({
       getWebTextArea,
+      readOnly,
       isConnected,
       disabled: disabled || isAttachmentPasteDisabled,
       onAddImages,

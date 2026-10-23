@@ -1,7 +1,9 @@
 import { BrowserWindow, clipboard, ipcMain, Menu, shell } from "electron";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTerminalContextMenuTemplate, setupApplicationMenu } from "./menu.js";
 import { registerMainWindow } from "../window/main-windows.js";
+import { getDesktopContextMenuLabels } from "./context-menu-labels.js";
 
 vi.mock("electron", () => ({
   app: { name: "OMP Desktop", on: vi.fn() },
@@ -33,8 +35,10 @@ describe("window reload shortcuts", () => {
         reload: firstReload,
         reloadIgnoringCache: forceFirstReload,
         isDestroyed: () => false,
+        once: vi.fn(),
       },
       once: vi.fn(),
+      on: vi.fn(),
       isDestroyed: () => false,
       isVisible: () => true,
     });
@@ -150,5 +154,133 @@ describe("assistant file link context menu", () => {
     expect(shell.showItemInFolder).not.toHaveBeenCalled();
     expect(shell.openPath).not.toHaveBeenCalled();
     expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+});
+
+describe("composer input context menu", () => {
+  const popup = vi.fn();
+  let win: BrowserWindow;
+  let sender: Electron.WebContents;
+  let handler: (event: Electron.IpcMainInvokeEvent, input: unknown) => unknown;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sender = Object.assign(new EventEmitter(), {
+      id: 300,
+      mainFrame: {},
+      isDestroyed: () => false,
+      focus: vi.fn(),
+    }) as unknown as Electron.WebContents;
+    win = Object.assign(new EventEmitter(), {
+      webContents: sender,
+      isDestroyed: () => false,
+    }) as unknown as BrowserWindow;
+    registerMainWindow(win);
+    popup.mockImplementation((options: Electron.PopupOptions) => {
+      expect(sender.focus).toHaveBeenCalledOnce();
+      options.callback?.();
+    });
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(win);
+    vi.mocked(Menu.buildFromTemplate).mockReturnValue({ popup } as unknown as Electron.Menu);
+    setupApplicationMenu({ onNewWindow: vi.fn() });
+    const registered = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.find(([channel]) => channel === "paseo:menu:showContextMenu")?.[1];
+    if (!registered) throw new Error("context menu handler was not registered");
+    handler = registered;
+    vi.mocked(Menu.buildFromTemplate).mockClear();
+  });
+
+  afterEach(() => {
+    win.emit("closed");
+  });
+
+  function event(frame: object | undefined = sender.mainFrame): Electron.IpcMainInvokeEvent {
+    return { sender, senderFrame: frame } as Electron.IpcMainInvokeEvent;
+  }
+
+  it("opens real native edit roles for a registered main-frame editor", async () => {
+    const labels = getDesktopContextMenuLabels();
+    const result = handler(event(), {
+      kind: "composer-input",
+      hasSelection: true,
+      isEditable: true,
+    });
+    const template = vi.mocked(Menu.buildFromTemplate).mock.calls[0]?.[0];
+
+    expect(template).toEqual([
+      { label: labels.cut, role: "cut", enabled: true },
+      { label: labels.copy, role: "copy", enabled: true },
+      { label: labels.paste, role: "paste", enabled: true },
+      { type: "separator" },
+      { label: labels.selectAll, role: "selectAll" },
+    ]);
+    expect(popup).toHaveBeenCalledExactlyOnceWith({
+      window: win,
+      callback: expect.any(Function),
+    });
+    await expect(result).resolves.toBeNull();
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it("disables cut and copy for an empty selection without disabling native Paste", () => {
+    handler(event(), { kind: "composer-input", hasSelection: false, isEditable: true });
+    const template = vi.mocked(Menu.buildFromTemplate).mock.calls[0]?.[0];
+
+    expect(template).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "cut", enabled: false }),
+        expect.objectContaining({ role: "copy", enabled: false }),
+        expect.objectContaining({ role: "paste", enabled: true }),
+      ]),
+    );
+  });
+
+  it("keeps copy and select all while disabling mutations for a locked editor", () => {
+    handler(event(), { kind: "composer-input", hasSelection: true, isEditable: false });
+    const template = vi.mocked(Menu.buildFromTemplate).mock.calls[0]?.[0];
+
+    expect(template).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "cut", enabled: false }),
+        expect.objectContaining({ role: "copy", enabled: true }),
+        expect.objectContaining({ role: "paste", enabled: false }),
+        expect.objectContaining({ role: "selectAll" }),
+      ]),
+    );
+  });
+
+  it("rejects subframes, missing frame identity and unregistered window senders", () => {
+    const input = { kind: "composer-input", hasSelection: true, isEditable: true };
+    handler(event({}), input);
+    handler({ sender } as Electron.IpcMainInvokeEvent, input);
+    const foreignSender = Object.assign(new EventEmitter(), {
+      mainFrame: {},
+      isDestroyed: () => false,
+    }) as unknown as Electron.WebContents;
+    handler(
+      {
+        sender: foreignSender,
+        senderFrame: foreignSender.mainFrame,
+      } as Electron.IpcMainInvokeEvent,
+      input,
+    );
+
+    expect(Menu.buildFromTemplate).not.toHaveBeenCalled();
+    expect(popup).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed editor state instead of enabling native actions by coercion", () => {
+    for (const input of [
+      { kind: "composer-input", isEditable: true },
+      { kind: "composer-input", hasSelection: false },
+      { kind: "composer-input", hasSelection: "yes", isEditable: true },
+      { kind: "composer-input", hasSelection: false, isEditable: "yes" },
+    ]) {
+      handler(event(), input);
+    }
+
+    expect(Menu.buildFromTemplate).not.toHaveBeenCalled();
+    expect(popup).not.toHaveBeenCalled();
   });
 });

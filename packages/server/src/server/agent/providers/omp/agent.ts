@@ -22,6 +22,8 @@ import type {
   OmpMemorySettings,
   OmpMemorySettingsPatch,
 } from "@omp-desktop/protocol/messages";
+import type { OmpStatsRange, OmpStatsResult } from "@omp-desktop/protocol/omp-stats";
+import { readOmpStats } from "./stats.js";
 import { isMap, parseDocument } from "yaml";
 
 import {
@@ -96,7 +98,13 @@ import {
 import { prepareOmpAgentShellEnv } from "./shell-config.js";
 export { formatOmpVersionSupport, resolveOmpDiagnosticPaths } from "./provider-config.js";
 import { OmpSubagentCardTracker, type OmpSubagentCardScheduler } from "./subagent-card-tracker.js";
-import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
+import { mapOmpCustomAssistantMessage, shouldDisplayOmpCustomMessage } from "./custom-message.js";
+import {
+  CHATPRO_CUSTOM_TYPE,
+  ChatProDeliveries,
+  prepareChatProCommand,
+  readChatProCommand,
+} from "./chatpro.js";
 import { getUserMessageImages, getUserMessageText } from "./message-history.js";
 import {
   buildOmpPlanTurnPrompt,
@@ -1726,6 +1734,7 @@ export class OmpAgentSession implements AgentSession {
   private activeAskUserDialog: ActiveAskUserDialog | null = null;
   private pendingAskUserFollowUpResponse: PendingAskUserFollowUpResponse | null = null;
   private activeTurnId: string | null = null;
+  private pendingTurnAdmission: { turnId: string; controller: AbortController } | null = null;
   private activeClientMessageId: string | null = null;
   private activeAssistantMessageId: string | null = null;
   private activeTurnTerminalAssistantMessage: OmpAgentMessage | null = null;
@@ -1778,6 +1787,7 @@ export class OmpAgentSession implements AgentSession {
   private automaticCredentialGeneration = 0;
   private closed = false;
   private live: boolean;
+  private readonly chatProDeliveries = new ChatProDeliveries();
   private initialUsageProbeStarted = false;
   private readonly emittedUserMessageIds = new Set<string>();
   private lastEmittedLiveUserMessageText: string | null = null;
@@ -1998,41 +2008,113 @@ export class OmpAgentSession implements AgentSession {
     });
   }
 
+  /** Admission binds a registered native command before any workflow can rewrite it. */
+  private async prepareNativeExtensionTurn(
+    prompt: AgentPromptInput,
+    origin: { turnId: string; clientMessageId?: string },
+    signal: AbortSignal,
+  ): Promise<string | undefined> {
+    const chatProCommand = readChatProCommand(prompt);
+    const command = chatProCommand ?? readPlainTextPromptInput(prompt);
+    if (command === null) return undefined;
+    const invocation = this.parseSlashCommandInput(command);
+    if (!invocation) return undefined;
+    const commands = await this.runtimeSession.getCommands();
+    if (signal.aborted) return undefined;
+    if (
+      !commands.some((item) => item.name === invocation.commandName && item.source === "extension")
+    ) {
+      if (chatProCommand !== null) {
+        throw new Error(
+          "/chatpro is unavailable. Install and enable omp-bridge-chatpro in this OMP session.",
+        );
+      }
+      return undefined;
+    }
+    if (chatProCommand === null) return command.trimStart();
+    const prepared = prepareChatProCommand(chatProCommand, origin);
+    if (prepared.requestId) this.chatProDeliveries.register(prepared.requestId, origin);
+    return prepared.text;
+  }
+
   async startTurn(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<StartTurnResult> {
-    if (this.activeTurnId) {
+    if (this.activeTurnId || this.pendingTurnAdmission) {
       throw new Error("An OMP turn is already active");
     }
+    if (this.closed) {
+      throw new Error("The OMP session is closed");
+    }
+    const turnId = randomUUID();
+    const controller = new AbortController();
+    const admission = { turnId, controller };
+    this.pendingTurnAdmission = admission;
+    const canceled = new Promise<StartTurnResult>((resolve) => {
+      controller.signal.addEventListener("abort", () => resolve({ turnId }), { once: true });
+    });
+    try {
+      return await Promise.race([
+        this.startAdmittedTurn(prompt, options, turnId, controller.signal),
+        canceled,
+      ]);
+    } finally {
+      if (this.pendingTurnAdmission === admission) {
+        this.pendingTurnAdmission = null;
+      }
+    }
+  }
+
+  private async startAdmittedTurn(
+    prompt: AgentPromptInput,
+    options: AgentRunOptions | undefined,
+    turnId: string,
+    signal: AbortSignal,
+  ): Promise<StartTurnResult> {
     this.suppressAutonomousEventsAfterInterrupt = false;
     this.activeInterrupt = null;
     this.dismissPendingPlanApproval();
 
+    const clientMessageId = options?.clientMessageId;
+    const origin = {
+      turnId,
+      ...(clientMessageId ? { clientMessageId } : {}),
+    };
+    const nativeCommand = await this.prepareNativeExtensionTurn(prompt, origin, signal);
+    if (signal.aborted) return { turnId };
     const payload = convertPromptInput(prompt, { model: this.state.model });
     const displayPromptText = payload.text;
+    if (nativeCommand !== undefined) payload.text = nativeCommand;
     const selectedWorkflowMode = normalizeOmpWorkflowSelection(this.features[0]?.value);
     const workflowMode =
       selectedWorkflowMode === "plan" ? selectedWorkflowMode : this.workflowModePending;
-    if (workflowMode === "standard" || workflowMode === "enhanced") {
-      await this.disableActiveWorkflowMode();
-      this.workflowModePending = null;
-    } else if (workflowMode) {
-      if (this.activeWorkflowMode && this.activeWorkflowMode !== workflowMode) {
-        await this.disableActiveWorkflowMode();
+    if (nativeCommand === undefined) {
+      if (workflowMode === "standard" || workflowMode === "enhanced") {
+        await this.disableActiveWorkflowMode(signal);
+        if (signal.aborted) return { turnId };
+        this.workflowModePending = null;
+      } else if (workflowMode) {
+        if (this.activeWorkflowMode && this.activeWorkflowMode !== workflowMode) {
+          await this.disableActiveWorkflowMode(signal);
+          if (signal.aborted) return { turnId };
+        }
+        payload.text =
+          workflowMode === "plan"
+            ? buildOmpPlanTurnPrompt(payload.text)
+            : `/${workflowMode} ${payload.text}`;
+        this.activeWorkflowMode = workflowMode;
+        this.workflowModePending = null;
       }
-      payload.text =
-        workflowMode === "plan"
-          ? buildOmpPlanTurnPrompt(payload.text)
-          : `/${workflowMode} ${payload.text}`;
-      this.activeWorkflowMode = workflowMode;
-      this.workflowModePending = null;
     }
-    if (!isOmpNativeWorkflowMode(selectedWorkflowMode) && this.planContextResetPending) {
+    if (
+      nativeCommand === undefined &&
+      !isOmpNativeWorkflowMode(selectedWorkflowMode) &&
+      this.planContextResetPending
+    ) {
       payload.text = buildOmpStandardTurnPrompt(payload.text);
       this.planContextResetPending = false;
     }
-    const turnId = randomUUID();
     this.live = true;
     this.activeTurnId = turnId;
-    this.activeClientMessageId = options?.clientMessageId ?? null;
+    this.activeClientMessageId = clientMessageId ?? null;
     this.lastSubmittedPromptText = payload.text;
     this.lastSubmittedPromptDisplayText = displayPromptText;
     this.lastSubmittedPromptClientMessageId = this.activeClientMessageId;
@@ -2051,6 +2133,7 @@ export class OmpAgentSession implements AgentSession {
     void (async () => {
       try {
         const ack = await this.runtimeSession.prompt(payload.text, payload.images);
+        if (this.activeTurnId !== turnId) return;
         this.activePromptRequestId = ack.requestId ?? null;
         const correlatedResult = ack.requestId
           ? this.pendingPromptResults.get(ack.requestId)
@@ -2145,12 +2228,25 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
-    yield* streamOmpHistory({
+    for await (const event of streamOmpHistory({
       sessionFile: this.state.sessionFile,
       runtimeSession: this.runtimeSession,
       provider: this.provider,
       blobDir: this.blobDir,
-    });
+    })) {
+      if (
+        event.type === "timeline" &&
+        event.item.type === "assistant_message" &&
+        event.item.customMessage?.customType === CHATPRO_CUSTOM_TYPE
+      ) {
+        this.chatProDeliveries.remember(
+          event.item.customMessage.details,
+          this.state.sessionId,
+          event.item.text,
+        );
+      }
+      yield event;
+    }
     for (const item of mapOmpTodoState(this.state)) {
       yield {
         type: "timeline",
@@ -2601,6 +2697,22 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async interrupt(reason: AgentInterruptReason = "user"): Promise<void> {
+    const admission = this.pendingTurnAdmission;
+    if (admission && !this.activeTurnId) {
+      // No foreground prompt has been dispatched. Settle the accepted identity now;
+      // discovery may still resolve, but cannot register or dispatch this canceled turn.
+      this.pendingTurnAdmission = null;
+      this.cancelModelErrorContinuation();
+      this.suppressAutonomousEventsAfterInterrupt = true;
+      admission.controller.abort();
+      this.emit({
+        type: "turn_canceled",
+        provider: this.provider,
+        reason,
+        turnId: admission.turnId,
+      });
+      return;
+    }
     const turnId = this.activeTurnId;
     const pendingContinuation = this.pendingModelErrorContinuation;
     this.cancelModelErrorContinuation();
@@ -2662,6 +2774,8 @@ export class OmpAgentSession implements AgentSession {
       return;
     }
     this.closed = true;
+    this.pendingTurnAdmission?.controller.abort();
+    this.pendingTurnAdmission = null;
     this.cancelModelErrorContinuation();
     this.backgroundDaemons?.dispose();
     this.stopAutomaticCredentialResolution();
@@ -3301,11 +3415,12 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
-  private async disableActiveWorkflowMode(): Promise<void> {
-    if (!this.activeWorkflowMode) return;
+  private async disableActiveWorkflowMode(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted || !this.activeWorkflowMode) return;
     if (this.activeWorkflowMode === "goal") {
       await this.runtimeSession.prompt("/goal drop");
     }
+    if (signal?.aborted) return;
     this.setActiveWorkflowMode(null);
   }
 
@@ -3567,6 +3682,14 @@ export class OmpAgentSession implements AgentSession {
   }
 
   private handleRuntimeEvent(event: OmpRuntimeEvent): void {
+    // Visible plugin originals are observable without any model-turn lifecycle,
+    // including before the first agent_start in a resumed process.
+    if (event.type === "message_end" && event.message.role === "custom") {
+      const turnId =
+        event.message.customType === CHATPRO_CUSTOM_TYPE ? undefined : this.currentTurnIdForEvent();
+      this.handleCustomMessageEnd(event.message, turnId);
+      return;
+    }
     if (event.type === "credential_changed") {
       this.handleCredentialChanged(event);
       return;
@@ -3970,10 +4093,6 @@ export class OmpAgentSession implements AgentSession {
       }
       return;
     }
-    if (event.message.role === "custom") {
-      this.handleCustomMessageEnd(event.message, turnId);
-      return;
-    }
 
     if (event.message.role !== "user") {
       return;
@@ -4064,6 +4183,21 @@ export class OmpAgentSession implements AgentSession {
     message: Extract<OmpAgentMessage, { role: "custom" }>,
     turnId: string | undefined,
   ): void {
+    if (message.customType === CHATPRO_CUSTOM_TYPE) {
+      if (!shouldDisplayOmpCustomMessage(message)) return;
+      const text = getUserMessageText(message.content);
+      if (!text) return;
+      const delivery = this.chatProDeliveries.accept(message.details, this.state.sessionId, text);
+      if (!delivery) return;
+      this.emit({
+        type: "timeline",
+        provider: this.provider,
+        ...delivery,
+        item: mapOmpCustomAssistantMessage(message, text),
+      });
+      // RPC prompt_result owns command completion; a background delivery never completes a turn.
+      return;
+    }
     if (shouldDisplayOmpCustomMessage(message)) {
       const text = getUserMessageText(message.content);
       if (text) {
@@ -4075,12 +4209,9 @@ export class OmpAgentSession implements AgentSession {
           type: "timeline",
           provider: this.provider,
           turnId,
-          item: item ?? { type: "assistant_message", text },
+          item: item ?? mapOmpCustomAssistantMessage(message, text),
         });
       }
-    }
-    if (!this.activeTurnHasUserMessage) {
-      this.completeTurn(turnId, []);
     }
   }
 
@@ -4827,6 +4958,16 @@ export class OmpAgentClient implements AgentClient {
       return false;
     }
   }
+
+  async getOmpStats(range: OmpStatsRange): Promise<OmpStatsResult> {
+    return readOmpStats({
+      range,
+      env: { ...process.env, ...this.runtimeSettings?.env },
+      command: this.runtimeSettings?.command,
+      cwd: homedir(),
+    });
+  }
+
   // eslint-disable-next-line complexity
   async getOmpProviderManagement(): Promise<OmpProviderManagement> {
     const configPath = this.resolveModelsConfigPath();

@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react-native";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -13,9 +13,11 @@ import type { ProviderUsageView } from "./types";
 export function ProviderUsageSettingsSection({
   view,
   onRefresh,
+  accountDetails,
 }: {
   view: ProviderUsageView;
   onRefresh: () => void;
+  accountDetails?: ReadonlyMap<string, ReactNode>;
 }) {
   const { t } = useTranslation();
   const busy = view.kind === "loading" || (view.kind === "ready" && view.isRefreshing);
@@ -42,7 +44,7 @@ export function ProviderUsageSettingsSection({
       testID="provider-usage-card"
       trailing={refreshButton}
     >
-      <ProviderUsageBody view={view} onRefresh={onRefresh} />
+      <ProviderUsageBody view={view} onRefresh={onRefresh} accountDetails={accountDetails} />
     </SettingsSection>
   );
 }
@@ -50,9 +52,11 @@ export function ProviderUsageSettingsSection({
 function ProviderUsageBody({
   view,
   onRefresh,
+  accountDetails,
 }: {
   view: ProviderUsageView;
   onRefresh: () => void;
+  accountDetails?: ReadonlyMap<string, ReactNode>;
 }) {
   const { t } = useTranslation();
   if (view.kind === "loading") {
@@ -81,7 +85,7 @@ function ProviderUsageBody({
     );
   }
 
-  return <ProviderUsageList providers={view.payload.providers} />;
+  return <ProviderUsageList providers={view.payload.providers} accountDetails={accountDetails} />;
 }
 
 const styles = StyleSheet.create((theme) => ({
