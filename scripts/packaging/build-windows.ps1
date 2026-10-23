@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $BuilderArgs = $args
+$RepositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
 # Windows PowerShell 5.1 does not turn native command failures into exceptions.
 function Invoke-CheckedCommand {
@@ -27,7 +28,7 @@ foreach ($Arch in $Arches) {
 
 $PreviousStaging = $env:OMP_DESKTOP_WINDOWS_KEYRING_STAGING
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) "omp-desktop-windows-$([guid]::NewGuid().ToString('N'))"
-Push-Location -LiteralPath $PSScriptRoot
+Push-Location -LiteralPath $RepositoryRoot
 try {
     $KeyringStaging = Join-Path $TempDir "keyring-packages"
     New-Item -ItemType Directory -Path $KeyringStaging -Force | Out-Null
@@ -50,7 +51,7 @@ try {
     # Keep private artifacts and update metadata entirely in release-plugins/.
     $Version = Invoke-CheckedCommand "node" @("-p", "require('./packages/desktop/package.json').version")
     $BuildOutput = (Invoke-CheckedCommand "node" (@("packages/desktop/scripts/windows-build-output.mjs", $Version) + $BuilderArgs)).Split("`t")
-    $ReleaseDir = Join-Path $PSScriptRoot $BuildOutput[0]
+    $ReleaseDir = Join-Path $RepositoryRoot $BuildOutput[0]
     $MetadataFilename = $BuildOutput[1]
     $LegacyInstaller = $BuildOutput[2]
     foreach ($Name in @($LegacyInstaller, "$LegacyInstaller.blockmap")) {
@@ -71,7 +72,7 @@ try {
         $MetadataFiles += $SnapshotPath
     }
 
-    Invoke-CheckedCommand "node" (@("scripts/merge-windows-update-metadata.mjs", $MetadataPath) + $MetadataFiles)
+    Invoke-CheckedCommand "node" (@("scripts/packaging/merge-windows-update-metadata.mjs", $MetadataPath) + $MetadataFiles)
 } finally {
     $env:OMP_DESKTOP_WINDOWS_KEYRING_STAGING = $PreviousStaging
     if (Test-Path -LiteralPath $TempDir) {

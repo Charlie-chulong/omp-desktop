@@ -1,0 +1,151 @@
+# Development and verification
+
+All shell and PowerShell commands in this guide run from the repository root unless stated otherwise. See [packaging](packaging.md) for supported native runtimes, installer construction, signing, bundled OMP, and release metadata; [remote hosts](remote-hosts.md) and [deployment](deployment.md) cover remote daemon and Web/relay setup.
+
+## Start development
+
+```bash
+npm install
+npm run dev:desktop
+```
+
+Development uses:
+
+- daemon: `127.0.0.1:6770`;
+- renderer: an available Electron Metro port;
+- state: `.dev/omp-desktop-home`.
+
+The packaged app uses `~/.omp-desktop`. OMP keeps its own configuration, credentials, provider subscriptions, and sessions under `~/.omp`.
+
+The syntax highlighter pins `@codemirror/legacy-modes` to `6.5.3`, whose Swift and Dart stream parsers use the same CodeMirror 6 language types as the application. Keep this pin when updating dependencies; `6.5.5` uses incompatible streamparser types.
+
+## Workspace packages
+
+| Package                                       | Responsibility                      |
+| --------------------------------------------- | ----------------------------------- |
+| [`packages/app`](../packages/app)             | Electron and Web renderer           |
+| [`packages/desktop`](../packages/desktop)     | Electron main process and packaging |
+| [`packages/server`](../packages/server)       | Local daemon and OMP adapter        |
+| [`packages/client`](../packages/client)       | Daemon client                       |
+| [`packages/protocol`](../packages/protocol)   | Shared wire schemas                 |
+| [`packages/relay`](../packages/relay)         | Shared E2EE relay transport         |
+| [`packages/cli`](../packages/cli)             | `omp-desktop` CLI                   |
+| [`packages/highlight`](../packages/highlight) | Code and diff highlighting          |
+
+## Runtime and protocol notes
+
+Main-process code keeps Electron-compatible `electron` imports; the stock `electron` package is retained only for TypeScript declarations. Project scripts do not download or substitute its runtime. Native runtime version selection and platform constraints are documented in [packaging](packaging.md#native-runtime-selection).
+
+The daemon decodes OMP's JSONL stdout and diagnostic stderr as UTF-8 streams, preserving Chinese characters and emoji even when their bytes span pipe data blocks. JSONL line framing and protocol-v2 chunk reassembly remain unchanged.
+
+### Startup and first-window work
+
+Apple Silicon startup streams local frontend assets in bounded chunks up to 1 MiB, avoiding repeated small-file-read overhead. The main window stays native-hidden until the renderer has painted a branded startup surface and the runtime has copied that frame into the AppKit backing store, avoiding an unpainted first reveal.
+
+Mermaid, WebSocket response validation, and terminal emulation load on first use instead of inflating the startup entry. Desktop daemon setup imports only its configuration/runtime helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell environment inheritance and daemon readiness checks are unchanged.
+
+On Windows, the renderer normally reports content readiness after app settings load. If that signal never arrives, a bounded main-process fallback presents the successfully loaded first document. Navigation, close, hide, minimize, or normal readiness cancels it; the fallback cannot reopen a window hidden to the tray. macOS remains gated on its native paint handoff.
+
+### Frontend work and generated output
+
+Desktop/web status rings, synchronized loaders, and the homepage WebGPU poster stop scheduling animation while their retained panel or application is inactive. The homepage route supplies its navigation focus to the retained-panel context, so opening Settings also stops the covered poster while the window stays focused. Retained poster resources are reused within the mounted component and released on unmount or when the existing home-effects switch is disabled. Loaders share one timer at the six visible step boundaries per 950 ms cycle, not a permanent display-rate worklet. Reduced-motion preferences remain respected.
+
+The frontend Babel pipeline resolves Lucide's actual named exports to individual icon modules, including legacy aliases; public type imports remain unchanged. Electron web exports use UTF-8 instead of ASCII-escaped strings. Protocol validator generation shares repeated, non-mutating IR containers without removing validation, defaults, transforms, or fallback schema behavior; see the [protocol code generator guide](../packages/protocol/codegen/README.md).
+
+## Verification policy
+
+```bash
+npm run format
+npm run lint
+npm run typecheck
+```
+
+Run only targeted Vitest files; **do not run the full test suite locally**.
+
+A successful build is not native acceptance. Qualify the actual packaged application, including generated-pet image conversion and right-click menu dismissal after one outside click. A minimal native menu probe is not substituted for that product path. The runtime requirements and known limitations in [packaging](packaging.md#native-runtime-contracts) remain part of qualification.
+
+### Packaged macOS application
+
+To exercise an unpacked application, including its renderer, daemon, bundled OMP, CLI, and terminal:
+
+```bash
+node packages/desktop/e2e/packaged-app-smoke.js --app "packages/desktop/release/mac-arm64/OMP Desktop.app"
+```
+
+Packaged smoke checks verify macOS Dock visibility, including a cold daemon launch, rather than requiring a separate Helper path. The packaged smoke keeps multiple native image launch configurations alive together inside the shipped runtime, in addition to invoking the OMP binary directly.
+
+#### Native window-close interactions
+
+Verify the packaged app with system mouse events, not direct `NSWindow.sendEvent` calls or a substituted close dialog:
+
+```bash
+swift packages/desktop/e2e/macos-window-close-smoke.swift \
+  "packages/desktop/release/mac-arm64/OMP Desktop.app"
+```
+
+This requires macOS Accessibility, screen-capture and input-event permission. It uses isolated settings and a real managed daemon, checking Cancel, tray background/restore, and Exit through system mouse input and the original UI. It also checks equal traffic-light spacing, yellow-button minimization and Dock restore, and green-button enlargement followed by restoration of the actual size.
+
+Known macOS host limitation: the optional pet overlay still requires the missing `BrowserWindow.setIgnoreMouseEvents` API. Activity publication was verified with the default hidden pet; this does not establish full overlay compatibility.
+
+#### Locally repaired runtime regressions
+
+On macOS, every renderer must service native AppKit application events even though it is a windowless `LSUIElement` process. JavaScript and daemon requests can remain live while Activity Monitor marks that renderer as not responding. Before packaging a locally repaired runtime, run its `test/macos-renderer-responsiveness-smoke.js` with the bundled `Electron.app`. The regression checks WindowServer responsiveness after targeted native events, sandbox isolation and renderer shutdown; changing Dock visibility or adding a JavaScript heartbeat is not a substitute for the native event loop.
+
+For the [local idle-scheduling runtime](packaging.md#macos-runtime), run its `macos-idle-pump-smoke.js`, `macos-idle-visibility-smoke.js`, and `macos-threaded-animation-smoke.js` alongside the responsiveness regression. These regressions belong to the mini-electron checkout. Select the rebuilt runtime with `MINI_ELECTRON_DIST_PATH`; rebuilding only the frontend does not add the native changes. A visible animated homepage is still active GPU work, not a zero-CPU idle page.
+
+### Packaged Windows application
+
+Windows runtime builds disable Inspector/CDP, so the CDP-based `PASEO_DESKTOP_SMOKE=1` check is not supported there. Verify the real native window and bundled CLI/daemon instead; **do not enable Inspector or bypass IPC frame checks to pass a smoke**.
+
+Run the actual unpacked Windows application on an unlocked interactive desktop:
+
+```bash
+node packages/desktop/e2e/packaged-app-smoke.js \
+  --app packages/desktop/release/win-unpacked
+```
+
+The Windows driver uses a copied official runtime, isolated native profile paths, real renderer/preload/IPC/daemon/CLI/terminal/OMP, and synthetic numeric SQLite fixtures. It checks maximize/restore/minimize presentation, companion assets and native menu input, and Chinese Usage ranges/refresh.
+
+Native screen captures reject foreign-window overlap and use an owned opaque backing for transparent gaps. Only the copied main is temporarily topmost during window/Usage surface scenarios; its original native flag is checked after restoration and before companion tests. Other programs are never hidden, moved, or reconfigured. Input targets only verified owned windows; initial foreground acquisition does not loosen OS foreground policy or force repaint during restore measurements.
+
+Pet input waits for genuine, authenticated interactivity IPC to transition from an outside false state to a fresh true state for the same run, process, and pet HWND. The passive observer discards superseded events and never changes input state or opens the menu itself. Native ownership and `HTCLIENT` are safety checks, not proof that the runtime has stopped ignoring mouse events. Upstream contract failures remain failures, not skipped or replaced by mock bridges.
+
+Windows runtime 0.1.15 has an observed [electron-log renderer-preload redeclaration issue](https://github.com/iris-cat-dev/mini-electron/issues/5). The native smoke retains this error; passing the application scenarios does not prove that renderer logging initialized successfully.
+
+#### Renderer-loss recovery
+
+To exercise renderer-loss recovery on Windows with a freshly built local runtime:
+
+```powershell
+npm --prefix packages/desktop run build:main
+$env:ELECTRON_PATH = "D:/Project/mini-electron/out/windows-x64/mini-electron.exe"
+node packages/desktop/e2e/renderer-loss-recovery-smoke.js
+Remove-Item Env:ELECTRON_PATH
+```
+
+Choose **Reload window**, then click **Verify interaction** in the replacement. The smoke uses a temporary profile and terminates only its own renderer child; it does not use an existing Desktop process or require Inspector/CDP.
+
+#### Installer switching and OMP preservation
+
+Run the installation-switch regression on a **clean Windows VM**, with standard and `no omp` installers for the same version and architecture:
+
+```powershell
+node packages/desktop/e2e/windows-installer-switch-smoke.js --standard "packages/desktop/release/OMP-Desktop-Setup-<version>-<arch>.exe" --no-omp "packages/desktop/release/OMP-Desktop-No-OMP-Setup-<version>-<arch>.exe"
+```
+
+The smoke refuses to run if the configured application is already registered. It checks fresh installation, switching to `no omp`, repeated installation with a changed directory, switching back, and explicit uninstallation. It verifies the preserved executable's SHA-256 and runs the packaged renderer, daemon, OMP, CLI, and terminal checks after the `no omp` upgrades, including the daemon's actual runtime path. Wine checks do not replace this real Windows installation and startup verification.
+
+Pass `--updated-omp "<path-to-another-omp.exe>"` to replace the initially installed runtime before switching, proving that `no omp` preserves independently updated bytes and that the standard installer restores its own packaged version. The replacement must differ from the standard payload. For disposable installers built with an isolated application identity, pass `--config "<electron-builder.cjs-or-yml>"` describing their `appId` and executable name; the registration safety check then uses that identity instead of the production application.
+
+See [Windows packages without bundled OMP](packaging.md#windows-packages-without-bundled-omp) for the preservation and failure behavior being exercised.
+
+### Companion layout regression
+
+After building the workspace dependencies, run the companion's native regression:
+
+```bash
+npm run build:main --workspace=@omp-desktop/desktop
+node packages/desktop/e2e/pet-layout-smoke.js
+```
+
+The smoke briefly opens a non-focusing companion with an isolated temporary profile. It covers changing captions and task counts, all three sizes, main-window zoom, viewport changes, and opaque/transparent pointer targets without calling a model. It uses an owned copy of the installed official Windows 0.1.15 runtime; stock Electron and legacy renderer-result wrappers are not used as fallbacks.

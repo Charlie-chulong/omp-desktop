@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../.."
 
 # mini-electron currently publishes a Windows x64 runtime only.
 read -r -a arches <<<"${WINDOWS_ARCHES:-x64}"
@@ -77,6 +77,6 @@ for arch in "${arches[@]}"; do
   metadata_files+=("$metadata_dir/$arch-$metadata_filename")
 done
 
-node scripts/merge-windows-update-metadata.mjs \
+node scripts/packaging/merge-windows-update-metadata.mjs \
   "$release_dir/$metadata_filename" \
   "${metadata_files[@]}"
