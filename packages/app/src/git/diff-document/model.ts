@@ -303,19 +303,46 @@ export function measureFragments(input: {
   const fragments: DiffFragment[] = [];
   let graphemeIndex = 0;
   while (graphemeIndex < graphemes.length) {
-    let low = graphemeIndex + 1;
-    let high = graphemes.length;
-    let fitting = low;
+    const remaining = graphemes.length - graphemeIndex;
+    let fittingLength = 1;
+    let candidateLength = Math.min(2, remaining);
+
+    // Find a local oversized bound before binary searching; probing the whole
+    // remaining line for every fragment makes long wrapped lines quadratic.
+
+    while (candidateLength > fittingLength) {
+      const width =
+        measureGraphemeSliceAdvances(
+          graphemes,
+          graphemeIndex,
+          graphemeIndex + candidateLength,
+          input.measureText,
+        ).at(-1) ?? 0;
+      if (!(width <= input.availableWidth)) break;
+      fittingLength = candidateLength;
+      candidateLength = Math.min(candidateLength * 2, remaining);
+    }
+
+    let low = fittingLength + 1;
+    let high = candidateLength - 1;
     while (low <= high) {
-      const middle = (low + high) >>> 1;
-      const width = measureGraphemeSlice(graphemes, graphemeIndex, middle, input.measureText).width;
-      if (width <= input.availableWidth || middle === graphemeIndex + 1) {
-        fitting = middle;
+      const middle = low + Math.floor((high - low) / 2);
+      const width =
+        measureGraphemeSliceAdvances(
+          graphemes,
+          graphemeIndex,
+          graphemeIndex + middle,
+          input.measureText,
+        ).at(-1) ?? 0;
+      if (width <= input.availableWidth) {
+        fittingLength = middle;
         low = middle + 1;
       } else {
         high = middle - 1;
       }
     }
+
+    const fitting = graphemeIndex + fittingLength;
     fragments.push(
       createFragment(
         graphemes,
@@ -383,18 +410,32 @@ function measureGraphemeSlice(
   endIndex: number,
   measureText: TextMeasurer,
 ): { graphemes: DiffGrapheme[]; width: number } {
-  const segments = graphemes.slice(startIndex, endIndex);
-  const displayGraphemes = segments.map((segment) => segment.text);
-  const advances = advancesFor(measureText)(displayGraphemes);
-  return {
-    graphemes: segments.map((segment, index) => ({
+  const advances = measureGraphemeSliceAdvances(graphemes, startIndex, endIndex, measureText);
+  const measured = Array.from<DiffGrapheme>({ length: endIndex - startIndex });
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const segment = graphemes[index]!;
+    const measuredIndex = index - startIndex;
+    measured[measuredIndex] = {
       start: segment.start,
       end: segment.end,
       text: segment.text,
-      width: (advances[index] ?? 0) - (advances[index - 1] ?? 0),
-    })),
-    width: advances.at(-1) ?? 0,
-  };
+      width: (advances[measuredIndex] ?? 0) - (advances[measuredIndex - 1] ?? 0),
+    };
+  }
+  return { graphemes: measured, width: advances.at(-1) ?? 0 };
+}
+
+function measureGraphemeSliceAdvances(
+  graphemes: Array<Omit<DiffGrapheme, "width">>,
+  startIndex: number,
+  endIndex: number,
+  measureText: TextMeasurer,
+): number[] {
+  const displayGraphemes = Array.from<string>({ length: endIndex - startIndex });
+  for (let index = startIndex; index < endIndex; index += 1) {
+    displayGraphemes[index - startIndex] = graphemes[index]!.text;
+  }
+  return advancesFor(measureText)(displayGraphemes);
 }
 
 export function fragmentTextForRange(fragment: DiffFragment, start: number, end: number): string {

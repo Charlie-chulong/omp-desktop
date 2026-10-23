@@ -73,7 +73,7 @@ function replicaQueryOptions<
   const { pushEvent, meta, ...options } = input;
   return {
     ...options,
-    gcTime: Infinity,
+    gcTime: pushEvent === "checkout_diff_update" ? 0 : Infinity,
     meta: {
       ...meta,
       serverDataPolicy: {

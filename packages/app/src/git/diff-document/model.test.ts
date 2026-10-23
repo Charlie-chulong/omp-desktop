@@ -141,6 +141,79 @@ describe("diff document model", () => {
     }
   });
 
+  it("bounds measurement work while wrapping a 64K line without losing content", () => {
+    const text = "x".repeat(65_536);
+    let measuredGraphemes = 0;
+    const countingMeasurer: TextMeasurer = {
+      measure: (value) => value.length,
+      measureAdvances(graphemes) {
+        measuredGraphemes += graphemes.length;
+        return graphemes.map((_, index) => index + 1);
+      },
+    };
+
+    const fragments = measureFragments({
+      text,
+      availableWidth: 100,
+      wrapLines: true,
+      lineHeight: 18,
+      measureText: countingMeasurer,
+    });
+
+    const expectedFragmentCount = Math.ceil(text.length / 100);
+    expect(fragments).toHaveLength(expectedFragmentCount);
+    expect(fragments.map((fragment) => fragment.text).join("")).toBe(text);
+    expect(fragments.map((fragment) => [fragment.start, fragment.end, fragment.width])).toEqual(
+      Array.from({ length: expectedFragmentCount }, (_, index) => {
+        const start = index * 100;
+        const end = Math.min(start + 100, text.length);
+        return [start, end, end - start];
+      }),
+    );
+    for (const fragment of fragments) {
+      expect(fragment.graphemes.every(({ width }) => width === 1)).toBe(true);
+    }
+    expect(measuredGraphemes).toBeLessThan(text.length * 12);
+  });
+
+  it("keeps the maximal boundary and makes progress past an oversized grapheme", () => {
+    const oversized = "👨‍👩‍👧‍👦";
+    const text = `ab${oversized}c`;
+    const variableMeasurer: TextMeasurer = {
+      measure(value) {
+        return value === oversized ? 30 : value.length * 5;
+      },
+      measureAdvances(graphemes) {
+        let width = 0;
+        return graphemes.map((grapheme) => (width += grapheme === oversized ? 30 : 5));
+      },
+    };
+
+    const fragments = measureFragments({
+      text,
+      availableWidth: 10,
+      wrapLines: true,
+      lineHeight: 18,
+      measureText: variableMeasurer,
+    });
+
+    expect(
+      fragments.map(({ text: fragmentText, start, end, width }) => ({
+        text: fragmentText,
+        start,
+        end,
+        width,
+      })),
+    ).toEqual([
+      { text: "ab", start: 0, end: 2, width: 10 },
+      { text: oversized, start: 2, end: 2 + oversized.length, width: 30 },
+      { text: "c", start: 2 + oversized.length, end: text.length, width: 5 },
+    ]);
+    expect(
+      fragments.flatMap((fragment) => fragment.graphemes).map((grapheme) => grapheme.text),
+    ).toEqual(["a", "b", oversized, "c"]);
+  });
+
   it("measures wrapped ligatures in the exact fragment shaping context", () => {
     const ligatureMeasurer = shapingMeasurer(ligatureWidth);
 
