@@ -26,9 +26,13 @@ export function createEditorTargetRuntime(
       return platform === "win32" ? win32.isAbsolute(targetPath) : posix.isAbsolute(targetPath);
     },
     async openPath(targetPath) {
-      const errorMessage = await openPath(targetPath);
+      const errorMessage = await openPath(
+        platform === "win32" ? win32.normalize(targetPath) : targetPath,
+      );
       if (errorMessage) throw new Error(errorMessage);
     },
-    revealPath,
+    revealPath(targetPath) {
+      revealPath(platform === "win32" ? win32.normalize(targetPath) : targetPath);
+    },
   };
 }
