@@ -968,6 +968,40 @@ async function smokePetCreationHelper({ page, appPath, env }) {
         ready: animation,
         blocked: animation,
       },
+      bubble: {
+        appearance: {
+          background: "#172A42",
+          foreground: "#E5F0FA",
+          border: "#579ED9",
+          shape: "rounded",
+          fontSize: 13,
+          fontWeight: "normal",
+          padding: 8,
+          borderRadius: 10,
+          maxWidth: 200,
+          animation: "fade",
+        },
+        states: Object.fromEntries(
+          [
+            "idle",
+            "offline",
+            "running",
+            "needs_input",
+            "ready",
+            "blocked",
+            "dragging",
+            "petted",
+          ].map((state) => [
+            state,
+            {
+              messages: [`Owned helper smoke: ${state}`],
+              delayMs: 0,
+              durationMs: 1500,
+              repeatDelayMs: 0,
+            },
+          ]),
+        ),
+      },
     }),
   );
   const helper = path.join(

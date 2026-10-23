@@ -122,6 +122,7 @@ async function readPetEntry(directory: string, id: string, builtIn: boolean): Pr
       sheetWidth: width,
       sheetHeight: height,
       animations: manifest.animations,
+      ...(manifest.bubble ? { bubble: manifest.bubble } : {}),
     },
     manifest,
     spritePath,
