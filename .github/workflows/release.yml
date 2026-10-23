@@ -19,7 +19,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  # Stock electron skips on any nonempty string; mini-electron treats "0" as false.
+  # Skip the unused stock runtime while allowing mini-electron to install on clean CI.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "0"
   LEFTHOOK: "0"
   EXPO_NO_TELEMETRY: "1"
 

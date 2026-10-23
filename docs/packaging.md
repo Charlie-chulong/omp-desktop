@@ -94,6 +94,8 @@ CI uses Node.js from `.tool-versions`, installs dependencies with `npm ci`, and 
 
 Commit the root `package-lock.json` together with dependency changes. Both the setup-node npm cache and `npm ci` require it in a fresh checkout; a lockfile present only on the developer's machine is insufficient. Nested/generated lockfiles remain ignored. After fixing a workflow dependency, start a new run on the updated commit: rerunning an older failed run still uses its original commit.
 
+CI deliberately sets `ELECTRON_SKIP_BINARY_DOWNLOAD` to the string `"0"`: the stock Electron installer skips downloads for any nonempty value, while the pinned mini-electron installer treats `"0"` as false and downloads its native runtime. Do not change this to `"1"`: that also disables mini-electron downloads and fails on fresh runners. Recheck both installer behaviors when upgrading these dependencies.
+
 ## Native runtime selection
 
 The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime versions are released independently. Windows x64 discovers updates through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform latest pointer.
