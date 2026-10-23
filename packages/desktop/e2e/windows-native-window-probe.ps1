@@ -157,6 +157,17 @@ public static class OmpOwnedWindowProbe {
       Contention("cannot prove controlled backing ownership during cleanup");
     if (!DestroyWindow(hwnd)) Contention("cannot destroy controlled opaque backing");
   }
+  public static int HitTest(IntPtr target, int x, int y) {
+    if (x < short.MinValue || x > short.MaxValue || y < short.MinValue || y > short.MaxValue)
+      throw new InvalidOperationException("SMOKE_DESKTOP_UNAVAILABLE: hit-test point exceeds signed physical-coordinate range");
+    uint packed = (uint)(ushort)x | ((uint)(ushort)y << 16);
+    UIntPtr hit;
+    if (SendMessageTimeout(target, 0x0084, UIntPtr.Zero, new IntPtr(unchecked((int)packed)), 0x0023, 100, out hit) == IntPtr.Zero)
+      throw new InvalidOperationException("SMOKE_UNSTABLE_GEOMETRY: owned WM_NCHITTEST timed out/failed");
+    return unchecked((int)hit.ToUInt64());
+  }
+  [DllImport("user32.dll", SetLastError=true)]
+  private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message, UIntPtr wparam, IntPtr lparam, uint flags, uint timeout, out UIntPtr result);
 }
 '@
 if (-not [OmpOwnedWindowProbe]::SetProcessDpiAwarenessContext([IntPtr]::new(-4))) {
@@ -242,6 +253,26 @@ function Assert-CaptureGuard($reference, [IntPtr]$underlay) {
   return $state
 }
 $result = Get-OwnedWindowState
+if ($request.chromeHitTests) {
+  if ($result.minimized -or $result.maximized) { throw 'Chrome resize hit-tests require the normal owned main window' }
+  $bounds = $result.bounds
+  $middleX = [int]($bounds.x + [Math]::Floor($bounds.width / 2))
+  $middleY = [int]($bounds.y + [Math]::Floor($bounds.height / 2))
+  $tests = @(
+    @{ name = 'left'; expected = 10; x = $bounds.x + 1; y = $middleY },
+    @{ name = 'right'; expected = 11; x = $bounds.x + $bounds.width - 2; y = $middleY },
+    @{ name = 'top'; expected = 12; x = $middleX; y = $bounds.y + 1 },
+    @{ name = 'bottom'; expected = 15; x = $middleX; y = $bounds.y + $bounds.height - 2 }
+  )
+  foreach ($test in $tests) {
+    $before = Get-OwnedWindowState
+    if ((Get-GeometryKey $before) -ne (Get-GeometryKey $result)) { throw 'Owned geometry changed before chrome hit-test' }
+    $test.hit = [OmpOwnedWindowProbe]::HitTest($handle, [int]$test.x, [int]$test.y)
+    $after = Get-OwnedWindowState
+    if ((Get-GeometryKey $after) -ne (Get-GeometryKey $result)) { throw 'Owned geometry changed during chrome hit-test' }
+  }
+  $result.chromeHitTests = $tests
+}
 if ($request.screenshot) {
   if ($request.captureTarget -ne 'main') { throw 'Screen capture is restricted to the owned main window' }
   if (-not $result.visible -or $result.minimized) { throw 'SMOKE_FOCUS_CONTENTION: owned capture target is hidden or minimized (not a renderer failure)' }

@@ -72,11 +72,6 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
         ipcRenderer.invoke("paseo:window:setFullscreen", fullscreen),
       isFullscreen: () => ipcRenderer.invoke("paseo:window:isFullscreen"),
       isMaximized: () => ipcRenderer.invoke("paseo:window:isMaximized"),
-      beginWindowDrag: (point: { screenX: number; screenY: number }) =>
-        ipcRenderer.invoke("paseo:window:beginDrag", point),
-      moveWindowDrag: (point: { screenX: number; screenY: number }) =>
-        ipcRenderer.send("paseo:window:moveDrag", point),
-      endWindowDrag: () => ipcRenderer.send("paseo:window:endDrag"),
       updateWindowControls: (update: {
         height?: number;
         backgroundColor?: string;

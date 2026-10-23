@@ -176,9 +176,6 @@ export interface DesktopWindowBridge {
   setFullscreen?: (fullscreen: boolean) => Promise<void>;
   isFullscreen?: () => Promise<boolean>;
   isMaximized?: () => Promise<boolean>;
-  beginWindowDrag?: (point: { screenX: number; screenY: number }) => Promise<void>;
-  moveWindowDrag?: (point: { screenX: number; screenY: number }) => void;
-  endWindowDrag?: () => void;
   updateWindowControls?: (update: DesktopWindowControlsOverlayUpdate) => Promise<void>;
   onResized?: <TEvent = unknown>(
     handler: (event: TEvent) => void,

@@ -129,9 +129,13 @@ node packages/desktop/e2e/packaged-app-smoke.js \
   --app packages/desktop/release/win-unpacked
 ```
 
-The Windows driver uses a copied official runtime, isolated native profile paths, real renderer/preload/IPC/daemon/CLI/terminal/OMP, and synthetic numeric SQLite fixtures. It checks maximize/restore/minimize presentation, companion assets and native menu input, and Chinese Usage ranges/refresh.
+The Windows driver uses a copied official runtime, isolated native profile paths, real renderer/preload/IPC/daemon/CLI/terminal/OMP, and synthetic numeric SQLite fixtures. It checks maximize/restore/minimize presentation, native resize-edge hit-tests, continuous restore-to-top dragging, companion assets and native menu input, and Chinese Usage ranges/refresh.
 
 Native screen captures reject foreign-window overlap and use an owned opaque backing for transparent gaps. Only the copied main is temporarily topmost during window/Usage surface scenarios; its original native flag is checked after restoration and before companion tests. Other programs are never hidden, moved, or reconfigured. Input targets only verified owned windows; initial foreground acquisition does not loosen OS foreground policy or force repaint during restore measurements.
+
+The continuous titlebar regression requires a safe native `HTCAPTION`, then uses one physical left-button press to drag a maximized window into its restored state and back to the current monitor's top edge. It records button state, window bounds, and the owned GUI thread's system move-loop state while held, then requires native maximization after release. It aborts on foreground/input contention, releases only its injected button, and restores the cursor only if the user has not taken it over. Keep the desktop unlocked and avoid mouse/keyboard input during this check.
+
+The gesture trace proves continuous native dragging and release-to-Snap, not visual animation quality: it does not capture transition pixels, inspect the Snap preview, or exercise physical titlebar double-click or cross-monitor mixed-DPI transitions. Existing browser tests cover scoped interactive no-drag regions and top-corner resize regions. Inspect transient restore frames separately when investigating ghosting; settled screenshots alone cannot establish a clean transition.
 
 Pet input waits for genuine, authenticated interactivity IPC to transition from an outside false state to a fresh true state for the same run, process, and pet HWND. The passive observer discards superseded events and never changes input state or opens the menu itself. Native ownership and `HTCLIENT` are safety checks, not proof that the runtime has stopped ignoring mouse events. Upstream contract failures remain failures, not skipped or replaced by mock bridges.
 

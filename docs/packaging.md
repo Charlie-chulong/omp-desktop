@@ -130,7 +130,7 @@ MINI_ELECTRON_DIST_PATH=/absolute/path/to/windows-x64/runtime-dist \
 
 ### Windows runtime version and local overrides
 
-Windows packages use `@iriscat/mini-electron` installer 0.1.12. Its Windows runtime channel selects 0.1.15, including the DirectComposition latency handle fix; the macOS channel remains independent. Native SQLite, IPC frame identity, clipboard/keyboard/OLE input, selection colors, and IME remain supported.
+Windows packages use `@iriscat/mini-electron` installer 0.1.12. Use Windows runtime **0.1.23 or newer** for the screen-coordinate and DPI-position fixes in [mini-electron #7](https://github.com/iris-cat-dev/mini-electron/issues/7); the macOS channel remains independent. Native SQLite, IPC frame identity, clipboard/keyboard/OLE input, selection colors, and IME remain supported.
 
 To package an unpublished local runtime instead, build its checkout with `python build.py --package-dist` and select that distribution explicitly (PowerShell):
 
@@ -143,11 +143,11 @@ Remove-Item Env:MINI_ELECTRON_DIST_PATH
 Update the native runtime explicitly before packaging an existing checkout:
 
 ```bash
-npx mini-electron --update-runtime 0.1.15
+npx mini-electron --update-runtime 0.1.23
 node -p "require('@iriscat/mini-electron/dist/version.json').runtimeVersion"
 ```
 
-For a reproducible fresh Windows install, set `MINI_ELECTRON_RUNTIME_VERSION=0.1.15` when running `npm ci`. The npm lockfile pins the installer, not the native runtime; ordinary postinstall reuses an already valid distribution instead of refreshing it.
+For a reproducible fresh Windows install, set `MINI_ELECTRON_RUNTIME_VERSION=0.1.23` when running `npm ci`. The npm lockfile pins the installer, not the native runtime; ordinary postinstall reuses an already valid distribution instead of refreshing it.
 
 ### Unsigned local candidate
 
@@ -203,6 +203,8 @@ Plain relaunch, native reopen, tray and pet requests reuse the existing main win
 If a running main window loses its renderer, Desktop logs the exit reason and available exit code and opens a native recovery dialog, including for hidden or minimized windows. **Reload window** creates a new renderer at the same route, query, and fragment before closing the failed window; it does not restart the daemon or its Agent sessions. Unsent input may be lost. **Close window** closes the failed window through the normal application lifecycle. Initial startup failures retain their separate error dialog.
 
 Window-close choices retain the application's existing modal sheet, including Cancel, Exit, background-to-tray, and the remembered choice. The main process holds pending requests until that renderer is ready. Choosing Exit hides the window before daemon and updater shutdown for immediate visual feedback.
+
+Titlebars and empty workspace-tab strip areas use native draggable regions in both normal and maximized windows. Windows owns the entire press, restore-drag, return-to-top, and release-to-Snap gesture; Desktop does not capture the pointer or drive window positions through renderer IPC. Interactive controls and the top resize strip remain non-draggable. Keep the native path rather than reintroducing a manual `unmaximize()`/`setPosition()` loop or disabling window animations to hide its restore transition.
 
 The macOS runtime must preserve native click gestures across event-pump turns: repeated `NSApplication.run`/`stop` calls cancel a normal mouse-down before its mouse-up. The native runtime must report `WebContents.isDestroyed()` from object lifetime, not renderer liveness, and deliver storage acknowledgements after pending mutations are registered. Synchronous reply notification must complete before its waiter's stack condition variable can be destroyed. See the [system-input window-close regression](development.md#native-window-close-interactions).
 
