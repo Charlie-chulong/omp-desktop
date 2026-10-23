@@ -92,6 +92,8 @@ Set the repository Actions **variable** `MACOS_RELEASE_ENABLED=true` to include 
 
 CI uses Node.js from `.tool-versions`, installs dependencies with `npm ci`, and downloads the selected platform's checksum-verified OMP binary. The lockfile pins the mini-electron installer, but the installer selects its current native runtime and the OMP downloader selects the latest upstream release; rebuilding a tag later is not guaranteed to reproduce identical binaries.
 
+Commit the root `package-lock.json` together with dependency changes. Both the setup-node npm cache and `npm ci` require it in a fresh checkout; a lockfile present only on the developer's machine is insufficient. Nested/generated lockfiles remain ignored. After fixing a workflow dependency, start a new run on the updated commit: rerunning an older failed run still uses its original commit.
+
 ## Native runtime selection
 
 The npm installer is pinned to official `@iriscat/mini-electron@0.1.12`; native runtime versions are released independently. Windows x64 discovers updates through `runtime-v1-win32-x64`; `runtime-v1` is the macOS channel, not a cross-platform latest pointer.

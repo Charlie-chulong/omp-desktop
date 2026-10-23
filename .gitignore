@@ -90,7 +90,9 @@ packages/desktop/remote-backend-dist/
 packages/desktop/src-tauri/resources/managed-runtime/
 app.json
 
-package-lock.json
+# Track the root npm lockfile for reproducible release builds.
+**/package-lock.json
+!/package-lock.json
 pnpm-lock.yaml
 bin/omp-darwin-*
 bin/omp-linux-*
