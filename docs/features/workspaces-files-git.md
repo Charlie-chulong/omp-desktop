@@ -103,6 +103,8 @@ Zoom uses **Cmd+=** or **Cmd+Shift+=**, **Cmd+-**, and **Cmd+0** (actual size); 
 
 Editable source tabs use **Ctrl+/** to toggle comments in the current file type; macOS **Cmd+/** also works. On a local Desktop host, a file tab's context menu reveals in **Finder**, **Explorer**, or **Files**, localized to the app language. Remote files and Web clients do not offer it. Desktop editor targets expose only ID, label, and kind; detection/opening does not depend on bundled editor icon images.
 
+On Windows, desktop file-manager actions normalize forward or mixed path separators to native backslashes before opening a directory or revealing an entry in Explorer. This includes paths with spaces, Unicode names, and UNC shares; macOS/Linux paths remain unchanged.
+
 ## Git changes
 
 ### Comparison modes

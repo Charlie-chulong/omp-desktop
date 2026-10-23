@@ -11,6 +11,47 @@ interface SpawnRecord {
 }
 
 describe("editor target runtime", () => {
+  it.each([
+    ["d:/project/mini-electron/v8/", "d:\\project\\mini-electron\\v8\\"],
+    ["C:/项目/repo & workspace\\src/file.ts", "C:\\项目\\repo & workspace\\src\\file.ts"],
+    ["//server/share/project/", "\\\\server\\share\\project\\"],
+  ])("uses native Windows shell paths for %s", async (input, expected) => {
+    const opened: string[] = [];
+    const revealed: string[] = [];
+    const runtime = createEditorTargetRuntime({
+      platform: "win32",
+      openPath: async (target) => {
+        opened.push(target);
+        return "";
+      },
+      revealPath: (target) => {
+        revealed.push(target);
+      },
+    });
+    await runtime.openPath(input);
+    runtime.revealPath(input);
+    expect(opened).toEqual([expected]);
+    expect(revealed).toEqual([expected]);
+  });
+
+  it.each(["darwin", "linux"] as const)("preserves POSIX filenames on %s", async (platform) => {
+    const paths: string[] = [];
+    const runtime = createEditorTargetRuntime({
+      platform,
+      openPath: async (target) => {
+        paths.push(target);
+        return "";
+      },
+      revealPath: (target) => {
+        paths.push(target);
+      },
+    });
+    const target = "/tmp/project/back\\slash";
+    await runtime.openPath(target);
+    runtime.revealPath(target);
+    expect(paths).toEqual([target, target]);
+  });
+
   it("resolves command aliases and safely launches Windows command scripts", async () => {
     const records: SpawnRecord[] = [];
     const runtime = createEditorTargetRuntime({
