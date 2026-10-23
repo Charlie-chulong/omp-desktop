@@ -3,17 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyMacWindowControlsUpdate,
   applyWindowControlsOverlayUpdate,
-  beginWindowDrag,
   buildStandardContextMenuItems,
   createWindowControlsOverlayState,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
   getMainWindowChromeOptions,
   getTitleBarOverlayOptions,
-  moveWindowDrag,
   readBadgeCount,
   readWindowControlsOverlayUpdate,
-  readWindowDragPoint,
   readWindowTheme,
   resolveRuntimeTitleBarOverlayOptions,
   resolveWindowBounds,
@@ -287,56 +284,6 @@ describe("window-manager", () => {
         width: 1024,
         height: 720,
       });
-    });
-  });
-  describe("manual titlebar drag", () => {
-    it("validates and rounds renderer screen coordinates", () => {
-      expect(readWindowDragPoint({ screenX: 120.4, screenY: 80.6 })).toEqual({
-        x: 120,
-        y: 81,
-      });
-      expect(readWindowDragPoint({ screenX: Number.NaN, screenY: 80 })).toBeNull();
-      expect(readWindowDragPoint({ screenX: "120", screenY: 80 })).toBeNull();
-    });
-
-    it("restores a maximized window under the pointer before moving it", () => {
-      const unmaximize = vi.fn();
-      const setPosition = vi.fn();
-      const getBounds = vi
-        .fn()
-        .mockReturnValueOnce({ x: 0, y: 38, width: 1646, height: 1079 })
-        .mockReturnValue({ x: 264, y: 103, width: 1200, height: 800 });
-      const win = {
-        isMaximized: () => true,
-        unmaximize,
-        getBounds,
-        setPosition,
-      };
-
-      const state = beginWindowDrag(win, { x: 900, y: 92 });
-
-      expect(state).toEqual({ offsetX: 656, offsetY: 54 });
-      expect(unmaximize).toHaveBeenCalledOnce();
-      expect(setPosition).toHaveBeenNthCalledWith(1, 244, 38, false);
-
-      moveWindowDrag(win, state, { x: 1000, y: 170 });
-      expect(setPosition).toHaveBeenNthCalledWith(2, 344, 116, false);
-    });
-
-    it("keeps a normal window's current pointer offset", () => {
-      const setPosition = vi.fn();
-      const win = {
-        isMaximized: () => false,
-        unmaximize: vi.fn(),
-        getBounds: () => ({ x: 300, y: 140, width: 1200, height: 800 }),
-        setPosition,
-      };
-
-      const state = beginWindowDrag(win, { x: 900, y: 194 });
-
-      expect(state).toEqual({ offsetX: 600, offsetY: 54 });
-      expect(win.unmaximize).not.toHaveBeenCalled();
-      expect(setPosition).not.toHaveBeenCalled();
     });
   });
 });

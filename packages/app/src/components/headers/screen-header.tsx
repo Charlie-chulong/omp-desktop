@@ -14,7 +14,7 @@ import { WindowChromeSafeArea } from "@/utils/desktop-window";
 import { isWeb } from "@/constants/platform";
 import {
   TitlebarDragRegion,
-  useTitlebarWindowDragSurface,
+  TITLEBAR_DRAG_REGION_DATASET,
 } from "@/components/desktop/titlebar-drag-region";
 
 interface ScreenHeaderProps {
@@ -58,7 +58,6 @@ export function ScreenHeader({
   );
   const leftCombinedStyle = useMemo(() => [styles.left, leftStyle], [leftStyle]);
   const rightCombinedStyle = useMemo(() => [styles.right, rightStyle], [rightStyle]);
-  const titlebarWindowDragSurface = useTitlebarWindowDragSurface();
   const headerStyle = useMemo(() => [styles.header, chrome && styles.headerChrome], [chrome]);
 
   return (
@@ -67,7 +66,7 @@ export function ScreenHeader({
         <WindowChromeSafeArea
           placement="inline"
           horizontalPadding={baseHorizontalPadding}
-          {...titlebarWindowDragSurface}
+          dataSet={TITLEBAR_DRAG_REGION_DATASET}
           onLayout={onRowLayout}
           style={rowStyle}
         >
