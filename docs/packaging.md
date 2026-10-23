@@ -61,7 +61,7 @@ For local installer builds, pass `--publish never` to avoid uploading release ar
 The [`Package release`](../.github/workflows/release.yml) workflow builds **Windows x64, both bundled-OMP and no-OMP variants**, by default. It runs when a `v*` tag is pushed or through **Actions → Package release → Run workflow**.
 
 - The root and desktop package versions must match. A tag build also requires the exact tag `v<packages/desktop/package.json version>`; the workflow does not bump versions.
-- Each successful build uploads a `release-windows-x64`, `release-windows-x64-no-omp`, or optional `release-darwin-arm64` Actions artifact, retained for 14 days. These contain installers, ZIPs, and blockmaps when generated, not unpacked apps or builder diagnostics. Bundled-OMP builds also include update YAML metadata.
+- Each successful build uploads an Actions artifact named `OMP-Desktop-Setup-<version>-x64`, `OMP-Desktop-No-OMP-Setup-<version>-x64`, or optional `OMP-Desktop-<version>-arm64`, retained for 14 days. GitHub downloads each artifact as an outer ZIP containing the original installers, package ZIPs, and blockmaps when generated, not unpacked apps or builder diagnostics. Bundled-OMP builds also include update YAML metadata. Publish the files inside this outer ZIP, not the Actions wrapper itself; installer names and update metadata references are unchanged.
 - The no-OMP job runs `npm run build:windows:no-omp` and skips the OMP download. Its installer and ZIP filenames contain `No-OMP`, so both variants can coexist in the release. Its update YAML is deliberately excluded: both Windows variants generate the same channel metadata filename, and the public auto-update feed must continue pointing to the standard bundled-OMP build. This does not create a separate no-OMP update channel.
 - Once all selected platforms succeed, a tag build uploads the assets to a **draft GitHub Release**. Reruns replace same-named assets only in a draft, preserve its notes, and refuse to modify an already published release. A failed upload leaves the release drafted; rerun after resolving the failure.
 - A manual run on a branch only creates Actions artifacts. A manual run with a tag selected also creates or updates its release draft.
@@ -78,17 +78,11 @@ The workflow uses the repository's `GITHUB_TOKEN`; no personal access token is r
 
 ### Enable macOS CI packaging
 
-macOS requires a Developer ID certificate and notarization credentials; fresh hosted runners do not have the local `OMP Desktop Local` identity. Configure these repository Actions secrets:
+Set the repository Actions **variable** `MACOS_RELEASE_ENABLED=true` to include macOS arm64 in tag and manual builds, or check the `macos` input for a single manual run. CI builds unsigned, unnotarized DMG and ZIP packages; no Apple certificate or notarization secrets are required.
 
-| Secret                        | Value                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------- |
-| `MACOS_CSC_LINK`              | Base64-encoded Developer ID Application `.p12` certificate, including its private key |
-| `MACOS_CSC_KEY_PASSWORD`      | Password for that `.p12` certificate                                                  |
-| `APPLE_ID`                    | Apple developer account email                                                         |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for notarization                                                |
-| `APPLE_TEAM_ID`               | Apple developer team ID                                                               |
+The workflow invokes `build:desktop` directly with `mac.identity=null`, `mac.notarize=false`, `forceCodeSigning=false`, and signing-identity discovery disabled. It does not run the local `build:mac` signing/verification helper. Local signing commands remain unchanged.
 
-Set the repository Actions **variable** `MACOS_RELEASE_ENABLED=true` to include macOS arm64 in tag and manual builds, or check the `macos` input for a single manual run. Missing credentials fail the macOS job rather than silently producing an unsigned release. The existing macOS helper verifies the code signature, stapled ticket, and Gatekeeper assessment.
+These CI packages do not satisfy Gatekeeper's signed and notarized distribution requirements and may be blocked on other Macs. Artifact creation alone does not establish launchability or native application acceptance.
 
 CI uses Node.js from `.tool-versions`, installs dependencies with `npm ci`, and downloads the selected platform's checksum-verified OMP binary. The lockfile pins the mini-electron installer, but the installer selects its current native runtime and the OMP downloader selects the latest upstream release; rebuilding a tag later is not guaranteed to reproduce identical binaries.
 

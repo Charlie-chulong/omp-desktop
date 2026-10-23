@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       macos:
-        description: Build signed and notarized macOS arm64 packages (requires Apple secrets)
+        description: Build unsigned macOS arm64 packages (no Apple credentials required)
         type: boolean
         default: false
 
@@ -51,11 +51,11 @@ jobs:
               throw new Error(`Release tag must be v${desktop.version}`);
             }
             const include = [
-              { os: 'windows-2022', target: 'windows-x64', bundle: true },
-              { os: 'windows-2022', target: 'windows-x64', bundle: false }
+              { os: 'windows-2022', target: 'windows-x64', bundle: true, artifact: `OMP-Desktop-Setup-${desktop.version}-x64` },
+              { os: 'windows-2022', target: 'windows-x64', bundle: false, artifact: `OMP-Desktop-No-OMP-Setup-${desktop.version}-x64` }
             ];
             if (process.env.BUILD_MACOS === 'true') {
-              include.push({ os: 'macos-14', target: 'darwin-arm64', bundle: true });
+              include.push({ os: 'macos-14', target: 'darwin-arm64', bundle: true, artifact: `OMP-Desktop-${desktop.version}-arm64` });
             }
             core.setOutput('matrix', JSON.stringify({ include }));
 
@@ -74,22 +74,6 @@ jobs:
         with:
           node-version-file: .tool-versions
           cache: npm
-      - name: Check macOS release credentials
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::Missing macOS release credential: $name"
-              exit 1
-            fi
-          done
       - name: Install dependencies
         run: npm ci
       - name: Download verified OMP binary
@@ -107,15 +91,15 @@ jobs:
         run: npm run build:windows:no-omp
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Package and verify macOS
+      - name: Package unsigned macOS
         if: runner.os == 'macOS'
-        run: npm run build:mac
+        run: >-
+          npm run build:desktop -- --mac --arm64 --publish never
+          --config.mac.identity=null
+          --config.mac.notarize=false
+          --config.forceCodeSigning=false
         env:
-          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Collect release assets
         uses: actions/github-script@v7
         env:
@@ -141,7 +125,7 @@ jobs:
             for (const name of files) fs.copyFileSync(path.join(source, name), path.join('release-assets', name));
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}${{ !matrix.bundle && '-no-omp' || '' }}
+          name: ${{ matrix.artifact }}
           path: release-assets/*
           if-no-files-found: error
           compression-level: 0
@@ -156,7 +140,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: release-*
+          pattern: OMP-Desktop-*
           path: release-assets
           merge-multiple: true
       - name: Upload assets to draft release
