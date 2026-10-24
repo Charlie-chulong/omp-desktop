@@ -46,6 +46,8 @@ While a conversation runs, the composer defaults to **Steer**. Steering guides t
 
 If the provider cannot accept steering, Desktop reports a send failure and leaves the current turn running. Agent-to-agent prompts and completion notifications follow this same non-destructive rule, rather than replacing the turn.
 
+Autonomous OMP continuations remain steerable after a foreground turn finishes: the provider and Desktop share one active turn identity. Delayed idle checks from an older turn or an earlier continuation cannot clear the current turn. Rejections distinguish unsupported steering, a provider with no active turn, and a mismatched turn identity; identity failures never trigger automatic cancellation or replacement.
+
 The conversation's **Stop** interrupts its current run and all running managed descendants, including children still active when the parent finishes during the stop request. Detached agents are independent and are not stopped. The subagent list also offers **Stop** on each running child; stopped children remain listed, unlike archived children.
 
 Individual and parent-initiated OMP-native child cancellation requires OMP **18.4.9+** (`cancel_subagent` RPC). Older binaries report that the child could not be stopped and leave it marked running instead of claiming success. Update OMP in Host Settings, or run `npm run download:omp` before [packaging](../packaging.md). The repository's general minimum remains **OMP 18.8.7**, even when native child cancellation is not needed.

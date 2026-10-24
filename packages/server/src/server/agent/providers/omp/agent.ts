@@ -1734,6 +1734,7 @@ export class OmpAgentSession implements AgentSession {
   private activeAskUserDialog: ActiveAskUserDialog | null = null;
   private pendingAskUserFollowUpResponse: PendingAskUserFollowUpResponse | null = null;
   private activeTurnId: string | null = null;
+  private activeTurnGeneration = 0;
   private pendingTurnAdmission: { turnId: string; controller: AbortController } | null = null;
   private activeClientMessageId: string | null = null;
   private activeAssistantMessageId: string | null = null;
@@ -2114,6 +2115,7 @@ export class OmpAgentSession implements AgentSession {
     }
     this.live = true;
     this.activeTurnId = turnId;
+    this.activeTurnGeneration += 1;
     this.activeClientMessageId = clientMessageId ?? null;
     this.lastSubmittedPromptText = payload.text;
     this.lastSubmittedPromptDisplayText = displayPromptText;
@@ -2194,8 +2196,11 @@ export class OmpAgentSession implements AgentSession {
     prompt: AgentPromptInput,
     options: SteerActiveTurnOptions,
   ): Promise<SteerResult> {
-    if (!this.activeTurnId || this.activeTurnId !== options.expectedTurnId) {
-      return { status: "unavailable" };
+    if (!this.activeTurnId || this.closed) {
+      return { status: "unavailable", reason: "no_active_turn" };
+    }
+    if (this.activeTurnId !== options.expectedTurnId) {
+      return { status: "unavailable", reason: "turn_mismatch" };
     }
     const payload = convertPromptInput(prompt, { model: this.state.model });
     const submittedMessage = {
@@ -2997,6 +3002,33 @@ export class OmpAgentSession implements AgentSession {
     }
   }
 
+  private initializeAutonomousTurn(): void {
+    this.activeTurnId = randomUUID();
+    this.activeTurnGeneration += 1;
+    this.activeClientMessageId = null;
+    this.lastSubmittedPromptText = null;
+    this.lastSubmittedPromptDisplayText = null;
+    this.lastSubmittedPromptClientMessageId = null;
+    this.activeAssistantMessageId = null;
+    this.activeTurnTerminalAssistantMessage = null;
+    this.activePlanText = "";
+    this.activePlanMessageId = null;
+    this.activeTurnStarted = false;
+    this.activeTurnHasUserMessage = false;
+    this.clearNoTurnBuffers();
+    this.usagePoller.startTurn();
+    this.startAutomaticCredentialResolution();
+  }
+
+  private ownsActiveTurn(turnId: string | undefined, generation?: number): turnId is string {
+    return (
+      !this.closed &&
+      turnId !== undefined &&
+      this.activeTurnId === turnId &&
+      (generation === undefined || this.activeTurnGeneration === generation)
+    );
+  }
+
   private currentTurnIdForEvent(): string | undefined {
     return this.activeTurnId ?? undefined;
   }
@@ -3759,10 +3791,16 @@ export class OmpAgentSession implements AgentSession {
   // eslint-disable-next-line complexity
   private handleSessionEvent(event: OmpAgentSessionEvent): void {
     this.refreshAutomaticCredential();
+    if (
+      (event.type === "agent_start" || event.type === "turn_start") &&
+      this.activeTurnId === null
+    ) {
+      this.initializeAutonomousTurn();
+    }
     const turnId = this.currentTurnIdForEvent();
-
     switch (event.type) {
       case "agent_start":
+        this.activeTurnGeneration += 1;
         this.cancelModelErrorContinuation();
         this.activeTurnStarted = true;
         this.streamedClaudeCompletionKey = null;
@@ -3774,6 +3812,7 @@ export class OmpAgentSession implements AgentSession {
         });
         return;
       case "turn_start":
+        this.activeTurnGeneration += 1;
         this.cancelModelErrorContinuation();
         this.activeTurnStarted = true;
         this.clearNoTurnBuffers();
@@ -3883,8 +3922,13 @@ export class OmpAgentSession implements AgentSession {
         }
         this.cancelModelErrorContinuation();
         // A state request is processed after OMP's RPC loop becomes promptable,
-        // so do not advertise Paseo idle until it reports that transition.
-        void this.completeTurnAfterProviderIdle(turnId, terminalMessages);
+        // so do not advertise Paseo idle until it reports that transition. A later
+        // provider start for the same Desktop turn invalidates this completion.
+        void this.completeTurnAfterProviderIdle(
+          turnId,
+          terminalMessages,
+          this.activeTurnGeneration,
+        );
         return;
       }
       default:
@@ -4264,7 +4308,12 @@ export class OmpAgentSession implements AgentSession {
     });
   }
 
-  private completeTurn(turnId: string | undefined, messages: OmpAgentMessage[]): void {
+  private completeTurn(
+    turnId: string | undefined,
+    messages: OmpAgentMessage[],
+    generation?: number,
+  ): void {
+    if (!this.ownsActiveTurn(turnId, generation)) return;
     const streamedPlanText = this.activePlanText.trim();
     const streamedPlan: OmpPlanDraft | null = streamedPlanText
       ? {
@@ -4329,19 +4378,26 @@ export class OmpAgentSession implements AgentSession {
   private async completeTurnAfterProviderIdle(
     turnId: string | undefined,
     messages: OmpAgentMessage[],
+    generation = this.activeTurnGeneration,
   ): Promise<void> {
-    while (!this.closed && this.activeTurnStarted && this.currentTurnIdForEvent() === turnId) {
+    while (this.ownsActiveTurn(turnId, generation) && this.activeTurnStarted) {
       try {
         const state = await this.runtimeSession.getState();
+        if (!this.ownsActiveTurn(turnId, generation) || !this.activeTurnStarted) {
+          return;
+        }
         this.state = {
           ...state,
           activeCredential: state.activeCredential ?? this.state.activeCredential,
         };
         if (!state.isStreaming && !state.isCompacting) {
-          this.completeTurn(turnId, messages);
+          this.completeTurn(turnId, messages, generation);
           return;
         }
       } catch (error) {
+        if (!this.ownsActiveTurn(turnId, generation) || !this.activeTurnStarted) {
+          return;
+        }
         this.logger.debug({ err: error }, "OMP state unavailable while waiting for provider idle");
       }
       await this.providerIdleScheduler.waitForRetry();

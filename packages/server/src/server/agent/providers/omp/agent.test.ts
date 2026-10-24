@@ -8,7 +8,7 @@ import type { PaseoToolCatalog } from "../../tools/types.js";
 import type { OmpNoTurnScheduler, OmpProviderIdleScheduler } from "./agent.js";
 import type { OmpUsagePollScheduler } from "./usage-poller.js";
 import { OmpHarness } from "./test-utils/omp-harness.js";
-import type { OmpAgentMessage, OmpRpcSlashCommand } from "./rpc-types.js";
+import type { OmpAgentMessage, OmpRpcSlashCommand, OmpSessionState } from "./rpc-types.js";
 import { OmpReadyTimeoutError } from "./cli-runtime.js";
 
 const OMP_PLAN_TURN_DIRECTIVE = `<system-directive>
@@ -847,6 +847,23 @@ describe("OMP agent client and session", () => {
 
     expect(omp.runtime().steerRequests).toEqual([{ message: "ACK", imageCount: 0 }]);
     expect(omp.wasAborted()).toBe(false);
+  });
+
+  test("distinguishes absent and mismatched steering targets", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+
+    await expect(omp.steerActiveTurn("too early", "missing-turn")).resolves.toEqual({
+      status: "unavailable",
+      reason: "no_active_turn",
+    });
+
+    const turnId = await omp.requireStartTurn("keep working");
+    await expect(omp.steerActiveTurn("wrong target", `${turnId}-stale`)).resolves.toEqual({
+      status: "unavailable",
+      reason: "turn_mismatch",
+    });
+    expect(omp.runtime().steerRequests).toEqual([]);
   });
 
   test("keeps a parent steerable while a native subagent continues", async () => {
@@ -1723,6 +1740,134 @@ describe("OMP agent client and session", () => {
     });
   });
 
+  test("does not let a deferred terminal state response settle a replacement turn", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    const runtime = omp.runtime();
+    const { promise: stateRequested, resolve: markStateRequested } = Promise.withResolvers<void>();
+    const { promise: staleState, resolve: releaseStaleState } =
+      Promise.withResolvers<OmpSessionState>();
+    const getState = runtime.getState.bind(runtime);
+    let deferNextState = true;
+    runtime.getState = async () => {
+      if (!deferNextState) return await getState();
+      deferNextState = false;
+      markStateRequested();
+      return await staleState;
+    };
+
+    await omp.requireStartTurn("turn A");
+    runtime.beginTurn();
+    runtime.streamAssistantText("A done", "assistant-a");
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: "A done" }],
+      responseId: "assistant-a",
+    });
+    await stateRequested;
+
+    await omp.interrupt("replacement");
+    const turnB = await omp.requireStartTurn("turn B");
+    releaseStaleState({ ...runtime.state, isStreaming: false, isCompacting: false });
+    await waitForImmediate();
+
+    expect(omp.completedTurnCount()).toBe(0);
+    expect(omp.canceledTurnCount()).toBe(1);
+    await expect(omp.steerActiveTurn("continue B", turnB)).resolves.toEqual({
+      status: "accepted",
+      userMessageEcho: "provider",
+    });
+
+    runtime.beginTurn();
+    runtime.streamAssistantText("B done", "assistant-b");
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: "B done" }],
+      responseId: "assistant-b",
+    });
+    await vi.waitFor(() => expect(omp.completedTurnCount()).toBe(1));
+  });
+
+  test("invalidates an idle check when OMP continues the same Desktop turn", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    const runtime = omp.runtime();
+    const { promise: stateRequested, resolve: markStateRequested } = Promise.withResolvers<void>();
+    const { promise: staleState, resolve: releaseStaleState } =
+      Promise.withResolvers<OmpSessionState>();
+    const getState = runtime.getState.bind(runtime);
+    let deferNextState = true;
+    runtime.getState = async () => {
+      if (!deferNextState) return await getState();
+      deferNextState = false;
+      markStateRequested();
+      return await staleState;
+    };
+
+    const turnId = await omp.requireStartTurn("work through both cycles");
+    runtime.beginTurn();
+    runtime.streamAssistantText("first cycle", "assistant-first");
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: "first cycle" }],
+      responseId: "assistant-first",
+    });
+    await stateRequested;
+
+    runtime.beginTurn();
+    runtime.streamAssistantText("second cycle", "assistant-second");
+    releaseStaleState({ ...runtime.state, isStreaming: false, isCompacting: false });
+    await waitForImmediate();
+    expect(omp.completedTurnCount()).toBe(0);
+
+    runtime.finishTurn({
+      role: "assistant",
+      content: [{ type: "text", text: "second cycle" }],
+      responseId: "assistant-second",
+    });
+    await vi.waitFor(() => expect(omp.completedTurnCount()).toBe(1));
+    expect(
+      omp
+        .streamEvents()
+        .filter((event) => event.type === "turn_started")
+        .map((event) => event.turnId),
+    ).toEqual([turnId, turnId]);
+  });
+
+  test("ignores a deferred terminal state response after close", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    const runtime = omp.runtime();
+    const { promise: stateRequested, resolve: markStateRequested } = Promise.withResolvers<void>();
+    const { promise: staleState, resolve: releaseStaleState } =
+      Promise.withResolvers<OmpSessionState>();
+    runtime.getState = async () => {
+      markStateRequested();
+      return await staleState;
+    };
+
+    await omp.requireStartTurn("close while settling");
+    runtime.beginTurn();
+    runtime.streamAssistantText("too late");
+    runtime.finishTurn();
+    await stateRequested;
+
+    await omp.close();
+    releaseStaleState({ ...runtime.state, isStreaming: false, isCompacting: false });
+    await waitForImmediate();
+
+    expect(
+      omp
+        .streamEvents()
+        .filter(
+          (event) =>
+            event.type === "turn_completed" ||
+            event.type === "turn_canceled" ||
+            event.type === "turn_failed",
+        ),
+    ).toEqual([]);
+  });
+
   test("does not complete on OMP's extension-notice agent_end", async () => {
     const omp = new OmpHarness();
     await omp.start();
@@ -2000,17 +2145,47 @@ describe("OMP agent client and session", () => {
     expect(omp.completedTurnCount()).toBe(1);
   });
 
-  test("completes an autonomous OMP turn without a foreground turn ID", async () => {
+  test("owns and steers an autonomous OMP turn with one provider identity", async () => {
     const omp = new OmpHarness();
     await omp.start();
+    const runtime = omp.runtime();
 
-    await omp.runAutonomousTurn("autonomous turn completed");
+    runtime.emit({ type: "agent_start" });
+    runtime.beginTurn();
+    const started = omp.streamEvents().findLast((event) => event.type === "turn_started");
+    expect(started?.turnId).toEqual(expect.any(String));
+    if (!started?.turnId) throw new Error("Autonomous OMP turn did not publish an identity");
+    const turnId = started.turnId;
 
-    expect(omp.completedTurnCount()).toBe(1);
+    await expect(omp.steerActiveTurn("steer autonomous work", turnId)).resolves.toEqual({
+      status: "accepted",
+      userMessageEcho: "provider",
+    });
+    runtime.acceptPrompt("steer autonomous work", "autonomous-steer");
+    runtime.streamAssistantText("autonomous turn completed");
+    runtime.finishTurn();
+    runtime.finishTurn();
+    await vi.waitFor(() => expect(omp.completedTurnCount()).toBe(1));
+
     expect(omp.timeline()).toContainEqual({
       type: "assistant_message",
       text: "autonomous turn completed",
       messageId: "omp-assistant-1",
+    });
+    expect(
+      omp
+        .streamEvents()
+        .filter(
+          (event) =>
+            event.type === "turn_started" ||
+            event.type === "turn_completed" ||
+            (event.type === "timeline" && event.item.type === "assistant_message"),
+        )
+        .every((event) => event.turnId === turnId),
+    ).toBe(true);
+    await expect(omp.steerActiveTurn("too late", turnId)).resolves.toEqual({
+      status: "unavailable",
+      reason: "no_active_turn",
     });
   });
 
@@ -2544,6 +2719,27 @@ describe("OMP agent client and session", () => {
     expect(omp.canceledTurnCount()).toBe(1);
     expect(omp.failedTurnCount()).toBe(0);
     expect(omp.cancellationReasons()).toEqual(["replacement"]);
+  });
+
+  test("cancels an autonomous provider-owned turn and suppresses its late terminal events", async () => {
+    const omp = new OmpHarness();
+    await omp.start();
+    const runtime = omp.runtime();
+    runtime.beginTurn();
+    const started = omp.streamEvents().findLast((event) => event.type === "turn_started");
+    expect(started?.turnId).toEqual(expect.any(String));
+
+    await omp.interrupt();
+    runtime.streamAssistantText("late autonomous output");
+    runtime.finishTurn();
+    await waitForImmediate();
+
+    expect(omp.canceledTurnCount()).toBe(1);
+    expect(omp.cancellationReasons()).toEqual(["user"]);
+    expect(omp.completedTurnCount()).toBe(0);
+    expect(omp.timeline()).not.toContainEqual(
+      expect.objectContaining({ text: "late autonomous output" }),
+    );
   });
 
   test("does not let late autonomous events wake an interrupted conversation", async () => {

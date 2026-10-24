@@ -238,13 +238,15 @@ export interface AgentSteerOptions extends AgentRunOptions {
   clearPendingPermissions?: boolean;
 }
 
+export type SteerUnavailableReason = "unsupported" | "no_active_turn" | "turn_mismatch";
+
 export type SteerResult =
   | {
       status: "accepted";
       /** The provider will emit the canonical user message when it consumes the steer. */
       userMessageEcho?: "provider";
     }
-  | { status: "unavailable" };
+  | { status: "unavailable"; reason: SteerUnavailableReason };
 
 export interface SteerActiveTurnOptions extends AgentSteerOptions {
   expectedTurnId: string;

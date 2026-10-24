@@ -46,6 +46,7 @@ import {
   type AgentSession,
   type AgentSessionConfig,
   type SteerResult,
+  type SteerUnavailableReason,
   type AgentStreamEvent,
   type AgentTimelineItem,
   type AgentUsage,
@@ -316,11 +317,13 @@ export interface AgentManagerOptions {
 }
 
 export interface ActiveTurnSteerDispatchOptions extends AgentSteerOptions {
+  /** Replace the foreground turn when steering is unsupported. Defaults true. */
   replaceOnUnavailable?: boolean;
 }
 
 export type ActiveTurnSteerDispatchResult =
-  | { status: "inactive" | "steered" | "unavailable" }
+  | { status: "inactive" | "steered" }
+  | { status: "unavailable"; reason: SteerUnavailableReason }
   | { status: "replaced"; iterator: AsyncGenerator<AgentStreamEvent> };
 
 function stripSteerOptions(options?: ActiveTurnSteerDispatchOptions): AgentRunOptions | undefined {
@@ -2660,8 +2663,11 @@ export class AgentManager {
   ): Promise<SteerResult> {
     const agent = this.requireSessionAgent(agentId);
     const expectedTurnId = agent.activeForegroundTurnId ?? agent.activeTurnId;
-    if (!expectedTurnId || !agent.session.steerActiveTurn) {
-      return { status: "unavailable" };
+    if (!expectedTurnId) {
+      return { status: "unavailable", reason: "no_active_turn" };
+    }
+    if (!agent.session.steerActiveTurn) {
+      return { status: "unavailable", reason: "unsupported" };
     }
     const result = await this.runSteerAdmission(agent, expectedTurnId, async () => {
       const admission = await agent.session.steerActiveTurn!(prompt, {
@@ -2715,16 +2721,19 @@ export class AgentManager {
           }
           return admission;
         })
-      : { status: "unavailable" as const };
+      : { status: "unavailable" as const, reason: "unsupported" as const };
     if (result.status === "accepted") {
       return { status: "steered" };
     }
+    if (result.reason !== "unsupported") {
+      return result;
+    }
     if (options?.replaceOnUnavailable === false) {
-      return { status: "unavailable" };
+      return result;
     }
 
-    // Providers without autonomous steering keep their existing dispatch behavior. The shared
-    // admission may recognize the turn, but only an accepted steer can own it without replacement.
+    // Only unsupported steering keeps the existing replacement behavior. Identity failures above
+    // must remain unavailable so they can never cancel or replace a different active turn.
     if (agent.activeForegroundTurnId === null && agent.activeTurnId === expectedTurnId) {
       return { status: "inactive" };
     }

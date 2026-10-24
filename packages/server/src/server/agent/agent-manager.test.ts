@@ -44,6 +44,7 @@ import type {
   AgentTimelineItem,
   SteerActiveTurnOptions,
   SteerResult,
+  SteerUnavailableReason,
   ImportProviderSessionInput,
   ImportProviderSessionContext,
   ResolveAgentDefaultModeInput,
@@ -541,7 +542,7 @@ class SteeringTestSession extends TestAgentSession {
   interruptReasons: AgentInterruptReason[] = [];
   startCount = 0;
   steerCount = 0;
-  steerResult: "accepted" | "unavailable" | Error = "accepted";
+  steerResult: "accepted" | SteerUnavailableReason | Error = "accepted";
   startPrompts: AgentPromptInput[] = [];
 
   override async startTurn(prompt: AgentPromptInput): Promise<{ turnId: string }> {
@@ -568,10 +569,12 @@ class SteeringTestSession extends TestAgentSession {
   ): Promise<SteerResult> {
     this.steerCount += 1;
     if (options.expectedTurnId !== `active-turn-${this.startCount}`) {
-      return { status: "unavailable" };
+      return { status: "unavailable", reason: "turn_mismatch" };
     }
     if (this.steerResult instanceof Error) throw this.steerResult;
-    if (this.steerResult === "unavailable") return { status: "unavailable" };
+    if (this.steerResult !== "accepted") {
+      return { status: "unavailable", reason: this.steerResult };
+    }
     this.pushEvent({
       type: "timeline",
       provider: this.provider,
@@ -593,7 +596,7 @@ class ProviderEchoSteeringSession extends SteeringTestSession {
   ): Promise<SteerResult> {
     this.steerCount += 1;
     if (options.expectedTurnId !== `active-turn-${this.startCount}`) {
-      return { status: "unavailable" };
+      return { status: "unavailable", reason: "turn_mismatch" };
     }
     return {
       status: "accepted",
@@ -908,9 +911,9 @@ test("retries provider history hydration after a stream failure", async () => {
   }
 });
 
-test("unavailable steer interrupts once and starts one replacement turn", async () => {
+test("unsupported steer interrupts once and starts one replacement turn", async () => {
   const session = new SteeringTestSession({ provider: "codex", cwd: process.cwd() });
-  session.steerResult = "unavailable";
+  session.steerResult = "unsupported";
   const { manager, agentId, workdir } = await startAndSteerThroughManager(session);
   try {
     expect(session.interruptCount).toBe(1);
@@ -921,6 +924,98 @@ test("unavailable steer interrupts once and starts one replacement turn", async 
     );
   } finally {
     await manager.closeAgent(agentId);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  {
+    reason: "no_active_turn" as const,
+    error: "provider no longer has an active turn to steer",
+  },
+  {
+    reason: "turn_mismatch" as const,
+    error: "provider's active turn did not match the turn being steered",
+  },
+])("does not replace or report delivery after provider $reason", async ({ reason, error }) => {
+  const workdir = mkdtempSync(join(tmpdir(), `agent-manager-${reason}-`));
+  const session = new SteeringTestSession({ provider: "codex", cwd: workdir });
+  session.steerResult = reason;
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  let agentId: string | null = null;
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    const stream = manager.streamAgent(agent.id, "keep running");
+    void (async () => {
+      for await (const _event of stream) {
+      }
+    })();
+    await manager.waitForAgentRunStart(agent.id);
+
+    await expect(
+      startAgentRun(manager, agent.id, "identity-sensitive steer", logger, {
+        replaceRunning: true,
+        activeTurnBehavior: "steer",
+        runOptions: { clientMessageId: "identity-sensitive-client" },
+      }),
+    ).rejects.toThrow(error);
+
+    expect(session.steerCount).toBe(1);
+    expect(session.interruptCount).toBe(0);
+    expect(session.startCount).toBe(1);
+    expect(manager.getTimeline(agent.id)).not.toContainEqual(
+      expect.objectContaining({ clientMessageId: "identity-sensitive-client" }),
+    );
+  } finally {
+    if (agentId) await manager.closeAgent(agentId).catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("distinguishes a missing active turn from an unsupported steer operation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-steer-unavailable-reasons-"));
+  const session = new UnsupportedSteeringSession({ provider: "codex", cwd: workdir });
+  const client = new (class extends TestAgentClient {
+    override async createSession(): Promise<AgentSession> {
+      return session;
+    }
+  })();
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  let agentId: string | null = null;
+
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    agentId = agent.id;
+    await expect(manager.steerAgentRun(agent.id, "idle steer")).resolves.toEqual({
+      status: "unavailable",
+      reason: "no_active_turn",
+    });
+
+    const stream = manager.streamAgent(agent.id, "keep running");
+    void (async () => {
+      for await (const _event of stream) {
+      }
+    })();
+    await manager.waitForAgentRunStart(agent.id);
+    await expect(manager.steerAgentRun(agent.id, "active steer")).resolves.toEqual({
+      status: "unavailable",
+      reason: "unsupported",
+    });
+    expect(session.interruptCount).toBe(0);
+    expect(session.startCount).toBe(1);
+  } finally {
+    if (agentId) await manager.closeAgent(agentId).catch(() => undefined);
     rmSync(workdir, { recursive: true, force: true });
   }
 });
@@ -1143,7 +1238,7 @@ test("does not replace a newer foreground turn after unavailable steer fallback 
   const entered = deferred<void>();
   const release = deferred<void>();
   const session = new SteeringTestSession({ provider: "codex", cwd: process.cwd() });
-  session.steerResult = "unavailable";
+  session.steerResult = "unsupported";
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stale-steer-"));
   const client = new (class extends TestAgentClient {
     override async createSession() {
@@ -1253,7 +1348,7 @@ test("steers a tracked autonomous turn without creating a replacement run", asyn
 
 test("isolated rewind falls back from steering to the normal replacement path", async () => {
   const session = new SteeringTestSession({ provider: "claude", cwd: process.cwd() });
-  session.steerResult = "unavailable";
+  session.steerResult = "unsupported";
   const { manager, agentId, workdir } = await startAndSteerThroughManager(session);
   try {
     await startAgentRun(manager, agentId, "/rewind submitted-message-id", logger, {

@@ -29,7 +29,7 @@ export interface StartAgentRunOptions {
   runOptions?: AgentRunOptions;
   /**
    * Defaults true. Set false when the caller must never interrupt the target
-   * or its managed descendants if provider steering is unavailable.
+   * or its managed descendants if provider steering is unsupported.
    */
   replaceOnSteerUnavailable?: boolean;
   /** Ask the provider to deny permissions blocking this steer. */
@@ -66,9 +66,20 @@ async function steerOrReplaceActiveRun(
     return { disposition: "steered" };
   }
   if (result.status === "unavailable") {
-    throw new Error(
-      `Cannot deliver a prompt to running agent ${agentId} without interrupting its active turn because its provider does not support steering`,
-    );
+    switch (result.reason) {
+      case "unsupported":
+        throw new Error(
+          `Cannot deliver a prompt to running agent ${agentId} without interrupting its active turn because its provider does not support steering`,
+        );
+      case "no_active_turn":
+        throw new Error(
+          `Cannot deliver a prompt to running agent ${agentId} because its provider no longer has an active turn to steer`,
+        );
+      case "turn_mismatch":
+        throw new Error(
+          `Cannot deliver a prompt to running agent ${agentId} because the provider's active turn did not match the turn being steered`,
+        );
+    }
   }
   if (result.status === "replaced") {
     return { disposition: "turn_started", iterator: result.iterator };
@@ -205,7 +216,7 @@ export interface SendPromptToAgentParams {
   activeTurnBehavior?: ActiveTurnBehavior;
   /**
    * Defaults true. Set false for prompts whose delivery must not cancel the
-   * target's managed subtree when steering is unavailable.
+   * target's managed subtree when steering is unsupported.
    */
   replaceOnSteerUnavailable?: boolean;
   runOptions?: AgentRunOptions;
