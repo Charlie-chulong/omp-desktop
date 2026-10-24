@@ -14,7 +14,7 @@ Customize local appearance and wallpaper, understand platform window behavior, a
 
 **Settings → General → Language → System** chooses the first supported system language; an explicit selection takes precedence. macOS reads actual OS language preference order, not a fixed browser locale. Restart Desktop after changing macOS language preferences.
 
-**Settings → General → Detail level** controls reasoning expansion, tool-call detail, completed-response file lists, and the Web chat outline. **Show files after each response** hides file chips without hiding statistics when off; it defaults on and persists across restarts. These controls are under General, not Appearance; existing values are retained.
+**Settings → Chat behavior → Detail level** controls reasoning expansion, tool-call detail, and the Web chat outline. **Settings → Chat behavior → Show files after each response** hides file chips without hiding statistics when off; it defaults on and persists across restarts. General no longer includes the Detail level section; existing values are retained.
 
 Conversation prose uses medium weight with semibold emphasis, with deeper near-black primary text in the light theme. Code remains regular weight; font sizes, line heights, and secondary tones are unchanged. Math retains bundled KaTeX fonts even if the interface font changes; see [Messages and media](messages-and-media.md).
 

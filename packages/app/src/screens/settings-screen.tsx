@@ -254,180 +254,6 @@ let retainedDesktopSidebarScrollOffset = 0;
 // Section components
 // ---------------------------------------------------------------------------
 
-interface AutoExpandReasoningRowProps {
-  value: boolean;
-  onChange: (value: boolean) => void;
-}
-
-function AutoExpandReasoningRow({ value, onChange }: AutoExpandReasoningRowProps) {
-  const { t } = useTranslation();
-  return (
-    <View style={settingsStyles.row}>
-      <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>
-          {t("settings.general.autoExpandReasoning.label")}
-        </Text>
-        <Text style={settingsStyles.rowHint}>
-          {t("settings.general.autoExpandReasoning.description")}
-        </Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        accessibilityLabel={t("settings.general.autoExpandReasoning.label")}
-      />
-    </View>
-  );
-}
-
-interface ChatOutlineRowProps {
-  value: boolean;
-  onChange: (value: boolean) => void;
-}
-
-function ChatOutlineRow({ value, onChange }: ChatOutlineRowProps) {
-  const { t } = useTranslation();
-  return (
-    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-      <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>{t("settings.appearance.chatOutline.title")}</Text>
-        <Text style={settingsStyles.rowHint}>
-          {t("settings.appearance.chatOutline.description")}
-        </Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        accessibilityLabel={t("settings.appearance.chatOutline.title")}
-      />
-    </View>
-  );
-}
-
-const TOOL_CALL_DETAIL_LEVELS: readonly AppSettings["toolCallDetailLevel"][] = [
-  "detailed",
-  "overview",
-];
-
-interface ToolCallDetailMenuItemProps {
-  value: AppSettings["toolCallDetailLevel"];
-  selected: boolean;
-  onChange: (value: AppSettings["toolCallDetailLevel"]) => void;
-}
-
-function ToolCallDetailMenuItem({ value, selected, onChange }: ToolCallDetailMenuItemProps) {
-  const { t } = useTranslation();
-  const handleSelect = useCallback(() => onChange(value), [onChange, value]);
-  return (
-    <DropdownMenuItem selected={selected} onSelect={handleSelect}>
-      {t(`settings.general.toolCallDetail.options.${value}`)}
-    </DropdownMenuItem>
-  );
-}
-
-interface ToolCallDetailRowProps {
-  value: AppSettings["toolCallDetailLevel"];
-  onChange: (value: AppSettings["toolCallDetailLevel"]) => void;
-}
-
-function ToolCallDetailRow({ value, onChange }: ToolCallDetailRowProps) {
-  const { t } = useTranslation();
-  const selectedLabel = t(`settings.general.toolCallDetail.options.${value}`);
-  return (
-    <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-      <View style={settingsStyles.rowContent}>
-        <Text style={settingsStyles.rowTitle}>{t("settings.general.toolCallDetail.label")}</Text>
-        <Text style={settingsStyles.rowHint}>
-          {t("settings.general.toolCallDetail.description")}
-        </Text>
-      </View>
-      <DropdownMenu>
-        <DropdownTrigger
-          accessibilityRole="button"
-          style={themeTriggerStyle}
-          accessibilityLabel={t("settings.general.toolCallDetail.accessibilityLabel", {
-            value: selectedLabel,
-          })}
-        >
-          <Text style={styles.themeTriggerText}>{selectedLabel}</Text>
-        </DropdownTrigger>
-        <DropdownMenuContent side="bottom" align="end" width={200}>
-          {TOOL_CALL_DETAIL_LEVELS.map((option) => (
-            <ToolCallDetailMenuItem
-              key={option}
-              value={option}
-              selected={value === option}
-              onChange={onChange}
-            />
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </View>
-  );
-}
-
-function ConversationDetailSection() {
-  const { t } = useTranslation();
-  const { settings, updateSettings } = useAppSettings();
-  const handleAutoExpandReasoningChange = useCallback(
-    (autoExpandReasoning: boolean) => {
-      void updateSettings({ autoExpandReasoning });
-    },
-    [updateSettings],
-  );
-  const handleToolCallDetailLevelChange = useCallback(
-    (toolCallDetailLevel: AppSettings["toolCallDetailLevel"]) => {
-      void updateSettings({ toolCallDetailLevel });
-    },
-    [updateSettings],
-  );
-  const handleChatOutlineChange = useCallback(
-    (chatOutlineEnabled: boolean) => {
-      void updateSettings({ chatOutlineEnabled });
-    },
-    [updateSettings],
-  );
-  const handleShowTurnFileChangesChange = useCallback(
-    (showTurnFileChanges: boolean) => {
-      void updateSettings({ showTurnFileChanges });
-    },
-    [updateSettings],
-  );
-
-  return (
-    <SettingsSection title={t("settings.appearance.detailLevel.title")}>
-      <View style={settingsStyles.card}>
-        <AutoExpandReasoningRow
-          value={settings.autoExpandReasoning}
-          onChange={handleAutoExpandReasoningChange}
-        />
-        <ToolCallDetailRow
-          value={settings.toolCallDetailLevel}
-          onChange={handleToolCallDetailLevelChange}
-        />
-        <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-          <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowTitle}>
-              {t("settings.general.showTurnFileChanges.label")}
-            </Text>
-            <Text style={settingsStyles.rowHint}>
-              {t("settings.general.showTurnFileChanges.description")}
-            </Text>
-          </View>
-          <Switch
-            value={settings.showTurnFileChanges}
-            onValueChange={handleShowTurnFileChangesChange}
-            accessibilityLabel={t("settings.general.showTurnFileChanges.label")}
-          />
-        </View>
-        {!isNative ? (
-          <ChatOutlineRow value={settings.chatOutlineEnabled} onChange={handleChatOutlineChange} />
-        ) : null}
-      </View>
-    </SettingsSection>
-  );
-}
-
 interface GeneralSectionProps {
   settings: AppSettings;
   handleLanguageChange: (language: AppLanguage) => void;
@@ -484,11 +310,18 @@ function ChatBehaviorSection({
   handleSendBehaviorChange: (behavior: SendBehavior) => void;
 }) {
   const { t } = useTranslation();
+  const { updateSettings } = useAppSettings();
   const sendBehaviorOptions = useMemo(() => getSendBehaviorOptions(t), [t]);
   const selectedSendBehaviorLabel =
     sendBehaviorOptions.find((option) => option.value === settings.sendBehavior)?.label ??
     settings.sendBehavior;
   const sendBehaviorDescriptionKey = `settings.general.defaultSend.descriptions.${settings.sendBehavior}`;
+  const handleShowTurnFileChangesChange = useCallback(
+    (showTurnFileChanges: boolean) => {
+      void updateSettings({ showTurnFileChanges });
+    },
+    [updateSettings],
+  );
 
   return (
     <>
@@ -519,6 +352,21 @@ function ChatBehaviorSection({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          </View>
+          <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+            <View style={settingsStyles.rowContent}>
+              <Text style={settingsStyles.rowTitle}>
+                {t("settings.general.showTurnFileChanges.label")}
+              </Text>
+              <Text style={settingsStyles.rowHint}>
+                {t("settings.general.showTurnFileChanges.description")}
+              </Text>
+            </View>
+            <Switch
+              value={settings.showTurnFileChanges}
+              onValueChange={handleShowTurnFileChangesChange}
+              accessibilityLabel={t("settings.general.showTurnFileChanges.label")}
+            />
           </View>
         </View>
       </SettingsSection>
@@ -1345,7 +1193,6 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
                 handleLanguageChange={handleLanguageChange}
                 handleTerminalScrollbackLinesChange={handleTerminalScrollbackLinesChange}
               />
-              <ConversationDetailSection />
               {isDesktopApp ? <DesktopBrowserSection /> : null}
               {isDesktopApp ? <DesktopStartupSection /> : null}
             </>
