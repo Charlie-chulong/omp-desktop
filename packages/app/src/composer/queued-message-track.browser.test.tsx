@@ -129,7 +129,7 @@ afterEach(() => {
 });
 
 describe("queued message order on a touch-sized screen", () => {
-  it("moves a pending message from last to first by touch without order buttons", async () => {
+  it("moves a pending message from last to first by touch", async () => {
     act(() => setMessages("A", "B", "C"));
     expect(orderedRows()).toEqual(["A", "B", "C"]);
     const handle = element("queued-message-drag-C");
@@ -140,8 +140,6 @@ describe("queued message order on a touch-sized screen", () => {
     const endY = to.y + to.height / 2;
     expect(from.width).toBeGreaterThanOrEqual(36);
     expect(from.height).toBeGreaterThanOrEqual(44);
-    expect(container.querySelector('[aria-label="Move queued message earlier"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Move queued message later"]')).toBeNull();
 
     act(() => sendTouch(handle, "touchstart", x, startY));
     await new Promise((resolve) => setTimeout(resolve, 230));

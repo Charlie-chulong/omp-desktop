@@ -152,12 +152,7 @@ export const zhCN: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "排队会话",
-      hint: "按住手柄拖动调整顺序，不会中断正在运行的对话。",
-      dragConversation: "调整「{{title}}」的排队顺序",
       dragMessage: "调整排队消息顺序：{{text}}",
-      messageCount: "排队消息：{{count}}",
-      untitledConversation: "未命名会话 · {{id}}",
     },
     placeholders: {
       desktop: "给 Agent 发消息，标记 @files，或使用 /commands 和 /skills",
@@ -197,7 +192,6 @@ export const zhCN: TranslationResources = {
       editQueuedMessage: "编辑排队消息",
       sendQueuedMessageNow: "立即发送排队消息",
       dragQueuedMessageHint: "按空格键拾起，使用方向键移动，再按空格键放下，或按 Escape 取消。",
-      queuedConversationPosition: "排队会话第 {{position}} 个，共 {{count}} 个",
       openImage: "打开图片附件",
       removeImage: "移除图片附件",
       removeFile: "Remove file attachment",

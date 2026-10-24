@@ -137,12 +137,7 @@ export const ru: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "Диалоги в очереди",
-      hint: "Удерживайте и перетаскивайте маркер. Текущие ходы продолжатся.",
-      dragConversation: "Изменить порядок: {{title}}",
       dragMessage: "Изменить порядок сообщения: {{text}}",
-      messageCount: "Сообщения в очереди: {{count}}",
-      untitledConversation: "Диалог без названия · {{id}}",
     },
     placeholders: {
       desktop: "Напишите агенту сообщение, отметьте @files или используйте /commands и /skills.",
@@ -183,7 +178,6 @@ export const ru: TranslationResources = {
       sendQueuedMessageNow: "Отправить сообщение из очереди сейчас",
       dragQueuedMessageHint:
         "Нажмите пробел для захвата, стрелки для перемещения, пробел для размещения или Escape для отмены.",
-      queuedConversationPosition: "Разговор в очереди: {{position}} из {{count}}",
       openImage: "Открыть прикрепленное изображение",
       removeImage: "Удалить прикрепленное изображение",
       removeFile: "Удалить прикрепленный файл",

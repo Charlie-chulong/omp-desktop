@@ -151,12 +151,7 @@ export const en = {
   },
   composer: {
     queueOrder: {
-      title: "Queued conversations",
-      hint: "Hold and drag a handle. Running turns continue.",
-      dragConversation: "Reorder {{title}}",
       dragMessage: "Reorder queued message: {{text}}",
-      messageCount: "Queued messages: {{count}}",
-      untitledConversation: "Untitled conversation · {{id}}",
     },
     placeholders: {
       desktop: "Message the agent, tag @files, or use /commands and /skills",
@@ -197,7 +192,6 @@ export const en = {
       sendQueuedMessageNow: "Send queued message now",
       dragQueuedMessageHint:
         "Press Space to pick up, use arrow keys to move, Space to drop, or Escape to cancel.",
-      queuedConversationPosition: "Queued conversation {{position}} of {{count}}",
       openImage: "Open image attachment",
       removeImage: "Remove image attachment",
       removeFile: "Remove file attachment",

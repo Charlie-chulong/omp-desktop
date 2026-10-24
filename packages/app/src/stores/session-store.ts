@@ -389,20 +389,6 @@ interface QueuedMessageState {
   attachments: ComposerAttachment[];
 }
 
-function reconcileQueuedAgentOrder(
-  current: readonly string[],
-  messages: ReadonlyMap<string, readonly QueuedMessageState[]>,
-): string[] {
-  const next = current.filter((agentId) => messages.has(agentId));
-  const seen = new Set(next);
-  for (const [agentId, queue] of messages) {
-    if (queue.length === 0 || seen.has(agentId)) continue;
-    next.push(agentId);
-    seen.add(agentId);
-  }
-  return next;
-}
-
 export type WorkspaceRestoreStatus = "restoring" | "failed" | "needs-host-upgrade";
 
 // Per-session state
@@ -468,9 +454,8 @@ export interface SessionState {
   // File explorer
   fileExplorer: Map<string, AgentFileExplorerState>;
 
-  // Queued messages and the cross-conversation execution order.
+  // Pending messages in each conversation's user-selected order.
   queuedMessages: Map<string, QueuedMessageState[]>;
-  queuedAgentOrder: string[];
 }
 
 // Global store state
@@ -673,7 +658,6 @@ interface SessionStoreActions {
       | Map<string, QueuedMessageState[]>
       | ((prev: Map<string, QueuedMessageState[]>) => Map<string, QueuedMessageState[]>),
   ) => void;
-  reorderQueuedAgents: (serverId: string, agentIds: readonly string[]) => void;
 
   // Hydration
   setHasHydratedAgents: (serverId: string, hydrated: boolean) => void;
@@ -730,7 +714,6 @@ function createInitialSessionState(
     pendingPermissions: new Map(),
     fileExplorer: new Map(),
     queuedMessages: new Map(),
-    queuedAgentOrder: [],
   };
 }
 
@@ -2103,44 +2086,11 @@ export const useSessionStore = create<SessionStore>()(
           if (session.queuedMessages === nextValue) {
             return prev;
           }
-          const queuedAgentOrder = reconcileQueuedAgentOrder(session.queuedAgentOrder, nextValue);
           return {
             ...prev,
             sessions: {
               ...prev.sessions,
-              [serverId]: { ...session, queuedMessages: nextValue, queuedAgentOrder },
-            },
-          };
-        });
-      },
-
-      reorderQueuedAgents: (serverId, agentIds) => {
-        set((prev) => {
-          const session = prev.sessions[serverId];
-          if (!session) return prev;
-
-          if (
-            agentIds.length === session.queuedAgentOrder.length &&
-            agentIds.every((agentId, index) => session.queuedAgentOrder[index] === agentId)
-          ) {
-            return prev;
-          }
-
-          const activeAgentIds = new Set<string>();
-          for (const [agentId, queue] of session.queuedMessages) {
-            if (queue.length > 0) activeAgentIds.add(agentId);
-          }
-          // A drag may finish after a conversation drained or joined the queue.
-          if (agentIds.length !== activeAgentIds.size) return prev;
-          for (const agentId of agentIds) {
-            if (!activeAgentIds.delete(agentId)) return prev;
-          }
-
-          return {
-            ...prev,
-            sessions: {
-              ...prev.sessions,
-              [serverId]: { ...session, queuedAgentOrder: [...agentIds] },
+              [serverId]: { ...session, queuedMessages: nextValue },
             },
           };
         });

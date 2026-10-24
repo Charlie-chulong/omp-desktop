@@ -137,12 +137,7 @@ export const es: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "Conversaciones en cola",
-      hint: "Mantén pulsado y arrastra un asa. Los turnos en curso continúan.",
-      dragConversation: "Reordenar {{title}}",
       dragMessage: "Reordenar el mensaje en cola: {{text}}",
-      messageCount: "Mensajes en cola: {{count}}",
-      untitledConversation: "Conversación sin título · {{id}}",
     },
     placeholders: {
       desktop: "Envíe un mensaje al agente, etiquete@fileso use/commandsy/skills",
@@ -183,7 +178,6 @@ export const es: TranslationResources = {
       sendQueuedMessageNow: "Enviar mensaje en cola ahora",
       dragQueuedMessageHint:
         "Pulsa Espacio para seleccionar, las flechas para mover, Espacio para soltar o Escape para cancelar.",
-      queuedConversationPosition: "Conversación en cola {{position}} de {{count}}",
       openImage: "Abrir imagen adjunta",
       removeImage: "Quitar imagen adjunta",
       removeFile: "Remove file attachment",
