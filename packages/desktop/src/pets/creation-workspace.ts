@@ -66,6 +66,7 @@ process.exit(result.status === null ? 1 : result.status);
       ? `User's pet brief: ${JSON.stringify(brief)}`
       : "Ask me what pet I want and whether I have reference images before generating artwork.",
     "Keep all authoring files in this workspace. iris-reference.png shows the built-in pet only as an optional style reference; do not copy its identity unless requested.",
+    "Create this pet's own bubble.appearance and all eight bubble.states rules: original dialogue, deliberate silence, and appearance/hide/repeat timing. Do not inherit Iris's bubble or stock chatter. Review actual animation frames and bubble behavior, not just image dimensions.",
     "Finish by running the included install-pet helper successfully. It validates the real pet package and installs it in OMP's local pet library without changing the selected pet.",
     "After success, tell me to open Settings > Appearance > Desktop pet, click Refresh, and select the new pet. Do not claim success without the helper's successful output.",
   ].join("\n\n");

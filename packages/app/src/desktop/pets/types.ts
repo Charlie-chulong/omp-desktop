@@ -19,6 +19,29 @@ export interface PetAnimation {
 export type PetAnimations = Record<Exclude<PetAnimationState, "dragging">, PetAnimation> & {
   dragging?: PetAnimation;
 };
+export type PetBubbleState = "idle" | "offline" | PetTaskStatus | "dragging" | "petted";
+export interface PetBubbleAppearance {
+  background: string;
+  foreground: string;
+  border: string;
+  shape: "speech" | "rounded" | "thought";
+  fontSize: number;
+  fontWeight: "normal" | "bold";
+  padding: number;
+  borderRadius: number;
+  maxWidth: number;
+  animation: "none" | "fade" | "pop";
+}
+export interface PetBubbleRule {
+  messages: string[];
+  delayMs: number;
+  durationMs: number;
+  repeatDelayMs: number;
+}
+export interface PetBubbleProfile {
+  appearance: PetBubbleAppearance;
+  states: Record<PetBubbleState, PetBubbleRule>;
+}
 export interface PetManifest {
   version: 1;
   name: string;
@@ -27,6 +50,7 @@ export interface PetManifest {
   frameWidth: number;
   frameHeight: number;
   animations: PetAnimations;
+  bubble?: PetBubbleProfile;
 }
 export interface PetDescriptor {
   id: string;
@@ -40,6 +64,7 @@ export interface PetDescriptor {
   sheetWidth: number;
   sheetHeight: number;
   animations: PetAnimations;
+  bubble?: PetBubbleProfile;
 }
 export interface DesktopPetTask {
   serverId: string;
