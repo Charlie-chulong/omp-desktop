@@ -3227,145 +3227,140 @@ describe("HostRuntimeStore", () => {
     },
   );
 
-  it("starts ready queued conversations in the user-selected order", async () => {
-    const host = makeHost({ serverId: "srv_reordered_queue" });
-    const fakeClient = new FakeDaemonClient();
-    const store = new HostRuntimeStore({
-      deps: {
-        createClient: () => fakeClient as unknown as DaemonClient,
-        connectToDaemon: async () => ({
-          client: fakeClient as unknown as DaemonClient,
-          serverId: host.serverId,
-          hostname: null,
-        }),
-        getClientId: async () => "cid_reordered_queue",
-      },
-    });
-    const first = makeFetchAgentsEntry({
-      id: "first",
-      cwd: "/repo",
-      updatedAt: "2026-07-12T10:00:00.000Z",
-    });
-    const second = makeFetchAgentsEntry({
-      id: "second",
-      cwd: "/repo",
-      updatedAt: "2026-07-12T10:00:00.000Z",
-    });
-    const sessionStore = useSessionStore.getState();
-    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
-    sessionStore.setAgents(
-      host.serverId,
-      new Map([
-        ["first", { ...replicaAgent(first.agent, host.serverId), status: "idle" }],
-        ["second", { ...replicaAgent(second.agent, host.serverId), status: "running" }],
-      ]),
-    );
-    sessionStore.setQueuedMessages(
-      host.serverId,
-      new Map([
-        ["first", [{ id: "message-first", text: "run first", attachments: [] }]],
-        ["second", [{ id: "message-second", text: "run second", attachments: [] }]],
-      ]),
-    );
-    sessionStore.reorderQueuedAgents(host.serverId, ["second", "first"]);
-
-    store.drainQueuedAgentMessage(host.serverId, "first");
-    expect(fakeClient.sentAgentMessages).toEqual([]);
-
-    sessionStore.setAgents(
-      host.serverId,
-      new Map([
-        ["first", { ...replicaAgent(first.agent, host.serverId), status: "idle" }],
-        ["second", { ...replicaAgent(second.agent, host.serverId), status: "idle" }],
-      ]),
-    );
-    store.drainQueuedAgentMessage(host.serverId, "second");
-    await fakeClient.waitForSentMessages(1);
-
-    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["second"]);
-    await vi.waitFor(() => {
-      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("second")).toBe(
-        false,
+  it.each(["running", "initializing", "pending-initialization"] as const)(
+    "does not let a %s conversation block another conversation's pending messages",
+    async (blockedState) => {
+      const host = makeHost({ serverId: `srv_independent_queue_${blockedState}` });
+      const fakeClient = new FakeDaemonClient();
+      const store = new HostRuntimeStore();
+      const sessionStore = useSessionStore.getState();
+      const blocked = makeFetchAgentsEntry({
+        id: "blocked",
+        cwd: "/repo",
+        updatedAt: "2026-07-12T10:00:00.000Z",
+      });
+      const ready = makeFetchAgentsEntry({
+        id: "ready",
+        cwd: "/repo",
+        updatedAt: "2026-07-12T10:00:00.000Z",
+      });
+      sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+      sessionStore.setAgents(
+        host.serverId,
+        new Map([
+          [
+            "blocked",
+            {
+              ...replicaAgent(blocked.agent, host.serverId),
+              status: blockedState === "pending-initialization" ? "idle" : blockedState,
+            },
+          ],
+          ["ready", { ...replicaAgent(ready.agent, host.serverId), status: "idle" }],
+        ]),
       );
-    });
+      if (blockedState === "pending-initialization") {
+        sessionStore.setInitializingAgents(host.serverId, new Map([["blocked", true]]));
+      }
+      const blockedMessage = { id: "blocked-1", text: "wait for my turn", attachments: [] };
+      sessionStore.setQueuedMessages(
+        host.serverId,
+        new Map([
+          ["blocked", [blockedMessage]],
+          ["ready", [{ id: "ready-1", text: "run independently", attachments: [] }]],
+        ]),
+      );
 
-    store.drainQueuedAgentMessage(host.serverId, "second");
-    await fakeClient.waitForSentMessages(2);
+      try {
+        store.reevaluateQueuedAgentMessages(host.serverId);
+        await vi.waitFor(() => {
+          expect(fakeClient.sentAgentMessages).toEqual([
+            [
+              "ready",
+              "run independently",
+              expect.objectContaining({ images: [], attachments: [] }),
+            ],
+          ]);
+        });
+        expect(
+          useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("blocked"),
+        ).toEqual([blockedMessage]);
+        expect(
+          useSessionStore.getState().sessions[host.serverId]?.agents.get("blocked")?.status,
+        ).toBe(blockedState === "pending-initialization" ? "idle" : blockedState);
+      } finally {
+        sessionStore.clearSession(host.serverId);
+      }
+    },
+  );
 
-    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["second", "first"]);
-
-    useSessionStore.getState().clearSession(host.serverId);
-  });
-
-  it("dispatches a dragged queue order without interrupting a running conversation", async () => {
-    const host = makeHost({ serverId: "srv_dragged_queue" });
+  it("continues each conversation independently while another submission is awaiting its ACK", async () => {
+    const host = makeHost({ serverId: "srv_independent_ack" });
     const fakeClient = new FakeDaemonClient();
+    const firstAck = new Deferred<void>();
+    fakeClient.sendAgentMessageResponses.push(firstAck.promise);
     const store = new HostRuntimeStore();
     const sessionStore = useSessionStore.getState();
     sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
-    const entries = ["first", "second", "third"].map((id) =>
-      makeFetchAgentsEntry({ id, cwd: "/repo", updatedAt: "2026-07-12T10:00:00.000Z" }),
-    );
-    sessionStore.setAgents(
-      host.serverId,
-      new Map(
-        entries.map((entry) => [
-          entry.agent.id,
-          {
-            ...replicaAgent(entry.agent, host.serverId),
-            status: entry.agent.id === "first" ? ("running" as const) : ("idle" as const),
-          },
-        ]),
-      ),
-    );
     sessionStore.setQueuedMessages(
       host.serverId,
-      new Map(
-        entries.map((entry) => [
-          entry.agent.id,
-          [{ id: `message-${entry.agent.id}`, text: `run ${entry.agent.id}`, attachments: [] }],
-        ]),
-      ),
+      new Map([
+        [
+          "first",
+          [
+            { id: "first-1", text: "first one", attachments: [] },
+            { id: "first-2", text: "first two", attachments: [] },
+          ],
+        ],
+        [
+          "second",
+          [
+            { id: "second-1", text: "second one", attachments: [] },
+            { id: "second-2", text: "second two", attachments: [] },
+          ],
+        ],
+      ]),
     );
-    sessionStore.reorderQueuedAgents(host.serverId, ["third", "second", "first"]);
-
-    store.reevaluateQueuedAgentMessages(host.serverId);
-    await fakeClient.waitForSentMessages(1);
-    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third"]);
-    await vi.waitFor(() => {
-      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("third")).toBe(
-        false,
-      );
-    });
-
-    store.drainQueuedAgentMessage(host.serverId, "third");
-    await fakeClient.waitForSentMessages(2);
-    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third", "second"]);
-    await vi.waitFor(() => {
-      expect(useSessionStore.getState().sessions[host.serverId]?.queuedMessages.has("second")).toBe(
-        false,
-      );
-    });
-
-    store.drainQueuedAgentMessage(host.serverId, "second");
-    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual(["third", "second"]);
-    sessionStore.setAgents(
-      host.serverId,
-      new Map(
-        entries.map((entry) => [
-          entry.agent.id,
-          { ...replicaAgent(entry.agent, host.serverId), status: "idle" as const },
-        ]),
-      ),
-    );
-    store.drainQueuedAgentMessage(host.serverId, "first");
-    await fakeClient.waitForSentMessages(3);
-    expect(fakeClient.sentAgentMessages.map(([agentId]) => agentId)).toEqual([
-      "third",
-      "second",
-      "first",
-    ]);
-    useSessionStore.getState().clearSession(host.serverId);
+    const sent = () => fakeClient.sentAgentMessages.map(([id, text]) => [id, text]);
+    try {
+      store.reevaluateQueuedAgentMessages(host.serverId);
+      await vi.waitFor(() => {
+        expect(sent()).toEqual([
+          ["first", "first one"],
+          ["second", "second one"],
+        ]);
+      });
+      // Reevaluation is not a completion: neither conversation may submit its next item.
+      store.reevaluateQueuedAgentMessages(host.serverId);
+      expect(sent()).toEqual([
+        ["first", "first one"],
+        ["second", "second one"],
+      ]);
+      store.drainQueuedAgentMessage(host.serverId, "second");
+      await vi.waitFor(() => {
+        expect(sent()).toEqual([
+          ["first", "first one"],
+          ["second", "second one"],
+          ["second", "second two"],
+        ]);
+      });
+      // A fast first turn can finish before its ACK; only its own next item must wait.
+      store.drainQueuedAgentMessage(host.serverId, "first");
+      expect(
+        useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("first")?.[0]?.id,
+      ).toBe("first-2");
+      firstAck.resolve();
+      await vi.waitFor(() => {
+        expect(sent()).toEqual([
+          ["first", "first one"],
+          ["second", "second one"],
+          ["second", "second two"],
+          ["first", "first two"],
+        ]);
+      });
+    } finally {
+      firstAck.resolve();
+      sessionStore.clearSession(host.serverId);
+    }
   });
 
   it("drains a reordered conversation in visible order without interrupting its active turn", async () => {
@@ -3610,6 +3605,44 @@ describe("HostRuntimeStore", () => {
       send.resolve();
       store.syncHosts([]);
       useSessionStore.getState().clearSession(host.serverId);
+    }
+  });
+
+  it("does not retry a failed queued submission when another conversation completes", async () => {
+    const host = makeHost({ serverId: "srv_independent_failure" });
+    const fakeClient = new FakeDaemonClient();
+    fakeClient.sendAgentMessageFailures.push(new Error("submission rejected"));
+    const store = new HostRuntimeStore();
+    const sessionStore = useSessionStore.getState();
+    const failedMessage = { id: "failed-1", text: "keep for retry", attachments: [] };
+    sessionStore.initializeSession(host.serverId, fakeClient as unknown as DaemonClient, 1);
+    sessionStore.setQueuedMessages(
+      host.serverId,
+      new Map([
+        ["failed", [failedMessage]],
+        ["other", [{ id: "other-1", text: "continue independently", attachments: [] }]],
+      ]),
+    );
+    try {
+      store.drainQueuedAgentMessage(host.serverId, "failed");
+      await vi.waitFor(() => {
+        expect(fakeClient.sentAgentMessages).toHaveLength(1);
+        expect(
+          useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("failed"),
+        ).toEqual([failedMessage]);
+      });
+      store.drainQueuedAgentMessage(host.serverId, "other");
+      await vi.waitFor(() => {
+        expect(fakeClient.sentAgentMessages).toEqual([
+          ["failed", "keep for retry", expect.anything()],
+          ["other", "continue independently", expect.anything()],
+        ]);
+      });
+      expect(
+        useSessionStore.getState().sessions[host.serverId]?.queuedMessages.get("failed"),
+      ).toEqual([failedMessage]);
+    } finally {
+      sessionStore.clearSession(host.serverId);
     }
   });
 

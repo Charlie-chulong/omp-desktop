@@ -137,12 +137,7 @@ export const ptBR: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "Conversas na fila",
-      hint: "Mantenha a alça pressionada e arraste. Os turnos em andamento continuam.",
-      dragConversation: "Reordenar {{title}}",
       dragMessage: "Reordenar mensagem na fila: {{text}}",
-      messageCount: "Mensagens na fila: {{count}}",
-      untitledConversation: "Conversa sem título · {{id}}",
     },
     placeholders: {
       desktop: "Envie uma mensagem ao agente, marque @files ou use /commands e /skills",
@@ -183,7 +178,6 @@ export const ptBR: TranslationResources = {
       sendQueuedMessageNow: "Enviar mensagem da fila agora",
       dragQueuedMessageHint:
         "Pressione Espaço para selecionar, as setas para mover, Espaço para soltar ou Escape para cancelar.",
-      queuedConversationPosition: "Conversa na fila {{position}} de {{count}}",
       openImage: "Abrir anexo de imagem",
       removeImage: "Remover anexo de imagem",
       removeFile: "Remover anexo de arquivo",

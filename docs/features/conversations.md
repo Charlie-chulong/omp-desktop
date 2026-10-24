@@ -54,11 +54,11 @@ Individual and parent-initiated OMP-native child cancellation requires OMP **18.
 
 ## Queued messages
 
-### Shared host order
+### Independent conversations
 
-When at least two conversations on one host have queued follow-ups, every composer on that host shows a shared order board above the input, even if its conversation has no queued message. Rows show position, title, and queued-message count. Hold and drag a handle directly to another position; automatic delivery follows the displayed order. No hover, right-click, or separate order buttons are needed.
+Queued messages belong to their own conversation, not a shared host-wide execution queue. A running or initializing conversation does not block ready follow-ups in another conversation on the same host. Waiting for one conversation's submission acknowledgement or completion also leaves other conversations free to continue.
 
-Running turns are not interrupted. Conversations added or drained during a drag cannot be restored by an outdated drop. For keyboard sorting, focus a handle, press **Space**, move with arrow keys, and press **Space** again to drop. **Send queued message now** is a separate explicit override of this shared order.
+Each composer shows only its conversation's pending messages. There is no cross-conversation order board. Sorting pending messages does not change another conversation's execution or interrupt any running turn. **Send queued message now** remains a separate explicit action.
 
 ### Order within a conversation
 
