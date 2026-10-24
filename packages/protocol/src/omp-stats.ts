@@ -59,7 +59,7 @@ export const OmpStatsResultSchema = z.discriminatedUnion("status", [
   }),
   OmpStatsMetadataSchema.extend({
     status: z.literal("error"),
-    reason: z.enum(["unreadable", "invalid_data"]),
+    reason: z.enum(["unreadable", "invalid_data", "index_refresh_failed", "index_refresh_timeout"]),
   }),
 ]);
 export type OmpStatsResult = z.infer<typeof OmpStatsResultSchema>;

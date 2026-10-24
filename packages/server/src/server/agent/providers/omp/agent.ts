@@ -23,7 +23,7 @@ import type {
   OmpMemorySettingsPatch,
 } from "@omp-desktop/protocol/messages";
 import type { OmpStatsRange, OmpStatsResult } from "@omp-desktop/protocol/omp-stats";
-import { readOmpStats } from "./stats.js";
+import { refreshAndReadOmpStats } from "./stats.js";
 import { isMap, parseDocument } from "yaml";
 
 import {
@@ -4960,11 +4960,12 @@ export class OmpAgentClient implements AgentClient {
   }
 
   async getOmpStats(range: OmpStatsRange): Promise<OmpStatsResult> {
-    return readOmpStats({
+    return refreshAndReadOmpStats({
       range,
       env: { ...process.env, ...this.runtimeSettings?.env },
       command: this.runtimeSettings?.command,
       cwd: homedir(),
+      resolveLaunch: () => this.resolveOmpLaunch(),
     });
   }
 

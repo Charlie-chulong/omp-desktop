@@ -219,12 +219,15 @@ async function runDaemonCommand(request) {
         `The real packaged daemon must advertise server_info.features.${feature}=true`,
       );
     }
+    let timeoutMs = 10_000;
+    if (request.action === "plugins") timeoutMs = 90_000;
+    else if (request.action === "stats") timeoutMs = 60_000;
     const payload = await Promise.race([
       runDaemonOperation(client, request),
       new Promise((_resolve, reject) => {
         timer = setTimeout(
           () => reject(new Error(`The real ${request.action} RPC did not settle`)),
-          request.action === "plugins" ? 90_000 : 10_000,
+          timeoutMs,
         );
       }),
     ]);
