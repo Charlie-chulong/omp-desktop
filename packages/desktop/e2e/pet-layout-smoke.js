@@ -35,7 +35,11 @@ if (!process.versions.electron) {
     });
     // Use an owned copy of the official runtime so every native process can be
     // identified/cleaned by its executable path, even after a timeout or crash.
-    const runtime = fs.realpathSync(require("@iriscat/mini-electron"));
+    const runtime = fs.realpathSync(
+      process.env.MINI_ELECTRON_DIST_PATH
+        ? path.join(process.env.MINI_ELECTRON_DIST_PATH, "electron.exe")
+        : require("@iriscat/mini-electron"),
+    );
     const stagedRuntime = path.join(temporary, "runtime");
     fs.cpSync(path.dirname(runtime), stagedRuntime, { recursive: true, dereference: true });
     env = isolatedEnvironment({
@@ -62,6 +66,9 @@ if (!process.versions.electron) {
     env.OMP_PET_LAYOUT_EARLY_PROFILE = JSON.stringify(earlyProfile);
     env.OMP_PET_LAYOUT_SOURCE_ROOT = desktopRoot;
     env.OMP_PET_LAYOUT_NATIVE_PATHS = JSON.stringify(nativeProfilePaths(env));
+    if (process.env.PASEO_DESKTOP_SMOKE_ARTIFACT_DIR) {
+      env.OMP_PET_LAYOUT_EVIDENCE = path.resolve(process.env.PASEO_DESKTOP_SMOKE_ARTIFACT_DIR);
+    }
     const result = spawnSync(
       path.join(stagedRuntime, path.basename(runtime)),
       [`--app=${temporary}`],
@@ -329,11 +336,231 @@ async function runNativeSmoke() {
       );
     }
     console.log("PASS opaque pet hit target and transparent click-through area");
+    await smokeCustomBubbles({
+      app,
+      main,
+      BrowserWindow,
+      library: getPetLibrary(),
+      settings: getDesktopSettingsStore(),
+      labels,
+    });
   } finally {
     controller.dispose();
     main.destroy();
   }
   app.exit(0);
+}
+
+async function smokeCustomBubbles({ app, main, BrowserWindow, library, settings, labels }) {
+  const states = [
+    "idle",
+    "offline",
+    "running",
+    "needs_input",
+    "ready",
+    "blocked",
+    "dragging",
+    "petted",
+  ];
+  const makeProfile = (name, appearance) => ({
+    appearance,
+    states: Object.fromEntries(
+      states.map((state) => [
+        state,
+        { messages: [`${name} ${state}`], delayMs: 0, durationMs: 0, repeatDelayMs: 0 },
+      ]),
+    ),
+  });
+  const first = makeProfile("蓝色伙伴", {
+    background: "#102846",
+    foreground: "#E5F0FA",
+    border: "#579ED9",
+    shape: "thought",
+    fontSize: 13,
+    fontWeight: "normal",
+    padding: 8,
+    borderRadius: 10,
+    maxWidth: 200,
+    animation: "pop",
+  });
+  first.states.idle = {
+    messages: ["蓝色伙伴第一句", "蓝色伙伴第二句"],
+    delayMs: 1800,
+    durationMs: 700,
+    repeatDelayMs: 1600,
+  };
+  const second = makeProfile("紫色伙伴", {
+    background: "#452044",
+    foreground: "#FFF2FB",
+    border: "#C786BA",
+    shape: "rounded",
+    fontSize: 15,
+    fontWeight: "bold",
+    padding: 10,
+    borderRadius: 4,
+    maxWidth: 180,
+    animation: "fade",
+  });
+  second.states.idle.messages = [];
+  const builtIn = path.join(app.getAppPath(), "assets", "pets", "iris");
+  const base = JSON.parse(fs.readFileSync(path.join(builtIn, "pet.json"), "utf8"));
+  const installed = [];
+  for (const [index, profile] of [first, second].entries()) {
+    const directory = path.join(__dirname, `owned-bubble-profile-${index}`);
+    fs.mkdirSync(directory);
+    fs.copyFileSync(path.join(builtIn, "sprites.png"), path.join(directory, "sprites.png"));
+    fs.writeFileSync(
+      path.join(directory, "pet.json"),
+      JSON.stringify({
+        ...base,
+        name: `Owned bubble profile ${index}`,
+        bubble: profile,
+      }),
+    );
+    installed.push(await library.importDirectory(directory));
+  }
+  let sequence = 0;
+  const publish = async (status) => {
+    const activity = {
+      connected: true,
+      serverIds: ["bubble-smoke"],
+      revisions: { "bubble-smoke": null },
+      fontFamily: "sans-serif",
+      labels,
+      tasks: status
+        ? [
+            {
+              serverId: "bubble-smoke",
+              agentId: "owned-task",
+              title: "Owned bubble task",
+              status,
+              updatedAt: ++sequence,
+            },
+          ]
+        : [],
+    };
+    await evaluateRenderer(
+      main.webContents,
+      `window.paseoDesktop.pet.publishActivity(${JSON.stringify(activity)})`,
+    );
+  };
+  const select = async (id) => {
+    await settings.patch({ pet: { selectedId: id } });
+    let window;
+    await until(async () => {
+      window = BrowserWindow.getAllWindows().find(
+        (item) =>
+          !item.isDestroyed() &&
+          new URL(item.webContents.getURL() || "about:blank").pathname === "/desktop-pet",
+      );
+      return (
+        window &&
+        (await evaluateRenderer(
+          window.webContents,
+          `typeof state!=='undefined'&&state?.descriptor.id===${JSON.stringify(id)}`,
+        ))
+      );
+    });
+    return window;
+  };
+  const inspect = (window) =>
+    evaluateRenderer(
+      window.webContents,
+      `(() => {
+    const style=getComputedStyle(bubble),bounds=bubble.getBoundingClientRect();
+    return {text:bubble.textContent,hidden:bubble.hidden,background:style.backgroundColor,
+      color:style.color,fontSize:style.fontSize,shape:bubble.dataset.shape,
+      bounds:{left:bounds.left,top:bounds.top,right:bounds.right,bottom:bounds.bottom},
+      viewport:{width:innerWidth,height:innerHeight}};
+  })()`,
+    );
+  const expectLine = async (window, text) => {
+    let current;
+    await until(async () => {
+      current = await inspect(window);
+      return !current.hidden && current.text === text;
+    });
+    assert.ok(current.bounds.left >= 0 && current.bounds.top >= 0);
+    assert.ok(current.bounds.right <= current.viewport.width);
+    assert.ok(current.bounds.bottom <= current.viewport.height);
+    return current;
+  };
+  const evidence = process.env.OMP_PET_LAYOUT_EVIDENCE;
+  if (evidence) fs.mkdirSync(evidence, { recursive: true });
+  const snapshot = async (window, name) => {
+    if (!evidence) return;
+    await delay(220);
+    const image = await window.webContents.capturePage();
+    assert.ok(!image.isEmpty(), "The real custom companion capture must contain a surface");
+    fs.writeFileSync(path.join(evidence, name), image.toPNG());
+  };
+  await publish(null);
+  let pet = await select(installed[0].id);
+  assert.equal(
+    (await inspect(pet)).hidden,
+    true,
+    "Custom initial delay must suppress stock dialogue",
+  );
+  await expectLine(pet, "蓝色伙伴第一句");
+  await publish(null);
+  await until(async () => (await inspect(pet)).hidden);
+  await expectLine(pet, "蓝色伙伴第二句");
+  await publish("needs_input");
+  const blue = await expectLine(pet, "蓝色伙伴 needs_input");
+  assert.equal(blue.background, "rgb(16, 40, 70)");
+  assert.equal(blue.shape, "thought");
+  assert.equal(blue.fontSize, "13px");
+  await snapshot(pet, "custom-bubble-blue.png");
+
+  pet = await select(installed[1].id);
+  const purple = await expectLine(pet, "紫色伙伴 needs_input");
+  assert.equal(purple.background, "rgb(69, 32, 68)");
+  assert.equal(purple.shape, "rounded");
+  assert.equal(purple.fontSize, "15px");
+  await snapshot(pet, "custom-bubble-purple.png");
+  await publish(null);
+  await until(async () => (await inspect(pet)).hidden);
+  await delay(300);
+  assert.equal(
+    (await inspect(pet)).hidden,
+    true,
+    "Explicit silence must not fall back to a stock line",
+  );
+  await publish("ready");
+  await expectLine(pet, "紫色伙伴 ready");
+
+  pet = await select("iris");
+  const legacy = await expectLine(pet, labels.ready);
+  assert.equal(legacy.background, "rgb(255, 240, 228)");
+  await snapshot(pet, "legacy-bubble-after-custom.png");
+  if (evidence)
+    fs.writeFileSync(
+      path.join(evidence, "custom-bubbles.json"),
+      JSON.stringify(
+        {
+          status: "passed",
+          nativeRuntime: process.versions.miniElectron,
+          fixtureArt: "owned copies of bundled Iris; no generated images or model calls",
+          checks: [
+            "initial delay",
+            "display duration",
+            "repeat rotation",
+            "task transition",
+            "independent themes and dialogue",
+            "explicit silence",
+            "legacy isolation",
+          ],
+          blue,
+          purple,
+          legacy,
+        },
+        null,
+        2,
+      ),
+    );
+  console.log(
+    "PASS real imported custom profiles: independent themes, dialogue, delays, hide/repeat, silence, and legacy isolation",
+  );
 }
 
 async function evaluateRenderer(contents, source) {
