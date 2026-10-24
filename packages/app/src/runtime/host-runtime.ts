@@ -1415,9 +1415,9 @@ export class HostRuntimeStore {
   private lastConnectionStatusByServer = new Map<string, HostRuntimeConnectionStatus>();
   private connectionStatusStartedAtByServer = new Map<string, number>();
   private directoryBootstrapInFlight = new Map<string, Promise<void>>();
-  private queuedAgentActiveByServer = new Map<
+  private queuedAgentDispatchesByServer = new Map<
     string,
-    { agentId: string; messageId: string; dispatchAccepted: boolean; stoppedRunning: boolean }
+    Map<string, { dispatchAccepted: boolean; stoppedRunning: boolean }>
   >();
   private directorySyncByServer = new Map<string, DirectorySync>();
   private projectLayoutMigrationByServer = new Map<
@@ -1683,7 +1683,7 @@ export class HostRuntimeStore {
     rekeyMap(this.lastConnectionStatusByServer, oldServerId, newServerId);
     rekeyMap(this.connectionStatusStartedAtByServer, oldServerId, newServerId);
     rekeyMap(this.directoryBootstrapInFlight, oldServerId, newServerId);
-    rekeyMap(this.queuedAgentActiveByServer, oldServerId, newServerId);
+    rekeyMap(this.queuedAgentDispatchesByServer, oldServerId, newServerId);
     this.replicaCache.reconcileServerId(oldServerId, newServerId);
     projectIconCache.reconcileServerId(oldServerId, newServerId);
     this.projectLayoutMigrationByServer.get(oldServerId)?.dispose();
@@ -2092,7 +2092,7 @@ export class HostRuntimeStore {
       this.lastConnectionStatusByServer.delete(serverId);
       this.connectionStatusStartedAtByServer.delete(serverId);
       this.directoryBootstrapInFlight.delete(serverId);
-      this.queuedAgentActiveByServer.delete(serverId);
+      this.queuedAgentDispatchesByServer.delete(serverId);
       this.projectLayoutMigrationByServer.get(serverId)?.dispose();
       this.projectLayoutMigrationByServer.delete(serverId);
       this.directorySyncByServer.get(serverId)?.dispose();
@@ -2314,26 +2314,30 @@ export class HostRuntimeStore {
   }
 
   drainQueuedAgentMessage(serverId: string, agentId: string): void {
-    const active = this.queuedAgentActiveByServer.get(serverId);
-    if (active?.agentId === agentId) {
+    const dispatches = this.queuedAgentDispatchesByServer.get(serverId);
+    const active = dispatches?.get(agentId);
+    if (active) {
       active.stoppedRunning = true;
       if (active.dispatchAccepted) {
-        this.queuedAgentActiveByServer.delete(serverId);
+        dispatches!.delete(agentId);
       }
     }
-    this.reevaluateQueuedAgentMessages(serverId);
+    this.dispatchQueuedAgentMessage(serverId, agentId);
   }
 
   reevaluateQueuedAgentMessages(serverId: string): void {
-    if (this.queuedAgentActiveByServer.has(serverId)) return;
-    const store = useSessionStore.getState();
-    const session = store.sessions[serverId];
+    const session = useSessionStore.getState().sessions[serverId];
+    if (!session) return;
+    for (const agentId of session.queuedMessages.keys()) {
+      this.dispatchQueuedAgentMessage(serverId, agentId);
+    }
+  }
+
+  private dispatchQueuedAgentMessage(serverId: string, agentId: string): void {
+    if (this.queuedAgentDispatchesByServer.get(serverId)?.has(agentId)) return;
+    const session = useSessionStore.getState().sessions[serverId];
     const client = session?.client;
     if (!session || !client) return;
-    const agentId = session.queuedAgentOrder.find(
-      (queuedAgentId) => (session.queuedMessages.get(queuedAgentId)?.length ?? 0) > 0,
-    );
-    if (!agentId) return;
     const queue = session.queuedMessages.get(agentId);
     const next = queue?.[0];
     const agent = session.agents.get(agentId) ?? session.agentDetails.get(agentId);
@@ -2346,13 +2350,15 @@ export class HostRuntimeStore {
       return;
     }
 
-    const active = {
-      agentId,
-      messageId: next.id,
-      dispatchAccepted: false,
-      stoppedRunning: false,
-    };
-    this.queuedAgentActiveByServer.set(serverId, active);
+    // Only this conversation waits for its submission ACK and turn completion.
+    // Other conversations on the same host remain independently dispatchable.
+    const active = { dispatchAccepted: false, stoppedRunning: false };
+    let dispatches = this.queuedAgentDispatchesByServer.get(serverId);
+    if (!dispatches) {
+      dispatches = new Map();
+      this.queuedAgentDispatchesByServer.set(serverId, dispatches);
+    }
+    dispatches.set(agentId, active);
     void sendQueuedComposerMessageNow({
       agentId,
       messageId: next.id,
@@ -2377,19 +2383,16 @@ export class HostRuntimeStore {
         });
       },
     }).then((result) => {
+      if (this.queuedAgentDispatchesByServer.get(serverId)?.get(agentId) !== active) return;
       if (result.status === "submitted") {
-        if (this.queuedAgentActiveByServer.get(serverId) === active) {
-          active.dispatchAccepted = true;
-          // A short turn can finish before the submission ACK. Replay that completion
-          // only after acceptance, through the normal current-session readiness gate.
-          if (active.stoppedRunning) {
-            this.drainQueuedAgentMessage(serverId, agentId);
-          }
+        active.dispatchAccepted = true;
+        // A short turn can finish before the submission ACK. Replay that completion
+        // only after acceptance, through this conversation's readiness gate.
+        if (active.stoppedRunning) {
+          this.drainQueuedAgentMessage(serverId, agentId);
         }
       } else {
-        if (this.queuedAgentActiveByServer.get(serverId) === active) {
-          this.queuedAgentActiveByServer.delete(serverId);
-        }
+        dispatches.delete(agentId);
         if (result.status === "failed") {
           console.error("[HostRuntime] failed to drain queued agent message", {
             serverId,
@@ -2397,7 +2400,7 @@ export class HostRuntimeStore {
             error: result.errorMessage,
           });
         } else {
-          this.reevaluateQueuedAgentMessages(serverId);
+          this.dispatchQueuedAgentMessage(serverId, agentId);
         }
       }
       return undefined;

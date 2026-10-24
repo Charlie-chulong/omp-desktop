@@ -138,12 +138,7 @@ export const fr: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "Conversations en attente",
-      hint: "Maintenez une poignée et faites-la glisser. Les tours en cours continuent.",
-      dragConversation: "Réordonner {{title}}",
       dragMessage: "Réordonner le message en attente : {{text}}",
-      messageCount: "Messages en attente : {{count}}",
-      untitledConversation: "Conversation sans titre · {{id}}",
     },
     placeholders: {
       desktop: "Envoyez un message à l'agent, marquez@filesou utilisez/commandset/skills",
@@ -184,7 +179,6 @@ export const fr: TranslationResources = {
       sendQueuedMessageNow: "Envoyer le message en file d'attente maintenant",
       dragQueuedMessageHint:
         "Appuyez sur Espace pour saisir, les flèches pour déplacer, Espace pour déposer ou Échap pour annuler.",
-      queuedConversationPosition: "Conversation en file d’attente {{position}} sur {{count}}",
       openImage: "Ouvrir la pièce jointe de l'image",
       removeImage: "Supprimer l'image jointe",
       removeFile: "Remove file attachment",

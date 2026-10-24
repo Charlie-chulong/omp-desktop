@@ -37,7 +37,6 @@ import {
   type DraftAgentControlsProps,
 } from "@/composer/agent-controls";
 import { ContextWindowMeter } from "@/components/context-window-meter";
-import { QueuedConversationOrder } from "@/composer/queued-conversation-order";
 import { QueuedMessageTrack } from "@/composer/queued-message-track";
 import { resolveModelBrowserProviderNamespaceId } from "@/composer/agent-controls/model-sheet-flow";
 import { resolveOmpAccountFeatureSelection } from "@/components/omp-provider-accounts";
@@ -2223,7 +2222,6 @@ function ComposerContentImpl({
         >
           <ComposerFileDropRegistration sink={fileDropSink} />
           <View style={styles.inputAreaContent}>
-            <QueuedConversationOrder serverId={serverId} />
             <QueuedMessageTrack
               agentId={agentId}
               messages={queuedMessages}

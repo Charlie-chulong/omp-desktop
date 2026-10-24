@@ -137,12 +137,7 @@ export const ar: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "المحادثات في قائمة الانتظار",
-      hint: "اضغط مطولاً على المقبض واسحبه. تستمر الأدوار الجارية.",
-      dragConversation: "إعادة ترتيب {{title}}",
       dragMessage: "إعادة ترتيب الرسالة: {{text}}",
-      messageCount: "الرسائل في قائمة الانتظار: {{count}}",
-      untitledConversation: "محادثة بلا عنوان · {{id}}",
     },
     placeholders: {
       desktop: "أرسل رسالة إلى الوكيل أو ضع علامة على @files أو استخدم /commands و /skills",
@@ -183,7 +178,6 @@ export const ar: TranslationResources = {
       sendQueuedMessageNow: "إرسال رسالة في قائمة الانتظار الآن",
       dragQueuedMessageHint:
         "اضغط مسافة للإمساك، ومفاتيح الأسهم للتحريك، ومسافة للإفلات، أو Escape للإلغاء.",
-      queuedConversationPosition: "المحادثة في قائمة الانتظار {{position}} من {{count}}",
       openImage: "فتح مرفق الصورة",
       removeImage: "إزالة مرفق الصورة",
       removeFile: "Remove file attachment",

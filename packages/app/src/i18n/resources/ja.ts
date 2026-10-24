@@ -137,12 +137,7 @@ export const ja: TranslationResources = {
   },
   composer: {
     queueOrder: {
-      title: "待機中の会話",
-      hint: "ハンドルを長押ししてドラッグします。実行中のターンは継続します。",
-      dragConversation: "「{{title}}」の順序を変更",
       dragMessage: "待機中のメッセージの順序を変更: {{text}}",
-      messageCount: "待機中のメッセージ: {{count}}",
-      untitledConversation: "無題の会話 · {{id}}",
     },
     placeholders: {
       desktop: "エージェントにメッセージ、@ファイル、/コマンドや/スキルを入力",
@@ -183,7 +178,6 @@ export const ja: TranslationResources = {
       sendQueuedMessageNow: "キューに入れたメッセージを今すぐ送信",
       dragQueuedMessageHint:
         "スペースキーで選択し、矢印キーで移動、スペースキーで確定、Escape キーでキャンセルします。",
-      queuedConversationPosition: "キュー内の会話 {{position}} / {{count}}",
       openImage: "画像添付ファイルを開く",
       removeImage: "画像添付ファイルを削除",
       removeFile: "ファイル添付ファイルを削除",
