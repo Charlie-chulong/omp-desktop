@@ -15,6 +15,8 @@ import {
   writeAttachmentBytes,
 } from "../features/attachments.js";
 import type { AppUpdateCheckIntent, AppReleaseChannel } from "../features/auto-updater.js";
+import type * as AppUpdater from "../features/auto-updater.js";
+import type * as CliInstall from "../integrations/cli-install/install.js";
 import { getBundledCliShimPath } from "../integrations/cli-install/paths.js";
 import {
   openLocalTransportSession,
@@ -655,8 +657,8 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     },
     check_app_update: async (args) => {
       const currentVersion = resolveDesktopAppVersion();
-      // Static imports load the updater's heavy graph during GUI startup.
-      const { checkForAppUpdate } = await import("../features/auto-updater.js");
+      // Keep CommonJS lazy loads on mini-electron's native module resolver.
+      const { checkForAppUpdate } = require("../features/auto-updater.js") as typeof AppUpdater;
       return checkForAppUpdate({
         currentVersion,
         releaseChannel: await resolveRequestedReleaseChannel(args),
@@ -665,8 +667,8 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
     },
     install_app_update: async (args) => {
       const currentVersion = resolveDesktopAppVersion();
-      // Static imports load the updater's heavy graph during GUI startup.
-      const { downloadAndInstallUpdate } = await import("../features/auto-updater.js");
+      const { downloadAndInstallUpdate } =
+        require("../features/auto-updater.js") as typeof AppUpdater;
       return downloadAndInstallUpdate(
         { currentVersion, releaseChannel: await resolveRequestedReleaseChannel(args) },
         async () => {
@@ -675,26 +677,29 @@ export function createDaemonCommandHandlers(): Record<string, DesktopCommandHand
       );
     },
     get_local_daemon_version: () => getLocalDaemonVersion(),
-    // Load CLI installation dependencies only on invocation, not during GUI startup.
+    // Keep installation off startup; ESM import bypasses the native electron resolver.
     install_cli: async () => {
-      const { installCli } = await import("../integrations/cli-install/install.js");
+      const { installCli } = require("../integrations/cli-install/install.js") as typeof CliInstall;
       return installCli();
     },
     get_cli_install_status: async () => {
-      const { getCliInstallStatus } = await import("../integrations/cli-install/install.js");
+      const { getCliInstallStatus } =
+        require("../integrations/cli-install/install.js") as typeof CliInstall;
       return getCliInstallStatus();
     },
     get_omp_shortcut_install_status: async () => {
       const { getOmpShortcutInstallStatus } =
-        await import("../integrations/cli-install/install.js");
+        require("../integrations/cli-install/install.js") as typeof CliInstall;
       return getOmpShortcutInstallStatus();
     },
     install_omp_shortcut: async () => {
-      const { installOmpShortcut } = await import("../integrations/cli-install/install.js");
+      const { installOmpShortcut } =
+        require("../integrations/cli-install/install.js") as typeof CliInstall;
       return installOmpShortcut();
     },
     uninstall_omp_shortcut: async () => {
-      const { uninstallOmpShortcut } = await import("../integrations/cli-install/install.js");
+      const { uninstallOmpShortcut } =
+        require("../integrations/cli-install/install.js") as typeof CliInstall;
       return uninstallOmpShortcut();
     },
     read_legacy_skill_selection: () => readLegacySkillSelection(),

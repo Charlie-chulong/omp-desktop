@@ -5,6 +5,7 @@ log.transports.console.level = "info";
 log.initialize({ spyRendererConsole: true });
 
 import { inheritLoginShellEnv } from "./login-shell-env.js";
+import type * as AppUpdater from "./features/auto-updater.js";
 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -917,7 +918,7 @@ if (!isPetCreationCli) {
     installAppUpdateOnQuit: async (signal) => {
       // Startup exception: updater loading belongs to an update/quit operation,
       // not the first-window critical path.
-      const { installAppUpdateOnQuit } = await import("./features/auto-updater.js");
+      const { installAppUpdateOnQuit } = require("./features/auto-updater.js") as typeof AppUpdater;
       const { releaseChannel } = await getDesktopSettingsStore().get();
       return await installAppUpdateOnQuit({
         currentVersion: app.getVersion(),

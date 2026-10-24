@@ -44,6 +44,8 @@ Apple Silicon startup streams local frontend assets in bounded chunks up to 1 Mi
 
 Mermaid, WebSocket response validation, and terminal emulation load on first use instead of inflating the startup entry. Desktop daemon setup imports only its configuration/runtime helpers; updater and CLI-install graphs also stay off the first-window path. Login-shell environment inheritance and daemon readiness checks are unchanged.
 
+Lazy-loaded CommonJS desktop modules must use typed `require`, not runtime `import()`. mini-electron resolves the native `electron` module through its CommonJS loader; Node's ESM-to-CommonJS loader bypasses that resolver and can fail with `Cannot find module 'electron'`, including in transitive dependencies. CLI/OMP shortcut installation and updater operations stay deferred through `require`; the Node worker and CLI entrypoint loaders retain `import()` for their ESM entrypoints. Qualify these paths in the native runtime, since Vitest's mocked Electron module does not exercise native resolution.
+
 On Windows, the renderer normally reports content readiness after app settings load. If that signal never arrives, a bounded main-process fallback presents the successfully loaded first document. Navigation, close, hide, minimize, or normal readiness cancels it; the fallback cannot reopen a window hidden to the tray. macOS remains gated on its native paint handoff.
 
 ### Frontend work and generated output
