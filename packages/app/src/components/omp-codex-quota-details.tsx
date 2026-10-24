@@ -52,75 +52,6 @@ export function OmpQuotaCountdown({ resetsAt }: { resetsAt?: string | null }) {
   );
 }
 
-function resolveSubscriptionState(
-  subscription: Quota["subscription"],
-  date: string | null,
-  countdown: string | null,
-) {
-  if (subscription?.status === "none") return "none";
-  if (subscription?.status === "unavailable") {
-    if (subscription.error) return "error";
-    return subscription.unavailableReason === "unsupported" ? "unsupported" : "unavailable";
-  }
-  if (!date) return "unavailable";
-  if (subscription?.status === "expired" || countdown === "") return "expired";
-  return "active";
-}
-
-function OmpCodexSubscriptionDetails({
-  subscription,
-  now,
-}: {
-  subscription: Quota["subscription"];
-  now: number;
-}) {
-  const { t, i18n } = useTranslation();
-  const date = formatOmpQuotaResetTime(subscription?.expiresAt, i18n.language);
-  const countdown = formatOmpQuotaCountdown(subscription?.expiresAt, now, {
-    day: t("settings.providers.omp.codexQuota.day"),
-    hour: t("settings.providers.omp.codexQuota.hour"),
-    minute: t("settings.providers.omp.codexQuota.minute"),
-  });
-  const state = resolveSubscriptionState(subscription, date, countdown);
-  return (
-    <>
-      <Text style={styles.title}>{t("settings.providers.omp.codexQuota.subscription")}</Text>
-      <Text style={styles.muted}>
-        {t(`settings.providers.omp.codexQuota.subscription_${state}`)}
-      </Text>
-      {subscription?.error && state === "error" ? (
-        <Text accessibilityRole="alert" style={styles.muted}>
-          {subscription.error}
-        </Text>
-      ) : null}
-      {state === "unavailable" || state === "unsupported" || state === "error" ? (
-        <Text style={styles.muted}>
-          {t("settings.providers.omp.codexQuota.subscriptionUnavailableNote")}
-        </Text>
-      ) : null}
-      {date && (state === "active" || state === "expired") ? (
-        <>
-          <Text style={styles.muted}>
-            {t("settings.providers.omp.codexQuota.expiry", { time: date })}
-          </Text>
-          {state === "active" && countdown ? (
-            <Text style={styles.muted}>
-              {t("settings.providers.omp.codexQuota.remaining", { time: countdown })}
-            </Text>
-          ) : null}
-          <Text style={styles.muted}>
-            {t(
-              subscription?.source === "account"
-                ? "settings.providers.omp.codexQuota.subscriptionAccountNote"
-                : "settings.providers.omp.codexQuota.subscriptionNote",
-            )}
-          </Text>
-        </>
-      ) : null}
-    </>
-  );
-}
-
 function OmpCodexCreditsDetails({ credits }: { credits: Quota["credits"] }) {
   const { t } = useTranslation();
   const summary = formatOmpCodexCreditBalance(credits, t);
@@ -436,7 +367,6 @@ export function OmpCodexQuotaDetails({
   );
   return (
     <View style={styles.details}>
-      <OmpCodexSubscriptionDetails subscription={account.quota?.subscription} now={now} />
       {showCreditBalance ? <OmpCodexCreditsDetails credits={account.quota?.credits} /> : null}
       <OmpCodexResetCreditsDetails
         account={account}

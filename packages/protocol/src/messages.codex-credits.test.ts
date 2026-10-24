@@ -18,6 +18,36 @@ describe("Codex account credits schema", () => {
     expect(quota.fiveHourUsedPct).toBe(20);
   });
 
+  it("ignores retired subscription metadata from older daemons without losing quota or cards", () => {
+    const quota = {
+      status: "available",
+      planLabel: "pro",
+      weeklyUsedPct: 25,
+      weeklyResetsAt: "2026-11-01T00:00:00Z",
+      resetCredits: {
+        status: "available",
+        availableCount: 1,
+        credits: [
+          {
+            id: "reset-1",
+            resetType: "codex_rate_limits",
+            status: "available",
+            grantedAt: "2026-10-01T00:00:00Z",
+            expiresAt: "2026-12-01T00:00:00Z",
+            title: null,
+            description: null,
+          },
+        ],
+      },
+    };
+    expect(
+      OmpProviderAccountQuotaSchema.parse({
+        ...quota,
+        subscription: { status: "expired", expiresAt: "2026-10-01T00:00:00Z" },
+      }),
+    ).toEqual(quota);
+  });
+
   it("keeps absent and unavailable credits distinct from a zero balance", () => {
     const absent = OmpProviderAccountQuotaSchema.parse({ status: "unavailable" });
     const unavailable = OmpProviderAccountQuotaSchema.parse({ status: "available", credits: null });

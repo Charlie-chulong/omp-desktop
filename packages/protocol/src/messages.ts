@@ -6481,13 +6481,6 @@ export const OmpCodexResetCreditsSchema = z.object({
   ),
   error: z.string().optional(),
 });
-export const OmpCodexSubscriptionSchema = z.object({
-  status: z.enum(["active", "expired", "none", "unavailable"]),
-  expiresAt: z.string().nullable(),
-  source: z.enum(["token", "account"]).optional(),
-  unavailableReason: z.enum(["not_provided", "unsupported"]).optional(),
-  error: z.string().optional(),
-});
 export const OmpCodexResetCreditConsumeResultSchema = z.object({
   code: z.enum(["reset", "nothing_to_reset", "no_credit", "already_redeemed"]),
   windowsReset: z.number().int().nonnegative(),
@@ -6586,7 +6579,6 @@ export const OmpProviderAccountQuotaSchema = z.object({
   credits: OmpCodexCreditsSchema.nullable().optional(),
   resetCredits: OmpCodexResetCreditsSchema.optional(),
   limitResets: OmpClaudeLimitResetsSchema.optional(),
-  subscription: OmpCodexSubscriptionSchema.optional(),
 });
 export const OmpProviderManagementSchema = z.object({
   configPath: z.string(),
@@ -7805,7 +7797,6 @@ export type OmpProviderManagement = z.infer<typeof OmpProviderManagementSchema>;
 export type OmpProviderAccountQuota = z.infer<typeof OmpProviderAccountQuotaSchema>;
 export type OmpCodexCredits = z.infer<typeof OmpCodexCreditsSchema>;
 export type OmpCodexResetCredits = z.infer<typeof OmpCodexResetCreditsSchema>;
-export type OmpCodexSubscription = z.infer<typeof OmpCodexSubscriptionSchema>;
 export type OmpClaudeLimitResetGrant = z.infer<typeof OmpClaudeLimitResetGrantSchema>;
 export type OmpClaudeLimitResets = z.infer<typeof OmpClaudeLimitResetsSchema>;
 export type OmpClaudeLimitResetConsumeResult = z.infer<

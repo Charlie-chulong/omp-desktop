@@ -375,9 +375,7 @@ providers:
       /claude-one|claude-two|claude-expired|codex-token|never-write/,
     );
     expect(
-      management.loginProviders[0]?.accounts?.every(
-        (account) => !account.quota?.resetCredits && !account.quota?.subscription,
-      ),
+      management.loginProviders[0]?.accounts?.every((account) => !account.quota?.resetCredits),
     ).toBe(true);
     const after = new DatabaseSync(databasePath);
     expect(after.prepare("SELECT * FROM auth_credentials ORDER BY id").all()).toEqual(storedBefore);

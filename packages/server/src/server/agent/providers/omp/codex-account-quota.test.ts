@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CODEX_USAGE_ENDPOINT, fetchCodexAccountQuota } from "./codex-account-quota.js";
-import { CODEX_SUBSCRIPTION_ENDPOINT } from "./codex-subscription.js";
+import { CODEX_RESET_CREDITS_ENDPOINT } from "./codex-reset-credits.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -379,43 +379,118 @@ describe("fetchCodexAccountQuota", () => {
     });
   });
 
-  it("queries the selected account's subscription when OAuth claims omit its expiry", async () => {
-    const quota = await fetchCodexAccountQuota({
-      credential: { accessToken: "access-token", accountId: "account-1" },
-      now: () => NOW,
-      fetch: async (url) => {
-        if (url === CODEX_USAGE_ENDPOINT) {
-          return jsonResponse({
-            plan_type: "plus",
-            rate_limit: { primary_window: { used_percent: 42 } },
-          });
-        }
-        if (url === CODEX_SUBSCRIPTION_ENDPOINT) {
-          return jsonResponse({
-            accounts: {
-              default: {
-                account: { account_id: "another-account" },
-                entitlement: {
-                  has_active_subscription: true,
-                  expires_at: "2026-09-30T00:00:00Z",
-                },
-              },
-              selected: {
-                account: { account_id: "account-1" },
-                entitlement: {
-                  has_active_subscription: true,
-                  expires_at: "2026-10-01T08:00:00+08:00",
-                },
-              },
+  it("refreshes only usage and reset cards even when the credential carries subscription claims", async () => {
+    const accessToken = `header.${Buffer.from(
+      JSON.stringify({
+        exp: NOW / 1_000 + 3_600,
+        "https://api.openai.com/auth": {
+          chatgpt_account_id: "account-1",
+          chatgpt_subscription_active_until: "2026-10-01T00:00:00Z",
+        },
+      }),
+    ).toString("base64url")}.signature`;
+    const fetchApi = vi.fn(async (url: RequestInfo | URL) => {
+      if (url === CODEX_USAGE_ENDPOINT) {
+        return jsonResponse({
+          plan_type: "plus",
+          rate_limit: {
+            primary_window: {
+              used_percent: "42",
+              reset_at: 1_798_122_000,
+              limit_window_seconds: 18_000,
             },
-          });
-        }
-        return jsonResponse({ available_count: 0, credits: [] });
+            secondary_window: {
+              used_percent: 65,
+              reset_at: 1_798_640_000,
+              limit_window_seconds: 604_800,
+            },
+          },
+          credits: { has_credits: true, unlimited: false, balance: " 12.50 " },
+        });
+      }
+      if (url === CODEX_RESET_CREDITS_ENDPOINT) {
+        return jsonResponse({
+          available_count: 1,
+          credits: [
+            {
+              id: " reset-1 ",
+              reset_type: "codex_rate_limits",
+              status: "available",
+              granted_at: "2026-08-01T00:00:00Z",
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected account request: ${url}`);
+    });
+    const quota = await fetchCodexAccountQuota({
+      credential: { accessToken, accountId: "account-1" },
+      now: () => NOW,
+      fetch: fetchApi,
+    });
+
+    expect(fetchApi.mock.calls.map(([url]) => url)).toEqual([
+      CODEX_USAGE_ENDPOINT,
+      CODEX_RESET_CREDITS_ENDPOINT,
+    ]);
+    expect(quota).toEqual({
+      status: "available",
+      planLabel: "plus",
+      credits: { hasCredits: true, unlimited: false, balance: "12.50" },
+      fiveHourUsedPct: 42,
+      fiveHourLimitReached: false,
+      fiveHourResetsAt: "2026-12-24T14:20:00.000Z",
+      weeklyUsedPct: 65,
+      weeklyResetsAt: "2026-12-30T14:13:20.000Z",
+      fetchedAt: "2026-08-29T00:00:00.000Z",
+      resetCredits: {
+        status: "available",
+        availableCount: 1,
+        credits: [
+          {
+            id: "reset-1",
+            resetType: "codex_rate_limits",
+            status: "available",
+            grantedAt: "2026-08-01T00:00:00Z",
+            expiresAt: null,
+            title: null,
+            description: null,
+          },
+        ],
       },
     });
-    expect(quota.subscription).toMatchObject({
-      status: "active",
-      expiresAt: "2026-10-01T00:00:00.000Z",
+  });
+
+  it("keeps usage available when the independent reset-card request fails", async () => {
+    const quota = await fetchCodexAccountQuota({
+      credential: { accessToken: "access-token" },
+      now: () => NOW,
+      fetch: async (url) =>
+        url === CODEX_USAGE_ENDPOINT
+          ? jsonResponse({
+              plan_type: "plus",
+              rate_limit: {
+                primary_window: { used_percent: 42, reset_at: 1_798_122_000 },
+                secondary_window: { used_percent: 65, reset_at: 1_798_640_000 },
+              },
+            })
+          : jsonResponse({}, 503),
+    });
+
+    expect(quota).toMatchObject({
+      status: "available",
+      planLabel: "plus",
+      fiveHourUsedPct: 42,
+      fiveHourLimitReached: false,
+      fiveHourResetsAt: "2026-12-24T14:20:00.000Z",
+      weeklyUsedPct: 65,
+      weeklyResetsAt: "2026-12-30T14:13:20.000Z",
+      resetCredits: {
+        status: "error",
+        availableCount: null,
+        credits: [],
+        error: "Codex reset card request failed (HTTP 503)",
+      },
     });
   });
 });

@@ -1,6 +1,6 @@
 # Usage, quotas, and account resets
 
-Read native OMP totals separately from provider quotas, account credits, and subscription information. Configure accounts in [Models and providers](models-and-providers.md).
+Read native OMP totals separately from provider quotas and account credits. Configure accounts in [Models and providers](models-and-providers.md).
 
 ## Contents
 
@@ -9,7 +9,7 @@ Read native OMP totals separately from provider quotas, account credits, and sub
 - [Claude official accounts](#claude-official-accounts)
 - [Codex accounts](#codex-accounts)
 
-For the selected host, **Settings → Usage** includes native OMP `/stats`, provider quotas/balances, Codex subscription/reset cards, and Claude limit-reset controls beside the affected account. Native totals and provider quotas are never added together. Reset actions require confirmation; changing account login or order remains in **Providers**.
+For the selected host, **Settings → Usage** includes native OMP `/stats`, provider quotas/balances, Codex reset cards, and Claude limit-reset controls beside the affected account. Native totals and provider quotas are never added together. Reset actions require confirmation; changing account login or order remains in **Providers**.
 
 ## Native OMP statistics
 
@@ -92,12 +92,10 @@ Each account lists banked cards, server-reported available count, status, and ti
 
 The daemon rechecks with OpenAI before consumption and preserves the redemption request ID so duplicate submissions do not intentionally spend another card. A confirmed server result refreshes both cards and quota. Errors and already-redeemed/nothing-to-reset outcomes are not reported as successful resets. Older daemons cannot consume cards.
 
-### Subscription validity
+### Account metadata
 
-Subscription validity is separate from quota reset. Desktop displays a timezone-qualified `chatgpt_subscription_active_until` claim when supplied by the current OAuth credential. Otherwise it queries the official Codex [`/backend-api/wham/accounts/check` account source](https://github.com/openai/codex/blob/a5130128697b10022a88e8f5eae6dca77393b4b0/codex-rs/backend-client/src/client.rs#L398-L407), matching selected account ID, not default workspace. Reported entitlement expiry and live remaining time are labeled separately from token metadata. Neither source guarantees auto-renewal.
+Desktop retains the reported plan name, quotas, reset countdowns, credits, and reset cards, but does not display or query subscription expiry or remaining subscription duration. The current official sign-in does not provide a reliable subscription-date API; the dedicated token-claim parser and account lookup have been removed ([#73](https://github.com/iris-cat-dev/omp/issues/73)).
 
-OAuth responses may supply only account/plan data: Desktop then says the sign-in does not support expiry lookup. A successful entitlement response with no date says **Subscription expiry unavailable**; HTTP/network/malformed-response/timeout failure says **Could not query subscription expiry** without discarding independently available quotas/cards.
+Quota refresh requests only usage and reset-card inventory. Subscription dates are not inferred from OAuth expiration, quota reset times, subscription creation, or local estimates. This removal neither changes login state nor treats an unknown expiry as an absent or expired subscription. Check ChatGPT billing settings for billing dates.
 
-None of those states means absent or expired subscription. **No subscription** requires a reported Free plan or explicit inactive entitlement without expiry. OAuth expiration, quota resets, and fabricated `0` are never substituted.
-
-ChatGPT browser billing has a separate authentication boundary. Desktop does not scrape cookies or send Codex credentials to the old browser-only account endpoint. Check ChatGPT billing settings when the current sign-in provides no date.
+For wire compatibility, new daemons omit the retired optional `quota.subscription` field, which older clients already accept as absent. New clients ignore that field from older daemons under the existing unknown-key stripping rules, without discarding quota or reset-card data.
