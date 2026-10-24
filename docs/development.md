@@ -170,6 +170,17 @@ Pass `--updated-omp "<path-to-another-omp.exe>"` to replace the initially instal
 
 See [Windows packages without bundled OMP](packaging.md#windows-packages-without-bundled-omp) for the preservation and failure behavior being exercised.
 
+### Local monitor native regression
+
+```bash
+npm run build:main --workspace=@omp-desktop/desktop
+node packages/desktop/e2e/local-monitor-smoke.js
+```
+
+This Windows surface smoke copies the configured official mini-electron runtime into an owned temporary profile and uses the real product controller, both production preloads, HTML, collector, and worker with synthetic numeric OMP files. It opens visible dashboard/compact windows, checks main/subagent accounting, sender rejection, five instruments/nine themes, effects, independent project scopes, native pinning, CSV saving, offline currency preferences, and final-close/reopen behavior. The native file-dialog driver modifies only the unique filename edit and Save button of a dialog owned by that disposable runtime; it never changes the system clipboard or another application's controls. No provider credentials, daemon, or model requests are used. This is monitor-surface qualification, not a complete installer or packaged-application acceptance run.
+
+Set `PASEO_DESKTOP_SMOKE_ARTIFACT_DIR` to retain its numeric report and native compositor PNGs elsewhere. Focused filesystem/pricing/lifecycle/CSV/resource regressions are under `packages/desktop/src/monitor`; run that directory only, not the full repository suite. The pricing tests use deterministic transports; a separate real public-data exercise is needed to qualify live network availability.
+
 ### Companion layout regression
 
 After building the workspace dependencies, run the companion's native regression:

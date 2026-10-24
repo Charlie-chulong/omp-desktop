@@ -5,6 +5,7 @@ Read native OMP totals separately from provider quotas and account credits. Conf
 ## Contents
 
 - [Native OMP statistics](#native-omp-statistics)
+- [Local OMP performance monitor](#local-omp-performance-monitor)
 - [Zhipu Coding Plan](#zhipu-coding-plan)
 - [Claude official accounts](#claude-official-accounts)
 - [Codex accounts](#codex-accounts)
@@ -28,6 +29,36 @@ Interpret these values carefully:
 Refresh synchronizes the native index and invalidates the host's cached ranges. Concurrent requests share a synchronization only when their scope and invocation match. Only direct OMP commands with no prefix arguments other than `--profile` are eligible; ambiguous wrappers or other flags return scope unavailable instead of executing a possible model request.
 
 Latest indexed-request time and index-read time are shown separately. Missing, unsupported, unreadable, failed-refresh, and timed-out sources are not shown as zero use. Native synchronization has a 40-second deadline with up to 2 seconds waiting for process-tree cleanup; if cleanup cannot finish, the failed flight remains reserved until the writer exits rather than starting another writer. Only a successful synchronization proceeds to the numeric SQLite scan, which runs in a short-lived child with a 15-second deadline, not on the daemon event loop.
+
+## Local OMP performance monitor
+
+On Desktop, open **OMP Local Monitor** from the system tray or **Settings → local host → Usage → Open monitor**. The monitor is a separate native window, not a second .NET application or a remote-host dashboard. It never adds its counters to native `/stats` or provider quotas.
+
+- Five SVG instruments: LED gauge, needle tachometer, liquid energy, reactor, and minimal ring.
+- Nine Chinese/English title ladders: vehicles, animals, Beaufort scale, cosmos, cultivation, martial arts, arcane ranks, game ranks, and engineer career. Titles are decorative; the fixed visual scale does not cap measured numbers.
+- Off/Low/High effects, bounded flame/particle effects at high throughput, and measured-peak celebrations. Effects stop while hidden and respect reduced-motion preferences.
+- Up to eight independent dashboard/compact windows, with per-window pinning and profile/project filters. All windows share one collector. Project labels include a stable, shortened cwd hash so unrelated folders with the same basename do not merge; raw paths are not exposed.
+- Main, subagent, and advisor phases; native request duration/TTFT, a five-minute chart, today's usage, and the last 30 local calendar dates of currently available logs.
+- CSV export uses an owned native save dialog, includes filter/coverage/price/rate provenance, and neutralizes spreadsheet formulas in metadata.
+- CPU and memory cover identifiable native OMP executables owned by the local user/session. Node/Bun wrappers are not inferred. CPU is a percentage of total logical capacity and is unknown on the first sample; summed working sets are not unique physical memory. These counters remain machine-wide when a project filter is selected.
+
+### Measurement and coverage
+
+The gauge and chart show **summed concurrent output throughput**, with measured and estimated parts separate. Request-average speed is measured output divided by summed request durations, includes TTFT, and excludes tool execution. OMP writes completed messages rather than a continuous token stream, so in-flight speed is explicitly estimated from recent measurements. Failed/aborted partial usage contributes to totals but not measured speed; side calls contribute to usage only. Peak celebrations require a new measured aggregate peak, not an estimated spike.
+
+Discovery reads only OMP's default/environment-selected session root and named profiles. It skips links, hidden staging files, and other applications. New/active files take priority over historical backfill. Limits are explicit: 20,000 files, 100,000 numeric candidates, 256 displayed agents, 32-MiB lines/pending fragments, and bounded per-poll work; files over 256 MiB use a 64-MiB tail. Scanning/partial coverage is always reported. Missing or failed sources show unknown metrics rather than successful zero use. An existing empty directory can correctly report zero.
+
+This is not a persistent billing ledger: deleted, rotated, compressed, inaccessible, or out-of-scope logs are not reconstructed. Native `/stats` retains its separate indexed-history role. Copied/replayed requests are deduplicated; replacements, title rewrites, tool gaps, stale activity, and local-day boundaries are handled without retaining conversation text.
+
+### Public prices, currency conversion, and privacy
+
+Recorded OMP USD amounts and **current-catalog API-list estimates** are separate. Unknown models/tiers remain unpriced; known zero remains zero. Catalog updates may reprice the available-log history at current public pricing rules, not historical invoice prices. Currency conversion never overwrites either USD value.
+
+The monitor bundles a dated Agent Speed public catalog and 38 CC0 fallback currencies. Optional anonymous HTTPS GET updates use the same fixed resources for every user: Agent Speed's GitHub raw price table (jsDelivr fallback), and USD-based public exchange rates from ExchangeRate-API, currency-api mirrors, and Frankfurter. No model names, chosen currency, logs, credentials, or usage are included in requests; the public servers still see the usual IP address and request time. ExchangeRate-API attribution is displayed when used.
+
+The global **Allow public-data updates** switch applies to manual and scheduled requests. Disabling it aborts in-flight downloads; slow FX requests do not block settings commands. Launch delays, daily synchronization, failure backoff, strict HTTPS/no-redirect policy, body/schema limits, monotonic version/date checks, and per-currency rate provenance protect cached data. Errors keep last-good values with their real dates. Corrupt opt-out settings fail closed. Safe preferences and public data are cached under Desktop user data's `local-monitor` directory.
+
+The renderer is sandboxed with no network or Node access. Only numeric facts and safe metadata reach it; prompts, message bodies, credentials, and raw transcript paths do not. Opening is restricted to registered application main frames; each monitor controls only its own authenticated main frame. The collector starts on demand, polls less often when every window is hidden/minimized, and terminates when the last monitor closes. No other-agent adapters, telemetry, rankings, device accounts, privileged traffic service, or taskbar hooks are included. Agent Speed's MIT attribution and full license are available in the monitor.
 
 ## Zhipu Coding Plan
 
